@@ -1,0 +1,39 @@
+{
+  "name": "platefull-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "Bot WhatsApp multi-usuário com GPT-4o via OpenRouter",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "db:generate": "npx prisma generate",
+    "db:migrate": "npx prisma migrate dev",
+    "db:deploy": "npx prisma migrate deploy",
+    "db:studio": "npx prisma studio"
+  },
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "gpt4",
+    "openrouter",
+    "wppconnect"
+  ],
+  "author": "Platefull",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^5.7.1",
+    "wppconnect": "^1.30.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "jsonwebtoken": "^9.0.2",
+    "axios": "^1.6.2"
+  },
+  "devDependencies": {
+    "prisma": "^5.7.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

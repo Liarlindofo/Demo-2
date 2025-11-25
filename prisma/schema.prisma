@@ -1,0 +1,54 @@
+// Prisma Schema para Platefull WhatsApp Bot
+// PostgreSQL via Neon
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  whatsappBots WhatsAppBot[]
+  botSettings  BotSettings?
+}
+
+model WhatsAppBot {
+  id              String   @id @default(cuid())
+  userId          String
+  slot            Int      // 1 ou 2
+  sessionJson     Json?
+  connectedNumber String?
+  isConnected     Boolean  @default(false)
+  qrCode          String?  // base64 temporário
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, slot])
+  @@index([userId])
+}
+
+model BotSettings {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  botName      String   @default("Assistente")
+  storeType    String?  // pizzaria, mercado, etc.
+  contextLimit Int      @default(10)
+  lineLimit    Int      @default(8)
+  basePrompt   String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

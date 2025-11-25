@@ -1,0 +1,40 @@
+# Docker Compose para desenvolvimento local
+# Opcional - Use se preferir Docker
+
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: platefull-bot
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=${DATABASE_URL}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      - ./tokens:/app/tokens
+      - ./logs:/app/logs
+    command: sh -c "npx prisma migrate deploy && node index.js"
+
+  # Descomente se quiser PostgreSQL local ao invés de Neon
+  # db:
+  #   image: postgres:15-alpine
+  #   container_name: platefull-db
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: platefull
+  #     POSTGRES_PASSWORD: platefull123
+  #     POSTGRES_DB: platefull_bot
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+
+# volumes:
+#   postgres_data:
+
