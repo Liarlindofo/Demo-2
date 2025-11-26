@@ -57,6 +57,7 @@ model UserAPI {
   baseUrl     String?
   storeId     String
   status      String        @default("disconnected")
+  isSyncing   Boolean       @default(false)
   enabled     Boolean       @default(true)
   lastTest    DateTime?
   createdAt   DateTime      @default(now())
@@ -107,34 +108,71 @@ model SalesDaily {
   @@map("sales_daily")
 }
 
-// Sync Run
-model SyncRun {
-  id          String      @id @default(cuid())
-  apiId       String
-  api         UserAPI     @relation(fields: [apiId], references: [id], onDelete: Cascade)
-  storeId     String
-  startDate   DateTime
-  endDate     DateTime
-  status      String      // 'running', 'completed', 'failed'
-  recordsSynced Int       @default(0)
-  startedAt   DateTime    @default(now())
-  completedAt DateTime?
-  
-  errors      SyncError[]
+// Individual raw sales (normalized per sale)
+model Sale {
+  id           String    @id @default(cuid())
+  userId       String
+  storeId      String
+  externalId   String
+  saleDateUtc  DateTime
+  totalAmount  Float?
+  rawJson      Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now())
 
-  @@index([apiId])
+  @@unique([storeId, externalId], name: "storeId_externalId")
+  @@index([storeId])
+  @@index([userId])
+  @@map("sales")
+}
+
+// Raw pages fetched from Saipos during sync (for debugging)
+model SalesRawPage {
+  id         String    @id @default(cuid())
+  syncRunId  String
+  run        SyncRun   @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+  pageIndex  Int
+  payload    Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([syncRunId])
+  @@map("sales_raw_pages")
+}
+
+// Sync Run (tracking)
+model SyncRun {
+  id               String    @id @default(cuid())
+  userApiId        String
+  api              UserAPI   @relation(fields: [userApiId], references: [id], onDelete: Cascade)
+  storeId          String
+  status           String    // 'running' | 'success' | 'error'
+  startPeriod      DateTime
+  endPeriod        DateTime
+  startedAt        DateTime  @default(now())
+  endedAt          DateTime?
+  lastUrl          String?
+  totalRequests    Int       @default(0)
+  totalRecordsRaw  Int       @default(0)
+  totalAfterFilter Int       @default(0)
+  syncedCount      Int       @default(0)
+  errorsCount      Int       @default(0)
+
+  rawPages         SalesRawPage[]
+  errors           SyncError[]
+
+  @@index([userApiId])
   @@index([status])
   @@map("sync_runs")
 }
 
 // Sync Error
 model SyncError {
-  id          String    @id @default(cuid())
-  syncRunId   String
-  syncRun     SyncRun   @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
-  error       String
-  context     Json?
-  createdAt   DateTime  @default(now())
+  id             String    @id @default(cuid())
+  syncRunId      String
+  run            SyncRun   @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+  message        String
+  payloadPreview String?
+  createdAt      DateTime  @default(now())
 
   @@index([syncRunId])
   @@map("sync_errors")
