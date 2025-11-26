@@ -57,6 +57,8 @@ model UserAPI {
   baseUrl     String?
   storeId     String
   status      String        @default("disconnected")
+  enabled     Boolean       @default(true)
+  lastTest    DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   
@@ -65,6 +67,7 @@ model UserAPI {
 
   @@index([userId])
   @@index([storeId])
+  @@index([enabled])
   @@map("user_apis")
 }
 
