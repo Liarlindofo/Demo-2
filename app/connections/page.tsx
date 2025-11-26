@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useUser } from "@stackframe/stack";
 import Image from "next/image";
 import { Card } from "@/components/ui/card";
@@ -22,6 +22,14 @@ interface SessionStatus {
   isActive: boolean;
 }
 
+interface UserAPI {
+  id: string;
+  name: string;
+  type: string;
+  storeId: string;
+  apiKey: string;
+}
+
 const API_URL = process.env.NEXT_PUBLIC_WHATSAPP_API_URL || "https://platefull.com.br";
 
 export default function ConnectionsPage() {
@@ -38,27 +46,19 @@ export default function ConnectionsPage() {
   });
   const [actionLoading, setActionLoading] = useState<{ [key: string]: boolean }>({});
 
-  useEffect(() => {
-    if (user) {
-      loadConnections();
-      const interval = setInterval(loadConnections, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [user]);
-
-  const loadConnections = async () => {
+  const loadConnections = useCallback(async () => {
     if (!user?.id) return;
 
     try {
       // Buscar APIs WhatsApp do usuário do banco
       const response = await fetch("/api/user-apis");
       if (response.ok) {
-        const data = await response.json();
-        const whatsappAPIs = data.filter((api: any) => api.type === 'whatsapp');
+        const data: UserAPI[] = await response.json();
+        const whatsappAPIs = data.filter((api) => api.type === 'whatsapp');
         
         // Para cada API WhatsApp, buscar status das sessões
         const connectionsWithSessions = await Promise.all(
-          whatsappAPIs.map(async (api: any) => {
+          whatsappAPIs.map(async (api) => {
             try {
               const sessionsResponse = await fetch(
                 `${API_URL}/api/whatsapp/${api.storeId}/sessions`,
@@ -98,7 +98,15 @@ export default function ConnectionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user) {
+      loadConnections();
+      const interval = setInterval(loadConnections, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [user, loadConnections]);
 
   const startSession = async (connectionId: string, clientId: string, slot: number, apiKey: string, connectionName: string) => {
     const key = `${connectionId}-${slot}`;

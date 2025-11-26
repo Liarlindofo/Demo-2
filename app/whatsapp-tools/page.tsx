@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useUser } from "@stackframe/stack";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,14 @@ import { Loader2, Save, Bot, Clock, Store, MessageSquare, Shield, Hash, Power } 
 import { Switch } from "@/components/ui/switch";
 
 const API_URL = process.env.NEXT_PUBLIC_WHATSAPP_API_URL || "https://platefull.com.br";
+
+interface UserAPI {
+  id: string;
+  name: string;
+  type: string;
+  storeId: string;
+  apiKey: string;
+}
 
 interface ClientConfig {
   id: string;
@@ -46,26 +54,14 @@ export default function WhatsAppToolsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      loadConnections();
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (selectedConnection) {
-      loadConfig(selectedConnection);
-    }
-  }, [selectedConnection]);
-
-  const loadConnections = async () => {
+  const loadConnections = useCallback(async () => {
     if (!user?.id) return;
 
     try {
       const response = await fetch("/api/user-apis");
       if (response.ok) {
-        const data = await response.json();
-        const whatsappAPIs = data.filter((api: any) => api.type === 'whatsapp');
+        const data: UserAPI[] = await response.json();
+        const whatsappAPIs = data.filter((api) => api.type === 'whatsapp');
         setConnections(whatsappAPIs);
         
         // Selecionar primeira conexão automaticamente
@@ -78,9 +74,9 @@ export default function WhatsAppToolsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id, selectedConnection]);
 
-  const loadConfig = async (clientId: string) => {
+  const loadConfig = useCallback(async (clientId: string) => {
     try {
       const connection = connections.find(c => c.storeId === clientId);
       if (!connection) return;
@@ -98,7 +94,19 @@ export default function WhatsAppToolsPage() {
     } catch (error) {
       console.error("Erro ao carregar configurações:", error);
     }
-  };
+  }, [connections]);
+
+  useEffect(() => {
+    if (user) {
+      loadConnections();
+    }
+  }, [user, loadConnections]);
+
+  useEffect(() => {
+    if (selectedConnection) {
+      loadConfig(selectedConnection);
+    }
+  }, [selectedConnection, loadConfig]);
 
   const saveConfig = async () => {
     if (!selectedConnection) {
