@@ -1,4 +1,4 @@
-import { create, Whatsapp, SocketState } from 'wppconnect';
+import { create, Whatsapp, SocketState } from '@wppconnect-team/wppconnect';
 import prisma from '../config/prisma';
 import { Logger } from '../utils/logger';
 import openRouterService from './openrouter.service';

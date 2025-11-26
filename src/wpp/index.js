@@ -1,4 +1,4 @@
-import wppconnect from 'wppconnect';
+import wppconnect from '@wppconnect-team/wppconnect';
 import config from '../../config.js';
 import logger from '../utils/logger.js';
 import prisma from '../db/index.js';
