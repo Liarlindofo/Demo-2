@@ -1,0 +1,23 @@
+# Backend (separate service, not part of Next.js build)
+backend/
+
+# Node modules
+node_modules/
+
+# Build artifacts
+.next/
+out/
+dist/
+
+# Environment files
+.env.local
+.env*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
