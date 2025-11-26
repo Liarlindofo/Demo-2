@@ -17,8 +17,9 @@ model StackUser {
   displayName           String?
   profileImageUrl       String?
   primaryEmailVerified  DateTime?
+  lastActiveAt          DateTime?
   userId                String?   @unique
-  user                  User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                  User?     @relation("StackUserBelongsToUser", fields: [userId], references: [id], onDelete: Cascade)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -36,7 +37,7 @@ model User {
   birthDate   DateTime?
   isAdmin     Boolean     @default(false)
   stackUserId String?     @unique
-  stackUser   StackUser?
+  stackUser   StackUser?  @relation("UserHasStackUser", fields: [stackUserId], references: [id])
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   
