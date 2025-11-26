@@ -1,4 +1,4 @@
-// Prisma Schema para Platefull WhatsApp Bot
+// Prisma Schema - Platefull Platform
 // PostgreSQL via Neon
 
 generator client {
@@ -10,45 +10,129 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Stack Auth User
+model StackUser {
+  id                    String    @id @default(uuid())
+  primaryEmail          String?   @unique
+  displayName           String?
+  profileImageUrl       String?
+  primaryEmailVerified  DateTime?
+  userId                String?   @unique
+  user                  User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("stack_users")
+}
+
+// Application User
 model User {
-  id           String        @id @default(cuid())
-  email        String        @unique
-  name         String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id          String      @id @default(cuid())
+  email       String      @unique
+  username    String      @unique
+  password    String?     // Opcional para Stack Auth users
+  fullName    String?
+  cnpj        String?
+  birthDate   DateTime?
+  isAdmin     Boolean     @default(false)
+  stackUserId String?     @unique
+  stackUser   StackUser?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
   
-  whatsappBots WhatsAppBot[]
-  botSettings  BotSettings?
+  stores      Store[]
+  apis        UserAPI[]
+
+  @@map("users")
 }
 
-model WhatsAppBot {
-  id              String   @id @default(cuid())
-  userId          String
-  slot            Int      // 1 ou 2
-  sessionJson     Json?
-  connectedNumber String?
-  isConnected     Boolean  @default(false)
-  qrCode          String?  // base64 temporário
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+// User APIs (Saipos, WhatsApp, etc)
+model UserAPI {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  type        String        // 'saipos' or 'whatsapp'
+  apiKey      String
+  baseUrl     String?
+  storeId     String
+  status      String        @default("disconnected")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@unique([userId, slot])
+  salesDaily  SalesDaily[]
+  syncRuns    SyncRun[]
+
   @@index([userId])
+  @@index([storeId])
+  @@map("user_apis")
 }
 
-model BotSettings {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  botName      String   @default("Assistente")
-  storeType    String?  // pizzaria, mercado, etc.
-  contextLimit Int      @default(10)
-  lineLimit    Int      @default(8)
-  basePrompt   String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+// Store
+model Store {
+  id        String    @id @default(cuid())
+  name      String
+  address   String?
+  phone     String?
+  cnpj      String?
+  isActive  Boolean   @default(true)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("stores")
+}
+
+// Sales Daily
+model SalesDaily {
+  id              String    @id @default(cuid())
+  apiId           String
+  api             UserAPI   @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  storeId         String
+  date            DateTime
+  totalOrders     Int
+  totalSales      Float
+  uniqueCustomers Int       @default(0)
+  channels        Json?
+  createdAt       DateTime  @default(now())
+
+  @@unique([apiId, date], name: "sales_daily_api_date_unique")
+  @@index([apiId, date])
+  @@index([storeId])
+  @@map("sales_daily")
+}
+
+// Sync Run
+model SyncRun {
+  id          String      @id @default(cuid())
+  apiId       String
+  api         UserAPI     @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  storeId     String
+  startDate   DateTime
+  endDate     DateTime
+  status      String      // 'running', 'completed', 'failed'
+  recordsSynced Int       @default(0)
+  startedAt   DateTime    @default(now())
+  completedAt DateTime?
   
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  errors      SyncError[]
+
+  @@index([apiId])
+  @@index([status])
+  @@map("sync_runs")
+}
+
+// Sync Error
+model SyncError {
+  id          String    @id @default(cuid())
+  syncRunId   String
+  syncRun     SyncRun   @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+  error       String
+  context     Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([syncRunId])
+  @@map("sync_errors")
 }
