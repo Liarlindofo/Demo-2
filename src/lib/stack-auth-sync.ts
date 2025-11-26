@@ -14,18 +14,28 @@ export interface StackAuthUser {
  */
 export async function syncStackAuthUser(stackUser: StackAuthUser) {
   try {
+    console.log('🔄 Sincronizando usuário Stack Auth:', { 
+      id: stackUser.id, 
+      email: stackUser.primaryEmail 
+    });
+
     if (!stackUser.primaryEmail) {
       throw new Error('Email do usuário não está disponível');
     }
 
     // Verificar se o StackUser já existe
+    console.log('📊 Buscando StackUser no banco...');
     let dbStackUser = await prisma.stackUser.findUnique({
       where: { id: stackUser.id },
       include: { user: true }
+    }).catch((error) => {
+      console.error('❌ Erro ao buscar StackUser:', error);
+      throw new Error(`Erro ao acessar banco de dados: ${error.message}. Possível causa: tabelas não criadas. Execute: GET /api/admin/sync-database?secret=YOUR_ADMIN_SECRET`);
     });
 
     // Se não existe, criar novo
     if (!dbStackUser) {
+      console.log('➕ Criando novo StackUser...');
       dbStackUser = await prisma.stackUser.create({
         data: {
           id: stackUser.id,
@@ -36,8 +46,13 @@ export async function syncStackAuthUser(stackUser: StackAuthUser) {
           lastActiveAt: new Date(),
         },
         include: { user: true },
+      }).catch((error) => {
+        console.error('❌ Erro ao criar StackUser:', error);
+        throw new Error(`Erro ao criar usuário: ${error.message}`);
       });
+      console.log('✅ StackUser criado:', dbStackUser.id);
     } else {
+      console.log('✅ StackUser encontrado:', dbStackUser.id);
       // Atualizar dados do StackUser
       dbStackUser = await prisma.stackUser.update({
         where: { id: stackUser.id },
