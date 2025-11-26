@@ -19,7 +19,10 @@ model StackUser {
   primaryEmailVerified  DateTime?
   lastActiveAt          DateTime?
   userId                String?   @unique
-  user                  User?     @relation("StackUserBelongsToUser", fields: [userId], references: [id], onDelete: Cascade)
+  // Relation A: StackUser -> User via userId
+  user                  User?     @relation("StackUserUser", fields: [userId], references: [id], onDelete: Cascade)
+  // Back relation for User.stackUser (Relation B)
+  primaryForUser        User?     @relation("UserStackUser")
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -37,7 +40,10 @@ model User {
   birthDate   DateTime?
   isAdmin     Boolean     @default(false)
   stackUserId String?     @unique
-  stackUser   StackUser?  @relation("UserHasStackUser", fields: [stackUserId], references: [id])
+  // Relation B: User -> StackUser via stackUserId
+  stackUser   StackUser?  @relation("UserStackUser", fields: [stackUserId], references: [id])
+  // Back relation for StackUser.user (Relation A)
+  stackUserRef StackUser? @relation("StackUserUser")
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   
