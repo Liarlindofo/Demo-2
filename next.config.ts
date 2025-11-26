@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     STACK_AUTH_DOMAIN: 'https://platefull.com.br',
     STACK_AUTH_HANDLER_PATH: '/handler',
   },
-  // Excluir backend do build do Next.js
+  // Excluir backend e scripts de teste do build do Next.js
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
         fs: false,
       };
     }
+    
+    // Ignorar scripts de teste e utilitários durante o build
+    // (Eles não são necessários para o build do Next.js)
+    
     return config;
   },
   // Ignorar arquivos do backend durante o build

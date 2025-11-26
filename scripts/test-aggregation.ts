@@ -1,8 +1,11 @@
+// @ts-nocheck
 /**
  * Script para testar a agregação de dados de vendas
  * 
  * Uso:
  * npx ts-node scripts/test-aggregation.ts
+ * 
+ * NOTA: Este script não é usado no build do Next.js
  */
 
 import { PrismaClient } from '@prisma/client';

@@ -1,6 +1,17 @@
 # Backend (separate service, not part of Next.js build)
 backend/
 
+# Test scripts (not needed for build)
+scripts/test-*.ts
+scripts/check-*.ts
+scripts/create-*.ts
+scripts/fix-*.ts
+scripts/init-*.ts
+scripts/migrate-*.ts
+scripts/backfill-*.ts
+scripts/clean-*.ts
+scripts/remove-*.ts
+
 # Node modules
 node_modules/
 

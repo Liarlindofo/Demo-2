@@ -28,14 +28,23 @@
     "app/**/*.tsx",
     "src/**/*.ts",
     "src/**/*.tsx",
-    "scripts/**/*.ts",
+    "scripts/vercel-build.ts",
     ".next/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "backend",
     "backend/**/*",
-    "**/backend/**/*"
+    "**/backend/**/*",
+    "scripts/test-*.ts",
+    "scripts/check-*.ts",
+    "scripts/create-*.ts",
+    "scripts/fix-*.ts",
+    "scripts/init-*.ts",
+    "scripts/migrate-*.ts",
+    "scripts/backfill-*.ts",
+    "scripts/clean-*.ts",
+    "scripts/remove-*.ts"
   ]
 }
 
