@@ -103,23 +103,80 @@ export async function startConnection(req, res) {
 
     logger.info(`Iniciando conexão [${userId}:${slot}]`);
 
+    // Inicia o cliente (não bloqueia - QR Code vem depois)
     const result = await startClient(userId, parseInt(slot));
 
-    if (result.success) {
-      res.json({
-        success: true,
-        message: result.message,
-        connectedNumber: result.connectedNumber
-      });
-    } else {
-      res.status(400).json({
+    if (!result.success) {
+      return res.status(400).json({
         success: false,
         message: result.message
       });
     }
 
+    // Se já está conectado, retorna imediatamente
+    if (result.connectedNumber) {
+      return res.json({
+        success: true,
+        message: result.message,
+        connectedNumber: result.connectedNumber,
+        qrCode: null,
+        isConnected: true
+      });
+    }
+
+    // Aguarda QR Code ser gerado (máximo 30 segundos)
+    let qrCode = null;
+    const maxWaitTime = 30000; // 30 segundos
+    const checkInterval = 1000; // Verifica a cada 1 segundo
+    const startTime = Date.now();
+
+    while (!qrCode && (Date.now() - startTime) < maxWaitTime) {
+      const bot = await WhatsAppBotModel.findByUserAndSlot(userId, parseInt(slot));
+      if (bot && bot.qrCode) {
+        qrCode = bot.qrCode;
+        break;
+      }
+      // Aguarda antes de verificar novamente
+      await new Promise(resolve => setTimeout(resolve, checkInterval));
+    }
+
+    // Retorna resposta com QR Code se disponível
+    res.json({
+      success: true,
+      message: qrCode ? 'QR Code gerado com sucesso' : 'Conexão iniciada, aguardando QR Code...',
+      qrCode: qrCode,
+      connectedNumber: result.connectedNumber || null,
+      isConnected: !!result.connectedNumber
+    });
+
   } catch (error) {
     logger.error('Erro ao iniciar conexão:', error);
+    
+    // Tratar erro específico de browser já rodando
+    if (error.message && error.message.includes('browser is already running')) {
+      // Tenta buscar QR Code existente
+      try {
+        const bot = await WhatsAppBotModel.findByUserAndSlot(userId, parseInt(slot));
+        if (bot && bot.qrCode) {
+          return res.json({
+            success: true,
+            message: 'Conexão já está ativa, QR Code disponível',
+            qrCode: bot.qrCode,
+            connectedNumber: bot.connectedNumber || null,
+            isConnected: bot.isConnected || false
+          });
+        }
+      } catch (dbError) {
+        logger.error('Erro ao buscar QR Code existente:', dbError);
+      }
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Uma sessão já está rodando. Pare a sessão atual antes de iniciar uma nova.',
+        error: error.message
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Erro ao iniciar conexão',

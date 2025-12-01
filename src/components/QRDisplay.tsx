@@ -34,14 +34,21 @@ export function QRDisplay({ userId, slot }) {
             retryCount = 0; // Reset contador em caso de sucesso
           } else {
             // QR ainda não está disponível, continua tentando
-            if (retryCount < MAX_RETRIES) {
-              retryCount++;
-            } else {
-              setError("QR Code ainda não está disponível. Aguarde alguns segundos.");
+            // Não incrementa retryCount aqui, pois é normal não ter QR ainda
+            if (retryCount >= MAX_RETRIES * 2) {
+              // Só mostra erro após muitas tentativas (dobro do normal)
+              setError("QR Code ainda não está disponível. O servidor pode estar processando a conexão.");
               setLoading(false);
             }
           }
         } else {
+          // Se a resposta diz que não tem QR ainda, continua tentando
+          if (res.message?.includes('não disponível') || res.message?.includes('não está disponível')) {
+            retryCount++;
+            if (retryCount < MAX_RETRIES * 2) {
+              return; // Continua tentando
+            }
+          }
           setError(res.message || "Erro ao buscar QR Code");
           setLoading(false);
         }
@@ -51,7 +58,8 @@ export function QRDisplay({ userId, slot }) {
         console.error("Erro ao carregar QR Code:", err);
         retryCount++;
         
-        if (retryCount >= MAX_RETRIES) {
+        // Só mostra erro após muitas tentativas
+        if (retryCount >= MAX_RETRIES * 2) {
           setError(err.message || "Erro ao conectar com o servidor. Verifique sua conexão.");
           setLoading(false);
           // Para o intervalo após muitas tentativas
@@ -66,14 +74,19 @@ export function QRDisplay({ userId, slot }) {
     // Primeira tentativa imediata
     loadQR();
 
-    // Configurar intervalo apenas se ainda não tiver QR e não tiver erro
-    if (!qr && !error) {
-      intervalId = setInterval(() => {
-        if (!error && retryCount < MAX_RETRIES) {
-          loadQR();
+    // Configurar intervalo para buscar QR Code
+    // Verifica a cada 2 segundos até encontrar o QR Code
+    intervalId = setInterval(() => {
+      if (!qr && retryCount < MAX_RETRIES * 2) {
+        loadQR();
+      } else if (qr) {
+        // Se já tem QR, para o intervalo
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
         }
-      }, 5000); // Aumentado para 5s para não sobrecarregar
-    }
+      }
+    }, 2000); // Verifica a cada 2 segundos
 
     return () => {
       isMounted = false;

@@ -290,6 +290,13 @@ export default function ConnectionsPage() {
         const data = await response.json();
         console.log('[Connections] Resposta do servidor:', data);
 
+        // Se já está conectado
+        if (data.isConnected && data.connectedNumber) {
+          alert(`WhatsApp já está conectado com o número ${data.connectedNumber}`);
+          await loadConnections();
+          return;
+        }
+
         // QR CODE DISPONÍVEL
         if (data.qrCode) {
           setQrModal({
@@ -298,33 +305,45 @@ export default function ConnectionsPage() {
             slot: defaultSlot,
             connectionName: "Nova Conexão",
           });
+          await loadConnections();
         } else {
-          // Se não tem QR ainda, pode ser que precise buscar depois
-          // Tentar buscar QR Code após alguns segundos
-          setTimeout(async () => {
+          // Se não tem QR ainda, fazer polling no endpoint /api/qr
+          console.log('[Connections] QR Code não veio na resposta, iniciando polling...');
+          
+          let attempts = 0;
+          const maxAttempts = 30; // 30 tentativas = 30 segundos
+          const pollInterval = setInterval(async () => {
+            attempts++;
+            
             try {
               const qrResponse = await fetch(
                 `${API_URL}/api/qr/${defaultClientId}/${defaultSlot}`
               );
+              
               if (qrResponse.ok) {
                 const qrData = await qrResponse.json();
-                if (qrData.qrCode) {
+                if (qrData.success && qrData.qrCode) {
+                  clearInterval(pollInterval);
                   setQrModal({
                     open: true,
                     qrCode: qrData.qrCode,
                     slot: defaultSlot,
                     connectionName: "Nova Conexão",
                   });
+                  await loadConnections();
                 }
               }
             } catch (err) {
               console.error('Erro ao buscar QR Code:', err);
             }
-          }, 5000);
+            
+            // Para polling após muitas tentativas
+            if (attempts >= maxAttempts) {
+              clearInterval(pollInterval);
+              alert('QR Code não foi gerado a tempo. Tente novamente ou verifique os logs do servidor.');
+            }
+          }, 1000); // Verifica a cada 1 segundo
         }
-
-        // Recarregar conexões após gerar QR
-        await loadConnections();
       } else {
         // Se a resposta não está OK, tentar obter mensagem de erro
         const errorText = await response.text();
@@ -344,6 +363,26 @@ export default function ConnectionsPage() {
         errorMessage = "Timeout: A requisição demorou mais de 2 minutos. O servidor pode estar processando a conexão. Aguarde alguns segundos e tente novamente, ou verifique se o servidor está online.";
       } else if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
         errorMessage = "Erro de conexão: Não foi possível conectar ao servidor. Verifique sua internet e se o servidor está online.";
+      } else if (error.message?.includes('browser is already running') || error.message?.includes('sessão já está rodando')) {
+        errorMessage = "Uma sessão já está ativa. Tente parar a sessão atual primeiro ou aguarde alguns segundos e tente buscar o QR Code novamente.";
+        // Tentar buscar QR Code existente
+        try {
+          const qrResponse = await fetch(`${API_URL}/api/qr/user-${user.id}/1`);
+          if (qrResponse.ok) {
+            const qrData = await qrResponse.json();
+            if (qrData.success && qrData.qrCode) {
+              setQrModal({
+                open: true,
+                qrCode: qrData.qrCode,
+                slot: 1,
+                connectionName: "Nova Conexão",
+              });
+              return; // Não mostra erro se conseguiu buscar o QR
+            }
+          }
+        } catch (qrError) {
+          console.error('Erro ao buscar QR Code existente:', qrError);
+        }
       } else {
         errorMessage = error.message || "Erro ao gerar QR Code. Tente novamente.";
       }
@@ -377,6 +416,14 @@ export default function ConnectionsPage() {
 
       if (response.ok) {
         const data = await response.json();
+        console.log('[Connections] Resposta startSession:', data);
+
+        // Se já está conectado
+        if (data.isConnected && data.connectedNumber) {
+          alert(`WhatsApp já está conectado com o número ${data.connectedNumber}`);
+          await loadConnections();
+          return;
+        }
 
         // QR CODE DISPONÍVEL
         if (data.qrCode) {
@@ -386,9 +433,41 @@ export default function ConnectionsPage() {
             slot,
             connectionName,
           });
+          await loadConnections();
+        } else {
+          // Fazer polling para buscar QR Code
+          console.log('[Connections] QR Code não veio, iniciando polling...');
+          
+          let attempts = 0;
+          const maxAttempts = 30;
+          const pollInterval = setInterval(async () => {
+            attempts++;
+            
+            try {
+              const qrResponse = await fetch(`${API_URL}/api/qr/${clientId}/${slot}`);
+              if (qrResponse.ok) {
+                const qrData = await qrResponse.json();
+                if (qrData.success && qrData.qrCode) {
+                  clearInterval(pollInterval);
+                  setQrModal({
+                    open: true,
+                    qrCode: qrData.qrCode,
+                    slot,
+                    connectionName,
+                  });
+                  await loadConnections();
+                }
+              }
+            } catch (err) {
+              console.error('Erro ao buscar QR Code:', err);
+            }
+            
+            if (attempts >= maxAttempts) {
+              clearInterval(pollInterval);
+              alert('QR Code não foi gerado a tempo. Tente novamente.');
+            }
+          }, 1000);
         }
-
-        await loadConnections();
       }
     } catch (error) {
       console.error("Erro ao iniciar sessão:", error);
