@@ -256,7 +256,53 @@ export default function ConnectionsPage() {
   };
 
   // --------------------------------------------------------------
-  // 4. INICIAR SESSÃO WHATSAPP (GERAR QR CODE)
+  // 4. GERAR QR CODE SEM CONEXÃO (PRIMEIRA VEZ)
+  // --------------------------------------------------------------
+  const generateQRCodeWithoutConnection = async () => {
+    if (!user?.id) return;
+
+    setActionLoading({ ...actionLoading, generate: true });
+
+    try {
+      // Usar o ID do usuário como clientId padrão
+      const defaultClientId = `user-${user.id}`;
+      const defaultSlot = 1;
+
+      const response = await fetch(
+        `${API_URL}/api/start/${defaultClientId}/${defaultSlot}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+
+        // QR CODE DISPONÍVEL
+        if (data.qrCode) {
+          setQrModal({
+            open: true,
+            qrCode: data.qrCode,
+            slot: defaultSlot,
+            connectionName: "Nova Conexão",
+          });
+        }
+
+        // Recarregar conexões após gerar QR
+        await loadConnections();
+      }
+    } catch (error) {
+      console.error("Erro ao gerar QR Code:", error);
+    } finally {
+      setActionLoading({ ...actionLoading, generate: false });
+    }
+  };
+
+  // --------------------------------------------------------------
+  // 5. INICIAR SESSÃO WHATSAPP (GERAR QR CODE)
   // --------------------------------------------------------------
   const startSession = async (
     connectionId: string,
@@ -448,17 +494,24 @@ export default function ConnectionsPage() {
                   Nenhuma conexão WhatsApp cadastrada
                 </h3>
                 <p className="text-gray-400 mb-6">
-                  Adicione uma conexão para começar
+                  Gere um QR Code para conectar seu WhatsApp
                 </p>
                 <Button
-                  onClick={() => {
-                    setAddConnectionModal(true);
-                    setConnectionType("whatsapp");
-                  }}
+                  onClick={generateQRCodeWithoutConnection}
+                  disabled={actionLoading.generate}
                   className="bg-[#001F05] hover:bg-[#003308] text-white"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Primeira Conexão
+                  {actionLoading.generate ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Gerando QR Code...
+                    </>
+                  ) : (
+                    <>
+                      <QrCode className="h-4 w-4 mr-2" />
+                      Gerar QR Code
+                    </>
+                  )}
                 </Button>
               </Card>
             ) : (
