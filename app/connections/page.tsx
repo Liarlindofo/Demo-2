@@ -268,6 +268,10 @@ export default function ConnectionsPage() {
       const defaultClientId = `user-${user.id}`;
       const defaultSlot = 1;
 
+      // Criar AbortController para timeout de 60 segundos
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
       const response = await fetch(
         `${API_URL}/api/start/${defaultClientId}/${defaultSlot}`,
         {
@@ -275,8 +279,11 @@ export default function ConnectionsPage() {
           headers: {
             "Content-Type": "application/json",
           },
+          signal: controller.signal,
         }
       );
+
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const data = await response.json();
@@ -294,8 +301,13 @@ export default function ConnectionsPage() {
         // Recarregar conexões após gerar QR
         await loadConnections();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao gerar QR Code:", error);
+      if (error.name === 'AbortError') {
+        alert("Timeout: A requisição demorou muito para responder. Tente novamente.");
+      } else {
+        alert(`Erro ao gerar QR Code: ${error.message || 'Erro desconhecido'}`);
+      }
     } finally {
       setActionLoading({ ...actionLoading, generate: false });
     }
