@@ -255,8 +255,11 @@ export async function restoreAllSessions() {
   try {
     logger.info('Restaurando sessões do banco de dados...');
     
-    // Busca todos os bots conectados
-    const connectedBots = await prisma.whatsAppBot.findMany({
+    // Busca todos os bots conectados usando Prisma direto
+    const { PrismaClient } = await import('@prisma/client');
+    const prismaClient = new PrismaClient();
+    
+    const connectedBots = await prismaClient.whatsAppBot.findMany({
       where: {
         isConnected: true
       }
