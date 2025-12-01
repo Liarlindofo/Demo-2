@@ -45,8 +45,15 @@ async function safeFetch(url: string, options?: RequestInit, timeout: number = D
   } catch (err: any) {
     clearTimeout(timeoutId);
     
-    if (err.name === 'AbortError') {
-      throw new Error(`Timeout: A requisição demorou mais de ${timeout}ms para responder`);
+    // Tratar AbortError (timeout ou cancelamento)
+    if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+      const timeoutSeconds = Math.round(timeout / 1000);
+      throw new Error(`Timeout: A requisição demorou mais de ${timeoutSeconds} segundos para responder. O servidor pode estar processando a conexão. Tente novamente.`);
+    }
+    
+    // Tratar erros de rede
+    if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
+      throw new Error('Erro de conexão: Não foi possível conectar ao servidor. Verifique sua internet e tente novamente.');
     }
     
     console.error("Erro ao chamar o bot:", err.message);
@@ -74,7 +81,11 @@ export async function startConnection(userId: string, slot: number) {
   const apiUrl = getApiUrl();
   const fullUrl = `${apiUrl}/start/${userId}/${slot}`;
   console.log('[WPP] Iniciando conexão:', fullUrl);
-  return safeFetch(fullUrl, { method: "POST" }, 60000); // 60s para iniciar conexão
+  console.log('[WPP] Isso pode demorar até 2 minutos...');
+  
+  // 120s (2 minutos) para iniciar conexão - pode demorar para gerar QR Code
+  // Iniciar uma sessão WhatsApp requer inicializar o navegador headless e gerar QR
+  return safeFetch(fullUrl, { method: "POST" }, 120000);
 }
 
 export async function getQRCode(userId: string, slot: number) {

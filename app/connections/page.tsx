@@ -268,9 +268,10 @@ export default function ConnectionsPage() {
       const defaultClientId = `user-${user.id}`;
       const defaultSlot = 1;
 
-      // Criar AbortController para timeout de 60 segundos
+      // Criar AbortController para timeout de 120 segundos (2 minutos)
+      // Iniciar conexão WhatsApp pode demorar para gerar o QR Code
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
 
       const response = await fetch(
         `${API_URL}/api/start/${defaultClientId}/${defaultSlot}`,
@@ -287,6 +288,7 @@ export default function ConnectionsPage() {
 
       if (response.ok) {
         const data = await response.json();
+        console.log('[Connections] Resposta do servidor:', data);
 
         // QR CODE DISPONÍVEL
         if (data.qrCode) {
@@ -296,18 +298,57 @@ export default function ConnectionsPage() {
             slot: defaultSlot,
             connectionName: "Nova Conexão",
           });
+        } else {
+          // Se não tem QR ainda, pode ser que precise buscar depois
+          // Tentar buscar QR Code após alguns segundos
+          setTimeout(async () => {
+            try {
+              const qrResponse = await fetch(
+                `${API_URL}/api/qr/${defaultClientId}/${defaultSlot}`
+              );
+              if (qrResponse.ok) {
+                const qrData = await qrResponse.json();
+                if (qrData.qrCode) {
+                  setQrModal({
+                    open: true,
+                    qrCode: qrData.qrCode,
+                    slot: defaultSlot,
+                    connectionName: "Nova Conexão",
+                  });
+                }
+              }
+            } catch (err) {
+              console.error('Erro ao buscar QR Code:', err);
+            }
+          }, 5000);
         }
 
         // Recarregar conexões após gerar QR
         await loadConnections();
+      } else {
+        // Se a resposta não está OK, tentar obter mensagem de erro
+        const errorText = await response.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { message: errorText || `Erro HTTP ${response.status}` };
+        }
+        throw new Error(errorData.message || `Erro HTTP ${response.status}`);
       }
     } catch (error: any) {
       console.error("Erro ao gerar QR Code:", error);
-      if (error.name === 'AbortError') {
-        alert("Timeout: A requisição demorou muito para responder. Tente novamente.");
+      let errorMessage = "Erro desconhecido";
+      
+      if (error.name === 'AbortError' || error.message?.includes('Timeout') || error.message?.includes('aborted')) {
+        errorMessage = "Timeout: A requisição demorou mais de 2 minutos. O servidor pode estar processando a conexão. Aguarde alguns segundos e tente novamente, ou verifique se o servidor está online.";
+      } else if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+        errorMessage = "Erro de conexão: Não foi possível conectar ao servidor. Verifique sua internet e se o servidor está online.";
       } else {
-        alert(`Erro ao gerar QR Code: ${error.message || 'Erro desconhecido'}`);
+        errorMessage = error.message || "Erro ao gerar QR Code. Tente novamente.";
       }
+      
+      alert(errorMessage);
     } finally {
       setActionLoading({ ...actionLoading, generate: false });
     }
