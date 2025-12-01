@@ -1,6 +1,3 @@
-// Prisma Schema - Platefull Platform
-// PostgreSQL via Neon
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,68 +7,62 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Stack Auth User
 model StackUser {
-  id                    String    @id @default(uuid())
-  primaryEmail          String?   @unique
-  displayName           String?
-  profileImageUrl       String?
-  primaryEmailVerified  DateTime?
-  lastActiveAt          DateTime?
-  userId                String?   @unique
-  // Relation A: StackUser -> User via userId
-  user                  User?     @relation("StackUserUser", fields: [userId], references: [id], onDelete: Cascade)
-  // Back relation for User.stackUser (Relation B)
-  primaryForUser        User?     @relation("UserStackUser")
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  id                   String    @id @default(uuid())
+  primaryEmail         String?   @unique
+  displayName          String?
+  profileImageUrl      String?
+  primaryEmailVerified DateTime?
+  lastActiveAt         DateTime?
+  userId               String?   @unique
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  user                 User?     @relation("StackUserUser", fields: [userId], references: [id], onDelete: Cascade)
+  primaryForUser       User?     @relation("UserStackUser")
 
   @@map("stack_users")
 }
 
-// Application User
 model User {
-  id          String      @id @default(cuid())
-  email       String      @unique
-  username    String      @unique
-  password    String?     // Opcional para Stack Auth users
-  fullName    String?
-  cnpj        String?
-  birthDate   DateTime?
-  isAdmin     Boolean     @default(false)
-  stackUserId String?     @unique
-  // Relation B: User -> StackUser via stackUserId
-  stackUser   StackUser?  @relation("UserStackUser", fields: [stackUserId], references: [id])
-  // Back relation for StackUser.user (Relation A)
-  stackUserRef StackUser? @relation("StackUserUser")
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  stores      Store[]
-  apis        UserAPI[]
+  id           String        @id @default(cuid())
+  email        String        @unique
+  username     String        @unique
+  password     String?
+  fullName     String?
+  cnpj         String?
+  birthDate    DateTime?
+  isAdmin      Boolean       @default(false)
+  stackUserId  String?       @unique
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  name         String?
+  stackUserRef StackUser?    @relation("StackUserUser")
+  stackUser    StackUser?    @relation("UserStackUser", fields: [stackUserId], references: [id])
+  stores       Store[]
+  apis         UserAPI[]
+  whatsappBots WhatsAppBot[]
+  botSettings  BotSettings?
 
   @@map("users")
 }
 
-// User APIs (Saipos, WhatsApp, etc)
 model UserAPI {
-  id          String        @id @default(cuid())
-  userId      String
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name        String
-  type        String        // 'saipos' or 'whatsapp'
-  apiKey      String
-  baseUrl     String?
-  storeId     String
-  status      String        @default("disconnected")
-  isSyncing   Boolean       @default(false)
-  enabled     Boolean       @default(true)
-  lastTest    DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  
-  salesDaily  SalesDaily[]
-  syncRuns    SyncRun[]
+  id         String       @id @default(cuid())
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  type       String
+  apiKey     String
+  baseUrl    String?
+  storeId    String
+  status     String       @default("disconnected")
+  isSyncing  Boolean      @default(false)
+  enabled    Boolean      @default(true)
+  lastTest   DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  salesDaily SalesDaily[]
+  syncRuns   SyncRun[]
 
   @@index([userId])
   @@index([storeId])
@@ -79,35 +70,33 @@ model UserAPI {
   @@map("user_apis")
 }
 
-// Store
 model Store {
-  id        String    @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String
   address   String?
   phone     String?
   cnpj      String?
-  isActive  Boolean   @default(true)
+  isActive  Boolean  @default(true)
   userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@map("stores")
 }
 
-// Sales Daily
 model SalesDaily {
-  id              String    @id @default(cuid())
+  id              String   @id @default(cuid())
   apiId           String
-  api             UserAPI   @relation(fields: [apiId], references: [id], onDelete: Cascade)
   storeId         String
   date            DateTime
   totalOrders     Int
   totalSales      Float
-  uniqueCustomers Int       @default(0)
+  uniqueCustomers Int      @default(0)
   channels        Json?
-  createdAt       DateTime  @default(now())
+  createdAt       DateTime @default(now())
+  api             UserAPI  @relation(fields: [apiId], references: [id], onDelete: Cascade)
 
   @@unique([apiId, date], name: "sales_daily_api_date_unique")
   @@index([apiId, date])
@@ -115,17 +104,16 @@ model SalesDaily {
   @@map("sales_daily")
 }
 
-// Individual raw sales (normalized per sale)
 model Sale {
-  id           String    @id @default(cuid())
-  userId       String
-  storeId      String
-  externalId   String
-  saleDateUtc  DateTime
-  totalAmount  Float?
-  rawJson      Json?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @default(now())
+  id          String   @id @default(cuid())
+  userId      String
+  storeId     String
+  externalId  String
+  saleDateUtc DateTime
+  totalAmount Float?
+  rawJson     Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
 
   @@unique([storeId, externalId], name: "storeId_externalId")
   @@index([storeId])
@@ -133,54 +121,87 @@ model Sale {
   @@map("sales")
 }
 
-// Raw pages fetched from Saipos during sync (for debugging)
 model SalesRawPage {
-  id         String    @id @default(cuid())
-  syncRunId  String
-  run        SyncRun   @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
-  pageIndex  Int
-  payload    Json?
-  createdAt  DateTime  @default(now())
+  id        String   @id @default(cuid())
+  syncRunId String
+  pageIndex Int
+  payload   Json?
+  createdAt DateTime @default(now())
+  run       SyncRun  @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
 
   @@index([syncRunId])
   @@map("sales_raw_pages")
 }
 
-// Sync Run (tracking)
 model SyncRun {
-  id               String    @id @default(cuid())
+  id               String         @id @default(cuid())
   userApiId        String
-  api              UserAPI   @relation(fields: [userApiId], references: [id], onDelete: Cascade)
   storeId          String
-  status           String    // 'running' | 'success' | 'error'
+  status           String
   startPeriod      DateTime
   endPeriod        DateTime
-  startedAt        DateTime  @default(now())
+  startedAt        DateTime       @default(now())
   endedAt          DateTime?
   lastUrl          String?
-  totalRequests    Int       @default(0)
-  totalRecordsRaw  Int       @default(0)
-  totalAfterFilter Int       @default(0)
-  syncedCount      Int       @default(0)
-  errorsCount      Int       @default(0)
-
+  totalRequests    Int            @default(0)
+  totalRecordsRaw  Int            @default(0)
+  totalAfterFilter Int            @default(0)
+  syncedCount      Int            @default(0)
+  errorsCount      Int            @default(0)
   rawPages         SalesRawPage[]
   errors           SyncError[]
+  api              UserAPI        @relation(fields: [userApiId], references: [id], onDelete: Cascade)
 
   @@index([userApiId])
   @@index([status])
   @@map("sync_runs")
 }
 
-// Sync Error
 model SyncError {
-  id             String    @id @default(cuid())
+  id             String   @id @default(cuid())
   syncRunId      String
-  run            SyncRun   @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+  run            SyncRun  @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
   message        String
   payloadPreview String?
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime @default(now())
 
   @@index([syncRunId])
   @@map("sync_errors")
+}
+
+model WhatsAppBot {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slot            Int
+  isConnected     Boolean  @default(false)
+  connectedNumber String?
+  sessionJson     Json?
+  qrCode          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, slot])
+  @@index([userId])
+  @@index([isConnected])
+  @@map("whatsapp_bots")
+}
+
+model BotSettings {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  botName      String?  @default("Assistente Virtual")
+  storeType    String?  @default("geral")
+  basePrompt   String?
+  forbidden    String?
+  messageLimit Int?     @default(30)
+  contextTime  Int?     @default(60)
+  botEnabled   Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+  @@index([botEnabled])
+  @@map("bot_settings")
 }
