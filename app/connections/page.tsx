@@ -123,9 +123,7 @@ export default function ConnectionsPage() {
               const statusRes = await fetch(
                 `${API_URL}/api/status/${api.storeId}`,
                 {
-                  headers: {
-                    Authorization: `Bearer ${api.apiKey}`,
-                  },
+                  method: "GET",
                 },
               );
 
@@ -274,7 +272,6 @@ export default function ConnectionsPage() {
       const response = await fetch(`${API_URL}/api/start/${clientId}/${slot}`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
       });
@@ -317,7 +314,7 @@ export default function ConnectionsPage() {
       const response = await fetch(`${API_URL}/api/stop/${clientId}/${slot}`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
         },
       });
 
