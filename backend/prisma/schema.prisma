@@ -7,32 +7,52 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Client {
-  id            String    @id @default(cuid())
-  name          String
-  botName       String?
-  storeType     String?
-  basePrompt    String?   @db.Text
-  forbidden     String?   @db.Text
-  messageLimit  Int?      @default(30)
-  contextTime   Int?      @default(60)
-  botEnabled    Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  sessions      Session[]
+//
+// USUÁRIOS
+//
+model User {
+  id            String          @id @default(cuid())
+  email         String          @unique
+  name          String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  botSettings   BotSettings?
+  whatsappBots  WhatsAppBot[]
 }
 
-model Session {
-  id        String   @id @default(cuid())
-  clientId  String
-  slot      Int
-  status    String   @default("disconnected")
-  qrCode    String?  @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+//
+// CONFIGURAÇÕES DO BOT
+//
+model BotSettings {
+  userId        String   @id
+  botName       String?  @default("Assistente")
+  storeType     String?  @default("restaurant")
+  contextLimit  Int      @default(10)   // número de mensagens no histórico
+  lineLimit     Int      @default(5)
+  basePrompt    String?  @db.Text
+  isActive      Boolean  @default(true)
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
 
-  @@unique([clientId, slot])
-  @@index([clientId])
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+//
+// BOTS WHATSAPP
+//
+model WhatsAppBot {
+  id              String    @id @default(cuid())
+  userId          String
+  slot            Int
+  isConnected     Boolean   @default(false)
+  connectedNumber String?
+  qrCode          String?   @db.Text
+  sessionJson     Json?
+  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime  @default(now())
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, slot])
+}
