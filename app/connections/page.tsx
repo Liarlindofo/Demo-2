@@ -11,6 +11,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2,
   QrCode,
@@ -21,6 +24,8 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  MessageSquare,
+  Trash2,
 } from "lucide-react";
 
 // Interfaces
@@ -75,9 +80,22 @@ export default function ConnectionsPage() {
   }>({
     open: false,
   });
+  const [addConnectionModal, setAddConnectionModal] = useState(false);
+  const [connectionType, setConnectionType] = useState<"saipos" | "whatsapp">(
+    "saipos",
+  );
   const [actionLoading, setActionLoading] = useState<{
     [key: string]: boolean;
   }>({});
+
+  // Formulário para adicionar conexão
+  const [formData, setFormData] = useState({
+    name: "",
+    apiKey: "",
+    storeId: "",
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // --------------------------------------------------------------
   // 1. CARREGAR CONEXÕES WHATSAPP E LOJAS SAIPOS
@@ -96,7 +114,7 @@ export default function ConnectionsPage() {
         const whatsappAPIs = data.filter((api) => api.type === "whatsapp");
         const saiposAPIs = data
           .filter((api) => api.type === "saipos")
-          .slice(0, 4); // Máximo 4 lojas
+          .slice(0, 3); // Máximo 3 lojas
 
         // Carregar status das conexões WhatsApp
         const connectionsWithStatus = await Promise.all(
@@ -163,7 +181,84 @@ export default function ConnectionsPage() {
   }, [user, loadConnections]);
 
   // --------------------------------------------------------------
-  // 2. INICIAR SESSÃO WHATSAPP (GERAR QR CODE)
+  // 2. ADICIONAR NOVA CONEXÃO
+  // --------------------------------------------------------------
+  const handleAddConnection = async () => {
+    if (!formData.name || !formData.apiKey) {
+      setErrorMsg("Preencha todos os campos obrigatórios");
+      return;
+    }
+
+    // Validar limite de 3 lojas Saipos
+    if (connectionType === "saipos" && saiposStores.length >= 3) {
+      setErrorMsg("Você já possui 3 lojas Saipos cadastradas (limite máximo)");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMsg(null);
+
+    try {
+      const response = await fetch("/api/user-apis", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          type: connectionType,
+          apiKey: formData.apiKey,
+          storeId:
+            formData.storeId ||
+            formData.name.toLowerCase().replace(/\s+/g, "-"),
+        }),
+      });
+
+      if (response.ok) {
+        // Limpar formulário e fechar modal
+        setFormData({ name: "", apiKey: "", storeId: "" });
+        setAddConnectionModal(false);
+        setErrorMsg(null);
+        // Recarregar conexões
+        await loadConnections();
+      } else {
+        const error = await response.json();
+        setErrorMsg(error.error || "Erro ao adicionar conexão");
+      }
+    } catch (error) {
+      console.error("Erro ao adicionar conexão:", error);
+      setErrorMsg("Erro ao adicionar conexão. Tente novamente.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // --------------------------------------------------------------
+  // 3. DELETAR CONEXÃO
+  // --------------------------------------------------------------
+  const handleDeleteConnection = async (id: string, type: string) => {
+    if (!confirm(`Tem certeza que deseja remover esta conexão ${type}?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/user-apis?id=${id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        await loadConnections();
+      } else {
+        alert("Erro ao remover conexão");
+      }
+    } catch (error) {
+      console.error("Erro ao deletar conexão:", error);
+      alert("Erro ao remover conexão");
+    }
+  };
+
+  // --------------------------------------------------------------
+  // 4. INICIAR SESSÃO WHATSAPP (GERAR QR CODE)
   // --------------------------------------------------------------
   const startSession = async (
     connectionId: string,
@@ -207,7 +302,7 @@ export default function ConnectionsPage() {
   };
 
   // --------------------------------------------------------------
-  // 3. DESCONECTAR SESSÃO WHATSAPP
+  // 5. DESCONECTAR SESSÃO WHATSAPP
   // --------------------------------------------------------------
   const stopSession = async (
     connectionId: string,
@@ -237,7 +332,7 @@ export default function ConnectionsPage() {
   };
 
   // --------------------------------------------------------------
-  // 4. FUNÇÕES AUXILIARES DE STATUS
+  // 6. FUNÇÕES AUXILIARES DE STATUS
   // --------------------------------------------------------------
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -283,7 +378,7 @@ export default function ConnectionsPage() {
   };
 
   // --------------------------------------------------------------
-  // 5. LOADING E AUTENTICAÇÃO
+  // 7. LOADING E AUTENTICAÇÃO
   // --------------------------------------------------------------
   if (loading) {
     return (
@@ -304,7 +399,7 @@ export default function ConnectionsPage() {
   }
 
   // --------------------------------------------------------------
-  // 6. RENDERIZAÇÃO
+  // 8. RENDERIZAÇÃO
   // --------------------------------------------------------------
   return (
     <div className="min-h-screen bg-black p-6">
@@ -318,7 +413,10 @@ export default function ConnectionsPage() {
             </p>
           </div>
           <Button
-            onClick={() => (window.location.href = "/dashboard")}
+            onClick={() => {
+              setAddConnectionModal(true);
+              setConnectionType("whatsapp");
+            }}
             className="bg-[#001F05] hover:bg-[#003308] text-white"
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -326,193 +424,420 @@ export default function ConnectionsPage() {
           </Button>
         </div>
 
-        {/* LOJAS SAIPOS */}
-        {saiposStores.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
-              <Store className="h-6 w-6" />
-              Lojas Saipos ({saiposStores.length}/4)
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {saiposStores.map((store) => (
-                <Card
-                  key={store.id}
-                  className="bg-[#141415] border-[#374151] rounded-2xl hover:border-[#001F05] transition-all"
-                >
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center justify-between">
-                      <span>{store.name}</span>
-                      {getStatusIcon(store.status)}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <p className="text-sm text-gray-400">
-                        <span className="font-semibold">Store ID:</span>{" "}
-                        {store.storeId}
-                      </p>
-                      <p className="text-sm text-gray-400">
-                        <span className="font-semibold">Status:</span>{" "}
-                        <span className={getStatusColor(store.status)}>
-                          {store.status}
-                        </span>
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* CONEXÕES WHATSAPP */}
-        {whatsappConnections.length === 0 ? (
-          <Card className="bg-[#141415] border-[#374151] rounded-2xl p-12 text-center">
-            <h3 className="text-xl font-semibold text-white mb-4">
-              Nenhuma conexão WhatsApp cadastrada
-            </h3>
-            <p className="text-gray-400 mb-6">
-              Adicione uma conexão para começar
-            </p>
-            <Button
-              onClick={() => (window.location.href = "/dashboard")}
-              className="bg-[#001F05] hover:bg-[#003308] text-white"
+        {/* TABS */}
+        <Tabs defaultValue="whatsapp" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 bg-[#374151] mb-6">
+            <TabsTrigger
+              value="whatsapp"
+              className="data-[state=active]:bg-[#001F05] text-white"
             >
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Primeira Conexão
-            </Button>
-          </Card>
-        ) : (
-          <div className="space-y-8">
-            {whatsappConnections.map((connection) => (
-              <div key={connection.id} className="space-y-4">
-                <h2 className="text-2xl font-bold text-white">
-                  {connection.name}
-                </h2>
+              <MessageSquare className="h-4 w-4 mr-2" />
+              WhatsApp
+            </TabsTrigger>
+            <TabsTrigger
+              value="saipos"
+              className="data-[state=active]:bg-[#001F05] text-white"
+            >
+              <Store className="h-4 w-4 mr-2" />
+              Saipos ({saiposStores.length}/3)
+            </TabsTrigger>
+          </TabsList>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {connection.sessions.map((session) => {
-                    const actionKey = `${connection.id}-${session.slot}`;
-
-                    return (
-                      <Card
-                        key={session.slot}
-                        className="bg-[#141415] border-[#374151] rounded-2xl p-6 hover:border-[#001F05] transition-all"
+          {/* ABA WHATSAPP */}
+          <TabsContent value="whatsapp" className="space-y-6">
+            {whatsappConnections.length === 0 ? (
+              <Card className="bg-[#141415] border-[#374151] rounded-2xl p-12 text-center">
+                <h3 className="text-xl font-semibold text-white mb-4">
+                  Nenhuma conexão WhatsApp cadastrada
+                </h3>
+                <p className="text-gray-400 mb-6">
+                  Adicione uma conexão para começar
+                </p>
+                <Button
+                  onClick={() => {
+                    setAddConnectionModal(true);
+                    setConnectionType("whatsapp");
+                  }}
+                  className="bg-[#001F05] hover:bg-[#003308] text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Primeira Conexão
+                </Button>
+              </Card>
+            ) : (
+              <div className="space-y-8">
+                {whatsappConnections.map((connection) => (
+                  <div key={connection.id} className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-2xl font-bold text-white">
+                        {connection.name}
+                      </h2>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          handleDeleteConnection(connection.id, "WhatsApp")
+                        }
+                        className="text-red-400 hover:text-red-500 hover:bg-red-500/10"
                       >
-                        {/* STATUS */}
-                        <div className="flex items-center gap-3 mb-4">
-                          <div
-                            className={`w-3 h-3 rounded-full ${getStatusColor(
-                              session.status,
-                            )} ${session.status === "connecting" ? "animate-pulse" : ""}`}
-                          />
-                          <h3 className="text-xl font-semibold text-white">
-                            WhatsApp {session.slot}
-                          </h3>
-                        </div>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
 
-                        <p className="text-gray-400 mb-6">
-                          {getStatusText(session.status)}
-                        </p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {connection.sessions.map((session) => {
+                        const actionKey = `${connection.id}-${session.slot}`;
+                        const isConnected =
+                          session.status === "CONNECTED" ||
+                          session.status.toLowerCase() === "connected";
 
-                        {/* AÇÕES */}
-                        <div className="space-y-3">
-                          {session.status === "CONNECTED" ||
-                          session.status.toLowerCase() === "connected" ? (
-                            <Button
-                              onClick={() =>
-                                stopSession(
-                                  connection.id,
-                                  connection.clientId,
-                                  session.slot,
-                                  "",
-                                )
-                              }
-                              disabled={actionLoading[actionKey]}
-                              className="w-full bg-red-600 hover:bg-red-700 text-white"
-                            >
-                              {actionLoading[actionKey] ? (
-                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                              ) : (
-                                <Power className="h-4 w-4 mr-2" />
-                              )}
-                              Desconectar
-                            </Button>
-                          ) : (
-                            <>
-                              <Button
-                                onClick={() =>
-                                  startSession(
-                                    connection.id,
-                                    connection.clientId,
-                                    session.slot,
-                                    "",
-                                    connection.name,
-                                  )
-                                }
-                                disabled={actionLoading[actionKey]}
-                                className="w-full bg-[#001F05] hover:bg-[#003308] text-white"
+                        return (
+                          <Card
+                            key={session.slot}
+                            className="bg-[#141415] border-[#374151] rounded-2xl p-6 hover:border-[#001F05] transition-all"
+                          >
+                            {/* STATUS */}
+                            <div className="flex items-center gap-3 mb-4">
+                              <div
+                                className={`w-3 h-3 rounded-full ${getStatusColor(
+                                  session.status,
+                                )} ${
+                                  session.status === "connecting"
+                                    ? "animate-pulse"
+                                    : ""
+                                }`}
+                              />
+                              <h3 className="text-xl font-semibold text-white">
+                                WhatsApp {session.slot}
+                              </h3>
+                              {getStatusIcon(session.status)}
+                            </div>
+
+                            <p className="text-gray-400 mb-2">
+                              {getStatusText(session.status)}
+                            </p>
+
+                            {/* STATUS BADGE */}
+                            <div className="mb-4">
+                              <span
+                                className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
+                                  isConnected
+                                    ? "bg-green-500/20 text-green-400"
+                                    : "bg-red-500/20 text-red-400"
+                                }`}
                               >
-                                {actionLoading[actionKey] ? (
-                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                ) : (
-                                  <QrCode className="h-4 w-4 mr-2" />
-                                )}
-                                Gerar QR Code
-                              </Button>
+                                {isConnected ? "✓ Conectado" : "✗ Desconectado"}
+                              </span>
+                            </div>
 
-                              {session.status === "qrcode" &&
-                                session.qrCode && (
+                            {/* AÇÕES */}
+                            <div className="space-y-3">
+                              {isConnected ? (
+                                <Button
+                                  onClick={() =>
+                                    stopSession(
+                                      connection.id,
+                                      connection.clientId,
+                                      session.slot,
+                                      "",
+                                    )
+                                  }
+                                  disabled={actionLoading[actionKey]}
+                                  className="w-full bg-red-600 hover:bg-red-700 text-white"
+                                >
+                                  {actionLoading[actionKey] ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  ) : (
+                                    <Power className="h-4 w-4 mr-2" />
+                                  )}
+                                  Desconectar
+                                </Button>
+                              ) : (
+                                <>
                                   <Button
                                     onClick={() =>
-                                      setQrModal({
-                                        open: true,
-                                        qrCode: session.qrCode,
-                                        slot: session.slot,
-                                        connectionName: connection.name,
-                                      })
+                                      startSession(
+                                        connection.id,
+                                        connection.clientId,
+                                        session.slot,
+                                        "",
+                                        connection.name,
+                                      )
                                     }
-                                    variant="outline"
-                                    className="w-full border-[#374151] text-white hover:bg-[#374151]"
+                                    disabled={actionLoading[actionKey]}
+                                    className="w-full bg-[#001F05] hover:bg-[#003308] text-white"
                                   >
-                                    <QrCode className="h-4 w-4 mr-2" />
-                                    Ver QR Code
+                                    {actionLoading[actionKey] ? (
+                                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    ) : (
+                                      <QrCode className="h-4 w-4 mr-2" />
+                                    )}
+                                    Gerar QR Code
                                   </Button>
-                                )}
-                            </>
-                          )}
 
-                          <Button
-                            onClick={() => loadConnections()}
-                            variant="outline"
-                            className="w-full border-[#374151] text-white hover:bg-[#374151]"
-                          >
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Atualizar Status
-                          </Button>
-                        </div>
-                      </Card>
-                    );
-                  })}
-                </div>
+                                  {session.status === "qrcode" &&
+                                    session.qrCode && (
+                                      <Button
+                                        onClick={() =>
+                                          setQrModal({
+                                            open: true,
+                                            qrCode: session.qrCode,
+                                            slot: session.slot,
+                                            connectionName: connection.name,
+                                          })
+                                        }
+                                        variant="outline"
+                                        className="w-full border-[#374151] text-white hover:bg-[#374151]"
+                                      >
+                                        <QrCode className="h-4 w-4 mr-2" />
+                                        Ver QR Code
+                                      </Button>
+                                    )}
+                                </>
+                              )}
+
+                              <Button
+                                onClick={() => loadConnections()}
+                                variant="outline"
+                                className="w-full border-[#374151] text-white hover:bg-[#374151]"
+                              >
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                Atualizar Status
+                              </Button>
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {/* CARD INFORMATIVO */}
-        <Card className="mt-8 bg-[#141415] border-[#374151] rounded-2xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-3">
-            Como Conectar
-          </h3>
-          <ol className="space-y-2 text-gray-400">
-            <li>1. Clique em "Gerar QR Code"</li>
-            <li>2. Abra o WhatsApp no seu celular</li>
-            <li>3. Vá em Aparelhos conectados → Conectar aparelho</li>
-            <li>4. Aponte a câmera para o QR Code</li>
-          </ol>
-        </Card>
+            {/* CARD INFORMATIVO */}
+            <Card className="mt-8 bg-[#141415] border-[#374151] rounded-2xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-3">
+                Como Conectar
+              </h3>
+              <ol className="space-y-2 text-gray-400">
+                <li>1. Clique em "Gerar QR Code"</li>
+                <li>2. Abra o WhatsApp no seu celular</li>
+                <li>3. Vá em Aparelhos conectados → Conectar aparelho</li>
+                <li>4. Aponte a câmera para o QR Code</li>
+              </ol>
+            </Card>
+          </TabsContent>
+
+          {/* ABA SAIPOS */}
+          <TabsContent value="saipos" className="space-y-6">
+            <div className="flex justify-between items-center mb-4">
+              <p className="text-gray-400">
+                Conecte até 3 lojas Saipos usando Bearer Token
+              </p>
+              {saiposStores.length < 3 && (
+                <Button
+                  onClick={() => {
+                    setAddConnectionModal(true);
+                    setConnectionType("saipos");
+                  }}
+                  className="bg-[#001F05] hover:bg-[#003308] text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Loja
+                </Button>
+              )}
+            </div>
+
+            {saiposStores.length === 0 ? (
+              <Card className="bg-[#141415] border-[#374151] rounded-2xl p-12 text-center">
+                <h3 className="text-xl font-semibold text-white mb-4">
+                  Nenhuma loja Saipos cadastrada
+                </h3>
+                <p className="text-gray-400 mb-6">
+                  Adicione uma loja para começar
+                </p>
+                <Button
+                  onClick={() => {
+                    setAddConnectionModal(true);
+                    setConnectionType("saipos");
+                  }}
+                  className="bg-[#001F05] hover:bg-[#003308] text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Primeira Loja
+                </Button>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {saiposStores.map((store) => (
+                  <Card
+                    key={store.id}
+                    className="bg-[#141415] border-[#374151] rounded-2xl hover:border-[#001F05] transition-all"
+                  >
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-white flex items-center gap-2">
+                          <Store className="h-5 w-5" />
+                          {store.name}
+                        </CardTitle>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            handleDeleteConnection(store.id, "Saipos")
+                          }
+                          className="text-red-400 hover:text-red-500 hover:bg-red-500/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-sm text-gray-400 mb-1">
+                            Store ID:
+                          </p>
+                          <p className="text-sm text-white font-mono bg-[#0f0f10] p-2 rounded">
+                            {store.storeId}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-400">Status:</span>
+                          <div className="flex items-center gap-2">
+                            {getStatusIcon(store.status)}
+                            <span
+                              className={`text-sm font-semibold ${
+                                store.status === "connected"
+                                  ? "text-green-400"
+                                  : "text-red-400"
+                              }`}
+                            >
+                              {store.status === "connected"
+                                ? "Conectado"
+                                : "Desconectado"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
+
+      {/* MODAL ADICIONAR CONEXÃO */}
+      <Dialog open={addConnectionModal} onOpenChange={setAddConnectionModal}>
+        <DialogContent className="bg-[#141415] border-[#374151] text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              Adicionar Conexão{" "}
+              {connectionType === "saipos" ? "Saipos" : "WhatsApp"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {errorMsg && (
+            <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded">
+              {errorMsg}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="name" className="text-gray-300">
+                Nome da {connectionType === "saipos" ? "Loja" : "Conexão"}
+              </Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
+                placeholder={
+                  connectionType === "saipos"
+                    ? "Ex: Loja Centro"
+                    : "Ex: WhatsApp Principal"
+                }
+                className="bg-[#0f0f10] border-[#374151] text-white mt-1"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="apiKey" className="text-gray-300">
+                {connectionType === "saipos" ? "Bearer Token" : "API Key"}
+              </Label>
+              <Input
+                id="apiKey"
+                type="password"
+                value={formData.apiKey}
+                onChange={(e) =>
+                  setFormData({ ...formData, apiKey: e.target.value })
+                }
+                placeholder="Cole sua chave de API aqui"
+                className="bg-[#0f0f10] border-[#374151] text-white mt-1"
+              />
+            </div>
+
+            {connectionType === "saipos" && (
+              <div>
+                <Label htmlFor="storeId" className="text-gray-300">
+                  Store ID (opcional)
+                </Label>
+                <Input
+                  id="storeId"
+                  value={formData.storeId}
+                  onChange={(e) =>
+                    setFormData({ ...formData, storeId: e.target.value })
+                  }
+                  placeholder="Será gerado automaticamente se vazio"
+                  className="bg-[#0f0f10] border-[#374151] text-white mt-1"
+                />
+              </div>
+            )}
+
+            {connectionType === "saipos" && (
+              <p className="text-sm text-gray-400">
+                Você pode adicionar até 3 lojas Saipos. Atualmente:{" "}
+                {saiposStores.length}/3
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddConnectionModal(false);
+                setFormData({ name: "", apiKey: "", storeId: "" });
+                setErrorMsg(null);
+              }}
+              className="border-[#374151] text-white hover:bg-[#374151]"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleAddConnection}
+              disabled={isSubmitting}
+              className="bg-[#001F05] hover:bg-[#003308] text-white"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Adicionando...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* MODAL DO QR CODE */}
       <Dialog open={qrModal.open} onOpenChange={(open) => setQrModal({ open })}>
