@@ -2,172 +2,253 @@ import prisma from './index.js';
 import logger from '../utils/logger.js';
 
 /**
- * Funções auxiliares para manipular dados do banco
+ * Modelo: USER
  */
-
 export const UserModel = {
   /**
    * Busca ou cria um usuário
    */
   async findOrCreate(email, name = null) {
     try {
-      let user = await prisma.user.findUnique({ where: { email } });
-      
+      if (!email) {
+        throw new Error('Email é obrigatório para criar usuário');
+      }
+
+      let user = await prisma.user.findUnique({
+        where: { email }
+      });
+
       if (!user) {
         user = await prisma.user.create({
-          data: { email, name },
-          include: {
-            botSettings: true,
-            whatsappBots: true
+          data: {
+            email,
+            name: name || email.split('@')[0]
           }
         });
-        logger.info(`Novo usuário criado: ${email}`);
+        logger.info(`Usuário criado: ${user.id} (${email})`);
       }
-      
+
       return user;
     } catch (error) {
-      logger.error('Erro ao buscar/criar usuário:', error);
+      logger.error('Erro em UserModel.findOrCreate:', error);
       throw error;
     }
   },
 
-  async findById(userId) {
-    return await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        botSettings: true,
-        whatsappBots: true
-      }
-    });
+  /**
+   * Busca usuário por ID
+   */
+  async findById(id) {
+    try {
+      return await prisma.user.findUnique({
+        where: { id },
+        include: {
+          botSettings: true,
+          whatsappBots: true
+        }
+      });
+    } catch (error) {
+      logger.error('Erro em UserModel.findById:', error);
+      throw error;
+    }
   }
 };
 
+/**
+ * Modelo: WHATSAPP BOT
+ */
 export const WhatsAppBotModel = {
   /**
    * Busca bot por userId e slot
    */
   async findByUserAndSlot(userId, slot) {
-    return await prisma.whatsAppBot.findUnique({
-      where: {
-        userId_slot: { userId, slot: parseInt(slot) }
-      }
-    });
+    try {
+      return await prisma.whatsAppBot.findUnique({
+        where: {
+          userId_slot: {
+            userId,
+            slot
+          }
+        }
+      });
+    } catch (error) {
+      logger.error(`Erro em WhatsAppBotModel.findByUserAndSlot [${userId}:${slot}]:`, error);
+      throw error;
+    }
   },
 
   /**
-   * Cria ou atualiza bot
+   * Cria ou atualiza bot (upsert)
    */
   async upsert(userId, slot, data) {
     try {
       return await prisma.whatsAppBot.upsert({
         where: {
-          userId_slot: { userId, slot: parseInt(slot) }
+          userId_slot: {
+            userId,
+            slot
+          }
         },
         update: data,
         create: {
           userId,
-          slot: parseInt(slot),
+          slot,
           ...data
         }
       });
     } catch (error) {
-      logger.error(`Erro ao upsert WhatsAppBot [${userId}:${slot}]:`, error);
+      logger.error(`Erro em WhatsAppBotModel.upsert [${userId}:${slot}]:`, error);
       throw error;
     }
   },
 
   /**
-   * Salva QR Code
+   * Salva QR Code no banco
    */
   async saveQrCode(userId, slot, qrCode) {
-    return await this.upsert(userId, slot, {
-      qrCode,
-      isConnected: false
-    });
+    try {
+      return await this.upsert(userId, slot, {
+        qrCode,
+        isConnected: false,
+        connectedNumber: null
+      });
+    } catch (error) {
+      logger.error(`Erro em WhatsAppBotModel.saveQrCode [${userId}:${slot}]:`, error);
+      throw error;
+    }
   },
 
   /**
-   * Marca como conectado
+   * Marca bot como conectado
    */
-  async setConnected(userId, slot, connectedNumber, sessionJson) {
-    return await this.upsert(userId, slot, {
-      isConnected: true,
-      connectedNumber,
-      sessionJson,
-      qrCode: null
-    });
+  async setConnected(userId, slot, connectedNumber, sessionJson = null) {
+    try {
+      return await this.upsert(userId, slot, {
+        isConnected: true,
+        connectedNumber,
+        sessionJson,
+        qrCode: null // Limpa QR após conectar
+      });
+    } catch (error) {
+      logger.error(`Erro em WhatsAppBotModel.setConnected [${userId}:${slot}]:`, error);
+      throw error;
+    }
   },
 
   /**
-   * Marca como desconectado
+   * Marca bot como desconectado
    */
   async setDisconnected(userId, slot) {
-    return await this.upsert(userId, slot, {
-      isConnected: false,
-      connectedNumber: null,
-      qrCode: null
-    });
+    try {
+      return await this.upsert(userId, slot, {
+        isConnected: false,
+        connectedNumber: null,
+        qrCode: null,
+        sessionJson: null
+      });
+    } catch (error) {
+      logger.error(`Erro em WhatsAppBotModel.setDisconnected [${userId}:${slot}]:`, error);
+      throw error;
+    }
   },
 
   /**
-   * Limpa sessão
+   * Limpa sessão (mantém registro, mas limpa dados)
    */
   async clearSession(userId, slot) {
-    return await this.upsert(userId, slot, {
-      isConnected: false,
-      connectedNumber: null,
-      sessionJson: null,
-      qrCode: null
-    });
+    try {
+      return await this.upsert(userId, slot, {
+        isConnected: false,
+        connectedNumber: null,
+        qrCode: null,
+        sessionJson: null
+      });
+    } catch (error) {
+      logger.error(`Erro em WhatsAppBotModel.clearSession [${userId}:${slot}]:`, error);
+      throw error;
+    }
   },
 
   /**
-   * Lista todos os bots de um usuário
+   * Busca todos os bots de um usuário
    */
   async findAllByUser(userId) {
-    return await prisma.whatsAppBot.findMany({
-      where: { userId },
-      orderBy: { slot: 'asc' }
-    });
+    try {
+      return await prisma.whatsAppBot.findMany({
+        where: { userId },
+        orderBy: { slot: 'asc' }
+      });
+    } catch (error) {
+      logger.error(`Erro em WhatsAppBotModel.findAllByUser [${userId}]:`, error);
+      throw error;
+    }
   }
 };
 
+/**
+ * Modelo: BOT SETTINGS
+ */
 export const BotSettingsModel = {
   /**
-   * Busca configurações do bot
+   * Busca configurações por userId
    */
   async findByUser(userId) {
-    let settings = await prisma.botSettings.findUnique({
-      where: { userId }
-    });
-
-    // Cria settings padrão se não existir
-    if (!settings) {
-      settings = await prisma.botSettings.create({
-        data: { userId }
+    try {
+      let settings = await prisma.botSettings.findUnique({
+        where: { userId }
       });
-    }
 
-    return settings;
+      // Se não existir, cria com valores padrão
+      if (!settings) {
+        settings = await prisma.botSettings.create({
+          data: {
+            userId,
+            botName: 'Assistente',
+            storeType: 'restaurant',
+            contextLimit: 10,
+            lineLimit: 5,
+            isActive: true
+          }
+        });
+        logger.info(`BotSettings criado para usuário: ${userId}`);
+      }
+
+      return settings;
+    } catch (error) {
+      logger.error(`Erro em BotSettingsModel.findByUser [${userId}]:`, error);
+      throw error;
+    }
   },
 
   /**
    * Atualiza configurações
    */
-  async update(userId, data) {
+  async update(userId, updates) {
     try {
+      // Remove campos undefined/null para não sobrescrever com null
+      const cleanUpdates = {};
+      Object.keys(updates).forEach(key => {
+        if (updates[key] !== undefined && updates[key] !== null) {
+          cleanUpdates[key] = updates[key];
+        }
+      });
+
       return await prisma.botSettings.upsert({
         where: { userId },
-        update: data,
+        update: cleanUpdates,
         create: {
           userId,
-          ...data
+          botName: 'Assistente',
+          storeType: 'restaurant',
+          contextLimit: 10,
+          lineLimit: 5,
+          isActive: true,
+          ...cleanUpdates
         }
       });
     } catch (error) {
-      logger.error(`Erro ao atualizar BotSettings [${userId}]:`, error);
+      logger.error(`Erro em BotSettingsModel.update [${userId}]:`, error);
       throw error;
     }
   }
 };
-

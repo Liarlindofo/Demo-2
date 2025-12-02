@@ -1,5 +1,6 @@
 import { WhatsAppBotModel } from '../db/models.js';
 import logger from '../utils/logger.js';
+import sessionManager from './sessionManager.js';
 
 /**
  * Manipulador de QR Code do WPPConnect
@@ -24,7 +25,7 @@ export async function onQRCode(userId, slot, qrCode) {
 /**
  * Callback de mudança de status
  */
-export async function onStatusChange(userId, slot, status) {
+export async function onStatusChange(userId, slot, status, client = null) {
   logger.wpp(userId, slot, `Status mudou: ${status}`);
   
   try {
@@ -34,6 +35,42 @@ export async function onStatusChange(userId, slot, status) {
     
     if (status === 'qrReadSuccess' || status === 'chatsAvailable') {
       logger.success(`✓ WhatsApp conectado [${userId}:${slot}]`);
+      
+      // Tenta obter o número conectado
+      let connectedNumber = null;
+      let sessionJson = null;
+      
+      try {
+        // Se client não foi passado, tenta obter do sessionManager
+        if (!client) {
+          client = sessionManager.getClient(userId, slot);
+        }
+        
+        if (client) {
+          // Obtém informações da sessão
+          const hostDevice = await client.getHostDevice().catch(() => null);
+          if (hostDevice) {
+            connectedNumber = extractPhoneNumber(hostDevice.wid?.id || hostDevice.id);
+          }
+          
+          // Obtém estado da sessão se disponível
+          try {
+            const state = await client.getState().catch(() => null);
+            if (state) {
+              sessionJson = { state };
+            }
+          } catch (e) {
+            // Ignora erro ao obter estado
+          }
+        }
+      } catch (error) {
+        logger.warn(`Não foi possível obter número conectado [${userId}:${slot}]:`, error.message);
+      }
+      
+      // Marca como conectado no banco
+      await WhatsAppBotModel.setConnected(userId, slot, connectedNumber, sessionJson);
+      logger.success(`✓ Bot marcado como conectado [${userId}:${slot}]`);
+      
     } else if (status === 'qrReadFail') {
       logger.warn(`⚠ QR Code falhou [${userId}:${slot}]`);
       await WhatsAppBotModel.setDisconnected(userId, slot);

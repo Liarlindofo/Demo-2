@@ -25,8 +25,8 @@ model StackUser {
 
 model User {
   id           String        @id @default(cuid())
-  email        String        @unique
-  username     String        @unique
+  email        String?       @unique
+  username     String?       @unique
   password     String?
   fullName     String?
   cnpj         String?
@@ -177,7 +177,7 @@ model WhatsAppBot {
   isConnected     Boolean  @default(false)
   connectedNumber String?
   sessionJson     Json?
-  qrCode          String?
+  qrCode          String?  @db.Text
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -188,20 +188,18 @@ model WhatsAppBot {
 }
 
 model BotSettings {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  botName      String?  @default("Assistente Virtual")
-  storeType    String?  @default("geral")
-  basePrompt   String?
-  forbidden    String?
-  messageLimit Int?     @default(30)
-  contextTime  Int?     @default(60)
-  botEnabled   Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  userId        String   @id
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  botName       String?  @default("Assistente")
+  storeType     String?  @default("restaurant")
+  contextLimit  Int      @default(10)
+  lineLimit     Int      @default(5)
+  basePrompt    String?  @db.Text
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([userId])
-  @@index([botEnabled])
+  @@index([isActive])
   @@map("bot_settings")
 }

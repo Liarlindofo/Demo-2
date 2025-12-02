@@ -20,6 +20,18 @@ export async function startClient(userId, slot) {
 
     const sessionName = `${userId}-slot${slot}`;
 
+    // Garante que o bot existe no banco antes de iniciar
+    try {
+      await WhatsAppBotModel.upsert(userId, slot, {
+        isConnected: false,
+        qrCode: null,
+        connectedNumber: null
+      });
+    } catch (error) {
+      logger.error(`Erro ao criar/atualizar bot no banco [${userId}:${slot}]:`, error);
+      // Continua mesmo se houver erro, mas loga
+    }
+
     // NÃO USA await → inicia em background
     wppconnect
       .create({
@@ -35,23 +47,37 @@ export async function startClient(userId, slot) {
           await onQRCode(userId, slot, base64Qr);
         },
 
-        statusFind: async (status) => {
-          await onStatusChange(userId, slot, status);
+        statusFind: async (status, session) => {
+          // Obtém o client do sessionManager para passar ao onStatusChange
+          const client = sessionManager.getClient(userId, slot);
+          await onStatusChange(userId, slot, status, client);
         },
       })
       .then(async (client) => {
         logger.wpp(userId, slot, 'Cliente WPPConnect criado.');
         sessionManager.setClient(userId, slot, client);
+        
+        // Verifica se já está conectado após criar o client
+        try {
+          const isConnected = await client.isConnected().catch(() => false);
+          if (isConnected) {
+            logger.wpp(userId, slot, 'Cliente já está conectado, atualizando status...');
+            await onStatusChange(userId, slot, 'chatsAvailable', client);
+          }
+        } catch (error) {
+          // Ignora erro na verificação inicial
+        }
       })
       .catch((error) => {
         logger.error(`Erro ao criar cliente [${userId}:${slot}]`, error);
         sessionManager.removeClient(userId, slot);
+        WhatsAppBotModel.setDisconnected(userId, slot).catch(() => {});
       });
 
     return {
       success: true,
-      message: 'Sessão iniciada. Aguarde o QR Code.',
-      connectedNumber: null,
+      message: 'Sessão iniciada, aguardando QR.',
+      isConnected: false,
     };
 
   } catch (error) {
@@ -103,11 +129,23 @@ export async function getClientStatus(userId, slot) {
 export async function restoreAllSessions() {
   try {
     logger.info('Restaurando sessões...');
-    const bots = await prisma.whatsAppBot.findMany({ where: { isConnected: true } });
+    
+    // Busca todos os bots conectados
+    const connectedBots = await prisma.whatsAppBot.findMany({ 
+      where: { isConnected: true } 
+    });
 
-    for (const bot of bots) {
-      startClient(bot.userId, bot.slot);
+    logger.info(`Encontrados ${connectedBots.length} bots para restaurar`);
+
+    for (const bot of connectedBots) {
+      logger.info(`Restaurando sessão [${bot.userId}:${bot.slot}]`);
+      // Inicia em background, não bloqueia
+      startClient(bot.userId, bot.slot).catch(error => {
+        logger.error(`Erro ao restaurar sessão [${bot.userId}:${bot.slot}]:`, error);
+      });
     }
+
+    logger.success(`✓ Restauração de sessões concluída`);
 
   } catch (error) {
     logger.error('Erro ao restaurar sessões:', error);
