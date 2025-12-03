@@ -79,9 +79,17 @@ export const WhatsAppBotModel = {
 
   /**
    * Cria ou atualiza bot (upsert)
+   * Valida que o usuário existe em stack_users antes de criar/atualizar
    */
   async upsert(userId, slot, data) {
     try {
+      // Verifica se o usuário existe na tabela correta
+      const user = await prisma.stackUser.findUnique({ where: { id: userId } });
+
+      if (!user) {
+        throw new Error(`Usuário ${userId} não encontrado na tabela stack_users`);
+      }
+
       return await prisma.whatsAppBot.upsert({
         where: {
           userId_slot: {
@@ -104,9 +112,17 @@ export const WhatsAppBotModel = {
 
   /**
    * Salva QR Code no banco
+   * Valida que o usuário existe em stack_users
    */
   async saveQrCode(userId, slot, qrCode) {
     try {
+      // Verifica se o usuário existe na tabela correta
+      const user = await prisma.stackUser.findUnique({ where: { id: userId } });
+
+      if (!user) {
+        throw new Error(`Usuário ${userId} não encontrado na tabela stack_users`);
+      }
+
       return await this.upsert(userId, slot, {
         qrCode,
         isConnected: false,
@@ -119,10 +135,38 @@ export const WhatsAppBotModel = {
   },
 
   /**
+   * Salva status do bot
+   * Valida que o usuário existe em stack_users
+   */
+  async saveBotStatus(userId, slot, status) {
+    try {
+      // Verifica se o usuário existe na tabela correta
+      const user = await prisma.stackUser.findUnique({ where: { id: userId } });
+
+      if (!user) {
+        throw new Error(`Usuário ${userId} não encontrado na tabela stack_users`);
+      }
+
+      return await this.upsert(userId, slot, { status });
+    } catch (error) {
+      logger.error(`Erro em WhatsAppBotModel.saveBotStatus [${userId}:${slot}]:`, error);
+      throw error;
+    }
+  },
+
+  /**
    * Marca bot como conectado
+   * Valida que o usuário existe em stack_users
    */
   async setConnected(userId, slot, connectedNumber, sessionJson = null) {
     try {
+      // Verifica se o usuário existe na tabela correta
+      const user = await prisma.stackUser.findUnique({ where: { id: userId } });
+
+      if (!user) {
+        throw new Error(`Usuário ${userId} não encontrado na tabela stack_users`);
+      }
+
       return await this.upsert(userId, slot, {
         isConnected: true,
         connectedNumber,
@@ -137,9 +181,17 @@ export const WhatsAppBotModel = {
 
   /**
    * Marca bot como desconectado
+   * Valida que o usuário existe em stack_users
    */
   async setDisconnected(userId, slot) {
     try {
+      // Verifica se o usuário existe na tabela correta
+      const user = await prisma.stackUser.findUnique({ where: { id: userId } });
+
+      if (!user) {
+        throw new Error(`Usuário ${userId} não encontrado na tabela stack_users`);
+      }
+
       return await this.upsert(userId, slot, {
         isConnected: false,
         connectedNumber: null,
@@ -154,9 +206,17 @@ export const WhatsAppBotModel = {
 
   /**
    * Limpa sessão (mantém registro, mas limpa dados)
+   * Valida que o usuário existe em stack_users
    */
   async clearSession(userId, slot) {
     try {
+      // Verifica se o usuário existe na tabela correta
+      const user = await prisma.stackUser.findUnique({ where: { id: userId } });
+
+      if (!user) {
+        throw new Error(`Usuário ${userId} não encontrado na tabela stack_users`);
+      }
+
       return await this.upsert(userId, slot, {
         isConnected: false,
         connectedNumber: null,

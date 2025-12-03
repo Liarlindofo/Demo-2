@@ -24,7 +24,9 @@ export default {
         '--no-zygote',
         '--disable-gpu'
       ]
-    }
+    },
+    // Diretório base para sessões do WhatsApp
+    sessionsDir: '/var/www/whatsapp-sessions'
   }
 };
 

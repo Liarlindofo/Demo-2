@@ -19,6 +19,15 @@ export async function startClient(userId, slot) {
     }
 
     const sessionName = `${userId}-slot${slot}`;
+    
+    // Define userDataDir do Puppeteer (NUNCA usar pastas dentro do nginx)
+    const userDataDir = `${config.wppConnect.sessionsDir || '/var/www/whatsapp-sessions'}/${sessionName}`;
+    
+    // Prepara opções do Puppeteer com userDataDir
+    const puppeteerOptions = {
+      ...config.wppConnect.puppeteerOptions,
+      userDataDir: userDataDir
+    };
 
     // Garante que o bot existe no banco antes de iniciar
     try {
@@ -37,7 +46,7 @@ export async function startClient(userId, slot) {
       .create({
         session: sessionName,
         headless: config.wppConnect.headless,
-        puppeteerOptions: config.wppConnect.puppeteerOptions,
+        puppeteerOptions: puppeteerOptions,
         autoClose: 60000,
         logQR: false,
         disableWelcome: true,
@@ -130,14 +139,12 @@ export async function restoreAllSessions() {
   try {
     logger.info('Restaurando sessões...');
     
-    // Busca todos os bots conectados
-    const connectedBots = await prisma.whatsAppBot.findMany({ 
-      where: { isConnected: true } 
-    });
+    // Busca todos os bots do banco (não apenas conectados, para restaurar todos)
+    const allBots = await prisma.whatsAppBot.findMany();
 
-    logger.info(`Encontrados ${connectedBots.length} bots para restaurar`);
+    logger.info(`Encontrados ${allBots.length} bots para restaurar`);
 
-    for (const bot of connectedBots) {
+    for (const bot of allBots) {
       logger.info(`Restaurando sessão [${bot.userId}:${bot.slot}]`);
       // Inicia em background, não bloqueia
       startClient(bot.userId, bot.slot).catch(error => {

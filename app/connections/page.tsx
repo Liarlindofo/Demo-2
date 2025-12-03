@@ -264,6 +264,28 @@ export default function ConnectionsPage() {
     setActionLoading({ ...actionLoading, generate: true });
 
     try {
+      // Verificar conectividade com o servidor primeiro
+      try {
+        const healthController = new AbortController();
+        const healthTimeout = setTimeout(() => healthController.abort(), 5000); // 5 segundos para health check
+        
+        const healthCheck = await fetch(`${API_URL}/health`, {
+          method: "GET",
+          signal: healthController.signal,
+        });
+        
+        clearTimeout(healthTimeout);
+        
+        if (!healthCheck.ok) {
+          throw new Error(`Servidor retornou status ${healthCheck.status}. O backend pode não estar funcionando corretamente.`);
+        }
+      } catch (healthError: any) {
+        if (healthError.name === 'AbortError' || healthError.message?.includes('Failed to fetch')) {
+          throw new Error(`Não foi possível conectar ao servidor em ${API_URL}.\n\nA VPS pode estar offline ou o backend não está rodando.\n\nVerifique:\n1. Se a VPS está online\n2. Se o backend está rodando (porta 3001)\n3. Se o Nginx está configurado corretamente\n4. Se a URL da API está correta`);
+        }
+        throw healthError;
+      }
+
       // Usar o ID do usuário como clientId padrão
       const defaultClientId = `user-${user.id}`;
       const defaultSlot = 1;
@@ -361,8 +383,16 @@ export default function ConnectionsPage() {
       
       if (error.name === 'AbortError' || error.message?.includes('Timeout') || error.message?.includes('aborted')) {
         errorMessage = "Timeout: A requisição demorou mais de 2 minutos. O servidor pode estar processando a conexão. Aguarde alguns segundos e tente novamente, ou verifique se o servidor está online.";
-      } else if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
-        errorMessage = "Erro de conexão: Não foi possível conectar ao servidor. Verifique sua internet e se o servidor está online.";
+      } else if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError') || error.name === 'TypeError') {
+        // Verificar se é problema de CORS ou servidor offline
+        const isCorsError = error.message?.includes('CORS') || error.message?.includes('Access-Control');
+        const serverUrl = API_URL;
+        
+        if (isCorsError) {
+          errorMessage = `Erro de CORS: O servidor em ${serverUrl} não está permitindo requisições do navegador. Verifique a configuração de CORS no backend.`;
+        } else {
+          errorMessage = `Erro de conexão: Não foi possível conectar ao servidor em ${serverUrl}.\n\nPossíveis causas:\n• A VPS está offline ou não está respondendo\n• O backend não está rodando na VPS\n• Problema de rede/firewall\n• URL da API incorreta\n\nVerifique se o servidor está acessível em: ${serverUrl}/health`;
+        }
       } else if (error.message?.includes('browser is already running') || error.message?.includes('sessão já está rodando')) {
         errorMessage = "Uma sessão já está ativa. Tente parar a sessão atual primeiro ou aguarde alguns segundos e tente buscar o QR Code novamente.";
         // Tentar buscar QR Code existente
@@ -407,6 +437,29 @@ export default function ConnectionsPage() {
     setActionLoading({ ...actionLoading, [key]: true });
 
     try {
+      // Verificar conectividade com o servidor primeiro
+      try {
+        const healthController = new AbortController();
+        const healthTimeout = setTimeout(() => healthController.abort(), 5000); // 5 segundos para health check
+        
+        const healthCheck = await fetch(`${API_URL}/health`, {
+          method: "GET",
+          signal: healthController.signal,
+        });
+        
+        clearTimeout(healthTimeout);
+        
+        if (!healthCheck.ok) {
+          throw new Error(`Servidor retornou status ${healthCheck.status}. O backend pode não estar funcionando corretamente.`);
+        }
+      } catch (healthError: any) {
+        if (healthError.name === 'AbortError' || healthError.message?.includes('Failed to fetch')) {
+          alert(`Não foi possível conectar ao servidor em ${API_URL}.\n\nA VPS pode estar offline ou o backend não está rodando.\n\nVerifique:\n1. Se a VPS está online\n2. Se o backend está rodando (porta 3001)\n3. Se o Nginx está configurado corretamente\n4. Se a URL da API está correta`);
+          return;
+        }
+        throw healthError;
+      }
+
       const response = await fetch(`${API_URL}/api/start/${clientId}/${slot}`, {
         method: "POST",
         headers: {
@@ -468,9 +521,35 @@ export default function ConnectionsPage() {
             }
           }, 1000);
         }
+      } else {
+        // Se a resposta não está OK, tentar obter mensagem de erro
+        const errorText = await response.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { message: errorText || `Erro HTTP ${response.status}` };
+        }
+        throw new Error(errorData.message || `Erro HTTP ${response.status}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao iniciar sessão:", error);
+      let errorMessage = "Erro desconhecido";
+      
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError') || error.name === 'TypeError') {
+        const isCorsError = error.message?.includes('CORS') || error.message?.includes('Access-Control');
+        const serverUrl = API_URL;
+        
+        if (isCorsError) {
+          errorMessage = `Erro de CORS: O servidor em ${serverUrl} não está permitindo requisições do navegador. Verifique a configuração de CORS no backend.`;
+        } else {
+          errorMessage = `Erro de conexão: Não foi possível conectar ao servidor em ${serverUrl}.\n\nPossíveis causas:\n• A VPS está offline ou não está respondendo\n• O backend não está rodando na VPS\n• Problema de rede/firewall\n• URL da API incorreta\n\nVerifique se o servidor está acessível em: ${serverUrl}/health`;
+        }
+      } else {
+        errorMessage = error.message || "Erro ao iniciar sessão. Tente novamente.";
+      }
+      
+      alert(errorMessage);
     } finally {
       setActionLoading({ ...actionLoading, [key]: false });
     }

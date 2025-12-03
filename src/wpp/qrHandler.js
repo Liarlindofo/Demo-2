@@ -50,7 +50,8 @@ export async function onStatusChange(userId, slot, status, client = null) {
           // Obtém informações da sessão
           const hostDevice = await client.getHostDevice().catch(() => null);
           if (hostDevice) {
-            connectedNumber = extractPhoneNumber(hostDevice.wid?.id || hostDevice.id);
+            const widId = (hostDevice.wid && hostDevice.wid.id) || hostDevice.id;
+            connectedNumber = extractPhoneNumber(widId);
           }
           
           // Obtém estado da sessão se disponível

@@ -8,17 +8,18 @@ datasource db {
 }
 
 model StackUser {
-  id                   String    @id @default(uuid())
-  primaryEmail         String?   @unique
+  id                   String        @id @default(uuid())
+  primaryEmail         String?       @unique
   displayName          String?
   profileImageUrl      String?
   primaryEmailVerified DateTime?
   lastActiveAt         DateTime?
-  userId               String?   @unique
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  user                 User?     @relation("StackUserUser", fields: [userId], references: [id], onDelete: Cascade)
-  primaryForUser       User?     @relation("UserStackUser")
+  userId               String?       @unique
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  user                 User?         @relation("StackUserUser", fields: [userId], references: [id], onDelete: Cascade)
+  primaryForUser       User?         @relation("UserStackUser")
+  whatsappBots         WhatsAppBot[]
 
   @@map("stack_users")
 }
@@ -40,7 +41,6 @@ model User {
   stackUser    StackUser?    @relation("UserStackUser", fields: [stackUserId], references: [id])
   stores       Store[]
   apis         UserAPI[]
-  whatsappBots WhatsAppBot[]
   botSettings  BotSettings?
 
   @@map("users")
@@ -170,20 +170,22 @@ model SyncError {
 }
 
 model WhatsAppBot {
-  id              String   @id @default(cuid())
+  id              String     @id @default(cuid())
   userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stackUser       StackUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
   slot            Int
-  isConnected     Boolean  @default(false)
+  status          String?    // Status da sessão (ex: "CONNECTED", "CONNECTING", "QRCODE", etc.)
+  isConnected     Boolean    @default(false)
   connectedNumber String?
   sessionJson     Json?
-  qrCode          String?  @db.Text
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  qrCode          String?    @db.Text
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   @@unique([userId, slot])
   @@index([userId])
   @@index([isConnected])
+  @@index([status])
   @@map("whatsapp_bots")
 }
 

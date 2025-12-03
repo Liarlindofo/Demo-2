@@ -1,5 +1,6 @@
 import { startClient, stopClient, getClientStatus } from '../wpp/index.js';
 import { UserModel, WhatsAppBotModel, BotSettingsModel } from '../db/models.js';
+import prisma from '../db/index.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -17,12 +18,12 @@ export async function getStatus(req, res) {
 
         return {
           slot,
-          isConnected: bot?.isConnected || false,
-          connectedNumber: bot?.connectedNumber || null,
-          qrCode: bot?.qrCode || null,
-          state: bot?.isConnected ? 'connected' : bot?.qrCode ? 'waiting_qr' : 'offline',
+          isConnected: (bot && bot.isConnected) || false,
+          connectedNumber: (bot && bot.connectedNumber) || null,
+          qrCode: (bot && bot.qrCode) || null,
+          state: (bot && bot.isConnected) ? 'connected' : (bot && bot.qrCode) ? 'waiting_qr' : 'offline',
           isActive: clientStatus.isActive,
-          updatedAt: bot?.updatedAt || null,
+          updatedAt: (bot && bot.updatedAt) || null,
         };
       })
     );
@@ -100,19 +101,25 @@ export async function startConnection(req, res) {
       });
     }
 
-    // Garante que o usuário existe
+    // Valida que o usuário existe na tabela stack_users
     try {
-      const user = await UserModel.findById(userId);
+      const user = await prisma.stackUser.findUnique({
+        where: { id: userId }
+      });
+
       if (!user) {
-        // Se não existe, tenta criar com base no userId (assumindo que userId pode ser email)
-        // Se userId não for email, cria um usuário básico
-        const email = userId.includes('@') ? userId : `${userId}@temp.local`;
-        await UserModel.findOrCreate(email, userId);
-        logger.info(`Usuário criado automaticamente: ${userId}`);
+        return res.status(400).json({
+          success: false,
+          message: `Usuário ${userId} não encontrado na tabela stack_users`
+        });
       }
     } catch (error) {
-      logger.error(`Erro ao validar/criar usuário [${userId}]:`, error);
-      // Continua mesmo se houver erro na criação do usuário
+      logger.error(`Erro ao validar usuário [${userId}]:`, error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao validar usuário',
+        error: error.message
+      });
     }
 
     // Inicia cliente (não bloqueia)
