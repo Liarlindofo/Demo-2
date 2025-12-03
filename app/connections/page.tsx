@@ -286,8 +286,8 @@ export default function ConnectionsPage() {
         throw healthError;
       }
 
-      // Usar o ID do usuário como clientId padrão
-      const defaultClientId = `user-${user.id}`;
+      // Usar exatamente o ID do usuário (sem prefixos) como clientId padrão
+      const defaultClientId = `${user.id}`;
       const defaultSlot = 1;
 
       // Criar AbortController para timeout de 120 segundos (2 minutos)
@@ -397,7 +397,7 @@ export default function ConnectionsPage() {
         errorMessage = "Uma sessão já está ativa. Tente parar a sessão atual primeiro ou aguarde alguns segundos e tente buscar o QR Code novamente.";
         // Tentar buscar QR Code existente
         try {
-          const qrResponse = await fetch(`${API_URL}/api/qr/user-${user.id}/1`);
+          const qrResponse = await fetch(`${API_URL}/api/qr/${user.id}/1`);
           if (qrResponse.ok) {
             const qrData = await qrResponse.json();
             if (qrData.success && qrData.qrCode) {
