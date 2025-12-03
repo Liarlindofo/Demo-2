@@ -21,13 +21,14 @@ export async function startClient(userId, slot) {
     const sessionName = `${userId}-slot${slot}`;
     
     // Define userDataDir do Puppeteer (NUNCA usar pastas dentro do nginx)
-    const userDataDir = `${config.wppConnect.sessionsDir || '/var/www/whatsapp-sessions'}/${sessionName}`;
+    const sessionsDir = (config.wppConnect && config.wppConnect.sessionsDir) || '/var/www/whatsapp-sessions';
+    const userDataDir = `${sessionsDir}/${sessionName}`;
     
     // Prepara opções do Puppeteer com userDataDir
-    const puppeteerOptions = {
-      ...config.wppConnect.puppeteerOptions,
+    const basePuppeteerOptions = (config.wppConnect && config.wppConnect.puppeteerOptions) || {};
+    const puppeteerOptions = Object.assign({}, basePuppeteerOptions, {
       userDataDir: userDataDir
-    };
+    });
 
     // Garante que o bot existe no banco antes de iniciar
     try {
@@ -42,10 +43,14 @@ export async function startClient(userId, slot) {
     }
 
     // NÃO USA await → inicia em background
+    const headless = (config.wppConnect && config.wppConnect.headless) !== undefined 
+      ? config.wppConnect.headless 
+      : true;
+    
     wppconnect
       .create({
         session: sessionName,
-        headless: config.wppConnect.headless,
+        headless: headless,
         puppeteerOptions: puppeteerOptions,
         autoClose: 60000,
         logQR: false,
