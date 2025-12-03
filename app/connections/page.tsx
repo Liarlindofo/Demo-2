@@ -333,7 +333,7 @@ export default function ConnectionsPage() {
           console.log('[Connections] QR Code não veio na resposta, iniciando polling...');
           
           let attempts = 0;
-          const maxAttempts = 30; // 30 tentativas = 30 segundos
+          const maxAttempts = 120; // até 120s de tentativa (2 minutos)
           const pollInterval = setInterval(async () => {
             attempts++;
             
@@ -492,7 +492,7 @@ export default function ConnectionsPage() {
           console.log('[Connections] QR Code não veio, iniciando polling...');
           
           let attempts = 0;
-          const maxAttempts = 30;
+          const maxAttempts = 120; // até 120s de tentativa (2 minutos)
           const pollInterval = setInterval(async () => {
             attempts++;
             

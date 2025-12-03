@@ -18,7 +18,7 @@ export function QRDisplay({ userId, slot }) {
     let isMounted = true;
     let intervalId: ReturnType<typeof setInterval> | null = null;
     let retryCount = 0;
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = 60; // até ~2 minutos (com verificação a cada 2s)
 
     async function loadQR() {
       try {
