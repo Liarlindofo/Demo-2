@@ -43,11 +43,21 @@ class Logger {
   }
 
   error(message, error = null) {
-    const errorData = error ? {
-      message: error.message,
-      stack: error.stack,
-      ...error
-    } : null;
+    let errorData = null;
+    if (error) {
+      errorData = {
+        message: error.message || String(error),
+        stack: error.stack || undefined
+      };
+      // Copia outras propriedades do erro de forma segura
+      if (error && typeof error === 'object') {
+        Object.keys(error).forEach(key => {
+          if (key !== 'message' && key !== 'stack') {
+            errorData[key] = error[key];
+          }
+        });
+      }
+    }
     console.error(
       `${colors.red}${this._formatMessage('ERROR', message, errorData)}${colors.reset}`
     );
