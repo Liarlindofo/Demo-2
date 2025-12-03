@@ -269,7 +269,7 @@ export default function ConnectionsPage() {
         const healthController = new AbortController();
         const healthTimeout = setTimeout(() => healthController.abort(), 5000); // 5 segundos para health check
         
-        const healthCheck = await fetch(`${API_URL}/health`, {
+        const healthCheck = await fetch(`${API_URL}/api/health`, {
           method: "GET",
           signal: healthController.signal,
         });
@@ -391,7 +391,7 @@ export default function ConnectionsPage() {
         if (isCorsError) {
           errorMessage = `Erro de CORS: O servidor em ${serverUrl} não está permitindo requisições do navegador. Verifique a configuração de CORS no backend.`;
         } else {
-          errorMessage = `Erro de conexão: Não foi possível conectar ao servidor em ${serverUrl}.\n\nPossíveis causas:\n• A VPS está offline ou não está respondendo\n• O backend não está rodando na VPS\n• Problema de rede/firewall\n• URL da API incorreta\n\nVerifique se o servidor está acessível em: ${serverUrl}/health`;
+          errorMessage = `Erro de conexão: Não foi possível conectar ao servidor em ${serverUrl}.\n\nPossíveis causas:\n• A VPS está offline ou não está respondendo\n• O backend não está rodando na VPS\n• Problema de rede/firewall\n• URL da API incorreta\n\nVerifique se o servidor está acessível em: ${serverUrl}/api/health`;
         }
       } else if (error.message?.includes('browser is already running') || error.message?.includes('sessão já está rodando')) {
         errorMessage = "Uma sessão já está ativa. Tente parar a sessão atual primeiro ou aguarde alguns segundos e tente buscar o QR Code novamente.";
@@ -442,7 +442,7 @@ export default function ConnectionsPage() {
         const healthController = new AbortController();
         const healthTimeout = setTimeout(() => healthController.abort(), 5000); // 5 segundos para health check
         
-        const healthCheck = await fetch(`${API_URL}/health`, {
+        const healthCheck = await fetch(`${API_URL}/api/health`, {
           method: "GET",
           signal: healthController.signal,
         });
@@ -543,7 +543,7 @@ export default function ConnectionsPage() {
         if (isCorsError) {
           errorMessage = `Erro de CORS: O servidor em ${serverUrl} não está permitindo requisições do navegador. Verifique a configuração de CORS no backend.`;
         } else {
-          errorMessage = `Erro de conexão: Não foi possível conectar ao servidor em ${serverUrl}.\n\nPossíveis causas:\n• A VPS está offline ou não está respondendo\n• O backend não está rodando na VPS\n• Problema de rede/firewall\n• URL da API incorreta\n\nVerifique se o servidor está acessível em: ${serverUrl}/health`;
+          errorMessage = `Erro de conexão: Não foi possível conectar ao servidor em ${serverUrl}.\n\nPossíveis causas:\n• A VPS está offline ou não está respondendo\n• O backend não está rodando na VPS\n• Problema de rede/firewall\n• URL da API incorreta\n\nVerifique se o servidor está acessível em: ${serverUrl}/api/health`;
         }
       } else {
         errorMessage = error.message || "Erro ao iniciar sessão. Tente novamente.";
