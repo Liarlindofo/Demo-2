@@ -60,10 +60,15 @@ export async function getQRCode(req, res) {
     }
 
     if (!bot.qrCode) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'QR Code não disponível',
-        isConnected: bot.isConnected 
+      // Não retornar 404 enquanto o QR ainda não foi gerado
+      // Evita erro imediato no frontend e permite polling suave
+      return res.json({
+        success: true,
+        qrCode: null,
+        slot: bot.slot,
+        isConnected: bot.isConnected,
+        updatedAt: bot.updatedAt,
+        message: 'Aguardando geração do QR Code'
       });
     }
 
