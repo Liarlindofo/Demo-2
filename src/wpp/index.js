@@ -52,7 +52,9 @@ export async function startClient(userId, slot) {
         session: sessionName,
         headless: headless,
         puppeteerOptions: puppeteerOptions,
-        autoClose: 60000,
+        // Não fechar automaticamente a sessão enquanto aguarda leitura do QR
+        // 0 (ou false) desabilita o auto close, evitando "Auto Close remain" e "Failed to authenticate"
+        autoClose: 0,
         logQR: false,
         disableWelcome: true,
         updatesLog: false,
