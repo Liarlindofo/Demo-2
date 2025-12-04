@@ -261,6 +261,12 @@ export default function ConnectionsPage() {
       return;
     }
 
+    // Não permitir deletar a conexão "padrão" (fallback visual)
+    if (id === "default") {
+      alert("Esta conexão padrão não pode ser removida. Para remover, delete uma conexão cadastrada no Dashboard.");
+      return;
+    }
+
     try {
       const response = await fetch(`/api/user-apis?id=${id}`, {
         method: "DELETE",

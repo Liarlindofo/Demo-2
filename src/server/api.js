@@ -12,7 +12,7 @@ export async function getStatus(req, res) {
     const bots = await WhatsAppBotModel.findAllByUser(userId);
 
     const connections = await Promise.all(
-      [1, 2].map(async (slot) => {
+      [1, 2, 3].map(async (slot) => {
         const bot = bots.find(b => b.slot === slot);
         const clientStatus = await getClientStatus(userId, slot);
 
