@@ -21,14 +21,32 @@ export async function getStatus(req, res) {
           isConnected: (bot && bot.isConnected) || false,
           connectedNumber: (bot && bot.connectedNumber) || null,
           qrCode: (bot && bot.qrCode) || null,
-          state: (bot && bot.isConnected) ? 'connected' : (bot && bot.qrCode) ? 'waiting_qr' : 'offline',
+          state: (bot && bot.isConnected) ? 'connected' : (bot && bot.qrCode) ? 'waiting_qr' : (clientStatus.isActive ? 'connecting' : 'offline'),
           isActive: clientStatus.isActive,
           updatedAt: (bot && bot.updatedAt) || null,
         };
       })
     );
 
-    res.json({ success: true, userId, connections });
+    // Compatibilidade com o frontend: devolver também "sessions" no formato esperado
+    const sessions = connections.map((c) => {
+      let status = 'DISCONNECTED';
+      if (c.isActive) {
+        if (c.isConnected) status = 'CONNECTED';
+        else if (c.qrCode) status = 'QRCODE';
+        else status = 'CONNECTING';
+      }
+      return {
+        slot: c.slot,
+        status,
+        qrCode: c.qrCode || null,
+        isActive: c.isActive,
+        connectedNumber: c.connectedNumber || null,
+        updatedAt: c.updatedAt || null,
+      };
+    });
+
+    res.json({ success: true, userId, connections, sessions });
 
   } catch (error) {
     res.status(500).json({ success: false, message: 'Erro ao buscar status', error: error.message });
@@ -131,6 +149,16 @@ export async function startConnection(req, res) {
     const result = await startClient(userId, slotNumber);
 
     if (!result.success) {
+      // Se o cliente já está ativo, não trate como erro — permita o frontend continuar
+      if ((result.message || '').toLowerCase().includes('cliente já está ativo')) {
+        const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slotNumber).catch(() => null);
+        return res.json({
+          success: true,
+          message: result.message,
+          isConnected: bot?.isConnected || false,
+          qrCode: bot?.qrCode || null,
+        });
+      }
       return res.status(400).json(result);
     }
 

@@ -117,7 +117,7 @@ export default function ConnectionsPage() {
           .slice(0, 3); // Máximo 3 lojas
 
         // Carregar status das conexões WhatsApp
-        const connectionsWithStatus = await Promise.all(
+        let connectionsWithStatus = await Promise.all(
           whatsappAPIs.map(async (api) => {
             try {
               const statusRes = await fetch(
@@ -148,6 +148,28 @@ export default function ConnectionsPage() {
             };
           }),
         );
+
+        // Fallback: se não houver conexões cadastradas, mostrar a sessão "padrão" do usuário
+        if (whatsappAPIs.length === 0 && user?.id) {
+          try {
+            const statusRes = await fetch(`${API_URL}/api/status/${user.id}`, {
+              method: "GET",
+            });
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              connectionsWithStatus = [
+                {
+                  id: "default",
+                  name: "WhatsApp Principal",
+                  clientId: `${user.id}`,
+                  sessions: statusData.sessions || [],
+                },
+              ];
+            }
+          } catch (error) {
+            console.error("Erro ao buscar status da sessão padrão:", error);
+          }
+        }
 
         setWhatsappConnections(connectionsWithStatus);
 
