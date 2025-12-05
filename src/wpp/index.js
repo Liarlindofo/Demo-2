@@ -73,6 +73,9 @@ export async function startClient(userId, slot) {
         logger.wpp(userId, slot, 'Cliente WPPConnect criado.');
         sessionManager.setClient(userId, slot, client);
         
+        // Configurar listener de mensagens
+        setupMessageListener(client, userId, slot);
+        
         // Verifica se já está conectado após criar o client
         try {
           const isConnected = await client.isConnected().catch(() => false);
@@ -140,6 +143,91 @@ export async function getClientStatus(userId, slot) {
   } catch {
     return { isActive: true, isConnected: false };
   }
+}
+
+/**
+ * Configura listener de mensagens para processar com IA
+ */
+function setupMessageListener(client, userId, slot) {
+  client.onMessage(async (message) => {
+    try {
+      // Ignorar mensagens de grupos e do próprio bot
+      if (message.isGroupMsg || message.fromMe) {
+        return;
+      }
+
+      // Verificar se deve ignorar a mensagem
+      if (shouldIgnoreMessage(message)) {
+        return;
+      }
+
+      logger.wpp(userId, slot, `Mensagem recebida de ${message.from}: ${message.type}`);
+
+      // Buscar configurações do bot
+      const botSettings = await BotSettingsModel.findByUser(userId).catch(() => null);
+      
+      if (!botSettings || !botSettings.isActive) {
+        logger.wpp(userId, slot, 'Bot desabilitado, ignorando mensagem');
+        return;
+      }
+
+      // Processar apenas mensagens de texto por enquanto
+      if (message.type !== 'chat' && message.type !== 'text') {
+        logger.wpp(userId, slot, `Tipo de mensagem não suportado: ${message.type}`);
+        return;
+      }
+
+      const userMessage = message.body || message.text;
+      if (!userMessage) {
+        return;
+      }
+
+      // Buscar histórico de conversa (últimas N mensagens)
+      const phoneNumber = message.from;
+      const conversationHistory = sessionManager.getConversation(userId, slot, phoneNumber, botSettings.contextLimit || 10);
+
+      // Formatar histórico para o GPT
+      const formattedHistory = formatConversationHistory(conversationHistory, botSettings.contextLimit || 10);
+
+      // Preparar configurações para o GPT
+      const gptSettings = {
+        botName: botSettings.botName || 'Assistente',
+        storeType: botSettings.storeType || 'restaurant',
+        lineLimit: botSettings.lineLimit || 5,
+        basePrompt: botSettings.basePrompt || ''
+      };
+
+      // Enviar para GPT e obter resposta
+      logger.ai(`Processando mensagem com IA [${userId}:${slot}]`);
+      const aiResponse = await sendToGPT(userMessage, formattedHistory, gptSettings);
+
+      // Salvar mensagem do usuário no histórico
+      sessionManager.addMessage(userId, slot, phoneNumber, {
+        body: userMessage,
+        fromMe: false,
+        timestamp: Date.now()
+      });
+
+      // Enviar resposta
+      await client.sendText(message.from, aiResponse);
+      logger.success(`Resposta enviada para ${message.from}`);
+
+      // Salvar resposta do bot no histórico
+      sessionManager.addMessage(userId, slot, phoneNumber, {
+        body: aiResponse,
+        fromMe: true,
+        timestamp: Date.now()
+      });
+
+    } catch (error) {
+      logger.error(`Erro ao processar mensagem [${userId}:${slot}]:`, error);
+      try {
+        await client.sendText(message.from, 'Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.');
+      } catch (sendError) {
+        logger.error('Erro ao enviar mensagem de erro:', sendError);
+      }
+    }
+  });
 }
 
 export async function restoreAllSessions() {
