@@ -71,6 +71,13 @@ export async function onStatusChange(userId, slot, status, client = null) {
       // Marca como conectado no banco
       await WhatsAppBotModel.setConnected(userId, slot, connectedNumber, sessionJson);
       logger.success(`✓ Bot marcado como conectado [${userId}:${slot}]`);
+
+      // Auto-criar entrada em user_apis se não existir
+      try {
+        await createUserAPIEntry(userId, slot, connectedNumber);
+      } catch (error) {
+        logger.warn(`Erro ao criar entrada em user_apis [${userId}:${slot}]:`, error.message);
+      }
       
     } else if (status === 'qrReadFail') {
       logger.warn(`⚠ QR Code falhou [${userId}:${slot}]`);
@@ -85,6 +92,53 @@ export async function onStatusChange(userId, slot, status, client = null) {
     }
   } catch (error) {
     logger.error(`Erro ao processar mudança de status [${userId}:${slot}]:`, error);
+  }
+}
+
+/**
+ * Cria entrada em user_apis automaticamente quando conecta
+ */
+async function createUserAPIEntry(userId, slot, connectedNumber) {
+  try {
+    const prisma = (await import('../db/index.js')).default;
+    
+    // Verifica se já existe
+    const existing = await prisma.userAPI.findFirst({
+      where: {
+        userId,
+        type: 'whatsapp',
+        storeId: userId // Usa userId como storeId para identificar
+      }
+    });
+
+    if (existing) {
+      // Atualiza status
+      await prisma.userAPI.update({
+        where: { id: existing.id },
+        data: {
+          status: 'connected',
+          name: connectedNumber ? `WhatsApp ${connectedNumber}` : `WhatsApp Slot ${slot}`
+        }
+      });
+      logger.info(`✓ Entrada user_apis atualizada para [${userId}:${slot}]`);
+    } else {
+      // Cria nova entrada
+      await prisma.userAPI.create({
+        data: {
+          userId,
+          name: connectedNumber ? `WhatsApp ${connectedNumber}` : `WhatsApp Slot ${slot}`,
+          type: 'whatsapp',
+          storeId: userId,
+          apiKey: '', // WhatsApp não usa apiKey
+          baseUrl: '',
+          status: 'connected'
+        }
+      });
+      logger.success(`✓ Nova entrada criada em user_apis para [${userId}:${slot}]`);
+    }
+  } catch (error) {
+    logger.error(`Erro ao criar/atualizar user_apis [${userId}:${slot}]:`, error);
+    throw error;
   }
 }
 
