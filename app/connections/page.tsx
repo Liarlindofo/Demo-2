@@ -41,6 +41,7 @@ interface SessionStatus {
   status: string;
   qrCode?: string;
   isActive: boolean;
+  isConnected?: boolean;
 }
 
 interface UserAPI {
@@ -202,10 +203,13 @@ export default function ConnectionsPage() {
 
   // Fechar modal do QR quando conectar
   useEffect(() => {
-    if (qrModal.open && whatsappConnections.length > 0) {
+    if (qrModal.open && whatsappConnections.length > 0 && qrModal.slot) {
       const currentSlot = qrModal.slot;
       const connection = whatsappConnections.find(c => 
-        c.sessions.some(s => s.slot === currentSlot && s.isConnected)
+        c.sessions.some(s => 
+          s.slot === currentSlot && 
+          (s.isConnected || s.status.toLowerCase() === 'connected')
+        )
       );
       if (connection) {
         setTimeout(() => {
