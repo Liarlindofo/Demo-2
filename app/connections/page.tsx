@@ -200,6 +200,21 @@ export default function ConnectionsPage() {
     }
   }, [user, loadConnections]);
 
+  // Fechar modal do QR quando conectar
+  useEffect(() => {
+    if (qrModal.open && whatsappConnections.length > 0) {
+      const currentSlot = qrModal.slot;
+      const connection = whatsappConnections.find(c => 
+        c.sessions.some(s => s.slot === currentSlot && s.isConnected)
+      );
+      if (connection) {
+        setTimeout(() => {
+          setQrModal({ open: false });
+        }, 2000); // Aguarda 2s para o usuário ver que conectou
+      }
+    }
+  }, [whatsappConnections, qrModal.open, qrModal.slot]);
+
   // --------------------------------------------------------------
   // 2. ADICIONAR NOVA CONEXÃO
   // --------------------------------------------------------------

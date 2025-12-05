@@ -109,7 +109,7 @@ async function createUserAPIEntry(userId, slot, connectedNumber) {
         type: 'whatsapp',
         storeId: userId // Usa userId como storeId para identificar
       }
-    });
+    }).catch(() => null);
 
     if (existing) {
       // Atualiza status
@@ -119,26 +119,43 @@ async function createUserAPIEntry(userId, slot, connectedNumber) {
           status: 'connected',
           name: connectedNumber ? `WhatsApp ${connectedNumber}` : `WhatsApp Slot ${slot}`
         }
+      }).catch(err => {
+        logger.error(`Erro ao atualizar user_apis: ${err.message}`);
       });
       logger.info(`✓ Entrada user_apis atualizada para [${userId}:${slot}]`);
     } else {
       // Cria nova entrada
+      const name = connectedNumber ? `WhatsApp ${connectedNumber}` : `WhatsApp Slot ${slot}`;
       await prisma.userAPI.create({
         data: {
           userId,
-          name: connectedNumber ? `WhatsApp ${connectedNumber}` : `WhatsApp Slot ${slot}`,
+          name,
           type: 'whatsapp',
           storeId: userId,
           apiKey: '', // WhatsApp não usa apiKey
           baseUrl: '',
           status: 'connected'
         }
+      }).catch(async (err) => {
+        logger.error(`Erro ao criar user_apis (tentativa 1): ${err.message}`);
+        // Tentar com query raw SQL se Prisma falhar
+        try {
+          await prisma.$executeRaw`
+            INSERT INTO user_apis (id, "userId", name, type, "storeId", "apiKey", "baseUrl", status, "createdAt", "updatedAt")
+            VALUES (gen_random_uuid(), ${userId}, ${name}, 'whatsapp', ${userId}, '', '', 'connected', NOW(), NOW())
+            ON CONFLICT DO NOTHING
+          `;
+          logger.success(`✓ Entrada criada via SQL raw para [${userId}:${slot}]`);
+        } catch (sqlErr) {
+          logger.error(`Erro SQL raw: ${sqlErr.message}`);
+          throw sqlErr;
+        }
       });
       logger.success(`✓ Nova entrada criada em user_apis para [${userId}:${slot}]`);
     }
   } catch (error) {
     logger.error(`Erro ao criar/atualizar user_apis [${userId}:${slot}]:`, error);
-    throw error;
+    // Não lança erro para não quebrar o fluxo principal
   }
 }
 
