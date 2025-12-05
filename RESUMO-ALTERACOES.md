@@ -71,7 +71,7 @@ openrouterModel: process.env.OPENROUTER_MODEL || 'openai/chatgpt-4o-latest',
 NEXT_PUBLIC_BACKEND_URL=https://platefull.com.br
 NEXT_PUBLIC_WHATSAPP_API_URL=https://platefull.com.br
 NEXT_PUBLIC_DRIN_API_KEY=sua_chave_api_aqui
-OPENROUTER_API_KEY=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
+OPENROUTER_API_KEY=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
 OPENROUTER_MODEL=openai/chatgpt-4o-latest
 ```
 
