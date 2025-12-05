@@ -11,8 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Save, Bot, Clock, Store, MessageSquare, Shield, Hash, Power } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
-const API_URL = process.env.NEXT_PUBLIC_WHATSAPP_API_URL || "https://platefull.com.br";
-const DRIN_API_KEY = process.env.NEXT_PUBLIC_DRIN_API_KEY || "";
+// Usar API routes do Next.js ao invés do backend separado
+const API_URL = "";
 
 interface UserAPI {
   id: string;
@@ -97,22 +97,17 @@ export default function WhatsAppToolsPage() {
       const connection = connections.find(c => c.storeId === clientId);
       if (!connection) return;
 
-      // Usa DRIN_API_KEY para autenticar no backend
-      const response = await fetch(`${API_URL}/api/client/${clientId}/config`, {
-        headers: {
-          Authorization: `Bearer ${DRIN_API_KEY}`,
-        },
-      });
+      // Usa API route do Next.js
+      const response = await fetch(`/api/client/${clientId}/config`);
 
       if (response.ok) {
         const data = await response.json();
         setConfig(data.data);
       } else if (response.status === 404) {
-        // Auto-provisionar cliente padrão (backend também faz isso, mas garantimos aqui)
-        const createRes = await fetch(`${API_URL}/api/client`, {
+        // Auto-provisionar cliente padrão
+        const createRes = await fetch(`/api/client`, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${DRIN_API_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -152,10 +147,9 @@ export default function WhatsAppToolsPage() {
 
     setSaving(true);
     try {
-      const response = await fetch(`${API_URL}/api/client/${selectedConnection}/config`, {
+      const response = await fetch(`/api/client/${selectedConnection}/config`, {
         method: "PUT",
         headers: {
-          Authorization: `Bearer ${DRIN_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(config),
