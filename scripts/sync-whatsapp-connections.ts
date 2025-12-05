@@ -14,7 +14,7 @@ async function syncWhatsAppConnections() {
 
   try {
     // Buscar todos os WhatsAppBots conectados
-    const connectedBots = await prisma.whatsappBot.findMany({
+    const connectedBots = await prisma.whatAppBot.findMany({
       where: {
         isConnected: true
       },
@@ -86,7 +86,7 @@ async function syncWhatsAppConnections() {
             }
 
             // Recarregar bot com User atualizado
-            const updatedBot = await prisma.whatsappBot.findUnique({
+            const updatedBot = await prisma.whatAppBot.findUnique({
               where: { id: bot.id },
               include: {
                 stackUser: {
