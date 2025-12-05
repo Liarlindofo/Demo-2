@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     console.log('🔄 Iniciando sincronização de conexões WhatsApp...');
 
     // Buscar todos os WhatsAppBots conectados
-    const connectedBots = await prisma.whatAppBot.findMany({
+    const connectedBots = await prisma.whatsAppBot.findMany({
       where: {
         isConnected: true
       },
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
             }
 
             // Recarregar bot com User atualizado
-            const updatedBot = await prisma.whatAppBot.findUnique({
+            const updatedBot = await prisma.whatsAppBot.findUnique({
               where: { id: bot.id },
               include: {
                 stackUser: {
