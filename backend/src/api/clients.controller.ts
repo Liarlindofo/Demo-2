@@ -9,14 +9,17 @@ export class ClientsController {
     try {
       const { clientId } = req.params;
 
-      const client = await clientConfigService.getClient(clientId);
+      let client = await clientConfigService.getClient(clientId);
 
       if (!client) {
-        res.status(404).json({
-          success: false,
-          error: 'Cliente não encontrado'
+        // Auto-provisionar cliente padrão com o clientId solicitado
+        client = await clientConfigService.createClient({
+          id: clientId,
+          name: 'WhatsApp Principal',
+          botEnabled: true,
+          messageLimit: 30,
+          contextTime: 60
         });
-        return;
       }
 
       res.json({

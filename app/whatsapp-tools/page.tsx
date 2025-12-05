@@ -12,6 +12,7 @@ import { Loader2, Save, Bot, Clock, Store, MessageSquare, Shield, Hash, Power } 
 import { Switch } from "@/components/ui/switch";
 
 const API_URL = process.env.NEXT_PUBLIC_WHATSAPP_API_URL || "https://platefull.com.br";
+const DRIN_API_KEY = process.env.NEXT_PUBLIC_DRIN_API_KEY || "";
 
 interface UserAPI {
   id: string;
@@ -62,11 +63,25 @@ export default function WhatsAppToolsPage() {
       if (response.ok) {
         const data: UserAPI[] = await response.json();
         const whatsappAPIs = data.filter((api) => api.type === 'whatsapp');
-        setConnections(whatsappAPIs);
-        
-        // Selecionar primeira conexão automaticamente
-        if (whatsappAPIs.length > 0 && !selectedConnection) {
-          setSelectedConnection(whatsappAPIs[0].storeId);
+
+        // Fallback: se não houver conexões cadastradas, usar sessão padrão do usuário
+        if (whatsappAPIs.length === 0 && user?.id) {
+          const fallback: WhatsAppConnection = {
+            id: "default",
+            name: "WhatsApp Principal",
+            storeId: `${user.id}`,
+            apiKey: "",
+          };
+          setConnections([fallback]);
+          if (!selectedConnection) {
+            setSelectedConnection(fallback.storeId);
+          }
+        } else {
+          setConnections(whatsappAPIs);
+          // Selecionar primeira conexão automaticamente
+          if (whatsappAPIs.length > 0 && !selectedConnection) {
+            setSelectedConnection(whatsappAPIs[0].storeId);
+          }
         }
       }
     } catch (error) {
@@ -81,15 +96,35 @@ export default function WhatsAppToolsPage() {
       const connection = connections.find(c => c.storeId === clientId);
       if (!connection) return;
 
+      // Usa DRIN_API_KEY para autenticar no backend
       const response = await fetch(`${API_URL}/api/client/${clientId}/config`, {
         headers: {
-          Authorization: `Bearer ${connection.apiKey}`,
+          Authorization: `Bearer ${DRIN_API_KEY}`,
         },
       });
 
       if (response.ok) {
         const data = await response.json();
         setConfig(data.data);
+      } else if (response.status === 404) {
+        // Auto-provisionar cliente padrão (backend também faz isso, mas garantimos aqui)
+        const createRes = await fetch(`${API_URL}/api/client`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${DRIN_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: clientId,
+            name: "WhatsApp Principal",
+            botEnabled: true,
+            messageLimit: 30,
+            contextTime: 60,
+          }),
+        });
+        if (createRes.ok) {
+          await loadConfig(clientId);
+        }
       }
     } catch (error) {
       console.error("Erro ao carregar configurações:", error);
@@ -116,16 +151,10 @@ export default function WhatsAppToolsPage() {
 
     setSaving(true);
     try {
-      const connection = connections.find(c => c.storeId === selectedConnection);
-      if (!connection) {
-        alert("Conexão não encontrada");
-        return;
-      }
-
       const response = await fetch(`${API_URL}/api/client/${selectedConnection}/config`, {
         method: "PUT",
         headers: {
-          Authorization: `Bearer ${connection.apiKey}`,
+          Authorization: `Bearer ${DRIN_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(config),

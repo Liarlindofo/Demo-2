@@ -29,10 +29,12 @@ export class ClientConfigService {
     }
   }
 
-  async createClient(data: Partial<ClientConfig>): Promise<ClientConfig> {
+  async createClient(data: Partial<ClientConfig> & { id?: string }): Promise<ClientConfig> {
     try {
       const client = await prisma.client.create({
         data: {
+          // Se for enviado um id (ex.: usar o userId/StoreId como clientId), respeite-o
+          ...(data.id ? { id: data.id } : {}),
           name: data.name || 'Cliente',
           botName: data.botName,
           storeType: data.storeType,
