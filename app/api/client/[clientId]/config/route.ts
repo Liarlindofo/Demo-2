@@ -9,10 +9,10 @@ import { syncStackAuthUser } from '@/lib/stack-auth-sync';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { clientId: string } }
+  { params }: { params: Promise<{ clientId: string }> }
 ) {
   try {
-    const { clientId } = params;
+    const { clientId } = await params;
 
     // Verificar autenticação
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
@@ -79,10 +79,10 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { clientId: string } }
+  { params }: { params: Promise<{ clientId: string }> }
 ) {
   try {
-    const { clientId } = params;
+    const { clientId } = await params;
     const body = await request.json();
 
     // Verificar autenticação
