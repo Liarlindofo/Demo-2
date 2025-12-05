@@ -61,7 +61,8 @@ export default function WhatsAppToolsPage() {
     try {
       const response = await fetch("/api/user-apis");
       if (response.ok) {
-        const data: UserAPI[] = await response.json();
+        const result = await response.json();
+        const data: UserAPI[] = result.apis || [];
         const whatsappAPIs = data.filter((api) => api.type === 'whatsapp');
 
         // Fallback: se não houver conexões cadastradas, usar sessão padrão do usuário

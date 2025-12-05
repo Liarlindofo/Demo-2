@@ -97,41 +97,115 @@ export async function onStatusChange(userId, slot, status, client = null) {
 
 /**
  * Cria entrada em user_apis automaticamente quando conecta
+ * userId aqui é do StackUser, precisa converter para User
  */
-async function createUserAPIEntry(userId, slot, connectedNumber) {
+async function createUserAPIEntry(stackUserId, slot, connectedNumber) {
   try {
     const prisma = (await import('../db/index.js')).default;
     
-    // Verifica se já existe
+    // Buscar o User correspondente ao StackUser
+    const stackUser = await prisma.stackUser.findUnique({
+      where: { id: stackUserId },
+      include: { user: true }
+    }).catch(() => null);
+
+    if (!stackUser || !stackUser.user) {
+      logger.warn(`StackUser ${stackUserId} não tem User associado. Tentando criar...`);
+      
+      // Tentar criar User se não existir
+      // Isso pode falhar se não houver email, mas pelo menos tentamos
+      const stackUserData = await prisma.stackUser.findUnique({
+        where: { id: stackUserId }
+      });
+      
+      if (stackUserData && stackUserData.primaryEmail) {
+        // Buscar ou criar User
+        let dbUser = await prisma.user.findUnique({
+          where: { email: stackUserData.primaryEmail }
+        });
+        
+        if (!dbUser) {
+          dbUser = await prisma.user.create({
+            data: {
+              email: stackUserData.primaryEmail,
+              username: stackUserData.primaryEmail.split('@')[0] + '_' + Date.now().toString(36),
+              fullName: stackUserData.displayName || '',
+              stackUserId: stackUserId
+            }
+          });
+          
+          // Atualizar StackUser com referência ao User
+          await prisma.stackUser.update({
+            where: { id: stackUserId },
+            data: { userId: dbUser.id }
+          });
+        } else if (!dbUser.stackUserId) {
+          // Associar User existente ao StackUser
+          await prisma.user.update({
+            where: { id: dbUser.id },
+            data: { stackUserId: stackUserId }
+          });
+          await prisma.stackUser.update({
+            where: { id: stackUserId },
+            data: { userId: dbUser.id }
+          });
+        }
+        
+        // Tentar novamente buscar o User
+        const updatedStackUser = await prisma.stackUser.findUnique({
+          where: { id: stackUserId },
+          include: { user: true }
+        });
+        
+        if (!updatedStackUser || !updatedStackUser.user) {
+          logger.error(`Não foi possível criar/associar User para StackUser ${stackUserId}`);
+          return;
+        }
+        
+        stackUser.user = updatedStackUser.user;
+      } else {
+        logger.error(`StackUser ${stackUserId} não tem email, não é possível criar User`);
+        return;
+      }
+    }
+    
+    const dbUserId = stackUser.user.id;
+    const storeId = stackUserId; // Usa stackUserId como storeId para identificar a conexão
+    
+    // Verifica se já existe entrada para este slot
     const existing = await prisma.userAPI.findFirst({
       where: {
-        userId,
+        userId: dbUserId,
         type: 'whatsapp',
-        storeId: userId // Usa userId como storeId para identificar
+        storeId: storeId
       }
     }).catch(() => null);
 
+    const name = connectedNumber 
+      ? `WhatsApp ${connectedNumber}` 
+      : `WhatsApp Slot ${slot}`;
+
     if (existing) {
-      // Atualiza status
+      // Atualiza status e nome
       await prisma.userAPI.update({
         where: { id: existing.id },
         data: {
           status: 'connected',
-          name: connectedNumber ? `WhatsApp ${connectedNumber}` : `WhatsApp Slot ${slot}`
+          name: name,
+          updatedAt: new Date()
         }
       }).catch(err => {
         logger.error(`Erro ao atualizar user_apis: ${err.message}`);
       });
-      logger.info(`✓ Entrada user_apis atualizada para [${userId}:${slot}]`);
+      logger.info(`✓ Entrada user_apis atualizada para [${stackUserId}:${slot}]`);
     } else {
       // Cria nova entrada
-      const name = connectedNumber ? `WhatsApp ${connectedNumber}` : `WhatsApp Slot ${slot}`;
       await prisma.userAPI.create({
         data: {
-          userId,
-          name,
+          userId: dbUserId,
+          name: name,
           type: 'whatsapp',
-          storeId: userId,
+          storeId: storeId,
           apiKey: '', // WhatsApp não usa apiKey
           baseUrl: '',
           status: 'connected'
@@ -142,19 +216,19 @@ async function createUserAPIEntry(userId, slot, connectedNumber) {
         try {
           await prisma.$executeRaw`
             INSERT INTO user_apis (id, "userId", name, type, "storeId", "apiKey", "baseUrl", status, "createdAt", "updatedAt")
-            VALUES (gen_random_uuid(), ${userId}, ${name}, 'whatsapp', ${userId}, '', '', 'connected', NOW(), NOW())
+            VALUES (gen_random_uuid(), ${dbUserId}, ${name}, 'whatsapp', ${storeId}, '', '', 'connected', NOW(), NOW())
             ON CONFLICT DO NOTHING
           `;
-          logger.success(`✓ Entrada criada via SQL raw para [${userId}:${slot}]`);
+          logger.success(`✓ Entrada criada via SQL raw para [${stackUserId}:${slot}]`);
         } catch (sqlErr) {
           logger.error(`Erro SQL raw: ${sqlErr.message}`);
           throw sqlErr;
         }
       });
-      logger.success(`✓ Nova entrada criada em user_apis para [${userId}:${slot}]`);
+      logger.success(`✓ Nova entrada criada em user_apis para [${stackUserId}:${slot}]`);
     }
   } catch (error) {
-    logger.error(`Erro ao criar/atualizar user_apis [${userId}:${slot}]:`, error);
+    logger.error(`Erro ao criar/atualizar user_apis [${stackUserId}:${slot}]:`, error);
     // Não lança erro para não quebrar o fluxo principal
   }
 }

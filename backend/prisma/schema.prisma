@@ -56,3 +56,18 @@ model WhatsAppBot {
 
   @@unique([userId, slot])
 }
+
+//
+// SESSÕES WHATSAPP (Backend)
+//
+model Session {
+  clientId    String   @id
+  slot        Int
+  status      String   @default("disconnected")
+  qrCode      String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([clientId, slot], name: "clientId_slot")
+  @@map("sessions")
+}
