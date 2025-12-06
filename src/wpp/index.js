@@ -170,91 +170,59 @@ function setupMessageListener(client, userId, slot) {
       const normalizedCommand = trimmedMessage.replace(/\s+/g, ' ').trim();
 
       // Verificar se é um comando (#boa noite ou #brigado)
-      const isCommand = normalizedCommand === '#boa noite' || 
-                        normalizedCommand.startsWith('#boa noite') ||
-                        normalizedCommand === '#brigado' || 
-                        normalizedCommand.startsWith('#brigado');
-
-      // Obter número conectado do bot para comparar
-      let botConnectedNumber = null;
-      try {
-        const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slot).catch(() => null);
-        if (bot && bot.connectedNumber) {
-          botConnectedNumber = extractPhoneNumber(bot.connectedNumber) || bot.connectedNumber;
-        }
-      } catch (error) {
-        logger.wpp(userId, slot, `Erro ao buscar número conectado: ${error.message}`);
-      }
-
-      // Extrair número do remetente
-      const senderNumber = extractPhoneNumber(message.from) || message.from;
+      // Se a mensagem é EXATAMENTE um desses comandos, sempre tratar como do estabelecimento
+      const isBoaNoite = normalizedCommand === '#boa noite' || normalizedCommand === '#boanoite';
+      const isBrigado = normalizedCommand === '#brigado' || normalizedCommand === '#obrigado';
+      const isCommand = isBoaNoite || isBrigado;
 
       // ============================================
       // COMANDOS DO ESTABELECIMENTO
-      // Verifica se: 1) fromMe é true OU 2) é um comando E o remetente é o bot conectado
+      // Se a mensagem é EXATAMENTE um comando, assumir que é do estabelecimento
       // ============================================
-      const isFromEstablishment = message.fromMe || 
-                                  (isCommand && botConnectedNumber && senderNumber === botConnectedNumber);
-
-      if (isFromEstablishment && isCommand) {
-        // Quando o estabelecimento envia um comando, precisamos identificar para qual cliente
-        // Se fromMe é true, message.from pode ser o destinatário OU message.to pode ter o destinatário
-        // Se não for fromMe mas o remetente é o bot, então message.from é o destinatário (cliente)
-        let clientPhoneNumber = null;
+      if (isCommand) {
+        // Identificar o cliente (destinatário)
+        // message.from é o número que enviou a mensagem
+        // Se for um comando, assumimos que message.from é o CLIENTE para o qual queremos ativar/desativar o modo manual
+        const clientPhoneNumber = extractPhoneNumber(message.from) || message.from;
         
-        if (message.fromMe) {
-          // Quando você envia, message.to geralmente tem o destinatário
-          clientPhoneNumber = message.to || message.chatId || message.chat?.id || message.remoteJid;
-        } else {
-          // Se não é fromMe mas o remetente é o bot conectado, então message.from é o cliente
-          clientPhoneNumber = message.from;
-        }
-        
-        // Normalizar número de telefone
-        if (clientPhoneNumber) {
-          clientPhoneNumber = extractPhoneNumber(clientPhoneNumber) || clientPhoneNumber;
-        } else {
-          logger.wpp(userId, slot, `⚠️ Não foi possível identificar o destinatário do comando`);
-          logger.wpp(userId, slot, `   message.from: ${message.from}, message.to: ${message.to}, message.fromMe: ${message.fromMe}`);
-          return;
-        }
-        
-        logger.wpp(userId, slot, `📤 COMANDO do ESTABELECIMENTO detectado!`);
+        logger.wpp(userId, slot, `✨✨✨ COMANDO DETECTADO! ✨✨✨`);
         logger.wpp(userId, slot, `   - Comando: "${normalizedCommand}"`);
-        logger.wpp(userId, slot, `   - Remetente: ${senderNumber} (bot conectado: ${botConnectedNumber})`);
-        logger.wpp(userId, slot, `   - Destinatário/Cliente: ${clientPhoneNumber}`);
+        logger.wpp(userId, slot, `   - Cliente (from): ${clientPhoneNumber} (${message.from})`);
         logger.wpp(userId, slot, `   - fromMe: ${message.fromMe}`);
         
         // Comando para assumir chat (ativar modo manual)
-        if (normalizedCommand === '#boa noite' || normalizedCommand.startsWith('#boa noite')) {
+        if (isBoaNoite) {
           sessionManager.setManualMode(userId, slot, clientPhoneNumber, true);
-          logger.wpp(userId, slot, `✅✅✅ Modo manual ATIVADO pelo estabelecimento para ${clientPhoneNumber}`);
+          logger.wpp(userId, slot, `✅✅✅ Modo manual ATIVADO para cliente ${clientPhoneNumber}`);
           // Verificar se foi salvo corretamente
           const verifyManual = sessionManager.isManualMode(userId, slot, clientPhoneNumber);
-          logger.wpp(userId, slot, `🔍 Verificação pós-ativação: ${verifyManual ? '✅ CONFIRMADO' : '❌ FALHOU'}`);
+          logger.wpp(userId, slot, `🔍 Verificação imediata: ${verifyManual ? '✅ MODO MANUAL CONFIRMADO ATIVO' : '❌ FALHOU - NÃO ESTÁ ATIVO'}`);
+          
+          // Enviar confirmação visual (opcional)
+          try {
+            await client.sendText(message.from, '✅ Modo manual ativado. Bot pausado para este chat. Use #brigado para reativar.');
+          } catch (e) {
+            logger.wpp(userId, slot, `Erro ao enviar confirmação: ${e.message}`);
+          }
           return;
         }
         
         // Comando para bot assumir (desativar modo manual)
-        if (normalizedCommand === '#brigado' || normalizedCommand.startsWith('#brigado')) {
+        if (isBrigado) {
           sessionManager.setManualMode(userId, slot, clientPhoneNumber, false);
-          logger.wpp(userId, slot, `✅✅✅ Modo automático ATIVADO pelo estabelecimento para ${clientPhoneNumber}`);
+          logger.wpp(userId, slot, `✅✅✅ Modo automático ATIVADO para cliente ${clientPhoneNumber}`);
           // Verificar se foi salvo corretamente
           const verifyManual = sessionManager.isManualMode(userId, slot, clientPhoneNumber);
-          logger.wpp(userId, slot, `🔍 Verificação pós-desativação: ${verifyManual ? '❌ AINDA ATIVO (ERRO)' : '✅ CONFIRMADO'}`);
+          logger.wpp(userId, slot, `🔍 Verificação imediata: ${verifyManual ? '❌ AINDA ATIVO (ERRO)' : '✅ MODO AUTOMÁTICO CONFIRMADO'}`);
+          
+          // Enviar confirmação visual (opcional)
+          try {
+            await client.sendText(message.from, '✅ Modo automático ativado. Bot voltou a responder automaticamente. Use #boa noite para pausar.');
+          } catch (e) {
+            logger.wpp(userId, slot, `Erro ao enviar confirmação: ${e.message}`);
+          }
           return;
         }
-      }
-      
-      // Se for mensagem do estabelecimento mas não for comando, apenas salvar no histórico
-      if (isFromEstablishment) {
-        const clientPhoneNumber = message.to || message.from;
-        sessionManager.addMessage(userId, slot, extractPhoneNumber(clientPhoneNumber) || clientPhoneNumber, {
-          body: userMessage,
-          fromMe: true,
-          timestamp: Date.now()
-        });
-        return; // Não processar mensagens do estabelecimento com IA
       }
 
       // ============================================
