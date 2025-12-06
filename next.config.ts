@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
     STACK_AUTH_DOMAIN: 'https://platefull.com.br',
     STACK_AUTH_HANDLER_PATH: '/handler',
   },
+  // Configuração Turbopack (Next.js 16+)
+  turbopack: {},
   // Excluir backend e scripts de teste do build do Next.js
   webpack: (config, { isServer }) => {
     if (!isServer) {
@@ -23,9 +25,6 @@ const nextConfig: NextConfig = {
   // Ignorar arquivos do backend durante o build
   typescript: {
     ignoreBuildErrors: false,
-  },
-  eslint: {
-    ignoreDuringBuilds: false,
   },
 };
 
