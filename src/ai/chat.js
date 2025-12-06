@@ -74,13 +74,15 @@ export async function sendToGPT(userMessage, conversationHistory = [], settings 
     return limitedReply;
 
   } catch (error) {
-    logger.error('Erro ao comunicar com OpenRouter:', error);
+    logger.error('Erro ao comunicar com OpenRouter:', error.message);
     
     if (error.response) {
       logger.error('Resposta do OpenRouter:', {
         status: error.response.status,
         data: error.response.data
       });
+    } else if (error.request) {
+      logger.error('Sem resposta do OpenRouter (timeout ou erro de rede)');
     }
 
     throw new Error('Erro ao processar sua mensagem. Tente novamente.');

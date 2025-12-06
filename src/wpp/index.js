@@ -220,11 +220,11 @@ function setupMessageListener(client, userId, slot) {
       });
 
     } catch (error) {
-      logger.error(`Erro ao processar mensagem [${userId}:${slot}]:`, error);
+      logger.error(`Erro ao processar mensagem [${userId}:${slot}]:`, error.message || error);
       try {
         await client.sendText(message.from, 'Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.');
       } catch (sendError) {
-        logger.error('Erro ao enviar mensagem de erro:', sendError);
+        logger.error('Erro ao enviar mensagem de erro:', sendError.message || sendError);
       }
     }
   });
