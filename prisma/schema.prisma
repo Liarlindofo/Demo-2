@@ -197,6 +197,7 @@ model BotSettings {
   contextLimit  Int      @default(10)
   lineLimit     Int      @default(5)
   basePrompt    String?  @db.Text
+  forbidden     String?  @db.Text
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

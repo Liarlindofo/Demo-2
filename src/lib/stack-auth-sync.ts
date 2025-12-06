@@ -1,4 +1,4 @@
-import { db as prisma } from '@/lib/db';
+import { db as prisma, ensureConnection } from '@/lib/db';
 
 export interface StackAuthUser {
   id: string;
@@ -25,12 +25,26 @@ export async function syncStackAuthUser(stackUser: StackAuthUser) {
 
     // Verificar se o StackUser já existe
     console.log('📊 Buscando StackUser no banco...');
+    
+    // Garantir que a conexão está ativa
+    await ensureConnection();
+    
     let dbStackUser = await prisma.stackUser.findUnique({
       where: { id: stackUser.id },
       include: { user: true }
     }).catch((error) => {
       console.error('❌ Erro ao buscar StackUser:', error);
-      throw new Error(`Erro ao acessar banco de dados: ${error.message}. Possível causa: tabelas não criadas. Execute: GET /api/admin/sync-database?secret=YOUR_ADMIN_SECRET`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      
+      // Detectar erros específicos
+      if (errorMsg.includes('closed the connection') || errorMsg.includes('connection closed')) {
+        throw new Error(`Erro ao acessar banco de dados: Conexão foi fechada. Possível causa: tabelas não criadas ou conexão perdida. Execute: GET /api/admin/sync-database?secret=YOUR_ADMIN_SECRET`);
+      }
+      if (errorMsg.includes('does not exist') || errorMsg.includes('relation') || errorMsg.includes('table')) {
+        throw new Error(`Erro ao acessar banco de dados: Tabelas não foram criadas. Execute: GET /api/admin/sync-database?secret=YOUR_ADMIN_SECRET`);
+      }
+      
+      throw new Error(`Erro ao acessar banco de dados: ${errorMsg}. Possível causa: tabelas não criadas. Execute: GET /api/admin/sync-database?secret=YOUR_ADMIN_SECRET`);
     });
 
     // Se não existe, criar novo
@@ -117,12 +131,22 @@ export async function syncStackAuthUser(stackUser: StackAuthUser) {
   } catch (error) {
     console.error('Erro ao sincronizar usuário do Stack Auth:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // Re-throw se já for um erro tratado
+    if (errorMessage.includes('Erro ao acessar banco de dados') || errorMessage.includes('Erro ao conectar ao banco')) {
+      throw error;
+    }
+    
     if (errorMessage.includes('DATABASE_URL') || errorMessage.includes('Environment variable not found')) {
       throw new Error('Variável de ambiente DATABASE_URL não configurada. Configure-a nas variáveis de ambiente da Vercel.');
     }
-    if (errorMessage.includes('does not exist') || errorMessage.includes('relation') && errorMessage.includes('does not exist')) {
-      throw new Error('Tabelas do banco de dados não foram criadas. Execute: npx prisma db push (local) ou configure migrações na Vercel.');
+    if (errorMessage.includes('does not exist') || (errorMessage.includes('relation') && errorMessage.includes('does not exist'))) {
+      throw new Error('Tabelas do banco de dados não foram criadas. Execute: GET /api/admin/sync-database?secret=YOUR_ADMIN_SECRET');
     }
+    if (errorMessage.includes('closed the connection') || errorMessage.includes('connection closed')) {
+      throw new Error('Conexão com o banco de dados foi fechada. Possível causa: tabelas não criadas ou conexão perdida. Execute: GET /api/admin/sync-database?secret=YOUR_ADMIN_SECRET');
+    }
+    
     throw error;
   }
 }

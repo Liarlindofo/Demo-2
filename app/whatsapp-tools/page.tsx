@@ -156,7 +156,14 @@ export default function WhatsAppToolsPage() {
       });
 
       if (response.ok) {
+        const result = await response.json();
+        // Atualizar o estado com a resposta do servidor para garantir sincronização
+        if (result.data) {
+          setConfig(result.data);
+        }
         alert("Configurações salvas com sucesso!");
+        // Recarregar a configuração para garantir que está sincronizada
+        await loadConfig(selectedConnection);
       } else {
         alert("Erro ao salvar configurações");
       }

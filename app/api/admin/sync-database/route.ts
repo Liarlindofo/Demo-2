@@ -36,19 +36,43 @@ export async function GET(request: Request) {
     console.log('📦 Executando: prisma db push --accept-data-loss');
     
     try {
-      const output = execSync('npx prisma db push --accept-data-loss --skip-generate', {
+      // Primeiro, fazer o push do schema
+      const pushOutput = execSync('npx prisma db push --accept-data-loss --skip-generate', {
         stdio: 'pipe',
         encoding: 'utf-8',
+        cwd: process.cwd(),
       });
 
-      console.log('✅ Sincronização concluída!');
-      console.log(output);
+      console.log('✅ Schema sincronizado!');
+      console.log(pushOutput);
 
-      return NextResponse.json({
-        success: true,
-        message: 'Banco de dados sincronizado com sucesso',
-        output: output,
-      });
+      // Depois, regenerar o Prisma Client
+      console.log('📦 Regenerando Prisma Client...');
+      try {
+        const generateOutput = execSync('npx prisma generate', {
+          stdio: 'pipe',
+          encoding: 'utf-8',
+          cwd: process.cwd(),
+        });
+        console.log('✅ Prisma Client regenerado!');
+        console.log(generateOutput);
+
+        return NextResponse.json({
+          success: true,
+          message: 'Banco de dados sincronizado e Prisma Client regenerado com sucesso',
+          pushOutput: pushOutput,
+          generateOutput: generateOutput,
+        });
+      } catch (generateError: any) {
+        console.warn('⚠️ Erro ao regenerar Prisma Client (pode ser normal):', generateError);
+        // Não falhar se o generate der erro, pois o push já foi feito
+        return NextResponse.json({
+          success: true,
+          message: 'Banco de dados sincronizado com sucesso (mas Prisma Client pode precisar ser regenerado manualmente)',
+          pushOutput: pushOutput,
+          generateWarning: generateError.stdout || generateError.stderr || generateError.message,
+        });
+      }
     } catch (execError: any) {
       console.error('❌ Erro ao executar prisma db push:', execError);
       

@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
           botName: body.botName || 'Assistente',
           storeType: body.storeType || 'restaurant',
           basePrompt: body.basePrompt || null,
+          forbidden: body.forbidden || null,
           contextLimit: body.messageLimit || 30,
           lineLimit: 5,
           isActive: body.botEnabled ?? true
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
           botName: body.botName || botSettings.botName,
           storeType: body.storeType || botSettings.storeType,
           basePrompt: body.basePrompt !== undefined ? body.basePrompt : botSettings.basePrompt,
+          forbidden: body.forbidden !== undefined ? body.forbidden : botSettings.forbidden,
           contextLimit: body.messageLimit || botSettings.contextLimit,
           isActive: body.botEnabled !== undefined ? body.botEnabled : botSettings.isActive
         }
@@ -64,6 +66,7 @@ export async function POST(request: NextRequest) {
       botName: botSettings.botName || 'Assistente',
       storeType: botSettings.storeType || 'restaurant',
       basePrompt: botSettings.basePrompt || null,
+      forbidden: botSettings.forbidden || null,
       messageLimit: botSettings.contextLimit || 30,
       contextTime: body.contextTime || 60,
       botEnabled: botSettings.isActive ?? true
