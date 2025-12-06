@@ -171,12 +171,38 @@ function setupMessageListener(client, userId, slot) {
 
       // ============================================
       // COMANDOS DO ESTABELECIMENTO (message.fromMe === true)
+      // IMPORTANTE: Verificar ANTES de shouldIgnoreMessage
       // ============================================
       if (message.fromMe) {
         // Identificar para qual conversa o comando foi enviado
-        // Quando você envia uma mensagem, o campo 'to' contém o número do destinatário
-        // Se não tiver 'to', tenta 'chatId' ou 'from' como fallback
-        let clientPhoneNumber = message.to || message.chatId || message.chat?.id || message.from;
+        // No wppconnect, quando você envia uma mensagem, pode vir em diferentes campos
+        // Tentar múltiplas formas de identificar o destinatário
+        let clientPhoneNumber = null;
+        
+        // Tentar diferentes campos para identificar o destinatário
+        if (message.to) {
+          clientPhoneNumber = message.to;
+        } else if (message.chatId) {
+          clientPhoneNumber = message.chatId;
+        } else if (message.chat?.id) {
+          clientPhoneNumber = message.chat.id;
+        } else if (message.remoteJid) {
+          clientPhoneNumber = message.remoteJid;
+        } else if (message.from) {
+          // Se não tiver 'to', pode ser que 'from' seja o destinatário quando você envia
+          clientPhoneNumber = message.from;
+        }
+        
+        // Log detalhado para debug
+        logger.wpp(userId, slot, `🔍 DEBUG - Mensagem do estabelecimento detectada:`);
+        logger.wpp(userId, slot, `   - message.to: ${message.to}`);
+        logger.wpp(userId, slot, `   - message.chatId: ${message.chatId}`);
+        logger.wpp(userId, slot, `   - message.chat?.id: ${message.chat?.id}`);
+        logger.wpp(userId, slot, `   - message.remoteJid: ${message.remoteJid}`);
+        logger.wpp(userId, slot, `   - message.from: ${message.from}`);
+        logger.wpp(userId, slot, `   - message.body: ${message.body}`);
+        logger.wpp(userId, slot, `   - normalizedCommand: "${normalizedCommand}"`);
+        logger.wpp(userId, slot, `   - clientPhoneNumber identificado: ${clientPhoneNumber}`);
         
         // Normalizar número de telefone
         if (clientPhoneNumber) {
@@ -184,16 +210,19 @@ function setupMessageListener(client, userId, slot) {
         } else {
           // Se não conseguir identificar, logar e retornar
           logger.wpp(userId, slot, `⚠️ Não foi possível identificar o destinatário da mensagem do estabelecimento`);
+          logger.wpp(userId, slot, `   Mensagem completa (campos disponíveis): ${Object.keys(message).join(', ')}`);
           return;
         }
         
-        logger.wpp(userId, slot, `📤 Mensagem do ESTABELECIMENTO para ${clientPhoneNumber} (to: ${message.to}, chatId: ${message.chatId}): "${userMessage}"`);
+        logger.wpp(userId, slot, `📤 Mensagem do ESTABELECIMENTO para ${clientPhoneNumber}: "${userMessage}"`);
         
         // Comando para assumir chat (ativar modo manual)
         if (normalizedCommand === '#boa noite' || normalizedCommand.startsWith('#boa noite')) {
           sessionManager.setManualMode(userId, slot, clientPhoneNumber, true);
           logger.wpp(userId, slot, `✅✅✅ Modo manual ATIVADO pelo estabelecimento para ${clientPhoneNumber}`);
-          // Não enviar mensagem de confirmação, apenas ativar o modo
+          // Verificar se foi salvo corretamente
+          const verifyManual = sessionManager.isManualMode(userId, slot, clientPhoneNumber);
+          logger.wpp(userId, slot, `🔍 Verificação pós-ativação: ${verifyManual ? '✅ CONFIRMADO' : '❌ FALHOU'}`);
           return;
         }
         
@@ -201,7 +230,9 @@ function setupMessageListener(client, userId, slot) {
         if (normalizedCommand === '#brigado' || normalizedCommand.startsWith('#brigado')) {
           sessionManager.setManualMode(userId, slot, clientPhoneNumber, false);
           logger.wpp(userId, slot, `✅✅✅ Modo automático ATIVADO pelo estabelecimento para ${clientPhoneNumber}`);
-          // Não enviar mensagem de confirmação, apenas desativar o modo
+          // Verificar se foi salvo corretamente
+          const verifyManual = sessionManager.isManualMode(userId, slot, clientPhoneNumber);
+          logger.wpp(userId, slot, `🔍 Verificação pós-desativação: ${verifyManual ? '❌ AINDA ATIVO (ERRO)' : '✅ CONFIRMADO'}`);
           return;
         }
         
@@ -218,8 +249,8 @@ function setupMessageListener(client, userId, slot) {
       // MENSAGENS DO CLIENTE (message.fromMe === false)
       // ============================================
       
-      // Verificar se deve ignorar a mensagem
-      if (shouldIgnoreMessage(message)) {
+      // Verificar se deve ignorar a mensagem (mas não verificar fromMe aqui, já foi verificado acima)
+      if (message.isGroupMsg || message.isBroadcast || (!message.body && !message.text)) {
         return;
       }
 
@@ -241,6 +272,9 @@ function setupMessageListener(client, userId, slot) {
       // IMPORTANTE: Verificar modo manual ANTES de processar com IA
       const isManual = sessionManager.isManualMode(userId, slot, phoneNumber);
       logger.wpp(userId, slot, `🔍 Verificando modo manual para ${phoneNumber} (${message.from}): ${isManual ? '✅ ATIVO - BLOQUEANDO IA' : '❌ INATIVO - PROCESSANDO COM IA'}`);
+      
+      // Debug: listar todos os modos manuais ativos
+      logger.wpp(userId, slot, `🔍 DEBUG - Verificando estado do modo manual...`);
       
       if (isManual) {
         logger.wpp(userId, slot, `🚫🚫🚫 Modo manual ATIVO para ${phoneNumber} - IGNORANDO processamento com IA - Mensagem: "${userMessage}"`);
