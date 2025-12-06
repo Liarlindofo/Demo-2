@@ -182,8 +182,40 @@ function setupMessageListener(client, userId, slot) {
         return;
       }
 
-      // Buscar histórico de conversa (últimas N mensagens)
       const phoneNumber = message.from;
+      
+      // Verificar comandos especiais antes de processar
+      const trimmedMessage = userMessage.trim().toLowerCase();
+      
+      // Comando para assumir chat (ativar modo manual)
+      if (trimmedMessage === '#boa noite') {
+        sessionManager.setManualMode(userId, slot, phoneNumber, true);
+        await client.sendText(phoneNumber, '✅ Modo manual ativado. Você assumiu o chat. O bot não responderá automaticamente. Use #brigado para o bot voltar a assumir.');
+        logger.wpp(userId, slot, `Modo manual ativado para ${phoneNumber}`);
+        return;
+      }
+      
+      // Comando para bot assumir (desativar modo manual)
+      if (trimmedMessage === '#brigado') {
+        sessionManager.setManualMode(userId, slot, phoneNumber, false);
+        await client.sendText(phoneNumber, '✅ Modo automático ativado. O bot voltou a responder automaticamente. Use #boa noite para assumir o chat novamente.');
+        logger.wpp(userId, slot, `Modo automático ativado para ${phoneNumber}`);
+        return;
+      }
+      
+      // Se estiver em modo manual, não processar com IA (apenas salvar no histórico)
+      if (sessionManager.isManualMode(userId, slot, phoneNumber)) {
+        logger.wpp(userId, slot, `Modo manual ativo para ${phoneNumber}, ignorando processamento com IA`);
+        // Salvar mensagem do usuário no histórico mesmo em modo manual
+        sessionManager.addMessage(userId, slot, phoneNumber, {
+          body: userMessage,
+          fromMe: false,
+          timestamp: Date.now()
+        });
+        return; // Não processa com IA, deixa o usuário responder manualmente
+      }
+
+      // Buscar histórico de conversa (últimas N mensagens)
       const conversationHistory = sessionManager.getConversation(userId, slot, phoneNumber, botSettings.contextLimit || 10);
 
       // Formatar histórico para o GPT

@@ -12,6 +12,9 @@ class SessionManager {
     
     // Armazena histórico de conversas: { "userId:slot": { "phoneNumber": [messages] } }
     this.conversations = new Map();
+    
+    // Armazena estado de modo manual por conversa: { "userId:slot": { "phoneNumber": true/false } }
+    this.manualMode = new Map();
   }
 
   /**
@@ -148,6 +151,48 @@ class SessionManager {
       activeSessions,
       totalConversations
     };
+  }
+
+  /**
+   * Ativa modo manual para uma conversa (bot para de responder automaticamente)
+   */
+  setManualMode(userId, slot, phoneNumber, enabled = true) {
+    const key = this.getKey(userId, slot);
+    
+    if (!this.manualMode.has(key)) {
+      this.manualMode.set(key, new Map());
+    }
+    
+    const sessionManualMode = this.manualMode.get(key);
+    sessionManualMode.set(phoneNumber, enabled);
+    
+    logger.wpp(userId, slot, `Modo manual ${enabled ? 'ativado' : 'desativado'} para ${phoneNumber}`);
+  }
+
+  /**
+   * Verifica se uma conversa está em modo manual
+   */
+  isManualMode(userId, slot, phoneNumber) {
+    const key = this.getKey(userId, slot);
+    const sessionManualMode = this.manualMode.get(key);
+    
+    if (!sessionManualMode) {
+      return false;
+    }
+    
+    return sessionManualMode.get(phoneNumber) === true;
+  }
+
+  /**
+   * Remove modo manual de uma conversa
+   */
+  clearManualMode(userId, slot, phoneNumber) {
+    const key = this.getKey(userId, slot);
+    const sessionManualMode = this.manualMode.get(key);
+    
+    if (sessionManualMode) {
+      sessionManualMode.delete(phoneNumber);
+    }
   }
 }
 

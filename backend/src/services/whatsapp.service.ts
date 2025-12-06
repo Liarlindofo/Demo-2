@@ -17,6 +17,7 @@ interface SessionData {
 export class WhatsAppService {
   private sessions: Map<string, SessionData> = new Map();
   private messageContexts: Map<string, { messages: string[]; timestamp: number }> = new Map();
+  private manualMode: Map<string, boolean> = new Map(); // Armazena modo manual por conversa: "clientId_slot_phoneNumber" => true/false
 
   private getSessionKey(clientId: string, slot: number): string {
     return `${clientId}_${slot}`;
@@ -118,6 +119,36 @@ export class WhatsAppService {
         if (!clientConfig || !clientConfig.botEnabled) {
           logger.info(`Bot desabilitado para cliente ${clientId}`);
           return;
+        }
+
+        const phoneNumber = message.from;
+        const manualModeKey = `${clientId}_${slot}_${phoneNumber}`;
+
+        // Verificar comandos especiais antes de processar
+        if (message.type === 'chat' || message.type === 'text') {
+          const userMessage = message.body?.trim().toLowerCase() || '';
+          
+          // Comando para assumir chat (ativar modo manual)
+          if (userMessage === '#boa noite') {
+            this.manualMode.set(manualModeKey, true);
+            await client.sendText(phoneNumber, '✅ Modo manual ativado. Você assumiu o chat. O bot não responderá automaticamente. Use #brigado para o bot voltar a assumir.');
+            logger.info(`Modo manual ativado para ${phoneNumber} (${clientId}:${slot})`);
+            return;
+          }
+          
+          // Comando para bot assumir (desativar modo manual)
+          if (userMessage === '#brigado') {
+            this.manualMode.set(manualModeKey, false);
+            await client.sendText(phoneNumber, '✅ Modo automático ativado. O bot voltou a responder automaticamente. Use #boa noite para assumir o chat novamente.');
+            logger.info(`Modo automático ativado para ${phoneNumber} (${clientId}:${slot})`);
+            return;
+          }
+          
+          // Se estiver em modo manual, não processar com IA
+          if (this.manualMode.get(manualModeKey) === true) {
+            logger.info(`Modo manual ativo para ${phoneNumber} (${clientId}:${slot}), ignorando processamento com IA`);
+            return; // Não processa com IA, deixa o usuário responder manualmente
+          }
         }
 
         // Processar mensagem
