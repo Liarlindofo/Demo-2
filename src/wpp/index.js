@@ -182,38 +182,53 @@ function setupMessageListener(client, userId, slot) {
         return;
       }
 
-      const phoneNumber = message.from;
+      // Extrair número de telefone usando função helper (normaliza formato)
+      const phoneNumber = extractPhoneNumber(message.from) || message.from;
       
-      // Verificar comandos especiais antes de processar
+      // Verificar comandos especiais ANTES de qualquer processamento
       const trimmedMessage = userMessage.trim().toLowerCase();
       
+      logger.wpp(userId, slot, `📨 Mensagem recebida de ${phoneNumber} (${message.from}): "${userMessage}"`);
+      
       // Comando para assumir chat (ativar modo manual)
-      if (trimmedMessage === '#boa noite') {
+      // Aceita variações: "#boa noite", "#boa noite ", " #boa noite", etc.
+      // Remove espaços extras e compara
+      const normalizedCommand = trimmedMessage.replace(/\s+/g, ' ').trim();
+      if (normalizedCommand === '#boa noite' || normalizedCommand.startsWith('#boa noite')) {
         sessionManager.setManualMode(userId, slot, phoneNumber, true);
-        await client.sendText(phoneNumber, '✅ Modo manual ativado. Você assumiu o chat. O bot não responderá automaticamente. Use #brigado para o bot voltar a assumir.');
-        logger.wpp(userId, slot, `Modo manual ativado para ${phoneNumber}`);
+        // Usar message.from para enviar (formato original do WhatsApp)
+        await client.sendText(message.from, '✅ Modo manual ativado. Você assumiu o chat. O bot não responderá automaticamente. Use #brigado para o bot voltar a assumir.');
+        logger.wpp(userId, slot, `✅✅✅ Modo manual ATIVADO para ${phoneNumber} (${message.from}) - Mensagem: "${userMessage}"`);
         return;
       }
       
       // Comando para bot assumir (desativar modo manual)
-      if (trimmedMessage === '#brigado') {
+      // Aceita variações: "#brigado", "#brigado ", " #brigado", etc.
+      if (normalizedCommand === '#brigado' || normalizedCommand.startsWith('#brigado')) {
         sessionManager.setManualMode(userId, slot, phoneNumber, false);
-        await client.sendText(phoneNumber, '✅ Modo automático ativado. O bot voltou a responder automaticamente. Use #boa noite para assumir o chat novamente.');
-        logger.wpp(userId, slot, `Modo automático ativado para ${phoneNumber}`);
+        // Usar message.from para enviar (formato original do WhatsApp)
+        await client.sendText(message.from, '✅ Modo automático ativado. O bot voltou a responder automaticamente. Use #boa noite para assumir o chat novamente.');
+        logger.wpp(userId, slot, `✅✅✅ Modo automático ATIVADO para ${phoneNumber} (${message.from}) - Mensagem: "${userMessage}"`);
         return;
       }
       
-      // Se estiver em modo manual, não processar com IA (apenas salvar no histórico)
-      if (sessionManager.isManualMode(userId, slot, phoneNumber)) {
-        logger.wpp(userId, slot, `Modo manual ativo para ${phoneNumber}, ignorando processamento com IA`);
+      // IMPORTANTE: Verificar modo manual ANTES de processar com IA
+      const isManual = sessionManager.isManualMode(userId, slot, phoneNumber);
+      logger.wpp(userId, slot, `🔍 Verificando modo manual para ${phoneNumber} (${message.from}): ${isManual ? '✅ ATIVO - BLOQUEANDO IA' : '❌ INATIVO - PROCESSANDO COM IA'}`);
+      
+      if (isManual) {
+        logger.wpp(userId, slot, `🚫🚫🚫 Modo manual ATIVO para ${phoneNumber} - IGNORANDO processamento com IA - Mensagem: "${userMessage}"`);
         // Salvar mensagem do usuário no histórico mesmo em modo manual
         sessionManager.addMessage(userId, slot, phoneNumber, {
           body: userMessage,
           fromMe: false,
           timestamp: Date.now()
         });
-        return; // Não processa com IA, deixa o usuário responder manualmente
+        // RETORNAR IMEDIATAMENTE - NÃO processa com IA
+        return;
       }
+      
+      logger.wpp(userId, slot, `🤖 Modo automático - Processando mensagem com IA para ${phoneNumber}`);
 
       // Buscar histórico de conversa (últimas N mensagens)
       const conversationHistory = sessionManager.getConversation(userId, slot, phoneNumber, botSettings.contextLimit || 10);
@@ -240,9 +255,9 @@ function setupMessageListener(client, userId, slot) {
         timestamp: Date.now()
       });
 
-      // Enviar resposta
+      // Enviar resposta (usar phoneNumber normalizado)
       await client.sendText(message.from, aiResponse);
-      logger.success(`Resposta enviada para ${message.from}`);
+      logger.success(`Resposta enviada para ${phoneNumber} (${message.from})`);
 
       // Salvar resposta do bot no histórico
       sessionManager.addMessage(userId, slot, phoneNumber, {

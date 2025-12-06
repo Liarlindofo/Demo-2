@@ -163,10 +163,20 @@ class SessionManager {
       this.manualMode.set(key, new Map());
     }
     
-    const sessionManualMode = this.manualMode.get(key);
-    sessionManualMode.set(phoneNumber, enabled);
+    // Normalizar número de telefone (remover sufixos do WhatsApp)
+    let normalizedPhone = phoneNumber;
+    if (normalizedPhone.includes('@')) {
+      normalizedPhone = normalizedPhone.split('@')[0];
+    }
     
-    logger.wpp(userId, slot, `Modo manual ${enabled ? 'ativado' : 'desativado'} para ${phoneNumber}`);
+    const sessionManualMode = this.manualMode.get(key);
+    // Salvar tanto com número normalizado quanto original para garantir compatibilidade
+    sessionManualMode.set(normalizedPhone, enabled);
+    if (normalizedPhone !== phoneNumber) {
+      sessionManualMode.set(phoneNumber, enabled);
+    }
+    
+    logger.wpp(userId, slot, `Modo manual ${enabled ? 'ativado' : 'desativado'} para ${normalizedPhone} (original: ${phoneNumber})`);
   }
 
   /**
@@ -180,7 +190,22 @@ class SessionManager {
       return false;
     }
     
-    return sessionManualMode.get(phoneNumber) === true;
+    // Normalizar número de telefone (remover sufixos do WhatsApp)
+    let normalizedPhone = phoneNumber;
+    if (normalizedPhone && normalizedPhone.includes('@')) {
+      normalizedPhone = normalizedPhone.split('@')[0];
+    }
+    
+    // Verificar tanto com número normalizado quanto original
+    const isManual = sessionManualMode.get(normalizedPhone) === true || 
+                     sessionManualMode.get(phoneNumber) === true;
+    
+    // Log para debug
+    if (isManual) {
+      logger.wpp(userId, slot, `🔍 Modo manual encontrado para ${normalizedPhone} (original: ${phoneNumber})`);
+    }
+    
+    return isManual;
   }
 
   /**
