@@ -107,12 +107,57 @@ export class WhatsAppService {
   private setupMessageListeners(client: Whatsapp, clientId: string, slot: number): void {
     client.onMessage(async (message) => {
       try {
-        // Ignorar mensagens de grupos e do próprio bot
-        if (message.isGroupMsg || message.fromMe) {
+        // Ignorar mensagens de grupos
+        if (message.isGroupMsg) {
           return;
         }
 
-        logger.info(`Mensagem recebida de ${message.from}: ${message.type}`);
+        // Processar apenas mensagens de texto
+        if (message.type !== 'chat' && message.type !== 'text') {
+          return;
+        }
+
+        const userMessage = message.body?.trim() || '';
+        if (!userMessage) {
+          return;
+        }
+
+        const trimmedMessage = userMessage.trim().toLowerCase();
+        const normalizedCommand = trimmedMessage.replace(/\s+/g, ' ').trim();
+
+        // ============================================
+        // COMANDOS DO ESTABELECIMENTO (message.fromMe === true)
+        // ============================================
+        if (message.fromMe) {
+          // Identificar para qual conversa o comando foi enviado
+          const clientPhoneNumber = (message.to || message.chatId || message.from)?.split('@')[0] || (message.to || message.chatId || message.from);
+          const manualModeKey = `${clientId}_${slot}_${clientPhoneNumber}`;
+          
+          logger.info(`📤 Mensagem do ESTABELECIMENTO para ${clientPhoneNumber}: "${userMessage}"`);
+          
+          // Comando para assumir chat (ativar modo manual)
+          if (normalizedCommand === '#boa noite' || normalizedCommand.startsWith('#boa noite')) {
+            this.manualMode.set(manualModeKey, true);
+            logger.info(`✅ Modo manual ATIVADO pelo estabelecimento para ${clientPhoneNumber} (${clientId}:${slot})`);
+            return;
+          }
+          
+          // Comando para bot assumir (desativar modo manual)
+          if (normalizedCommand === '#brigado' || normalizedCommand.startsWith('#brigado')) {
+            this.manualMode.set(manualModeKey, false);
+            logger.info(`✅ Modo automático ATIVADO pelo estabelecimento para ${clientPhoneNumber} (${clientId}:${slot})`);
+            return;
+          }
+          
+          // Se não for comando, é mensagem normal do estabelecimento - não processar
+          return;
+        }
+
+        // ============================================
+        // MENSAGENS DO CLIENTE (message.fromMe === false)
+        // ============================================
+        
+        logger.info(`📨 Mensagem recebida do CLIENTE ${message.from}: ${message.type}`);
 
         // Verificar se o bot está habilitado
         const clientConfig = await clientConfigService.getClient(clientId);
@@ -121,34 +166,13 @@ export class WhatsAppService {
           return;
         }
 
-        const phoneNumber = message.from;
+        const phoneNumber = message.from?.split('@')[0] || message.from;
         const manualModeKey = `${clientId}_${slot}_${phoneNumber}`;
 
-        // Verificar comandos especiais antes de processar
-        if (message.type === 'chat' || message.type === 'text') {
-          const userMessage = message.body?.trim().toLowerCase() || '';
-          
-          // Comando para assumir chat (ativar modo manual)
-          if (userMessage === '#boa noite') {
-            this.manualMode.set(manualModeKey, true);
-            await client.sendText(phoneNumber, '✅ Modo manual ativado. Você assumiu o chat. O bot não responderá automaticamente. Use #brigado para o bot voltar a assumir.');
-            logger.info(`Modo manual ativado para ${phoneNumber} (${clientId}:${slot})`);
-            return;
-          }
-          
-          // Comando para bot assumir (desativar modo manual)
-          if (userMessage === '#brigado') {
-            this.manualMode.set(manualModeKey, false);
-            await client.sendText(phoneNumber, '✅ Modo automático ativado. O bot voltou a responder automaticamente. Use #boa noite para assumir o chat novamente.');
-            logger.info(`Modo automático ativado para ${phoneNumber} (${clientId}:${slot})`);
-            return;
-          }
-          
-          // Se estiver em modo manual, não processar com IA
-          if (this.manualMode.get(manualModeKey) === true) {
-            logger.info(`Modo manual ativo para ${phoneNumber} (${clientId}:${slot}), ignorando processamento com IA`);
-            return; // Não processa com IA, deixa o usuário responder manualmente
-          }
+        // Se estiver em modo manual, não processar com IA
+        if (this.manualMode.get(manualModeKey) === true) {
+          logger.info(`🚫 Modo manual ativo para ${phoneNumber} (${clientId}:${slot}), ignorando processamento com IA`);
+          return; // Não processa com IA, deixa o usuário responder manualmente
         }
 
         // Processar mensagem

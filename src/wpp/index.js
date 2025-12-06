@@ -151,17 +151,79 @@ export async function getClientStatus(userId, slot) {
 function setupMessageListener(client, userId, slot) {
   client.onMessage(async (message) => {
     try {
-      // Ignorar mensagens de grupos e do próprio bot
-      if (message.isGroupMsg || message.fromMe) {
+      // Ignorar mensagens de grupos
+      if (message.isGroupMsg) {
         return;
       }
 
+      // Processar apenas mensagens de texto
+      if (message.type !== 'chat' && message.type !== 'text') {
+        return;
+      }
+
+      const userMessage = message.body || message.text;
+      if (!userMessage) {
+        return;
+      }
+
+      const trimmedMessage = userMessage.trim().toLowerCase();
+      const normalizedCommand = trimmedMessage.replace(/\s+/g, ' ').trim();
+
+      // ============================================
+      // COMANDOS DO ESTABELECIMENTO (message.fromMe === true)
+      // ============================================
+      if (message.fromMe) {
+        // Identificar para qual conversa o comando foi enviado
+        // Quando você envia uma mensagem, o campo 'to' contém o número do destinatário
+        // Se não tiver 'to', tenta 'chatId' ou 'from' como fallback
+        let clientPhoneNumber = message.to || message.chatId || message.chat?.id || message.from;
+        
+        // Normalizar número de telefone
+        if (clientPhoneNumber) {
+          clientPhoneNumber = extractPhoneNumber(clientPhoneNumber) || clientPhoneNumber;
+        } else {
+          // Se não conseguir identificar, logar e retornar
+          logger.wpp(userId, slot, `⚠️ Não foi possível identificar o destinatário da mensagem do estabelecimento`);
+          return;
+        }
+        
+        logger.wpp(userId, slot, `📤 Mensagem do ESTABELECIMENTO para ${clientPhoneNumber} (to: ${message.to}, chatId: ${message.chatId}): "${userMessage}"`);
+        
+        // Comando para assumir chat (ativar modo manual)
+        if (normalizedCommand === '#boa noite' || normalizedCommand.startsWith('#boa noite')) {
+          sessionManager.setManualMode(userId, slot, clientPhoneNumber, true);
+          logger.wpp(userId, slot, `✅✅✅ Modo manual ATIVADO pelo estabelecimento para ${clientPhoneNumber}`);
+          // Não enviar mensagem de confirmação, apenas ativar o modo
+          return;
+        }
+        
+        // Comando para bot assumir (desativar modo manual)
+        if (normalizedCommand === '#brigado' || normalizedCommand.startsWith('#brigado')) {
+          sessionManager.setManualMode(userId, slot, clientPhoneNumber, false);
+          logger.wpp(userId, slot, `✅✅✅ Modo automático ATIVADO pelo estabelecimento para ${clientPhoneNumber}`);
+          // Não enviar mensagem de confirmação, apenas desativar o modo
+          return;
+        }
+        
+        // Se não for comando, é uma mensagem normal do estabelecimento - apenas salvar no histórico
+        sessionManager.addMessage(userId, slot, clientPhoneNumber, {
+          body: userMessage,
+          fromMe: true,
+          timestamp: Date.now()
+        });
+        return; // Não processar mensagens do estabelecimento com IA
+      }
+
+      // ============================================
+      // MENSAGENS DO CLIENTE (message.fromMe === false)
+      // ============================================
+      
       // Verificar se deve ignorar a mensagem
       if (shouldIgnoreMessage(message)) {
         return;
       }
 
-      logger.wpp(userId, slot, `Mensagem recebida de ${message.from}: ${message.type}`);
+      logger.wpp(userId, slot, `📨 Mensagem recebida do CLIENTE ${message.from}: ${message.type}`);
 
       // Buscar configurações do bot
       const botSettings = await BotSettingsModel.findByUser(userId).catch(() => null);
@@ -171,46 +233,10 @@ function setupMessageListener(client, userId, slot) {
         return;
       }
 
-      // Processar apenas mensagens de texto por enquanto
-      if (message.type !== 'chat' && message.type !== 'text') {
-        logger.wpp(userId, slot, `Tipo de mensagem não suportado: ${message.type}`);
-        return;
-      }
-
-      const userMessage = message.body || message.text;
-      if (!userMessage) {
-        return;
-      }
-
-      // Extrair número de telefone usando função helper (normaliza formato)
+      // Extrair número de telefone do cliente
       const phoneNumber = extractPhoneNumber(message.from) || message.from;
       
-      // Verificar comandos especiais ANTES de qualquer processamento
-      const trimmedMessage = userMessage.trim().toLowerCase();
-      
-      logger.wpp(userId, slot, `📨 Mensagem recebida de ${phoneNumber} (${message.from}): "${userMessage}"`);
-      
-      // Comando para assumir chat (ativar modo manual)
-      // Aceita variações: "#boa noite", "#boa noite ", " #boa noite", etc.
-      // Remove espaços extras e compara
-      const normalizedCommand = trimmedMessage.replace(/\s+/g, ' ').trim();
-      if (normalizedCommand === '#boa noite' || normalizedCommand.startsWith('#boa noite')) {
-        sessionManager.setManualMode(userId, slot, phoneNumber, true);
-        // Usar message.from para enviar (formato original do WhatsApp)
-        await client.sendText(message.from, '✅ Modo manual ativado. Você assumiu o chat. O bot não responderá automaticamente. Use #brigado para o bot voltar a assumir.');
-        logger.wpp(userId, slot, `✅✅✅ Modo manual ATIVADO para ${phoneNumber} (${message.from}) - Mensagem: "${userMessage}"`);
-        return;
-      }
-      
-      // Comando para bot assumir (desativar modo manual)
-      // Aceita variações: "#brigado", "#brigado ", " #brigado", etc.
-      if (normalizedCommand === '#brigado' || normalizedCommand.startsWith('#brigado')) {
-        sessionManager.setManualMode(userId, slot, phoneNumber, false);
-        // Usar message.from para enviar (formato original do WhatsApp)
-        await client.sendText(message.from, '✅ Modo automático ativado. O bot voltou a responder automaticamente. Use #boa noite para assumir o chat novamente.');
-        logger.wpp(userId, slot, `✅✅✅ Modo automático ATIVADO para ${phoneNumber} (${message.from}) - Mensagem: "${userMessage}"`);
-        return;
-      }
+      logger.wpp(userId, slot, `📨 Mensagem do cliente ${phoneNumber} (${message.from}): "${userMessage}"`);
       
       // IMPORTANTE: Verificar modo manual ANTES de processar com IA
       const isManual = sessionManager.isManualMode(userId, slot, phoneNumber);
@@ -218,7 +244,7 @@ function setupMessageListener(client, userId, slot) {
       
       if (isManual) {
         logger.wpp(userId, slot, `🚫🚫🚫 Modo manual ATIVO para ${phoneNumber} - IGNORANDO processamento com IA - Mensagem: "${userMessage}"`);
-        // Salvar mensagem do usuário no histórico mesmo em modo manual
+        // Salvar mensagem do cliente no histórico mesmo em modo manual
         sessionManager.addMessage(userId, slot, phoneNumber, {
           body: userMessage,
           fromMe: false,
