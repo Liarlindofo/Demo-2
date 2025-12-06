@@ -250,19 +250,95 @@ export const WhatsAppBotModel = {
  */
 export const BotSettingsModel = {
   /**
+   * Resolve o userId real da tabela `users` a partir de um id que pode ser:
+   * - o próprio `users.id`, ou
+   * - o `stack_users.id` (stackUserId usado pelo WhatsAppBot)
+   */
+  async _resolveUserId(rawUserId) {
+    // 1) Se já for um User.id válido, usa direto
+    const existingUser = await prisma.user.findUnique({
+      where: { id: rawUserId }
+    }).catch(() => null);
+
+    if (existingUser) {
+      return existingUser.id;
+    }
+
+    // 2) Tentar resolver como StackUser.id
+    const stackUser = await prisma.stackUser.findUnique({
+      where: { id: rawUserId },
+      include: { user: true }
+    }).catch(() => null);
+
+    if (!stackUser) {
+      // Não conseguimos mapear, devolve o id original (vai falhar com FK,
+      // mas registramos o erro no caller)
+      return rawUserId;
+    }
+
+    // 2.1) Se já houver user associado, usa ele
+    if (stackUser.user) {
+      return stackUser.user.id;
+    }
+
+    // 2.2) Criar/associar um User para esse StackUser
+    let userForStack = null;
+
+    // Se tiver email, tentar reaproveitar User por email
+    if (stackUser.primaryEmail) {
+      userForStack = await prisma.user.findUnique({
+        where: { email: stackUser.primaryEmail }
+      }).catch(() => null);
+    }
+
+    if (!userForStack) {
+      // Criar novo User mínimo
+      const baseName = (stackUser.displayName || stackUser.primaryEmail || 'user')
+        .toLowerCase()
+        .replace(/\s+/g, '_')
+        .slice(0, 20);
+
+      userForStack = await prisma.user.create({
+        data: {
+          email: stackUser.primaryEmail,
+          username: `${baseName}_${Date.now().toString(36)}`,
+          fullName: stackUser.displayName || null,
+          stackUserId: stackUser.id
+        }
+      });
+    } else if (!userForStack.stackUserId) {
+      // Garantir associação se ainda não existir
+      userForStack = await prisma.user.update({
+        where: { id: userForStack.id },
+        data: { stackUserId: stackUser.id }
+      });
+    }
+
+    // Atualizar StackUser com referência ao User
+    await prisma.stackUser.update({
+      where: { id: stackUser.id },
+      data: { userId: userForStack.id }
+    }).catch(() => null);
+
+    return userForStack.id;
+  },
+
+  /**
    * Busca configurações por userId
    */
   async findByUser(userId) {
     try {
+      const resolvedUserId = await this._resolveUserId(userId);
+
       let settings = await prisma.botSettings.findUnique({
-        where: { userId }
+        where: { userId: resolvedUserId }
       });
 
       // Se não existir, cria com valores padrão
       if (!settings) {
         settings = await prisma.botSettings.create({
           data: {
-            userId,
+            userId: resolvedUserId,
             botName: 'Assistente',
             storeType: 'restaurant',
             contextLimit: 10,
@@ -270,7 +346,7 @@ export const BotSettingsModel = {
             isActive: true
           }
         });
-        logger.info(`BotSettings criado para usuário: ${userId}`);
+        logger.info(`BotSettings criado para usuário (resolved): ${resolvedUserId} (raw: ${userId})`);
       }
 
       return settings;
@@ -285,6 +361,8 @@ export const BotSettingsModel = {
    */
   async update(userId, updates) {
     try {
+      const resolvedUserId = await this._resolveUserId(userId);
+
       // Remove campos undefined/null para não sobrescrever com null
       const cleanUpdates = {};
       Object.keys(updates).forEach(key => {
@@ -294,10 +372,10 @@ export const BotSettingsModel = {
       });
 
       return await prisma.botSettings.upsert({
-        where: { userId },
+        where: { userId: resolvedUserId },
         update: cleanUpdates,
         create: {
-          userId,
+          userId: resolvedUserId,
           botName: 'Assistente',
           storeType: 'restaurant',
           contextLimit: 10,
