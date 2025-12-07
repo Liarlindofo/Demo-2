@@ -166,24 +166,123 @@ function setupMessageListener(client, userId, slot) {
         return;
       }
 
+      // Log TODAS as mensagens que chegam
+      logger.wpp(userId, slot, `📩 MENSAGEM RECEBIDA - from: ${message.from}, fromMe: ${message.fromMe}, body: "${userMessage}"`);
+
       const trimmedMessage = userMessage.trim().toLowerCase();
       const normalizedCommand = trimmedMessage.replace(/\s+/g, ' ').trim();
+      
+      logger.wpp(userId, slot, `🔍 Após normalização: "${normalizedCommand}"`);
 
-      // Verificar se é um comando (#boa noite ou #brigado)
-      // Se a mensagem é EXATAMENTE um desses comandos, sempre tratar como do estabelecimento
+      // Obter número conectado do bot
+      let botConnectedNumber = null;
+      try {
+        const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slot).catch(() => null);
+        if (bot && bot.connectedNumber) {
+          botConnectedNumber = extractPhoneNumber(bot.connectedNumber) || bot.connectedNumber;
+          logger.wpp(userId, slot, `📱 Bot conectado no número: ${botConnectedNumber}`);
+        } else {
+          logger.wpp(userId, slot, `⚠️ Número do bot não encontrado no banco`);
+        }
+      } catch (error) {
+        logger.wpp(userId, slot, `❌ Erro ao buscar número conectado: ${error.message}`);
+      }
+
+      // Extrair número do remetente
+      const senderNumber = extractPhoneNumber(message.from) || message.from;
+      logger.wpp(userId, slot, `📤 Remetente: ${senderNumber}`);
+
+      // Verificar se o remetente é o número conectado do bot
+      const isBotNumber = botConnectedNumber && senderNumber === botConnectedNumber;
+      logger.wpp(userId, slot, `🔍 Remetente é o bot? ${isBotNumber} (${senderNumber} === ${botConnectedNumber})`);
+
+      // Verificar se é um comando (APENAS com #)
       const isBoaNoite = normalizedCommand === '#boa noite' || normalizedCommand === '#boanoite';
       const isBrigado = normalizedCommand === '#brigado' || normalizedCommand === '#obrigado';
       const isCommand = isBoaNoite || isBrigado;
+      
+      logger.wpp(userId, slot, `🔍 É comando? ${isCommand} (isBoaNoite: ${isBoaNoite}, isBrigado: ${isBrigado})`);
 
       // ============================================
       // COMANDOS DO ESTABELECIMENTO
-      // Se a mensagem é EXATAMENTE um comando, assumir que é do estabelecimento
+      // Apenas se: 1) É um comando E 2) O remetente é o número conectado do bot
       // ============================================
-      if (isCommand) {
-        // Identificar o cliente (destinatário)
-        // message.from é o número que enviou a mensagem
-        // Se for um comando, assumimos que message.from é o CLIENTE para o qual queremos ativar/desativar o modo manual
-        const clientPhoneNumber = extractPhoneNumber(message.from) || message.from;
+      if (isCommand && isBotNumber) {
+        // Identificar o cliente através do chatId
+        // Quando você envia "#boa noite" em uma conversa com um cliente,
+        // o chatId dessa mensagem é o identificador da conversa com esse cliente
+        let clientPhoneNumber = null;
+        
+        // Tentar múltiplos campos para identificar o cliente/conversa
+        if (message.chatId) {
+          clientPhoneNumber = message.chatId;
+        } else if (message.chat && message.chat.id) {
+          clientPhoneNumber = message.chat.id;
+        } else if (message.to) {
+          clientPhoneNumber = message.to;
+        } else if (message.id && message.id.remote) {
+          clientPhoneNumber = message.id.remote;
+        }
+        
+        logger.wpp(userId, slot, `🔍 Tentando identificar cliente:`);
+        logger.wpp(userId, slot, `   - message.chatId: ${message.chatId}`);
+        logger.wpp(userId, slot, `   - message.chat?.id: ${message.chat?.id}`);
+        logger.wpp(userId, slot, `   - message.to: ${message.to}`);
+        logger.wpp(userId, slot, `   - message.id?.remote: ${message.id?.remote}`);
+        logger.wpp(userId, slot, `   - clientPhoneNumber identificado: ${clientPhoneNumber}`);
+        
+        if (!clientPhoneNumber) {
+          logger.wpp(userId, slot, `❌ Não foi possível identificar o cliente. Campos disponíveis: ${Object.keys(message).join(', ')}`);
+          return;
+        }
+        
+        // Normalizar número do cliente
+        clientPhoneNumber = extractPhoneNumber(clientPhoneNumber) || clientPhoneNumber;
+        
+        logger.wpp(userId, slot, `✨✨✨ COMANDO DETECTADO! ✨✨✨`);
+        logger.wpp(userId, slot, `   - Comando: "${normalizedCommand}"`);
+        logger.wpp(userId, slot, `   - Remetente: ${senderNumber} (bot)`);
+        logger.wpp(userId, slot, `   - Cliente: ${clientPhoneNumber}`);
+        
+        // Comando para assumir chat (ativar modo manual)
+        if (isBoaNoite) {
+          sessionManager.setManualMode(userId, slot, clientPhoneNumber, true);
+          logger.wpp(userId, slot, `✅✅✅ Modo manual ATIVADO para cliente ${clientPhoneNumber}`);
+          // Verificar se foi salvo corretamente
+          const verifyManual = sessionManager.isManualMode(userId, slot, clientPhoneNumber);
+          logger.wpp(userId, slot, `🔍 Verificação imediata: ${verifyManual ? '✅ MODO MANUAL CONFIRMADO ATIVO' : '❌ FALHOU - NÃO ESTÁ ATIVO'}`);
+          
+          // Enviar confirmação visual
+          try {
+            await client.sendText(message.chatId || message.chat?.id || message.from, '✅ Modo manual ativado. Bot pausado para este chat. Use #brigado para reativar.');
+          } catch (e) {
+            logger.wpp(userId, slot, `Erro ao enviar confirmação: ${e.message}`);
+          }
+          return;
+        }
+        
+        // Comando para bot assumir (desativar modo manual)
+        if (isBrigado) {
+          sessionManager.setManualMode(userId, slot, clientPhoneNumber, false);
+          logger.wpp(userId, slot, `✅✅✅ Modo automático ATIVADO para cliente ${clientPhoneNumber}`);
+          // Verificar se foi salvo corretamente
+          const verifyManual = sessionManager.isManualMode(userId, slot, clientPhoneNumber);
+          logger.wpp(userId, slot, `🔍 Verificação imediata: ${verifyManual ? '❌ AINDA ATIVO (ERRO)' : '✅ MODO AUTOMÁTICO CONFIRMADO'}`);
+          
+          // Enviar confirmação visual
+          try {
+            await client.sendText(message.chatId || message.chat?.id || message.from, '✅ Modo automático ativado. Bot voltou a responder automaticamente. Use #boa noite para pausar.');
+          } catch (e) {
+            logger.wpp(userId, slot, `Erro ao enviar confirmação: ${e.message}`);
+          }
+          return;
+        }
+      }
+      
+      // Se o remetente é o bot mas não é um comando válido, ignorar
+      if (isBotNumber) {
+        logger.wpp(userId, slot, `📝 Mensagem do bot (não é comando): ignorando processamento com IA`);
+        return;
         
         logger.wpp(userId, slot, `✨✨✨ COMANDO DETECTADO! ✨✨✨`);
         logger.wpp(userId, slot, `   - Comando: "${normalizedCommand}"`);
