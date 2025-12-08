@@ -185,7 +185,9 @@ export async function getClientStatus(userId, slot) {
  * Configura listener de mensagens para processar com IA
  */
 function setupMessageListener(client, userId, slot) {
-  client.onMessage(async (message) => {
+  // Usamos onAnyMessage para receber TANTO mensagens do cliente
+  // quanto mensagens enviadas pelo próprio número conectado (fromMe === true).
+  client.onAnyMessage(async (message) => {
     try {
       // Ignorar mensagens de grupos
       if (message.isGroupMsg) {
