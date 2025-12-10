@@ -311,26 +311,28 @@ export default function ConnectionsPage() {
     setActionLoading({ ...actionLoading, generate: true });
 
     try {
-      // Verificar conectividade com o servidor primeiro
+      // Health check **não bloqueante** (apenas loga problema e segue)
       try {
         const healthController = new AbortController();
         const healthTimeout = setTimeout(() => healthController.abort(), 5000); // 5 segundos para health check
-        
+
         const healthCheck = await fetch(`${API_URL}/api/health`, {
           method: "GET",
           signal: healthController.signal,
         });
-        
+
         clearTimeout(healthTimeout);
-        
+
         if (!healthCheck.ok) {
-          throw new Error(`Servidor retornou status ${healthCheck.status}. O backend pode não estar funcionando corretamente.`);
+          console.warn(
+            `[Connections] Health check falhou com status ${healthCheck.status}. Tentando iniciar sessão mesmo assim...`,
+          );
         }
       } catch (healthError: any) {
-        if (healthError.name === 'AbortError' || healthError.message?.includes('Failed to fetch')) {
-          throw new Error(`Não foi possível conectar ao servidor em ${API_URL}.\n\nA VPS pode estar offline ou o backend não está rodando.\n\nVerifique:\n1. Se a VPS está online\n2. Se o backend está rodando (porta 3001)\n3. Se o Nginx está configurado corretamente\n4. Se a URL da API está correta`);
-        }
-        throw healthError;
+        console.warn(
+          "[Connections] Erro no health check. Tentando iniciar sessão mesmo assim...",
+          healthError,
+        );
       }
 
       // Usar exatamente o ID do usuário (sem prefixos) como clientId padrão
@@ -350,7 +352,7 @@ export default function ConnectionsPage() {
             "Content-Type": "application/json",
           },
           signal: controller.signal,
-        }
+        },
       );
 
       clearTimeout(timeoutId);
@@ -484,27 +486,28 @@ export default function ConnectionsPage() {
     setActionLoading({ ...actionLoading, [key]: true });
 
     try {
-      // Verificar conectividade com o servidor primeiro
+      // Health check **não bloqueante** (apenas loga problema e segue)
       try {
         const healthController = new AbortController();
         const healthTimeout = setTimeout(() => healthController.abort(), 5000); // 5 segundos para health check
-        
+
         const healthCheck = await fetch(`${API_URL}/api/health`, {
           method: "GET",
           signal: healthController.signal,
         });
-        
+
         clearTimeout(healthTimeout);
-        
+
         if (!healthCheck.ok) {
-          throw new Error(`Servidor retornou status ${healthCheck.status}. O backend pode não estar funcionando corretamente.`);
+          console.warn(
+            `[Connections] Health check falhou com status ${healthCheck.status}. Tentando iniciar sessão mesmo assim...`,
+          );
         }
       } catch (healthError: any) {
-        if (healthError.name === 'AbortError' || healthError.message?.includes('Failed to fetch')) {
-          alert(`Não foi possível conectar ao servidor em ${API_URL}.\n\nA VPS pode estar offline ou o backend não está rodando.\n\nVerifique:\n1. Se a VPS está online\n2. Se o backend está rodando (porta 3001)\n3. Se o Nginx está configurado corretamente\n4. Se a URL da API está correta`);
-          return;
-        }
-        throw healthError;
+        console.warn(
+          "[Connections] Erro no health check. Tentando iniciar sessão mesmo assim...",
+          healthError,
+        );
       }
 
       const response = await fetch(`${API_URL}/api/start/${clientId}/${slot}`, {
