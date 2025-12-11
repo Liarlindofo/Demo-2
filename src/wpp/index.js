@@ -54,53 +54,75 @@ export function isChatPaused(userId, slot, phone) {
  */
 async function cleanupOrphanBrowser(userDataDir) {
   try {
-    // Tentar encontrar e matar processos que estão usando o userDataDir
+    logger.info(`🧹 Iniciando limpeza agressiva para: ${userDataDir}`);
+    
+    // PASSO 1: Matar TODOS os processos Chrome usando esse userDataDir
     try {
       // Buscar processos Chrome/Chromium que estão usando esse userDataDir
       const { stdout } = await execAsync(`ps aux | grep -i "chrome.*${userDataDir}" | grep -v grep | awk '{print $2}'`);
       const pids = stdout.trim().split('\n').filter(pid => pid);
       
       if (pids.length > 0) {
-        logger.warn(`Encontrados ${pids.length} processos órfãos para ${userDataDir}, tentando finalizar...`);
+        logger.warn(`⚠️ Encontrados ${pids.length} processos órfãos para ${userDataDir}`);
         for (const pid of pids) {
           try {
+            logger.info(`💀 Finalizando processo ${pid}...`);
             await execAsync(`kill -9 ${pid}`);
-            logger.info(`Processo ${pid} finalizado`);
+            logger.info(`✅ Processo ${pid} finalizado`);
           } catch (killError) {
-            logger.warn(`Não foi possível finalizar processo ${pid}: ${killError.message}`);
+            logger.warn(`⚠️ Não foi possível finalizar processo ${pid}: ${killError.message}`);
           }
         }
-        // Aguardar um pouco para os processos terminarem
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Aguardar mais tempo para garantir que processos foram encerrados
+        logger.info('⏳ Aguardando 3 segundos para processos encerrarem...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      } else {
+        logger.info('✅ Nenhum processo órfão encontrado');
       }
     } catch (psError) {
-      // Se o comando ps falhar (pode não estar disponível), apenas loga
-      logger.warn(`Não foi possível verificar processos: ${psError.message}`);
+      // Se o comando ps falhar, tentar método alternativo
+      logger.warn(`⚠️ Método ps falhou: ${psError.message}`);
+      
+      // Tentar método alternativo: matar todos os processos Chrome do usuário
+      try {
+        await execAsync(`pkill -9 -f "chrome.*${userDataDir}"`);
+        logger.info('✅ Processos órfãos finalizados via pkill');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      } catch (pkillError) {
+        logger.warn(`⚠️ pkill também falhou: ${pkillError.message}`);
+      }
     }
 
-    // Limpar lock files do Puppeteer
-    const lockFile = path.join(userDataDir, 'SingletonLock');
-    const lockSocket = path.join(userDataDir, 'SingletonSocket');
+    // PASSO 2: Limpar TODOS os lock files do Puppeteer
+    const lockFiles = [
+      path.join(userDataDir, 'SingletonLock'),
+      path.join(userDataDir, 'SingletonSocket'),
+      path.join(userDataDir, 'SingletonCookie'),
+      path.join(userDataDir, '.lock'),
+    ];
     
-    if (fs.existsSync(lockFile)) {
-      try {
-        fs.unlinkSync(lockFile);
-        logger.info(`Lock file removido: ${lockFile}`);
-      } catch (unlinkError) {
-        logger.warn(`Não foi possível remover lock file: ${unlinkError.message}`);
+    for (const lockFile of lockFiles) {
+      if (fs.existsSync(lockFile)) {
+        try {
+          fs.unlinkSync(lockFile);
+          logger.info(`🗑️ Lock file removido: ${lockFile}`);
+        } catch (unlinkError) {
+          logger.warn(`⚠️ Não foi possível remover lock file ${lockFile}: ${unlinkError.message}`);
+          
+          // Tentar forçar remoção com sudo (se disponível)
+          try {
+            await execAsync(`sudo rm -f ${lockFile}`);
+            logger.info(`✅ Lock file removido com sudo: ${lockFile}`);
+          } catch (sudoError) {
+            logger.warn(`⚠️ sudo rm também falhou para ${lockFile}`);
+          }
+        }
       }
     }
     
-    if (fs.existsSync(lockSocket)) {
-      try {
-        fs.unlinkSync(lockSocket);
-        logger.info(`Lock socket removido: ${lockSocket}`);
-      } catch (unlinkError) {
-        logger.warn(`Não foi possível remover lock socket: ${unlinkError.message}`);
-      }
-    }
+    logger.info('✅ Limpeza concluída');
   } catch (error) {
-    logger.warn(`Erro ao limpar processos órfãos: ${error.message}`);
+    logger.error(`❌ Erro ao limpar processos órfãos: ${error.message}`);
   }
 }
 
@@ -111,8 +133,21 @@ export async function startClient(userId, slot) {
   try {
     logger.wpp(userId, slot, 'Iniciando cliente WPPConnect (não bloqueante)...');
 
+    // Verificar se já existe cliente na memória
     if (sessionManager.hasClient(userId, slot)) {
       logger.wpp(userId, slot, 'Cliente já está ativo na memória, retornando...');
+      
+      // Verificar se está realmente conectado
+      const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slot);
+      if (bot && bot.qrCode) {
+        return { 
+          success: true, 
+          message: 'Cliente já está ativo com QR Code',
+          qrCode: bot.qrCode,
+          isConnected: bot.isConnected
+        };
+      }
+      
       return { success: false, message: 'Cliente já está ativo' };
     }
 
@@ -133,9 +168,12 @@ export async function startClient(userId, slot) {
     console.log('📌 Timestamp:', new Date().toISOString());
     console.log('==================================');
     
-    // Limpar processos órfãos antes de tentar criar nova sessão
-    logger.wpp(userId, slot, 'Verificando processos órfãos...');
+    // IMPORTANTE: Limpar processos órfãos AGRESSIVAMENTE
+    logger.wpp(userId, slot, '🧹 Limpando processos órfãos e locks...');
     await cleanupOrphanBrowser(userDataDir);
+    
+    // Aguardar um pouco após limpeza para garantir que os processos foram encerrados
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
     // Prepara opções do Puppeteer com userDataDir
     const basePuppeteerOptions = (config.wppConnect && config.wppConnect.puppeteerOptions) || {};
