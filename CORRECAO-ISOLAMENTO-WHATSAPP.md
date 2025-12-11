@@ -1,8 +1,9 @@
 # 🔧 Correção: Isolamento de Sessões WhatsApp Entre Usuários
 
-## 🚨 Problema Identificado
+## 🚨 Problemas Identificados
 
-Quando dois usuários diferentes tentavam gerar QR codes para seus bots WhatsApp, o sistema estava **desconectando e conectando bots de forma cruzada**, sem isolar corretamente as sessões por usuário.
+1. **Duplicação de sessões**: Cada API WhatsApp cadastrada criava uma cópia das sessões ✅ **CORRIGIDO**
+2. **Isolamento entre usuários**: Quando dois usuários diferentes tentavam gerar QR codes, o sistema desconectava e conectava bots de forma cruzada ⚠️ **EM INVESTIGAÇÃO**
 
 ### Causa Raiz
 
@@ -24,38 +25,67 @@ O sistema estava usando **identificadores inconsistentes** para sessões WhatsAp
 
 ---
 
-## ✅ Solução Implementada
+## ✅ Soluções Implementadas
 
-### 1. **Frontend: Sempre usar `user.id` como `clientId`**
+### 1. **Correção da Duplicação de Sessões** ✅
+
+**Problema:** O código fazia um `map` sobre cada API WhatsApp, criando múltiplas conexões com as mesmas sessões.
+
+**Solução:** Buscar status UMA ÚNICA VEZ por usuário.
 
 **Arquivo**: `app/connections/page.tsx`
 
 ```typescript
-// ANTES (❌ Incorreto)
-const statusRes = await fetch(
-  `${API_URL}/api/status/${api.storeId}`, // Usava storeId diferente por API
-  { method: "GET" }
+// ANTES (❌ Duplicava sessões)
+let connectionsWithStatus = await Promise.all(
+  whatsappAPIs.map(async (api) => {
+    // Para CADA API, busca o mesmo status do usuário
+    const statusRes = await fetch(`${API_URL}/api/status/${user.id}`);
+    return {
+      id: api.id,
+      name: api.name,
+      clientId: user.id,
+      sessions: statusData.sessions || [],
+    };
+  })
 );
+// Resultado: Se usuário tinha 2 APIs, mostrava 2x as mesmas sessões
 
-return {
-  id: api.id,
-  name: api.name,
-  clientId: api.storeId, // ❌ Cada API tinha storeId diferente
-  sessions: statusData.sessions || [],
-};
+// DEPOIS (✅ Busca uma única vez)
+let connectionsWithStatus: WhatsAppConnection[] = [];
 
-// DEPOIS (✅ Correto)
-const statusRes = await fetch(
-  `${API_URL}/api/status/${user.id}`, // ✅ Sempre usa user.id
-  { method: "GET" }
-);
+const statusRes = await fetch(`${API_URL}/api/status/${user.id}`);
+if (statusRes.ok) {
+  const statusData = await statusRes.json();
+  connectionsWithStatus = [
+    {
+      id: "main",
+      name: "WhatsApp Principal",
+      clientId: user.id,
+      sessions: statusData.sessions || [],
+    },
+  ];
+}
+// Resultado: Sempre mostra UMA ÚNICA conexão com os slots do usuário
+```
 
-return {
-  id: api.id,
-  name: api.name,
-  clientId: user.id, // ✅ Sempre usa user.id para isolar sessões
-  sessions: statusData.sessions || [],
-};
+### 2. **Logs de Debug para Isolamento** 🔍
+
+Adicionados logs detalhados para identificar problema de isolamento:
+
+**Arquivo**: `src/wpp/index.js`
+```javascript
+console.log('=== 🔍 DEBUG ISOLAMENTO SESSÃO ===');
+console.log('📌 userId recebido:', userId);
+console.log('📌 sessionName gerado:', sessionName);
+console.log('📌 userDataDir:', userDataDir);
+```
+
+**Arquivo**: `src/server/api.js`
+```javascript
+console.log('=== 🔍 DEBUG START CONNECTION ===');
+console.log('📌 userId da URL:', userId);
+console.log('📌 URL completa:', req.url);
 ```
 
 ### 2. **Backend: Usar `stackUserId` consistentemente**
@@ -161,14 +191,14 @@ ORDER BY "userId", slot;
 
 ---
 
-## 🚀 Deploy
+## 🚀 Deploy e Teste
 
-### Para aplicar as correções na VPS:
+### 1. Aplicar as correções na VPS:
 
 ```bash
-# 1. Fazer commit das alterações (local)
-git add app/connections/page.tsx src/wpp/qrHandler.js
-git commit -m "fix: corrigir isolamento de sessões WhatsApp entre usuários"
+# 1. Na sua máquina local, fazer commit
+git add .
+git commit -m "fix: corrigir duplicação e adicionar logs de debug para isolamento"
 git push origin main
 
 # 2. Conectar na VPS
@@ -178,13 +208,41 @@ cd ~/Demo-2
 # 3. Atualizar código
 git pull origin main
 
-# 4. Reiniciar backend WhatsApp (se estiver rodando com PM2)
+# 4. Reiniciar backend WhatsApp
 pm2 restart bot-whatsapp
 
-# OU se estiver rodando direto:
+# OU se não estiver usando PM2:
 pkill -f "node index.js"
 node index.js &
 ```
+
+### 2. Testar e ver logs de debug:
+
+```bash
+# Ver logs em tempo real
+pm2 logs bot-whatsapp --lines 100
+
+# Procurar pelos logs de debug:
+# === 🔍 DEBUG ISOLAMENTO SESSÃO ===
+# 📌 userId recebido: 1c31266a-caf4-47b7-8a58-...
+# 📌 sessionName gerado: 1c31266a-caf4-47b7-8a58-...-slot1
+# 📌 userDataDir: /var/www/whatsapp-sessions/1c31266a-caf4-47b7-8a58-...-slot1
+```
+
+### 3. Verificar se o isolamento está funcionando:
+
+```bash
+# Listar sessões criadas
+ls -la /var/www/whatsapp-sessions/
+
+# Deve mostrar diretórios separados:
+# 1c31266a-caf4-47b7-8a58-abc123-slot1/  (Usuário A)
+# 3f203a94-927c-45c3-8b08-def456-slot1/  (Usuário B)
+```
+
+### 4. Se o problema persistir:
+
+Consulte o arquivo `DEBUG-ISOLAMENTO.md` com comandos detalhados para investigação.
 
 ---
 

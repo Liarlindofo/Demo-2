@@ -136,6 +136,16 @@ export async function startConnection(req, res) {
     const { userId, slot } = req.params;
     const slotNumber = Number(slot);
 
+    // LOG DE DEBUG - ISOLAMENTO
+    console.log('=== 🔍 DEBUG START CONNECTION ===');
+    console.log('📌 userId da URL:', userId);
+    console.log('📌 userId type:', typeof userId);
+    console.log('📌 userId length:', userId?.length);
+    console.log('📌 slot:', slotNumber);
+    console.log('📌 URL completa:', req.url);
+    console.log('📌 Timestamp:', new Date().toISOString());
+    console.log('=================================');
+
     // Log para debug: verificar qual userId está sendo usado
     logger.info(`[startConnection] Iniciando sessão para userId: ${userId}, slot: ${slotNumber}`);
 

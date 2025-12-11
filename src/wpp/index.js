@@ -122,6 +122,17 @@ export async function startClient(userId, slot) {
     const sessionsDir = (config.wppConnect && config.wppConnect.sessionsDir) || '/var/www/whatsapp-sessions';
     const userDataDir = `${sessionsDir}/${sessionName}`;
     
+    // LOG DE DEBUG - ISOLAMENTO
+    console.log('=== 🔍 DEBUG ISOLAMENTO SESSÃO ===');
+    console.log('📌 userId recebido:', userId);
+    console.log('📌 userId type:', typeof userId);
+    console.log('📌 userId length:', userId?.length);
+    console.log('📌 slot:', slot);
+    console.log('📌 sessionName gerado:', sessionName);
+    console.log('📌 userDataDir:', userDataDir);
+    console.log('📌 Timestamp:', new Date().toISOString());
+    console.log('==================================');
+    
     // Limpar processos órfãos antes de tentar criar nova sessão
     logger.wpp(userId, slot, 'Verificando processos órfãos...');
     await cleanupOrphanBrowser(userDataDir);

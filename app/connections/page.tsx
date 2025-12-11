@@ -118,59 +118,41 @@ export default function ConnectionsPage() {
           .slice(0, 3); // Máximo 3 lojas
 
         // Carregar status das conexões WhatsApp
-        // IMPORTANTE: Sempre usar user.id como clientId para isolar sessões por usuário
-        let connectionsWithStatus = await Promise.all(
-          whatsappAPIs.map(async (api) => {
-            try {
-              const statusRes = await fetch(
-                `${API_URL}/api/status/${user.id}`,
-                {
-                  method: "GET",
-                },
-              );
-
-              if (statusRes.ok) {
-                const statusData = await statusRes.json();
-                return {
-                  id: api.id,
-                  name: api.name,
-                  clientId: user.id, // Usar user.id para isolar sessões
-                  sessions: statusData.sessions || [],
-                };
-              }
-            } catch (error) {
-              console.error("Erro ao buscar status WhatsApp:", error);
-            }
-
-            return {
-              id: api.id,
-              name: api.name,
-              clientId: user.id, // Usar user.id para isolar sessões
-              sessions: [],
-            };
-          }),
-        );
-
-        // Fallback: se não houver conexões cadastradas, mostrar a sessão "padrão" do usuário
-        if (whatsappAPIs.length === 0 && user?.id) {
-          try {
-            const statusRes = await fetch(`${API_URL}/api/status/${user.id}`, {
+        // IMPORTANTE: Buscar status UMA ÚNICA VEZ por usuário (não por API)
+        // Cada usuário tem apenas UMA conexão WhatsApp com múltiplos slots
+        let connectionsWithStatus: WhatsAppConnection[] = [];
+        
+        try {
+          const statusRes = await fetch(
+            `${API_URL}/api/status/${user.id}`,
+            {
               method: "GET",
-            });
-            if (statusRes.ok) {
-              const statusData = await statusRes.json();
-              connectionsWithStatus = [
-                {
-                  id: "default",
-                  name: "WhatsApp Principal",
-                  clientId: `${user.id}`,
-                  sessions: statusData.sessions || [],
-                },
-              ];
-            }
-          } catch (error) {
-            console.error("Erro ao buscar status da sessão padrão:", error);
+            },
+          );
+
+          if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            // Criar UMA ÚNICA conexão para o usuário
+            connectionsWithStatus = [
+              {
+                id: "main",
+                name: "WhatsApp Principal",
+                clientId: user.id,
+                sessions: statusData.sessions || [],
+              },
+            ];
           }
+        } catch (error) {
+          console.error("Erro ao buscar status WhatsApp:", error);
+          // Se falhar, criar conexão vazia
+          connectionsWithStatus = [
+            {
+              id: "main",
+              name: "WhatsApp Principal",
+              clientId: user.id,
+              sessions: [],
+            },
+          ];
         }
 
         setWhatsappConnections(connectionsWithStatus);
