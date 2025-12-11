@@ -9,6 +9,26 @@ import logger from '../utils/logger.js';
 export async function getStatus(req, res) {
   try {
     const { userId } = req.params;
+    
+    // Log para debug: verificar qual userId está sendo usado
+    logger.info(`[getStatus] Buscando status para userId: ${userId}`);
+    
+    // Validar que o userId existe na tabela stack_users
+    const stackUser = await prisma.stackUser.findUnique({
+      where: { id: userId }
+    });
+    
+    if (!stackUser) {
+      logger.warn(`[getStatus] Usuário ${userId} não encontrado em stack_users`);
+      return res.status(404).json({ 
+        success: false, 
+        message: `Usuário ${userId} não encontrado`,
+        sessions: []
+      });
+    }
+    
+    logger.info(`[getStatus] Usuário encontrado: ${stackUser.id} (${stackUser.primaryEmail})`);
+    
     const bots = await WhatsAppBotModel.findAllByUser(userId);
 
     const connections = await Promise.all(
@@ -116,6 +136,9 @@ export async function startConnection(req, res) {
     const { userId, slot } = req.params;
     const slotNumber = Number(slot);
 
+    // Log para debug: verificar qual userId está sendo usado
+    logger.info(`[startConnection] Iniciando sessão para userId: ${userId}, slot: ${slotNumber}`);
+
     // Valida slot
     if (isNaN(slotNumber) || slotNumber < 1 || slotNumber > 10) {
       return res.status(400).json({ 
@@ -125,17 +148,21 @@ export async function startConnection(req, res) {
     }
 
     // Valida que o usuário existe na tabela stack_users
+    let user;
     try {
-      const user = await prisma.stackUser.findUnique({
+      user = await prisma.stackUser.findUnique({
         where: { id: userId }
       });
 
       if (!user) {
+        logger.warn(`[startConnection] Usuário ${userId} não encontrado em stack_users`);
         return res.status(400).json({
           success: false,
           message: `Usuário ${userId} não encontrado na tabela stack_users`
         });
       }
+      
+      logger.info(`[startConnection] Usuário validado: ${user.id} (${user.primaryEmail})`);
     } catch (error) {
       logger.error(`Erro ao validar usuário [${userId}]:`, error);
       return res.status(500).json({
@@ -143,6 +170,15 @@ export async function startConnection(req, res) {
         message: 'Erro ao validar usuário',
         error: error.message
       });
+    }
+
+    // Garantir que estamos usando o ID completo do stack_users (não truncado)
+    const actualUserId = user.id;
+    
+    if (actualUserId !== userId) {
+      logger.warn(`[startConnection] ID mismatch! Recebido: ${userId}, Correto: ${actualUserId}`);
+      // Usar o ID correto do banco
+      userId = actualUserId;
     }
 
     // Inicia cliente (não bloqueia)
@@ -186,11 +222,38 @@ export async function stopConnection(req, res) {
     const { userId, slot } = req.params;
     const slotNumber = Number(slot);
 
+    // Log para debug: verificar qual userId está sendo usado
+    logger.info(`[stopConnection] Parando sessão para userId: ${userId}, slot: ${slotNumber}`);
+
     if (isNaN(slotNumber)) {
       return res.status(400).json({ 
         success: false, 
         message: 'Slot inválido' 
       });
+    }
+
+    // Validar que o usuário existe na tabela stack_users
+    const stackUser = await prisma.stackUser.findUnique({
+      where: { id: userId }
+    });
+
+    if (!stackUser) {
+      logger.warn(`[stopConnection] Usuário ${userId} não encontrado em stack_users`);
+      return res.status(404).json({
+        success: false,
+        message: `Usuário ${userId} não encontrado na tabela stack_users`
+      });
+    }
+
+    logger.info(`[stopConnection] Usuário validado: ${stackUser.id} (${stackUser.primaryEmail})`);
+
+    // Garantir que estamos usando o ID completo do stack_users (não truncado)
+    const actualUserId = stackUser.id;
+    
+    if (actualUserId !== userId) {
+      logger.warn(`[stopConnection] ID mismatch! Recebido: ${userId}, Correto: ${actualUserId}`);
+      // Usar o ID correto do banco
+      userId = actualUserId;
     }
 
     const result = await stopClient(userId, slotNumber);
