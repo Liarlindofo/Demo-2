@@ -118,11 +118,12 @@ export default function ConnectionsPage() {
           .slice(0, 3); // Máximo 3 lojas
 
         // Carregar status das conexões WhatsApp
+        // IMPORTANTE: Sempre usar user.id como clientId para isolar sessões por usuário
         let connectionsWithStatus = await Promise.all(
           whatsappAPIs.map(async (api) => {
             try {
               const statusRes = await fetch(
-                `${API_URL}/api/status/${api.storeId}`,
+                `${API_URL}/api/status/${user.id}`,
                 {
                   method: "GET",
                 },
@@ -133,7 +134,7 @@ export default function ConnectionsPage() {
                 return {
                   id: api.id,
                   name: api.name,
-                  clientId: api.storeId,
+                  clientId: user.id, // Usar user.id para isolar sessões
                   sessions: statusData.sessions || [],
                 };
               }
@@ -144,7 +145,7 @@ export default function ConnectionsPage() {
             return {
               id: api.id,
               name: api.name,
-              clientId: api.storeId,
+              clientId: user.id, // Usar user.id para isolar sessões
               sessions: [],
             };
           }),

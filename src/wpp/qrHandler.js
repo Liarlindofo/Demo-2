@@ -170,7 +170,9 @@ async function createUserAPIEntry(stackUserId, slot, connectedNumber) {
     }
     
     const dbUserId = stackUser.user.id;
-    const storeId = stackUserId; // Usa stackUserId como storeId para identificar a conexão
+    // IMPORTANTE: Usar o stackUserId como storeId para manter consistência
+    // com o que o frontend envia quando chama /api/start/${user.id}/${slot}
+    const storeId = `whatsapp_${stackUserId}_slot${slot}`; // ID único por usuário e slot
     
     // Verifica se já existe entrada para este slot
     const existing = await prisma.userAPI.findFirst({
