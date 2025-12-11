@@ -54,7 +54,7 @@ export function isChatPaused(userId, slot, phone) {
  */
 async function cleanupOrphanBrowser(userDataDir) {
   try {
-    logger.info(`🧹 Iniciando limpeza agressiva para: ${userDataDir}`);
+    logger.info(`🧹 Iniciando limpeza DRÁSTICA para: ${userDataDir}`);
     
     // PASSO 1: Matar TODOS os processos Chrome usando esse userDataDir
     try {
@@ -74,8 +74,8 @@ async function cleanupOrphanBrowser(userDataDir) {
           }
         }
         // Aguardar mais tempo para garantir que processos foram encerrados
-        logger.info('⏳ Aguardando 3 segundos para processos encerrarem...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        logger.info('⏳ Aguardando 5 segundos para processos encerrarem...');
+        await new Promise(resolve => setTimeout(resolve, 5000));
       } else {
         logger.info('✅ Nenhum processo órfão encontrado');
       }
@@ -87,40 +87,50 @@ async function cleanupOrphanBrowser(userDataDir) {
       try {
         await execAsync(`pkill -9 -f "chrome.*${userDataDir}"`);
         logger.info('✅ Processos órfãos finalizados via pkill');
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 5000));
       } catch (pkillError) {
         logger.warn(`⚠️ pkill também falhou: ${pkillError.message}`);
       }
     }
 
-    // PASSO 2: Limpar TODOS os lock files do Puppeteer
-    const lockFiles = [
-      path.join(userDataDir, 'SingletonLock'),
-      path.join(userDataDir, 'SingletonSocket'),
-      path.join(userDataDir, 'SingletonCookie'),
-      path.join(userDataDir, '.lock'),
-    ];
-    
-    for (const lockFile of lockFiles) {
-      if (fs.existsSync(lockFile)) {
+    // PASSO 2: DELETAR A PASTA INTEIRA E RECRIAR (método mais drástico)
+    if (fs.existsSync(userDataDir)) {
+      try {
+        logger.warn(`🗑️ DELETANDO pasta inteira: ${userDataDir}`);
+        
+        // Tentar deletar recursivamente
         try {
-          fs.unlinkSync(lockFile);
-          logger.info(`🗑️ Lock file removido: ${lockFile}`);
-        } catch (unlinkError) {
-          logger.warn(`⚠️ Não foi possível remover lock file ${lockFile}: ${unlinkError.message}`);
+          fs.rmSync(userDataDir, { recursive: true, force: true });
+          logger.info('✅ Pasta deletada com fs.rmSync');
+        } catch (rmError) {
+          logger.warn(`⚠️ fs.rmSync falhou: ${rmError.message}, tentando rm -rf...`);
           
-          // Tentar forçar remoção com sudo (se disponível)
+          // Tentar com comando rm -rf
           try {
-            await execAsync(`sudo rm -f ${lockFile}`);
-            logger.info(`✅ Lock file removido com sudo: ${lockFile}`);
-          } catch (sudoError) {
-            logger.warn(`⚠️ sudo rm também falhou para ${lockFile}`);
+            await execAsync(`rm -rf "${userDataDir}"`);
+            logger.info('✅ Pasta deletada com rm -rf');
+          } catch (rmRfError) {
+            logger.error(`❌ rm -rf também falhou: ${rmRfError.message}`);
           }
         }
+        
+        // Aguardar um pouco
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Recriar pasta vazia
+        if (!fs.existsSync(userDataDir)) {
+          fs.mkdirSync(userDataDir, { recursive: true });
+          logger.info(`✅ Pasta recriada: ${userDataDir}`);
+        }
+      } catch (deleteError) {
+        logger.error(`❌ Erro ao deletar/recriar pasta: ${deleteError.message}`);
       }
+    } else {
+      logger.info('📁 Pasta não existe, criando nova...');
+      fs.mkdirSync(userDataDir, { recursive: true });
     }
     
-    logger.info('✅ Limpeza concluída');
+    logger.info('✅ Limpeza DRÁSTICA concluída - pasta completamente resetada');
   } catch (error) {
     logger.error(`❌ Erro ao limpar processos órfãos: ${error.message}`);
   }
@@ -527,3 +537,4 @@ export async function restoreAllSessions() {
     logger.error('Erro ao restaurar sessões:', error);
   }
 }
+
