@@ -6,6 +6,12 @@ import sessionManager from './sessionManager.js';
 import { onQRCode, onStatusChange, extractPhoneNumber } from './qrHandler.js';
 import { WhatsAppBotModel, BotSettingsModel } from '../db/models.js';
 import { sendToGPT, formatConversationHistory } from '../ai/chat.js';
+import * as fs from 'fs';
+import * as path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 /**
  * Controle de modo manual (pausa do bot) por conversa.
@@ -44,6 +50,61 @@ export function isChatPaused(userId, slot, phone) {
 }
 
 /**
+ * Limpa processos de browser órfãos e lock files
+ */
+async function cleanupOrphanBrowser(userDataDir) {
+  try {
+    // Tentar encontrar e matar processos que estão usando o userDataDir
+    try {
+      // Buscar processos Chrome/Chromium que estão usando esse userDataDir
+      const { stdout } = await execAsync(`ps aux | grep -i "chrome.*${userDataDir}" | grep -v grep | awk '{print $2}'`);
+      const pids = stdout.trim().split('\n').filter(pid => pid);
+      
+      if (pids.length > 0) {
+        logger.warn(`Encontrados ${pids.length} processos órfãos para ${userDataDir}, tentando finalizar...`);
+        for (const pid of pids) {
+          try {
+            await execAsync(`kill -9 ${pid}`);
+            logger.info(`Processo ${pid} finalizado`);
+          } catch (killError) {
+            logger.warn(`Não foi possível finalizar processo ${pid}: ${killError.message}`);
+          }
+        }
+        // Aguardar um pouco para os processos terminarem
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    } catch (psError) {
+      // Se o comando ps falhar (pode não estar disponível), apenas loga
+      logger.warn(`Não foi possível verificar processos: ${psError.message}`);
+    }
+
+    // Limpar lock files do Puppeteer
+    const lockFile = path.join(userDataDir, 'SingletonLock');
+    const lockSocket = path.join(userDataDir, 'SingletonSocket');
+    
+    if (fs.existsSync(lockFile)) {
+      try {
+        fs.unlinkSync(lockFile);
+        logger.info(`Lock file removido: ${lockFile}`);
+      } catch (unlinkError) {
+        logger.warn(`Não foi possível remover lock file: ${unlinkError.message}`);
+      }
+    }
+    
+    if (fs.existsSync(lockSocket)) {
+      try {
+        fs.unlinkSync(lockSocket);
+        logger.info(`Lock socket removido: ${lockSocket}`);
+      } catch (unlinkError) {
+        logger.warn(`Não foi possível remover lock socket: ${unlinkError.message}`);
+      }
+    }
+  } catch (error) {
+    logger.warn(`Erro ao limpar processos órfãos: ${error.message}`);
+  }
+}
+
+/**
  * Inicia cliente WPPConnect para um usuário/slot — NÃO BLOQUEIA
  */
 export async function startClient(userId, slot) {
@@ -51,6 +112,7 @@ export async function startClient(userId, slot) {
     logger.wpp(userId, slot, 'Iniciando cliente WPPConnect (não bloqueante)...');
 
     if (sessionManager.hasClient(userId, slot)) {
+      logger.wpp(userId, slot, 'Cliente já está ativo na memória, retornando...');
       return { success: false, message: 'Cliente já está ativo' };
     }
 
@@ -59,6 +121,10 @@ export async function startClient(userId, slot) {
     // Define userDataDir do Puppeteer (NUNCA usar pastas dentro do nginx)
     const sessionsDir = (config.wppConnect && config.wppConnect.sessionsDir) || '/var/www/whatsapp-sessions';
     const userDataDir = `${sessionsDir}/${sessionName}`;
+    
+    // Limpar processos órfãos antes de tentar criar nova sessão
+    logger.wpp(userId, slot, 'Verificando processos órfãos...');
+    await cleanupOrphanBrowser(userDataDir);
     
     // Prepara opções do Puppeteer com userDataDir
     const basePuppeteerOptions = (config.wppConnect && config.wppConnect.puppeteerOptions) || {};
@@ -123,10 +189,70 @@ export async function startClient(userId, slot) {
           // Ignora erro na verificação inicial
         }
       })
-      .catch((error) => {
+      .catch(async (error) => {
         logger.error(`Erro ao criar cliente [${userId}:${slot}]`, error);
-        sessionManager.removeClient(userId, slot);
-        WhatsAppBotModel.setDisconnected(userId, slot).catch(() => {});
+        
+        // Se o erro for "browser already running", tentar limpar e tentar novamente uma vez
+        if (error.message && error.message.includes('browser is already running')) {
+          logger.warn(`Browser já está rodando para ${userDataDir}, tentando limpar e reiniciar...`);
+          
+          // Limpar processos órfãos novamente
+          await cleanupOrphanBrowser(userDataDir);
+          
+          // Aguardar um pouco mais
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          // Tentar criar novamente (apenas uma vez)
+          try {
+            logger.wpp(userId, slot, 'Tentando criar cliente novamente após limpeza...');
+            
+            wppconnect
+              .create({
+                session: sessionName,
+                headless: headless,
+                puppeteerOptions: puppeteerOptions,
+                autoClose: 0,
+                logQR: false,
+                disableWelcome: true,
+                updatesLog: false,
+                catchQR: async (base64Qr) => {
+                  await onQRCode(userId, slot, base64Qr);
+                },
+                statusFind: async (status, session) => {
+                  const client = sessionManager.getClient(userId, slot);
+                  await onStatusChange(userId, slot, status, client);
+                },
+              })
+              .then(async (client) => {
+                logger.wpp(userId, slot, 'Cliente WPPConnect criado após limpeza.');
+                sessionManager.setClient(userId, slot, client);
+                setupMessageListener(client, userId, slot);
+                
+                try {
+                  const isConnected = await client.isConnected().catch(() => false);
+                  if (isConnected) {
+                    logger.wpp(userId, slot, 'Cliente já está conectado, atualizando status...');
+                    await onStatusChange(userId, slot, 'chatsAvailable', client);
+                  }
+                } catch (error) {
+                  // Ignora erro na verificação inicial
+                }
+              })
+              .catch((retryError) => {
+                logger.error(`Erro ao criar cliente após limpeza [${userId}:${slot}]:`, retryError);
+                sessionManager.removeClient(userId, slot);
+                WhatsAppBotModel.setDisconnected(userId, slot).catch(() => {});
+              });
+          } catch (retryError) {
+            logger.error(`Erro na tentativa de retry [${userId}:${slot}]:`, retryError);
+            sessionManager.removeClient(userId, slot);
+            WhatsAppBotModel.setDisconnected(userId, slot).catch(() => {});
+          }
+        } else {
+          // Para outros erros, apenas remove e marca como desconectado
+          sessionManager.removeClient(userId, slot);
+          WhatsAppBotModel.setDisconnected(userId, slot).catch(() => {});
+        }
       });
 
     return {
