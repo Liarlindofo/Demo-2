@@ -56,41 +56,76 @@ async function cleanupOrphanBrowser(userDataDir) {
   try {
     logger.info(`🧹 Iniciando limpeza DRÁSTICA para: ${userDataDir}`);
     
-    // PASSO 1: Matar TODOS os processos Chrome usando esse userDataDir
+    // Extrair o nome da sessão do userDataDir (última parte do caminho)
+    const sessionName = path.basename(userDataDir);
+    logger.info(`📌 Nome da sessão: ${sessionName}`);
+    
+    // PASSO 1: Matar TODOS os processos Chrome relacionados a esta sessão
+    // Método 1: Buscar por userDataDir completo
     try {
-      // Buscar processos Chrome/Chromium que estão usando esse userDataDir
-      const { stdout } = await execAsync(`ps aux | grep -i "chrome.*${userDataDir}" | grep -v grep | awk '{print $2}'`);
-      const pids = stdout.trim().split('\n').filter(pid => pid);
+      const { stdout: stdout1 } = await execAsync(`ps aux | grep -i "chrome" | grep "${userDataDir}" | grep -v grep | awk '{print $2}'`).catch(() => ({ stdout: '' }));
+      const pids1 = stdout1.trim().split('\n').filter(pid => pid && !isNaN(pid));
       
-      if (pids.length > 0) {
-        logger.warn(`⚠️ Encontrados ${pids.length} processos órfãos para ${userDataDir}`);
-        for (const pid of pids) {
+      // Método 2: Buscar por nome da sessão
+      const { stdout: stdout2 } = await execAsync(`ps aux | grep -i "chrome" | grep "${sessionName}" | grep -v grep | awk '{print $2}'`).catch(() => ({ stdout: '' }));
+      const pids2 = stdout2.trim().split('\n').filter(pid => pid && !isNaN(pid));
+      
+      // Método 3: Buscar todos os processos Chrome que usam o diretório de sessões
+      const sessionsDir = path.dirname(userDataDir);
+      const { stdout: stdout3 } = await execAsync(`ps aux | grep -i "chrome" | grep "${sessionsDir}" | grep -v grep | awk '{print $2}'`).catch(() => ({ stdout: '' }));
+      const pids3 = stdout3.trim().split('\n').filter(pid => pid && !isNaN(pid));
+      
+      // Combinar todos os PIDs únicos
+      const allPids = [...new Set([...pids1, ...pids2, ...pids3])];
+      
+      if (allPids.length > 0) {
+        logger.warn(`⚠️ Encontrados ${allPids.length} processos órfãos para ${sessionName}`);
+        for (const pid of allPids) {
           try {
             logger.info(`💀 Finalizando processo ${pid}...`);
-            await execAsync(`kill -9 ${pid}`);
+            await execAsync(`kill -9 ${pid} 2>/dev/null`).catch(() => {});
             logger.info(`✅ Processo ${pid} finalizado`);
           } catch (killError) {
             logger.warn(`⚠️ Não foi possível finalizar processo ${pid}: ${killError.message}`);
           }
         }
-        // Aguardar mais tempo para garantir que processos foram encerrados
-        logger.info('⏳ Aguardando 5 segundos para processos encerrarem...');
-        await new Promise(resolve => setTimeout(resolve, 5000));
       } else {
-        logger.info('✅ Nenhum processo órfão encontrado');
+        logger.info('✅ Nenhum processo órfão encontrado pelo método ps');
       }
     } catch (psError) {
-      // Se o comando ps falhar, tentar método alternativo
       logger.warn(`⚠️ Método ps falhou: ${psError.message}`);
+    }
+    
+    // PASSO 1.5: Usar pkill como método adicional (mais agressivo)
+    try {
+      // Matar processos pelo userDataDir
+      await execAsync(`pkill -9 -f "${userDataDir}" 2>/dev/null`).catch(() => {});
       
-      // Tentar método alternativo: matar todos os processos Chrome do usuário
-      try {
-        await execAsync(`pkill -9 -f "chrome.*${userDataDir}"`);
-        logger.info('✅ Processos órfãos finalizados via pkill');
-        await new Promise(resolve => setTimeout(resolve, 5000));
-      } catch (pkillError) {
-        logger.warn(`⚠️ pkill também falhou: ${pkillError.message}`);
+      // Matar processos pelo nome da sessão
+      await execAsync(`pkill -9 -f "${sessionName}" 2>/dev/null`).catch(() => {});
+      
+      logger.info('✅ Processos finalizados via pkill');
+    } catch (pkillError) {
+      logger.warn(`⚠️ pkill falhou: ${pkillError.message}`);
+    }
+    
+    // Aguardar para garantir que processos foram encerrados
+    logger.info('⏳ Aguardando 3 segundos para processos encerrarem...');
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    // PASSO 1.6: Verificar se ainda há processos e matar TODOS os Chrome se necessário
+    try {
+      const { stdout: checkStdout } = await execAsync(`ps aux | grep -iE "chrome|chromium" | grep -v grep | wc -l`).catch(() => ({ stdout: '0' }));
+      const chromeCount = parseInt(checkStdout.trim()) || 0;
+      
+      if (chromeCount > 10) {
+        logger.warn(`⚠️ Muitos processos Chrome rodando (${chromeCount}). Matando todos os processos Chrome relacionados ao WhatsApp...`);
+        await execAsync(`pkill -9 -f "whatsapp" 2>/dev/null`).catch(() => {});
+        await execAsync(`pkill -9 -f "wppconnect" 2>/dev/null`).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
+    } catch (checkError) {
+      // Ignorar erro de verificação
     }
 
     // PASSO 2: DELETAR A PASTA INTEIRA E RECRIAR (método mais drástico)
@@ -196,6 +231,40 @@ export async function startClient(userId, slot) {
     logger.wpp(userId, slot, '🧹 Limpando processos órfãos e locks...');
     await cleanupOrphanBrowser(userDataDir);
     
+    // Verificar se ainda há processos rodando ANTES de tentar criar o cliente
+    try {
+      const { stdout: checkStdout } = await execAsync(`ps aux | grep -iE "chrome|chromium" | grep "${sessionName}" | grep -v grep | wc -l`).catch(() => ({ stdout: '0' }));
+      const stillRunning = parseInt(checkStdout.trim()) || 0;
+      
+      if (stillRunning > 0) {
+        logger.warn(`⚠️ Ainda há ${stillRunning} processos Chrome rodando para ${sessionName}. Tentando limpeza adicional...`);
+        
+        // Limpeza adicional mais agressiva
+        try {
+          await execAsync(`pkill -9 -f "${sessionName}" 2>/dev/null`).catch(() => {});
+          await execAsync(`pkill -9 -f "${userDataDir}" 2>/dev/null`).catch(() => {});
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          // Verificar novamente
+          const { stdout: recheckStdout } = await execAsync(`ps aux | grep -iE "chrome|chromium" | grep "${sessionName}" | grep -v grep | wc -l`).catch(() => ({ stdout: '0' }));
+          const stillRunningAfter = parseInt(recheckStdout.trim()) || 0;
+          
+          if (stillRunningAfter > 0) {
+            logger.error(`❌ AINDA há ${stillRunningAfter} processos rodando após limpeza adicional. Isso pode causar erro "browser already running".`);
+            // Continuar mesmo assim, mas avisar
+          } else {
+            logger.info(`✅ Limpeza adicional bem-sucedida. Nenhum processo restante.`);
+          }
+        } catch (additionalCleanupError) {
+          logger.warn(`⚠️ Erro na limpeza adicional: ${additionalCleanupError.message}`);
+        }
+      } else {
+        logger.info('✅ Nenhum processo Chrome rodando para esta sessão. Prosseguindo...');
+      }
+    } catch (checkError) {
+      logger.warn(`⚠️ Erro ao verificar processos: ${checkError.message}. Prosseguindo mesmo assim...`);
+    }
+    
     // Aguardar um pouco após limpeza para garantir que os processos foram encerrados
     await new Promise(resolve => setTimeout(resolve, 2000));
     
@@ -280,18 +349,42 @@ export async function startClient(userId, slot) {
         logger.error(`Erro ao criar cliente [${userId}:${slot}]`, error);
         
         // Se o erro for "browser already running", tentar limpar e tentar novamente uma vez
-        if (error.message && error.message.includes('browser is already running')) {
-          logger.warn(`Browser já está rodando para ${userDataDir}, tentando limpar e reiniciar...`);
+        if (error.message && (error.message.includes('browser is already running') || error.message.includes('already running'))) {
+          logger.warn(`Browser já está rodando para ${userDataDir}, tentando limpeza EXTRA AGRESSIVA...`);
           
-          // Limpar processos órfãos novamente
-          await cleanupOrphanBrowser(userDataDir);
-          
-          // Aguardar um pouco mais
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          // Limpeza EXTRA AGRESSIVA
+          try {
+            // Matar TODOS os processos Chrome relacionados
+            await execAsync(`pkill -9 -f "${sessionName}" 2>/dev/null`).catch(() => {});
+            await execAsync(`pkill -9 -f "${userDataDir}" 2>/dev/null`).catch(() => {});
+            await execAsync(`pkill -9 -f "whatsapp.*${sessionName}" 2>/dev/null`).catch(() => {});
+            
+            // Deletar a pasta inteira e recriar
+            if (fs.existsSync(userDataDir)) {
+              try {
+                fs.rmSync(userDataDir, { recursive: true, force: true });
+                logger.info('✅ Pasta deletada durante limpeza extra');
+              } catch (rmError) {
+                await execAsync(`rm -rf "${userDataDir}" 2>/dev/null`).catch(() => {});
+              }
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              if (!fs.existsSync(userDataDir)) {
+                fs.mkdirSync(userDataDir, { recursive: true });
+                logger.info('✅ Pasta recriada durante limpeza extra');
+              }
+            }
+            
+            // Aguardar mais tempo
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+            logger.wpp(userId, slot, 'Limpeza extra concluída. Tentando criar cliente novamente...');
+          } catch (cleanupError) {
+            logger.error(`Erro na limpeza extra: ${cleanupError.message}`);
+          }
           
           // Tentar criar novamente (apenas uma vez)
           try {
-            logger.wpp(userId, slot, 'Tentando criar cliente novamente após limpeza...');
+            logger.wpp(userId, slot, 'Tentando criar cliente novamente após limpeza extra...');
             
             wppconnect
               .create({
@@ -311,7 +404,7 @@ export async function startClient(userId, slot) {
                 },
               })
               .then(async (client) => {
-                logger.wpp(userId, slot, 'Cliente WPPConnect criado após limpeza.');
+                logger.wpp(userId, slot, '✅ Cliente WPPConnect criado após limpeza extra.');
                 sessionManager.setClient(userId, slot, client);
                 setupMessageListener(client, userId, slot);
                 
@@ -326,17 +419,25 @@ export async function startClient(userId, slot) {
                 }
               })
               .catch((retryError) => {
-                logger.error(`Erro ao criar cliente após limpeza [${userId}:${slot}]:`, retryError);
+                logger.error(`❌ Erro ao criar cliente após limpeza extra [${userId}:${slot}]:`, retryError);
                 sessionManager.removeClient(userId, slot);
                 WhatsAppBotModel.setDisconnected(userId, slot).catch(() => {});
+                
+                // Se ainda falhar, marcar no banco que houve erro
+                WhatsAppBotModel.upsert(userId, slot, {
+                  isConnected: false,
+                  qrCode: null,
+                  connectedNumber: null
+                }).catch(() => {});
               });
           } catch (retryError) {
-            logger.error(`Erro na tentativa de retry [${userId}:${slot}]:`, retryError);
+            logger.error(`❌ Erro na tentativa de retry [${userId}:${slot}]:`, retryError);
             sessionManager.removeClient(userId, slot);
             WhatsAppBotModel.setDisconnected(userId, slot).catch(() => {});
           }
         } else {
           // Para outros erros, apenas remove e marca como desconectado
+          logger.error(`Erro ao criar cliente [${userId}:${slot}]:`, error.message);
           sessionManager.removeClient(userId, slot);
           WhatsAppBotModel.setDisconnected(userId, slot).catch(() => {});
         }

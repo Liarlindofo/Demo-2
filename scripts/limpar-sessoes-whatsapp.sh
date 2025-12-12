@@ -12,12 +12,28 @@ pm2 delete bot-whatsapp 2>/dev/null || true
 
 # 2. Matar todos os processos Chrome/Chromium relacionados ao WhatsApp
 echo "📌 Finalizando processos Chrome/Chromium..."
+# Método 1: Por nome específico
 pkill -9 -f "chrome.*whatsapp" 2>/dev/null || true
 pkill -9 -f "chromium.*whatsapp" 2>/dev/null || true
 pkill -9 -f "wppconnect" 2>/dev/null || true
 
+# Método 2: Matar TODOS os processos Chrome (mais agressivo)
+echo "📌 Matando TODOS os processos Chrome/Chromium..."
+pkill -9 chrome 2>/dev/null || true
+pkill -9 chromium 2>/dev/null || true
+pkill -9 puppeteer 2>/dev/null || true
+
+# Método 3: Buscar e matar processos por PID
+echo "📌 Buscando processos órfãos por PID..."
+CHROME_PIDS=$(ps aux | grep -E "chrome|chromium|puppeteer" | grep -v grep | awk '{print $2}')
+if [ -n "$CHROME_PIDS" ]; then
+    echo "⚠️  Encontrados processos: $CHROME_PIDS"
+    echo "$CHROME_PIDS" | xargs kill -9 2>/dev/null || true
+fi
+
 # Aguardar processos encerrarem
-sleep 3
+echo "⏳ Aguardando processos encerrarem..."
+sleep 5
 
 # 3. Limpar diretório de sessões
 SESSIONS_DIR="/var/www/whatsapp-sessions"
