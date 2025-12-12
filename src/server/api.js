@@ -185,11 +185,25 @@ export async function startConnection(req, res) {
     // Garantir que estamos usando o ID completo do stack_users (não truncado)
     const actualUserId = user.id;
     
+    // CRÍTICO: Validar que o userId recebido corresponde ao stackUser.id
     if (actualUserId !== userId) {
       logger.warn(`[startConnection] ID mismatch! Recebido: ${userId}, Correto: ${actualUserId}`);
+      logger.warn(`[startConnection] Usando ID correto do banco: ${actualUserId}`);
       // Usar o ID correto do banco
       userId = actualUserId;
     }
+
+    // VALIDAÇÃO ADICIONAL: Garantir que o userId não está vazio ou undefined
+    if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
+      logger.error(`[startConnection] userId inválido: ${userId}`);
+      return res.status(400).json({
+        success: false,
+        message: 'userId inválido ou vazio'
+      });
+    }
+
+    // LOG FINAL: Confirmar qual userId será usado
+    logger.info(`[startConnection] ✅ Usando userId final: ${userId} (tipo: ${typeof userId}, tamanho: ${userId.length})`);
 
     // Inicia cliente (não bloqueia)
     const result = await startClient(userId, slotNumber);

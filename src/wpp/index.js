@@ -161,7 +161,17 @@ export async function startClient(userId, slot) {
       return { success: false, message: 'Cliente já está ativo' };
     }
 
-    const sessionName = `${userId}-slot${slot}`;
+    // VALIDAÇÃO CRÍTICA: Garantir que userId é válido
+    if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
+      logger.error(`[startClient] userId inválido: ${userId}`);
+      throw new Error(`userId inválido: ${userId}`);
+    }
+
+    // Normalizar userId (remover espaços, garantir que é string)
+    const normalizedUserId = String(userId).trim();
+    
+    // Gerar sessionName único usando userId normalizado
+    const sessionName = `${normalizedUserId}-slot${slot}`;
     
     // Define userDataDir do Puppeteer (NUNCA usar pastas dentro do nginx)
     const sessionsDir = (config.wppConnect && config.wppConnect.sessionsDir) || '/var/www/whatsapp-sessions';
@@ -170,13 +180,17 @@ export async function startClient(userId, slot) {
     // LOG DE DEBUG - ISOLAMENTO
     console.log('=== 🔍 DEBUG ISOLAMENTO SESSÃO ===');
     console.log('📌 userId recebido:', userId);
-    console.log('📌 userId type:', typeof userId);
-    console.log('📌 userId length:', userId?.length);
+    console.log('📌 userId normalizado:', normalizedUserId);
+    console.log('📌 userId type:', typeof normalizedUserId);
+    console.log('📌 userId length:', normalizedUserId.length);
     console.log('📌 slot:', slot);
     console.log('📌 sessionName gerado:', sessionName);
     console.log('📌 userDataDir:', userDataDir);
     console.log('📌 Timestamp:', new Date().toISOString());
     console.log('==================================');
+    
+    // Usar userId normalizado daqui em diante
+    userId = normalizedUserId;
     
     // IMPORTANTE: Limpar processos órfãos AGRESSIVAMENTE
     logger.wpp(userId, slot, '🧹 Limpando processos órfãos e locks...');
@@ -193,14 +207,28 @@ export async function startClient(userId, slot) {
 
     // Garante que o bot existe no banco antes de iniciar
     try {
+      // VALIDAÇÃO: Verificar se o usuário existe antes de criar bot
+      const stackUser = await prisma.stackUser.findUnique({
+        where: { id: userId }
+      });
+      
+      if (!stackUser) {
+        logger.error(`[startClient] Usuário ${userId} não encontrado em stack_users`);
+        throw new Error(`Usuário ${userId} não encontrado em stack_users`);
+      }
+      
+      logger.info(`[startClient] ✅ Usuário validado: ${stackUser.id} (${stackUser.primaryEmail})`);
+      
       await WhatsAppBotModel.upsert(userId, slot, {
         isConnected: false,
         qrCode: null,
         connectedNumber: null
       });
+      
+      logger.info(`[startClient] ✅ Bot criado/atualizado no banco para [${userId}:${slot}]`);
     } catch (error) {
       logger.error(`Erro ao criar/atualizar bot no banco [${userId}:${slot}]:`, error);
-      // Continua mesmo se houver erro, mas loga
+      throw error; // Re-throw para não continuar com erro
     }
 
     // NÃO USA await → inicia em background
