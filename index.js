@@ -4,7 +4,7 @@ import config from './config.js';
 import logger from './src/utils/logger.js';
 import router from './src/server/router.js';
 import prisma from './src/db/index.js';
-import { restoreAllSessions } from './src/wpp/index.js';
+// ❌ REMOVIDO: restoreAllSessions - Sessões só iniciam via ação explícita do usuário
 
 /**
  * Servidor principal do Platefull WhatsApp Bot
@@ -91,11 +91,10 @@ app.listen(PORT, async () => {
   logger.info(`  - Health Check: http://localhost:${PORT}/api/health`);
   logger.info(`  - API Docs: http://localhost:${PORT}/`);
 
-  // Restaura sessões após 5 segundos (dá tempo do servidor estabilizar)
-  setTimeout(async () => {
-    logger.info('Iniciando restauração de sessões...');
-    await restoreAllSessions();
-  }, 5000);
+  // ❌ DESATIVADO: Restauração automática de sessões
+  // Sessões só iniciam via ação explícita do usuário (QR Code)
+  // Isso garante isolamento total e evita conflitos entre usuários
+  logger.info('✓ Sistema iniciado. Sessões WhatsApp só iniciam via ação explícita do usuário.');
 });
 
 // Graceful shutdown

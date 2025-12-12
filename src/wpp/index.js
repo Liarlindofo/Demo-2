@@ -172,12 +172,15 @@ async function cleanupOrphanBrowser(userDataDir) {
 }
 
 /**
- * Inicia cliente WPPConnect para um usuário/slot — NÃO BLOQUEIA
+ * Inicia cliente WPPConnect para um usuário — NÃO BLOQUEIA
+ * SLOT FIXO = 1 (apenas uma sessão por usuário)
  */
-export async function startClient(userId, slot) {
-  try {
-    logger.wpp(userId, slot, 'Iniciando cliente WPPConnect (não bloqueante)...');
+export async function startClient(userId) {
+  // SLOT FIXO: sempre 1
+  const slot = 1;
+  let normalizedUserId = null;
 
+  try {
     // VALIDAÇÃO CRÍTICA: Garantir que userId é válido (ANTES de normalizar)
     if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
       logger.error(`[startClient] userId inválido: ${userId}`);
@@ -185,13 +188,14 @@ export async function startClient(userId, slot) {
     }
 
     // Normalizar userId (remover espaços, garantir que é string) - FAZER PRIMEIRO!
-    const normalizedUserId = String(userId).trim();
+    normalizedUserId = String(userId).trim();
     
     logger.info(`[startClient] userId original: "${userId}", normalizado: "${normalizedUserId}"`);
+    logger.wpp(normalizedUserId, slot, 'Iniciando cliente WPPConnect (não bloqueante)...');
 
-    // Verificar se já existe cliente na memória (usando userId normalizado)
+    // ❌ BLOQUEAR: Este usuário já possui uma sessão WhatsApp ativa
     if (sessionManager.hasClient(normalizedUserId, slot)) {
-      logger.wpp(normalizedUserId, slot, 'Cliente já está ativo na memória, retornando...');
+      logger.warn(`[startClient] ⚠️ Usuário ${normalizedUserId} já possui uma sessão WhatsApp ativa`);
       
       // Verificar se está realmente conectado
       const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
@@ -204,11 +208,14 @@ export async function startClient(userId, slot) {
         };
       }
       
-      return { success: false, message: 'Cliente já está ativo' };
+      return { 
+        success: false, 
+        message: 'Este usuário já possui uma sessão WhatsApp ativa. Desconecte antes de criar uma nova.' 
+      };
     }
     
-    // Gerar sessionName único usando userId normalizado
-    const sessionName = `${normalizedUserId}-slot${slot}`;
+    // ISOLAMENTO TOTAL: Gerar sessionName único por usuário (SEM slot no nome)
+    const sessionName = `whatsapp_${normalizedUserId}`;
     
     // Define userDataDir do Puppeteer (NUNCA usar pastas dentro do nginx)
     const sessionsDir = (config.wppConnect && config.wppConnect.sessionsDir) || '/var/www/whatsapp-sessions';
@@ -220,14 +227,11 @@ export async function startClient(userId, slot) {
     console.log('📌 userId normalizado:', normalizedUserId);
     console.log('📌 userId type:', typeof normalizedUserId);
     console.log('📌 userId length:', normalizedUserId.length);
-    console.log('📌 slot:', slot);
+    console.log('📌 slot: 1 (FIXO)');
     console.log('📌 sessionName gerado:', sessionName);
     console.log('📌 userDataDir:', userDataDir);
     console.log('📌 Timestamp:', new Date().toISOString());
     console.log('==================================');
-    
-    // Usar userId normalizado daqui em diante
-    userId = normalizedUserId;
     
     // IMPORTANTE: Limpar processos órfãos AGRESSIVAMENTE
     logger.wpp(userId, slot, '🧹 Limpando processos órfãos e locks...');
@@ -462,8 +466,12 @@ export async function startClient(userId, slot) {
 
 /**
  * PARA cliente WPPConnect
+ * SLOT FIXO = 1 (apenas uma sessão por usuário)
  */
-export async function stopClient(userId, slot) {
+export async function stopClient(userId) {
+  // SLOT FIXO: sempre 1
+  const slot = 1;
+  
   try {
     // VALIDAÇÃO: Normalizar userId
     if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
@@ -473,12 +481,13 @@ export async function stopClient(userId, slot) {
     
     const normalizedUserId = String(userId).trim();
     
-    logger.info(`[stopClient] Parando cliente para userId: "${normalizedUserId}" (original: "${userId}"), slot: ${slot}`);
+    logger.info(`[stopClient] Parando cliente para userId: "${normalizedUserId}" (original: "${userId}")`);
     
+    // ISOLAMENTO TOTAL: Buscar apenas a sessão deste usuário
     const client = sessionManager.getClient(normalizedUserId, slot);
 
     if (!client) {
-      logger.warn(`[stopClient] Cliente não encontrado para [${normalizedUserId}:${slot}]`);
+      logger.warn(`[stopClient] Cliente não encontrado para usuário ${normalizedUserId}`);
       return { success: false, message: 'Cliente não está ativo' };
     }
 
@@ -488,16 +497,23 @@ export async function stopClient(userId, slot) {
     sessionManager.clearAllConversations(normalizedUserId, slot);
     await WhatsAppBotModel.setDisconnected(normalizedUserId, slot);
 
-    logger.info(`[stopClient] ✅ Cliente desconectado com sucesso para [${normalizedUserId}:${slot}]`);
+    logger.info(`[stopClient] ✅ Cliente desconectado com sucesso para usuário ${normalizedUserId}`);
     return { success: true, message: 'Cliente desconectado com sucesso' };
 
   } catch (error) {
-    logger.error(`Erro ao parar cliente [${userId}:${slot}]:`, error);
+    logger.error(`Erro ao parar cliente [${userId}]:`, error);
     return { success: false, message: error.message };
   }
 }
 
-export async function getClientStatus(userId, slot) {
+/**
+ * Obtém status do cliente
+ * SLOT FIXO = 1 (apenas uma sessão por usuário)
+ */
+export async function getClientStatus(userId) {
+  // SLOT FIXO: sempre 1
+  const slot = 1;
+  
   // VALIDAÇÃO: Normalizar userId
   if (!userId || typeof userId !== 'string') {
     return { isActive: false, isConnected: false };

@@ -5,13 +5,16 @@ import logger from '../utils/logger.js';
 
 /**
  * GET /api/status/:userId
+ * SLOT FIXO = 1 (apenas uma sessão por usuário)
  */
 export async function getStatus(req, res) {
   try {
     const { userId } = req.params;
+    // SLOT FIXO: sempre 1
+    const slot = 1;
     
     // Log para debug: verificar qual userId está sendo usado
-    logger.info(`[getStatus] Buscando status para userId: ${userId}`);
+    logger.info(`[getStatus] Buscando status WhatsApp para userId: ${userId}`);
     
     // Validar que o userId existe na tabela stack_users
     const stackUser = await prisma.stackUser.findUnique({
@@ -23,50 +26,43 @@ export async function getStatus(req, res) {
       return res.status(404).json({ 
         success: false, 
         message: `Usuário ${userId} não encontrado`,
-        sessions: []
+        session: null
       });
     }
     
     logger.info(`[getStatus] Usuário encontrado: ${stackUser.id} (${stackUser.primaryEmail})`);
     
-    const bots = await WhatsAppBotModel.findAllByUser(userId);
+    // Buscar apenas a sessão do slot 1
+    const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slot);
+    const clientStatus = await getClientStatus(userId);
 
-    const connections = await Promise.all(
-      [1, 2, 3].map(async (slot) => {
-        const bot = bots.find(b => b.slot === slot);
-        const clientStatus = await getClientStatus(userId, slot);
+    const connection = {
+      isConnected: (bot && bot.isConnected) || false,
+      connectedNumber: (bot && bot.connectedNumber) || null,
+      qrCode: (bot && bot.qrCode) || null,
+      state: (bot && bot.isConnected) ? 'connected' : (bot && bot.qrCode) ? 'waiting_qr' : (clientStatus.isActive ? 'connecting' : 'offline'),
+      isActive: clientStatus.isActive,
+      updatedAt: (bot && bot.updatedAt) || null,
+    };
 
-        return {
-          slot,
-          isConnected: (bot && bot.isConnected) || false,
-          connectedNumber: (bot && bot.connectedNumber) || null,
-          qrCode: (bot && bot.qrCode) || null,
-          state: (bot && bot.isConnected) ? 'connected' : (bot && bot.qrCode) ? 'waiting_qr' : (clientStatus.isActive ? 'connecting' : 'offline'),
-          isActive: clientStatus.isActive,
-          updatedAt: (bot && bot.updatedAt) || null,
-        };
-      })
-    );
+    // Formato simplificado: apenas uma sessão
+    let status = 'DISCONNECTED';
+    if (connection.isActive) {
+      if (connection.isConnected) status = 'CONNECTED';
+      else if (connection.qrCode) status = 'QRCODE';
+      else status = 'CONNECTING';
+    }
 
-    // Compatibilidade com o frontend: devolver também "sessions" no formato esperado
-    const sessions = connections.map((c) => {
-      let status = 'DISCONNECTED';
-      if (c.isActive) {
-        if (c.isConnected) status = 'CONNECTED';
-        else if (c.qrCode) status = 'QRCODE';
-        else status = 'CONNECTING';
-      }
-      return {
-        slot: c.slot,
-        status,
-        qrCode: c.qrCode || null,
-        isActive: c.isActive,
-        connectedNumber: c.connectedNumber || null,
-        updatedAt: c.updatedAt || null,
-      };
-    });
+    const session = {
+      status,
+      qrCode: connection.qrCode || null,
+      isActive: connection.isActive,
+      isConnected: connection.isConnected,
+      connectedNumber: connection.connectedNumber || null,
+      updatedAt: connection.updatedAt || null,
+    };
 
-    res.json({ success: true, userId, connections, sessions });
+    res.json({ success: true, userId, connection, session });
 
   } catch (error) {
     res.status(500).json({ success: false, message: 'Erro ao buscar status', error: error.message });
@@ -74,21 +70,16 @@ export async function getStatus(req, res) {
 }
 
 /**
- * GET /api/qr/:userId/:slot
+ * GET /api/qr/:userId
+ * SLOT FIXO = 1 (apenas uma sessão por usuário)
  */
 export async function getQRCode(req, res) {
   try {
-    const { userId, slot } = req.params;
-    const slotNumber = Number(slot);
+    const { userId } = req.params;
+    // SLOT FIXO: sempre 1
+    const slot = 1;
 
-    if (isNaN(slotNumber)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Slot inválido' 
-      });
-    }
-
-    const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slotNumber);
+    const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slot);
 
     if (!bot) {
       return res.status(404).json({ 
@@ -128,34 +119,28 @@ export async function getQRCode(req, res) {
 }
 
 /**
- * POST /api/start/:userId/:slot
+ * POST /api/start/:userId
+ * SLOT FIXO = 1 (apenas uma sessão por usuário)
  * NÃO BLOQUEIA — retorna imediatamente
  */
 export async function startConnection(req, res) {
   try {
-    const { userId, slot } = req.params;
-    const slotNumber = Number(slot);
+    const { userId } = req.params;
+    // SLOT FIXO: sempre 1
+    const slot = 1;
 
     // LOG DE DEBUG - ISOLAMENTO
     console.log('=== 🔍 DEBUG START CONNECTION ===');
     console.log('📌 userId da URL:', userId);
     console.log('📌 userId type:', typeof userId);
     console.log('📌 userId length:', userId?.length);
-    console.log('📌 slot:', slotNumber);
+    console.log('📌 slot: 1 (FIXO)');
     console.log('📌 URL completa:', req.url);
     console.log('📌 Timestamp:', new Date().toISOString());
     console.log('=================================');
 
     // Log para debug: verificar qual userId está sendo usado
-    logger.info(`[startConnection] Iniciando sessão para userId: ${userId}, slot: ${slotNumber}`);
-
-    // Valida slot
-    if (isNaN(slotNumber) || slotNumber < 1 || slotNumber > 10) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Slot inválido. Deve ser entre 1 e 10.' 
-      });
-    }
+    logger.info(`[startConnection] Iniciando sessão WhatsApp para userId: ${userId}`);
 
     // Valida que o usuário existe na tabela stack_users
     let user;
@@ -205,13 +190,14 @@ export async function startConnection(req, res) {
     // LOG FINAL: Confirmar qual userId será usado
     logger.info(`[startConnection] ✅ Usando userId final: ${userId} (tipo: ${typeof userId}, tamanho: ${userId.length})`);
 
-    // Inicia cliente (não bloqueia)
-    const result = await startClient(userId, slotNumber);
+    // Inicia cliente (não bloqueia) - SLOT FIXO = 1
+    const result = await startClient(userId);
 
     if (!result.success) {
       // Se o cliente já está ativo, não trate como erro — permita o frontend continuar
-      if ((result.message || '').toLowerCase().includes('cliente já está ativo')) {
-        const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slotNumber).catch(() => null);
+      if ((result.message || '').toLowerCase().includes('cliente já está ativo') || 
+          (result.message || '').toLowerCase().includes('já possui uma sessão')) {
+        const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slot).catch(() => null);
         return res.json({
           success: true,
           message: result.message,
@@ -239,22 +225,17 @@ export async function startConnection(req, res) {
 }
 
 /**
- * POST /api/stop/:userId/:slot
+ * POST /api/stop/:userId
+ * SLOT FIXO = 1 (apenas uma sessão por usuário)
  */
 export async function stopConnection(req, res) {
   try {
-    const { userId, slot } = req.params;
-    const slotNumber = Number(slot);
+    const { userId } = req.params;
+    // SLOT FIXO: sempre 1
+    const slot = 1;
 
     // Log para debug: verificar qual userId está sendo usado
-    logger.info(`[stopConnection] Parando sessão para userId: ${userId}, slot: ${slotNumber}`);
-
-    if (isNaN(slotNumber)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Slot inválido' 
-      });
-    }
+    logger.info(`[stopConnection] Parando sessão WhatsApp para userId: ${userId}`);
 
     // Validar que o usuário existe na tabela stack_users
     const stackUser = await prisma.stackUser.findUnique({
@@ -281,10 +262,10 @@ export async function stopConnection(req, res) {
       logger.warn(`[stopConnection] ID mismatch! Recebido: "${userId}", Correto: "${normalizedUserId}"`);
     }
     
-    // Usar sempre o ID normalizado do banco
-    logger.info(`[stopConnection] ✅ Usando userId normalizado: "${normalizedUserId}" para parar slot ${slotNumber}`);
+    // Usar sempre o ID normalizado do banco - SLOT FIXO = 1
+    logger.info(`[stopConnection] ✅ Usando userId normalizado: "${normalizedUserId}" para parar sessão WhatsApp`);
 
-    const result = await stopClient(normalizedUserId, slotNumber);
+    const result = await stopClient(normalizedUserId);
 
     res.json(result);
 

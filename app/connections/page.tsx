@@ -132,13 +132,20 @@ export default function ConnectionsPage() {
 
           if (statusRes.ok) {
             const statusData = await statusRes.json();
-            // Criar UMA ÚNICA conexão para o usuário
+            // SLOT FIXO = 1: Criar UMA ÚNICA conexão WhatsApp para o usuário
+            // Formato simplificado: apenas uma sessão
+            const session = statusData.session || {
+              status: 'DISCONNECTED',
+              isActive: false,
+              isConnected: false,
+            };
+            
             connectionsWithStatus = [
               {
                 id: "main",
-                name: "WhatsApp Principal",
+                name: "WhatsApp",
                 clientId: user.id,
-                sessions: statusData.sessions || [],
+                sessions: [session], // Apenas uma sessão
               },
             ];
           }
@@ -186,11 +193,9 @@ export default function ConnectionsPage() {
 
   // Fechar modal do QR quando conectar
   useEffect(() => {
-    if (qrModal.open && whatsappConnections.length > 0 && qrModal.slot) {
-      const currentSlot = qrModal.slot;
+    if (qrModal.open && whatsappConnections.length > 0) {
       const connection = whatsappConnections.find(c => 
         c.sessions.some(s => 
-          s.slot === currentSlot && 
           (s.isConnected || s.status.toLowerCase() === 'connected')
         )
       );
@@ -200,7 +205,7 @@ export default function ConnectionsPage() {
         }, 2000); // Aguarda 2s para o usuário ver que conectou
       }
     }
-  }, [whatsappConnections, qrModal.open, qrModal.slot]);
+  }, [whatsappConnections, qrModal.open]);
 
   // --------------------------------------------------------------
   // 2. ADICIONAR NOVA CONEXÃO
@@ -319,16 +324,17 @@ export default function ConnectionsPage() {
       }
 
       // Usar exatamente o ID do usuário (sem prefixos) como clientId padrão
+      // SLOT FIXO = 1 (removido parâmetro slot)
       const defaultClientId = `${user.id}`;
-      const defaultSlot = 1;
 
       // Criar AbortController para timeout de 120 segundos (2 minutos)
       // Iniciar conexão WhatsApp pode demorar para gerar o QR Code
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-      const response = await fetch(
-        `${API_URL}/api/start/${defaultClientId}/${defaultSlot}`,
+        // SLOT FIXO = 1 - Removido parâmetro slot da URL
+        const response = await fetch(
+          `${API_URL}/api/start/${defaultClientId}`,
         {
           method: "POST",
           headers: {
@@ -356,7 +362,6 @@ export default function ConnectionsPage() {
           setQrModal({
             open: true,
             qrCode: data.qrCode,
-            slot: defaultSlot,
             connectionName: "Nova Conexão",
           });
           await loadConnections();
@@ -371,7 +376,8 @@ export default function ConnectionsPage() {
             
             try {
               const qrResponse = await fetch(
-                `${API_URL}/api/qr/${defaultClientId}/${defaultSlot}`
+                // SLOT FIXO = 1 - Removido parâmetro slot da URL
+                `${API_URL}/api/qr/${defaultClientId}`
               );
               
               if (qrResponse.ok) {
@@ -381,7 +387,6 @@ export default function ConnectionsPage() {
                   setQrModal({
                     open: true,
                     qrCode: qrData.qrCode,
-                    slot: defaultSlot,
                     connectionName: "Nova Conexão",
                   });
                   await loadConnections();
@@ -429,14 +434,14 @@ export default function ConnectionsPage() {
         errorMessage = "Uma sessão já está ativa. Tente parar a sessão atual primeiro ou aguarde alguns segundos e tente buscar o QR Code novamente.";
         // Tentar buscar QR Code existente
         try {
-          const qrResponse = await fetch(`${API_URL}/api/qr/${user.id}/1`);
+          // SLOT FIXO = 1 - Removido parâmetro slot da URL
+          const qrResponse = await fetch(`${API_URL}/api/qr/${user.id}`);
           if (qrResponse.ok) {
             const qrData = await qrResponse.json();
             if (qrData.success && qrData.qrCode) {
               setQrModal({
                 open: true,
                 qrCode: qrData.qrCode,
-                slot: 1,
                 connectionName: "Nova Conexão",
               });
               return; // Não mostra erro se conseguiu buscar o QR
@@ -457,22 +462,20 @@ export default function ConnectionsPage() {
 
   // --------------------------------------------------------------
   // 5. INICIAR SESSÃO WHATSAPP (GERAR QR CODE)
+  // SLOT FIXO = 1 (apenas uma sessão por usuário)
   // --------------------------------------------------------------
   const startSession = async (
-    connectionId: string,
     clientId: string,
-    slot: number,
-    apiKey: string,
     connectionName: string,
   ) => {
-    const key = `${connectionId}-${slot}`;
+    const key = `whatsapp-${clientId}`;
     setActionLoading({ ...actionLoading, [key]: true });
 
     try {
       // Health check **não bloqueante** (apenas loga problema e segue)
       try {
         const healthController = new AbortController();
-        const healthTimeout = setTimeout(() => healthController.abort(), 5000); // 5 segundos para health check
+        const healthTimeout = setTimeout(() => healthController.abort(), 5000);
 
         const healthCheck = await fetch(`${API_URL}/api/health`, {
           method: "GET",
@@ -493,7 +496,8 @@ export default function ConnectionsPage() {
         );
       }
 
-      const response = await fetch(`${API_URL}/api/start/${clientId}/${slot}`, {
+      // SLOT FIXO = 1 - Removido parâmetro slot da URL
+      const response = await fetch(`${API_URL}/api/start/${clientId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -516,7 +520,6 @@ export default function ConnectionsPage() {
           setQrModal({
             open: true,
             qrCode: data.qrCode,
-            slot,
             connectionName,
           });
           await loadConnections();
@@ -530,7 +533,8 @@ export default function ConnectionsPage() {
             attempts++;
             
             try {
-              const qrResponse = await fetch(`${API_URL}/api/qr/${clientId}/${slot}`);
+              // SLOT FIXO = 1 - Removido parâmetro slot da URL
+              const qrResponse = await fetch(`${API_URL}/api/qr/${clientId}`);
               if (qrResponse.ok) {
                 const qrData = await qrResponse.json();
                 if (qrData.success && qrData.qrCode) {
@@ -538,7 +542,6 @@ export default function ConnectionsPage() {
                   setQrModal({
                     open: true,
                     qrCode: qrData.qrCode,
-                    slot,
                     connectionName,
                   });
                   await loadConnections();
@@ -590,18 +593,17 @@ export default function ConnectionsPage() {
 
   // --------------------------------------------------------------
   // 5. DESCONECTAR SESSÃO WHATSAPP
+  // SLOT FIXO = 1 (apenas uma sessão por usuário)
   // --------------------------------------------------------------
   const stopSession = async (
-    connectionId: string,
     clientId: string,
-    slot: number,
-    apiKey: string,
   ) => {
-    const key = `${connectionId}-${slot}`;
+    const key = `whatsapp-${clientId}`;
     setActionLoading({ ...actionLoading, [key]: true });
 
     try {
-      const response = await fetch(`${API_URL}/api/stop/${clientId}/${slot}`, {
+      // SLOT FIXO = 1 - Removido parâmetro slot da URL
+      const response = await fetch(`${API_URL}/api/stop/${clientId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -780,14 +782,14 @@ export default function ConnectionsPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       {connection.sessions.map((session) => {
-                        const actionKey = `${connection.id}-${session.slot}`;
+                        const actionKey = `whatsapp-${connection.clientId}`;
                         const isConnected =
                           session.status === "CONNECTED" ||
                           session.status.toLowerCase() === "connected";
 
                         return (
                           <Card
-                            key={session.slot}
+                            key="whatsapp-main"
                             className="bg-[#141415] border-[#374151] rounded-2xl p-6 hover:border-[#001F05] transition-all"
                           >
                             {/* STATUS */}
@@ -802,7 +804,7 @@ export default function ConnectionsPage() {
                                 }`}
                               />
                               <h3 className="text-xl font-semibold text-white">
-                                WhatsApp {session.slot}
+                                WhatsApp
                               </h3>
                               {getStatusIcon(session.status)}
                             </div>
@@ -829,12 +831,7 @@ export default function ConnectionsPage() {
                               {isConnected ? (
                                 <Button
                                   onClick={() =>
-                                    stopSession(
-                                      connection.id,
-                                      connection.clientId,
-                                      session.slot,
-                                      "",
-                                    )
+                                    stopSession(connection.clientId)
                                   }
                                   disabled={actionLoading[actionKey]}
                                   className="w-full bg-red-600 hover:bg-red-700 text-white"
@@ -851,10 +848,7 @@ export default function ConnectionsPage() {
                                   <Button
                                     onClick={() =>
                                       startSession(
-                                        connection.id,
                                         connection.clientId,
-                                        session.slot,
-                                        "",
                                         connection.name,
                                       )
                                     }
@@ -876,7 +870,6 @@ export default function ConnectionsPage() {
                                           setQrModal({
                                             open: true,
                                             qrCode: session.qrCode,
-                                            slot: session.slot,
                                             connectionName: connection.name,
                                           })
                                         }
@@ -1138,8 +1131,7 @@ export default function ConnectionsPage() {
         <DialogContent className="bg-[#141415] border-[#374151] text-white">
           <DialogHeader>
             <DialogTitle>
-              Escaneie o QR Code - {qrModal.connectionName} (Slot {qrModal.slot}
-              )
+              Escaneie o QR Code - {qrModal.connectionName}
             </DialogTitle>
           </DialogHeader>
 
