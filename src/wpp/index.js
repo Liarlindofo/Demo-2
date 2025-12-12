@@ -178,6 +178,17 @@ export async function startClient(userId, slot) {
   try {
     logger.wpp(userId, slot, 'Iniciando cliente WPPConnect (não bloqueante)...');
 
+    // VALIDAÇÃO CRÍTICA: Garantir que userId é válido (ANTES de normalizar)
+    if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
+      logger.error(`[startClient] userId inválido: ${userId}`);
+      throw new Error(`userId inválido: ${userId}`);
+    }
+
+    // Normalizar userId (remover espaços, garantir que é string) - FAZER PRIMEIRO!
+    const normalizedUserId = String(userId).trim();
+    
+    logger.info(`[startClient] userId original: "${userId}", normalizado: "${normalizedUserId}"`);
+
     // Verificar se já existe cliente na memória (usando userId normalizado)
     if (sessionManager.hasClient(normalizedUserId, slot)) {
       logger.wpp(normalizedUserId, slot, 'Cliente já está ativo na memória, retornando...');
@@ -195,15 +206,6 @@ export async function startClient(userId, slot) {
       
       return { success: false, message: 'Cliente já está ativo' };
     }
-
-    // VALIDAÇÃO CRÍTICA: Garantir que userId é válido
-    if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
-      logger.error(`[startClient] userId inválido: ${userId}`);
-      throw new Error(`userId inválido: ${userId}`);
-    }
-
-    // Normalizar userId (remover espaços, garantir que é string)
-    const normalizedUserId = String(userId).trim();
     
     // Gerar sessionName único usando userId normalizado
     const sessionName = `${normalizedUserId}-slot${slot}`;
