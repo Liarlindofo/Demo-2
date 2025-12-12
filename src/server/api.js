@@ -274,13 +274,17 @@ export async function stopConnection(req, res) {
     // Garantir que estamos usando o ID completo do stack_users (não truncado)
     const actualUserId = stackUser.id;
     
-    if (actualUserId !== userId) {
-      logger.warn(`[stopConnection] ID mismatch! Recebido: ${userId}, Correto: ${actualUserId}`);
-      // Usar o ID correto do banco
-      userId = actualUserId;
+    // Normalizar userId (remover espaços, garantir consistência)
+    let normalizedUserId = String(actualUserId).trim();
+    
+    if (normalizedUserId !== userId.trim()) {
+      logger.warn(`[stopConnection] ID mismatch! Recebido: "${userId}", Correto: "${normalizedUserId}"`);
     }
+    
+    // Usar sempre o ID normalizado do banco
+    logger.info(`[stopConnection] ✅ Usando userId normalizado: "${normalizedUserId}" para parar slot ${slotNumber}`);
 
-    const result = await stopClient(userId, slotNumber);
+    const result = await stopClient(normalizedUserId, slotNumber);
 
     res.json(result);
 

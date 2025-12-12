@@ -178,12 +178,12 @@ export async function startClient(userId, slot) {
   try {
     logger.wpp(userId, slot, 'Iniciando cliente WPPConnect (não bloqueante)...');
 
-    // Verificar se já existe cliente na memória
-    if (sessionManager.hasClient(userId, slot)) {
-      logger.wpp(userId, slot, 'Cliente já está ativo na memória, retornando...');
+    // Verificar se já existe cliente na memória (usando userId normalizado)
+    if (sessionManager.hasClient(normalizedUserId, slot)) {
+      logger.wpp(normalizedUserId, slot, 'Cliente já está ativo na memória, retornando...');
       
       // Verificar se está realmente conectado
-      const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slot);
+      const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
       if (bot && bot.qrCode) {
         return { 
           success: true, 
@@ -318,35 +318,36 @@ export async function startClient(userId, slot) {
         updatesLog: false,
 
         catchQR: async (base64Qr) => {
-          await onQRCode(userId, slot, base64Qr);
+          await onQRCode(normalizedUserId, slot, base64Qr);
         },
 
         statusFind: async (status, session) => {
           // Obtém o client do sessionManager para passar ao onStatusChange
-          const client = sessionManager.getClient(userId, slot);
-          await onStatusChange(userId, slot, status, client);
+          const client = sessionManager.getClient(normalizedUserId, slot);
+          await onStatusChange(normalizedUserId, slot, status, client);
         },
       })
       .then(async (client) => {
-        logger.wpp(userId, slot, 'Cliente WPPConnect criado.');
-        sessionManager.setClient(userId, slot, client);
+        logger.wpp(normalizedUserId, slot, 'Cliente WPPConnect criado.');
+        // IMPORTANTE: Usar normalizedUserId para garantir consistência
+        sessionManager.setClient(normalizedUserId, slot, client);
         
-        // Configurar listener de mensagens
-        setupMessageListener(client, userId, slot);
+        // Configurar listener de mensagens (usar normalizedUserId)
+        setupMessageListener(client, normalizedUserId, slot);
         
         // Verifica se já está conectado após criar o client
         try {
           const isConnected = await client.isConnected().catch(() => false);
           if (isConnected) {
-            logger.wpp(userId, slot, 'Cliente já está conectado, atualizando status...');
-            await onStatusChange(userId, slot, 'chatsAvailable', client);
+            logger.wpp(normalizedUserId, slot, 'Cliente já está conectado, atualizando status...');
+            await onStatusChange(normalizedUserId, slot, 'chatsAvailable', client);
           }
         } catch (error) {
           // Ignora erro na verificação inicial
         }
       })
       .catch(async (error) => {
-        logger.error(`Erro ao criar cliente [${userId}:${slot}]`, error);
+        logger.error(`Erro ao criar cliente [${normalizedUserId}:${slot}]`, error);
         
         // Se o erro for "browser already running", tentar limpar e tentar novamente uma vez
         if (error.message && (error.message.includes('browser is already running') || error.message.includes('already running'))) {
@@ -377,14 +378,14 @@ export async function startClient(userId, slot) {
             // Aguardar mais tempo
             await new Promise(resolve => setTimeout(resolve, 5000));
             
-            logger.wpp(userId, slot, 'Limpeza extra concluída. Tentando criar cliente novamente...');
+            logger.wpp(normalizedUserId, slot, 'Limpeza extra concluída. Tentando criar cliente novamente...');
           } catch (cleanupError) {
             logger.error(`Erro na limpeza extra: ${cleanupError.message}`);
           }
           
           // Tentar criar novamente (apenas uma vez)
           try {
-            logger.wpp(userId, slot, 'Tentando criar cliente novamente após limpeza extra...');
+            logger.wpp(normalizedUserId, slot, 'Tentando criar cliente novamente após limpeza extra...');
             
             wppconnect
               .create({
@@ -396,50 +397,50 @@ export async function startClient(userId, slot) {
                 disableWelcome: true,
                 updatesLog: false,
                 catchQR: async (base64Qr) => {
-                  await onQRCode(userId, slot, base64Qr);
+                  await onQRCode(normalizedUserId, slot, base64Qr);
                 },
                 statusFind: async (status, session) => {
-                  const client = sessionManager.getClient(userId, slot);
-                  await onStatusChange(userId, slot, status, client);
+                  const client = sessionManager.getClient(normalizedUserId, slot);
+                  await onStatusChange(normalizedUserId, slot, status, client);
                 },
               })
               .then(async (client) => {
-                logger.wpp(userId, slot, '✅ Cliente WPPConnect criado após limpeza extra.');
-                sessionManager.setClient(userId, slot, client);
-                setupMessageListener(client, userId, slot);
+                logger.wpp(normalizedUserId, slot, '✅ Cliente WPPConnect criado após limpeza extra.');
+                sessionManager.setClient(normalizedUserId, slot, client);
+                setupMessageListener(client, normalizedUserId, slot);
                 
                 try {
                   const isConnected = await client.isConnected().catch(() => false);
                   if (isConnected) {
-                    logger.wpp(userId, slot, 'Cliente já está conectado, atualizando status...');
-                    await onStatusChange(userId, slot, 'chatsAvailable', client);
+                    logger.wpp(normalizedUserId, slot, 'Cliente já está conectado, atualizando status...');
+                    await onStatusChange(normalizedUserId, slot, 'chatsAvailable', client);
                   }
                 } catch (error) {
                   // Ignora erro na verificação inicial
                 }
               })
               .catch((retryError) => {
-                logger.error(`❌ Erro ao criar cliente após limpeza extra [${userId}:${slot}]:`, retryError);
-                sessionManager.removeClient(userId, slot);
-                WhatsAppBotModel.setDisconnected(userId, slot).catch(() => {});
+                logger.error(`❌ Erro ao criar cliente após limpeza extra [${normalizedUserId}:${slot}]:`, retryError);
+                sessionManager.removeClient(normalizedUserId, slot);
+                WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
                 
                 // Se ainda falhar, marcar no banco que houve erro
-                WhatsAppBotModel.upsert(userId, slot, {
+                WhatsAppBotModel.upsert(normalizedUserId, slot, {
                   isConnected: false,
                   qrCode: null,
                   connectedNumber: null
                 }).catch(() => {});
               });
           } catch (retryError) {
-            logger.error(`❌ Erro na tentativa de retry [${userId}:${slot}]:`, retryError);
-            sessionManager.removeClient(userId, slot);
-            WhatsAppBotModel.setDisconnected(userId, slot).catch(() => {});
+            logger.error(`❌ Erro na tentativa de retry [${normalizedUserId}:${slot}]:`, retryError);
+            sessionManager.removeClient(normalizedUserId, slot);
+            WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
           }
         } else {
           // Para outros erros, apenas remove e marca como desconectado
-          logger.error(`Erro ao criar cliente [${userId}:${slot}]:`, error.message);
-          sessionManager.removeClient(userId, slot);
-          WhatsAppBotModel.setDisconnected(userId, slot).catch(() => {});
+          logger.error(`Erro ao criar cliente [${normalizedUserId}:${slot}]:`, error.message);
+          sessionManager.removeClient(normalizedUserId, slot);
+          WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
         }
       });
 
@@ -450,7 +451,9 @@ export async function startClient(userId, slot) {
     };
 
   } catch (error) {
-    logger.error(`Erro ao iniciar cliente [${userId}:${slot}]:`, error);
+    // Usar normalizedUserId se disponível, senão usar userId original
+    const errorUserId = typeof normalizedUserId !== 'undefined' ? normalizedUserId : userId;
+    logger.error(`Erro ao iniciar cliente [${errorUserId}:${slot}]:`, error);
     return { success: false, message: error.message };
   }
 }
@@ -460,17 +463,30 @@ export async function startClient(userId, slot) {
  */
 export async function stopClient(userId, slot) {
   try {
-    const client = sessionManager.getClient(userId, slot);
+    // VALIDAÇÃO: Normalizar userId
+    if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
+      logger.error(`[stopClient] userId inválido: ${userId}`);
+      return { success: false, message: 'userId inválido' };
+    }
+    
+    const normalizedUserId = String(userId).trim();
+    
+    logger.info(`[stopClient] Parando cliente para userId: "${normalizedUserId}" (original: "${userId}"), slot: ${slot}`);
+    
+    const client = sessionManager.getClient(normalizedUserId, slot);
 
     if (!client) {
+      logger.warn(`[stopClient] Cliente não encontrado para [${normalizedUserId}:${slot}]`);
       return { success: false, message: 'Cliente não está ativo' };
     }
 
+    logger.info(`[stopClient] ✅ Cliente encontrado. Fechando...`);
     await client.close();
-    sessionManager.removeClient(userId, slot);
-    sessionManager.clearAllConversations(userId, slot);
-    await WhatsAppBotModel.setDisconnected(userId, slot);
+    sessionManager.removeClient(normalizedUserId, slot);
+    sessionManager.clearAllConversations(normalizedUserId, slot);
+    await WhatsAppBotModel.setDisconnected(normalizedUserId, slot);
 
+    logger.info(`[stopClient] ✅ Cliente desconectado com sucesso para [${normalizedUserId}:${slot}]`);
     return { success: true, message: 'Cliente desconectado com sucesso' };
 
   } catch (error) {
@@ -480,7 +496,13 @@ export async function stopClient(userId, slot) {
 }
 
 export async function getClientStatus(userId, slot) {
-  const client = sessionManager.getClient(userId, slot);
+  // VALIDAÇÃO: Normalizar userId
+  if (!userId || typeof userId !== 'string') {
+    return { isActive: false, isConnected: false };
+  }
+  
+  const normalizedUserId = String(userId).trim();
+  const client = sessionManager.getClient(normalizedUserId, slot);
 
   if (!client) {
     return { isActive: false, isConnected: false };

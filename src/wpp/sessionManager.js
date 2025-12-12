@@ -18,39 +18,92 @@ class SessionManager {
   }
 
   /**
+   * Normaliza userId para garantir consistência
+   */
+  normalizeUserId(userId) {
+    if (!userId || typeof userId !== 'string') {
+      throw new Error(`userId inválido: ${userId}`);
+    }
+    return String(userId).trim();
+  }
+
+  /**
    * Gera chave única para identificar sessão
    */
   getKey(userId, slot) {
-    return `${userId}:${slot}`;
+    const normalizedUserId = this.normalizeUserId(userId);
+    const key = `${normalizedUserId}:${slot}`;
+    
+    // LOG DE DEBUG para rastrear chaves
+    logger.info(`[SessionManager] Gerando chave: userId="${userId}" (normalizado="${normalizedUserId}"), slot=${slot} -> key="${key}"`);
+    
+    return key;
   }
 
   /**
    * Adiciona cliente WPPConnect
    */
   setClient(userId, slot, client) {
-    const key = this.getKey(userId, slot);
+    const normalizedUserId = this.normalizeUserId(userId);
+    const key = this.getKey(normalizedUserId, slot);
+    
+    // Verificar se já existe cliente para esta chave
+    if (this.clients.has(key)) {
+      logger.warn(`[SessionManager] ⚠️ Já existe cliente para chave "${key}". Substituindo...`);
+      const oldClient = this.clients.get(key);
+      // Tentar fechar cliente antigo se existir
+      if (oldClient && typeof oldClient.close === 'function') {
+        oldClient.close().catch(err => {
+          logger.warn(`[SessionManager] Erro ao fechar cliente antigo: ${err.message}`);
+        });
+      }
+    }
+    
     this.clients.set(key, client);
-    logger.wpp(userId, slot, 'Cliente armazenado na memória');
+    logger.wpp(normalizedUserId, slot, `✅ Cliente armazenado na memória com chave: "${key}"`);
+    
+    // Listar todas as chaves ativas para debug
+    const allKeys = Array.from(this.clients.keys());
+    logger.info(`[SessionManager] Chaves ativas (${allKeys.length}): ${allKeys.join(', ')}`);
   }
 
   /**
    * Busca cliente WPPConnect
    */
   getClient(userId, slot) {
-    const key = this.getKey(userId, slot);
-    return this.clients.get(key);
+    const normalizedUserId = this.normalizeUserId(userId);
+    const key = this.getKey(normalizedUserId, slot);
+    const client = this.clients.get(key);
+    
+    if (client) {
+      logger.info(`[SessionManager] ✅ Cliente encontrado para chave: "${key}"`);
+    } else {
+      logger.warn(`[SessionManager] ⚠️ Cliente NÃO encontrado para chave: "${key}"`);
+      // Listar chaves disponíveis para debug
+      const allKeys = Array.from(this.clients.keys());
+      logger.info(`[SessionManager] Chaves disponíveis: ${allKeys.join(', ')}`);
+    }
+    
+    return client;
   }
 
   /**
    * Remove cliente
    */
   removeClient(userId, slot) {
-    const key = this.getKey(userId, slot);
+    const normalizedUserId = this.normalizeUserId(userId);
+    const key = this.getKey(normalizedUserId, slot);
     const client = this.clients.get(key);
     
     if (client) {
       this.clients.delete(key);
-      logger.wpp(userId, slot, 'Cliente removido da memória');
+      logger.wpp(normalizedUserId, slot, `✅ Cliente removido da memória (chave: "${key}")`);
+      
+      // Listar chaves restantes
+      const remainingKeys = Array.from(this.clients.keys());
+      logger.info(`[SessionManager] Chaves restantes (${remainingKeys.length}): ${remainingKeys.join(', ')}`);
+    } else {
+      logger.warn(`[SessionManager] ⚠️ Tentativa de remover cliente inexistente (chave: "${key}")`);
     }
     
     return client;
@@ -60,8 +113,13 @@ class SessionManager {
    * Verifica se existe cliente ativo
    */
   hasClient(userId, slot) {
-    const key = this.getKey(userId, slot);
-    return this.clients.has(key);
+    const normalizedUserId = this.normalizeUserId(userId);
+    const key = this.getKey(normalizedUserId, slot);
+    const has = this.clients.has(key);
+    
+    logger.info(`[SessionManager] hasClient(${normalizedUserId}, ${slot}) -> chave="${key}" -> ${has ? 'SIM' : 'NÃO'}`);
+    
+    return has;
   }
 
   /**
