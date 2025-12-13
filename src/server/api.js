@@ -36,12 +36,24 @@ export async function getStatus(req, res) {
     const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slot);
     const clientStatus = await getClientStatus(userId);
 
+    // 🔒 Regra de ouro: quem manda é o estado em memória (clientStatus)
+    // - isActive / isConnected vêm SEMPRE do clientStatus (WPPConnect)
+    // - O banco (whatsapp_bots) guarda apenas informações auxiliares (QR, número conectado, timestamps)
+    const isActive = clientStatus.isActive;
+    const isConnected = clientStatus.isConnected && clientStatus.isActive;
+
     const connection = {
-      isConnected: (bot && bot.isConnected) || false,
+      isConnected,
       connectedNumber: (bot && bot.connectedNumber) || null,
       qrCode: (bot && bot.qrCode) || null,
-      state: (bot && bot.isConnected) ? 'connected' : (bot && bot.qrCode) ? 'waiting_qr' : (clientStatus.isActive ? 'connecting' : 'offline'),
-      isActive: clientStatus.isActive,
+      state: isConnected
+        ? 'connected'
+        : (bot && bot.qrCode)
+          ? 'waiting_qr'
+          : isActive
+            ? 'connecting'
+            : 'offline',
+      isActive,
       updatedAt: (bot && bot.updatedAt) || null,
     };
 
