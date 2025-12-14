@@ -1,13 +1,3 @@
-module.exports = {
-  apps: [
-    {
-      name: "platefull-api",
-      script: "index.js",
-      instances: 1,
-      exec_mode: "fork",
-      watch: false,
-    },
-  ],
-};
-
-
+// Arquivo mantido vazio apenas por compatibilidade.
+// Use sempre `ecosystem.config.cjs` com CommonJS para rodar o PM2,
+// pois este projeto é `type: "module"` e `.js` é tratado como ESM.
