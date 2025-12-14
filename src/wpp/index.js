@@ -217,9 +217,10 @@ export async function startClient(userId) {
     // ISOLAMENTO TOTAL: Gerar sessionName único por usuário (SEM slot no nome)
     const sessionName = `whatsapp_${normalizedUserId}`;
     
-    // Define userDataDir do Puppeteer (NUNCA usar pastas dentro do nginx)
-    const sessionsDir = (config.wppConnect && config.wppConnect.sessionsDir) || '/var/www/whatsapp-sessions';
-    const userDataDir = `${sessionsDir}/${sessionName}`;
+    // Diretório de sessão 100% isolado por usuário
+    // Slot é fixo = 1, então nunca há mais de uma sessão por StackUser.
+    // NUNCA reutilizar diretórios, NUNCA compartilhar Chrome entre usuários.
+    const userDataDir = `/var/www/whatsapp-sessions/${sessionName}`;
     
     // LOG DE DEBUG - ISOLAMENTO
     console.log('=== 🔍 DEBUG ISOLAMENTO SESSÃO ===');

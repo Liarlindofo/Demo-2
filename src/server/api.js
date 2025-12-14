@@ -1,7 +1,7 @@
-import { startClient, stopClient, getClientStatus } from '../wpp/index.js';
 import { UserModel, WhatsAppBotModel, BotSettingsModel } from '../db/models.js';
 import prisma from '../db/index.js';
 import logger from '../utils/logger.js';
+import { startWhatsappWorker, stopWhatsappWorker } from '../services/pm2.service.js';
 
 /**
  * GET /api/status/:userId
@@ -12,7 +12,7 @@ export async function getStatus(req, res) {
     const { userId } = req.params;
     // SLOT FIXO: sempre 1
     const slot = 1;
-    
+
     // Log para debug: verificar qual userId está sendo usado
     logger.info(`[getStatus] Buscando status WhatsApp para userId: ${userId}`);
     
@@ -34,13 +34,11 @@ export async function getStatus(req, res) {
     
     // Buscar apenas a sessão do slot 1
     const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slot);
-    const clientStatus = await getClientStatus(userId);
 
-    // 🔒 Regra de ouro: quem manda é o estado em memória (clientStatus)
-    // - isActive / isConnected vêm SEMPRE do clientStatus (WPPConnect)
-    // - O banco (whatsapp_bots) guarda apenas informações auxiliares (QR, número conectado, timestamps)
-    const isActive = clientStatus.isActive;
-    const isConnected = clientStatus.isConnected && clientStatus.isActive;
+    // Sem acesso direto ao WPPConnect neste processo,
+    // o estado vem exclusivamente do banco (whatsapp_bots)
+    const isActive = !!bot;
+    const isConnected = !!(bot && bot.isConnected);
 
     const connection = {
       isConnected,
@@ -138,93 +136,13 @@ export async function getQRCode(req, res) {
 export async function startConnection(req, res) {
   try {
     const { userId } = req.params;
-    // SLOT FIXO: sempre 1
-    const slot = 1;
 
-    // LOG DE DEBUG - ISOLAMENTO
-    console.log('=== 🔍 DEBUG START CONNECTION ===');
-    console.log('📌 userId da URL:', userId);
-    console.log('📌 userId type:', typeof userId);
-    console.log('📌 userId length:', userId?.length);
-    console.log('📌 slot: 1 (FIXO)');
-    console.log('📌 URL completa:', req.url);
-    console.log('📌 Timestamp:', new Date().toISOString());
-    console.log('=================================');
+    // Slot é fixo = 1 (regra global), porém o processo WhatsApp é isolado por usuário.
+    logger.info(`[startConnection] Iniciando worker WhatsApp para userId: ${userId}`);
 
-    // Log para debug: verificar qual userId está sendo usado
-    logger.info(`[startConnection] Iniciando sessão WhatsApp para userId: ${userId}`);
+    const result = await startWhatsappWorker(userId);
 
-    // Valida que o usuário existe na tabela stack_users
-    let user;
-    try {
-      user = await prisma.stackUser.findUnique({
-        where: { id: userId }
-      });
-
-      if (!user) {
-        logger.warn(`[startConnection] Usuário ${userId} não encontrado em stack_users`);
-        return res.status(400).json({
-          success: false,
-          message: `Usuário ${userId} não encontrado na tabela stack_users`
-        });
-      }
-      
-      logger.info(`[startConnection] Usuário validado: ${user.id} (${user.primaryEmail})`);
-    } catch (error) {
-      logger.error(`Erro ao validar usuário [${userId}]:`, error);
-      return res.status(500).json({
-        success: false,
-        message: 'Erro ao validar usuário',
-        error: error.message
-      });
-    }
-
-    // Garantir que estamos usando o ID completo do stack_users (não truncado)
-    const actualUserId = user.id;
-    
-    // CRÍTICO: Validar que o userId recebido corresponde ao stackUser.id
-    if (actualUserId !== userId) {
-      logger.warn(`[startConnection] ID mismatch! Recebido: ${userId}, Correto: ${actualUserId}`);
-      logger.warn(`[startConnection] Usando ID correto do banco: ${actualUserId}`);
-      // Usar o ID correto do banco
-      userId = actualUserId;
-    }
-
-    // VALIDAÇÃO ADICIONAL: Garantir que o userId não está vazio ou undefined
-    if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
-      logger.error(`[startConnection] userId inválido: ${userId}`);
-      return res.status(400).json({
-        success: false,
-        message: 'userId inválido ou vazio'
-      });
-    }
-
-    // LOG FINAL: Confirmar qual userId será usado
-    logger.info(`[startConnection] ✅ Usando userId final: ${userId} (tipo: ${typeof userId}, tamanho: ${userId.length})`);
-
-    // Inicia cliente (não bloqueia) - SLOT FIXO = 1
-    const result = await startClient(userId);
-
-    if (!result.success) {
-      // Se o cliente já está ativo, não trate como erro — permita o frontend continuar
-      if ((result.message || '').toLowerCase().includes('cliente já está ativo') || 
-          (result.message || '').toLowerCase().includes('já possui uma sessão')) {
-        const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slot).catch(() => null);
-        return res.json({
-          success: true,
-          message: result.message,
-          isConnected: bot?.isConnected || false,
-          qrCode: bot?.qrCode || null,
-        });
-      }
-      return res.status(400).json(result);
-    }
-
-    return res.json({
-      success: true,
-      message: result.message || 'Sessão iniciada, aguardando QR.',
-      isConnected: false,
-    });
+    return res.json(result);
 
   } catch (error) {
     logger.error('Erro em startConnection:', error);
@@ -243,43 +161,12 @@ export async function startConnection(req, res) {
 export async function stopConnection(req, res) {
   try {
     const { userId } = req.params;
-    // SLOT FIXO: sempre 1
-    const slot = 1;
 
-    // Log para debug: verificar qual userId está sendo usado
-    logger.info(`[stopConnection] Parando sessão WhatsApp para userId: ${userId}`);
+    logger.info(`[stopConnection] Parando worker WhatsApp para userId: ${userId}`);
 
-    // Validar que o usuário existe na tabela stack_users
-    const stackUser = await prisma.stackUser.findUnique({
-      where: { id: userId }
-    });
+    await stopWhatsappWorker(userId);
 
-    if (!stackUser) {
-      logger.warn(`[stopConnection] Usuário ${userId} não encontrado em stack_users`);
-      return res.status(404).json({
-        success: false,
-        message: `Usuário ${userId} não encontrado na tabela stack_users`
-      });
-    }
-
-    logger.info(`[stopConnection] Usuário validado: ${stackUser.id} (${stackUser.primaryEmail})`);
-
-    // Garantir que estamos usando o ID completo do stack_users (não truncado)
-    const actualUserId = stackUser.id;
-    
-    // Normalizar userId (remover espaços, garantir consistência)
-    let normalizedUserId = String(actualUserId).trim();
-    
-    if (normalizedUserId !== userId.trim()) {
-      logger.warn(`[stopConnection] ID mismatch! Recebido: "${userId}", Correto: "${normalizedUserId}"`);
-    }
-    
-    // Usar sempre o ID normalizado do banco - SLOT FIXO = 1
-    logger.info(`[stopConnection] ✅ Usando userId normalizado: "${normalizedUserId}" para parar sessão WhatsApp`);
-
-    const result = await stopClient(normalizedUserId);
-
-    res.json(result);
+    res.json({ success: true });
 
   } catch (error) {
     logger.error('Erro em stopConnection:', error);
