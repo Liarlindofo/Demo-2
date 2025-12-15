@@ -244,6 +244,16 @@ export async function startClient(userId) {
     
     logger.info(`[startClient] ISOLAMENTO - userId: "${normalizedUserId}" -> sessionName: "${sessionName}" -> userDataDir: "${userDataDir}"`);
     
+    // CRÍTICO: Limpar banco de dados ANTES de iniciar nova sessão
+    // Isso garante que não vamos reutilizar dados de uma sessão anterior
+    logger.info(`[startClient] 🗑️ Limpando dados do banco para userId: "${normalizedUserId}" antes de iniciar nova sessão...`);
+    try {
+      await WhatsAppBotModel.clearSession(normalizedUserId, slot);
+      logger.info(`[startClient] ✅ Dados do banco limpos para userId: "${normalizedUserId}"`);
+    } catch (dbError) {
+      logger.warn(`[startClient] ⚠️ Erro ao limpar banco (continuando mesmo assim): ${dbError.message}`);
+    }
+
     // VERIFICAÇÃO CRÍTICA: Garantir que o diretório de sessão é único para este usuário
     // Se outro usuário estiver usando o mesmo diretório, isso é um BUG CRÍTICO
     if (fs.existsSync(userDataDir)) {
@@ -251,7 +261,7 @@ export async function startClient(userId) {
       try {
         const lockFiles = fs.readdirSync(userDataDir).filter(f => f.includes('lock') || f.includes('session'));
         if (lockFiles.length > 0) {
-          logger.warn(`[startClient] ⚠️ Diretório ${userDataDir} já existe com arquivos. Isso é normal se for a primeira vez após limpeza.`);
+          logger.warn(`[startClient] ⚠️ Diretório ${userDataDir} já existe com arquivos. DELETANDO para forçar novo QR code...`);
         }
       } catch (err) {
         // Ignorar erro de leitura
@@ -261,6 +271,36 @@ export async function startClient(userId) {
     // IMPORTANTE: Limpar processos órfãos AGRESSIVAMENTE
     logger.wpp(normalizedUserId, slot, `🧹 Limpando processos órfãos e locks para userId: "${normalizedUserId}"...`);
     await cleanupOrphanBrowser(userDataDir);
+
+    // CRÍTICO: DELETAR diretório de sessão ANTES de criar nova sessão
+    // Isso FORÇA o WPPConnect a gerar um novo QR code ao invés de reutilizar sessão salva
+    if (fs.existsSync(userDataDir)) {
+      logger.warn(`[startClient] 🗑️ DELETANDO diretório de sessão ${userDataDir} para forçar novo QR code...`);
+      try {
+        fs.rmSync(userDataDir, { recursive: true, force: true });
+        logger.info(`[startClient] ✅ Diretório ${userDataDir} deletado com sucesso`);
+        // Aguardar um pouco para garantir que o sistema de arquivos processou a deleção
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (deleteError) {
+        logger.error(`[startClient] ❌ Erro ao deletar diretório ${userDataDir}: ${deleteError.message}`);
+        // Tentar com comando do sistema
+        try {
+          await execAsync(`rm -rf "${userDataDir}" 2>/dev/null`);
+          logger.info(`[startClient] ✅ Diretório deletado via rm -rf`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (rmError) {
+          logger.error(`[startClient] ❌ Erro ao deletar via rm -rf: ${rmError.message}`);
+          // Continuar mesmo assim, mas avisar
+          logger.warn(`[startClient] ⚠️ Continuando mesmo com diretório existente. Pode reutilizar sessão antiga!`);
+        }
+      }
+    }
+
+    // Recriar diretório vazio para nova sessão
+    if (!fs.existsSync(userDataDir)) {
+      fs.mkdirSync(userDataDir, { recursive: true });
+      logger.info(`[startClient] ✅ Diretório ${userDataDir} recriado (vazio) para nova sessão`);
+    }
     
     // Verificar se ainda há processos rodando ANTES de tentar criar o cliente
     try {
@@ -366,15 +406,51 @@ export async function startClient(userId) {
         // Configurar listener de mensagens (usar normalizedUserId)
         setupMessageListener(client, normalizedUserId, slot);
         
-        // Verifica se já está conectado após criar o client
+        // CRÍTICO: Verificar se já está conectado após criar o client
+        // Se estiver conectado SEM ter gerado QR code, isso indica que reutilizou sessão antiga
+        // Neste caso, devemos FORÇAR desconexão e gerar novo QR
         try {
           const isConnected = await client.isConnected().catch(() => false);
           if (isConnected) {
-            logger.wpp(normalizedUserId, slot, 'Cliente já está conectado, atualizando status...');
-            await onStatusChange(normalizedUserId, slot, 'chatsAvailable', client);
+            // Verificar se há QR code no banco (se não há, significa que conectou sem QR = sessão reutilizada)
+            const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
+            
+            if (!bot || !bot.qrCode) {
+              logger.warn(`[startClient] ⚠️ Cliente conectado SEM QR code no banco! Isso indica sessão reutilizada.`);
+              logger.warn(`[startClient] ⚠️ Forçando desconexão e limpeza para gerar novo QR code...`);
+              
+              // Forçar logout e limpeza
+              try {
+                await client.logout().catch(() => {});
+                await client.close().catch(() => {});
+              } catch (logoutError) {
+                logger.warn(`[startClient] Erro ao fazer logout: ${logoutError.message}`);
+              }
+              
+              // Limpar banco e diretório novamente
+              await WhatsAppBotModel.clearSession(normalizedUserId, slot);
+              if (fs.existsSync(userDataDir)) {
+                fs.rmSync(userDataDir, { recursive: true, force: true });
+                fs.mkdirSync(userDataDir, { recursive: true });
+              }
+              
+              // Remover da memória
+              sessionManager.removeClient(normalizedUserId, slot);
+              
+              logger.error(`[startClient] ❌ Sessão reutilizada detectada! Limpeza forçada. Reinicie o processo para gerar novo QR code.`);
+              return {
+                success: false,
+                message: 'Sessão antiga detectada. Por favor, tente novamente em alguns segundos.'
+              };
+            } else {
+              // QR code existe no banco, então a conexão é válida
+              logger.wpp(normalizedUserId, slot, 'Cliente já está conectado (com QR code válido), atualizando status...');
+              await onStatusChange(normalizedUserId, slot, 'chatsAvailable', client);
+            }
           }
         } catch (error) {
           // Ignora erro na verificação inicial
+          logger.warn(`[startClient] Erro ao verificar conexão inicial: ${error.message}`);
         }
       })
       .catch(async (error) => {
@@ -414,6 +490,18 @@ export async function startClient(userId) {
             logger.error(`Erro na limpeza extra: ${cleanupError.message}`);
           }
           
+          // CRÍTICO: Deletar diretório novamente antes de retry
+          if (fs.existsSync(userDataDir)) {
+            try {
+              fs.rmSync(userDataDir, { recursive: true, force: true });
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              fs.mkdirSync(userDataDir, { recursive: true });
+              logger.info(`[startClient] ✅ Diretório deletado e recriado antes do retry`);
+            } catch (retryDeleteError) {
+              logger.warn(`[startClient] ⚠️ Erro ao deletar diretório no retry: ${retryDeleteError.message}`);
+            }
+          }
+
           // Tentar criar novamente (apenas uma vez)
           try {
             logger.wpp(normalizedUserId, slot, 'Tentando criar cliente novamente após limpeza extra...');
@@ -440,14 +528,31 @@ export async function startClient(userId) {
                 sessionManager.setClient(normalizedUserId, slot, client);
                 setupMessageListener(client, normalizedUserId, slot);
                 
+                // CRÍTICO: Verificar se conectou sem QR (mesma lógica do primeiro create)
                 try {
                   const isConnected = await client.isConnected().catch(() => false);
                   if (isConnected) {
-                    logger.wpp(normalizedUserId, slot, 'Cliente já está conectado, atualizando status...');
-                    await onStatusChange(normalizedUserId, slot, 'chatsAvailable', client);
+                    const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
+                    if (!bot || !bot.qrCode) {
+                      logger.warn(`[startClient] ⚠️ [RETRY] Cliente conectado SEM QR code! Forçando limpeza...`);
+                      await client.logout().catch(() => {});
+                      await client.close().catch(() => {});
+                      await WhatsAppBotModel.clearSession(normalizedUserId, slot);
+                      if (fs.existsSync(userDataDir)) {
+                        fs.rmSync(userDataDir, { recursive: true, force: true });
+                        fs.mkdirSync(userDataDir, { recursive: true });
+                      }
+                      sessionManager.removeClient(normalizedUserId, slot);
+                      logger.error(`[startClient] ❌ [RETRY] Sessão reutilizada detectada após retry!`);
+                      return;
+                    } else {
+                      logger.wpp(normalizedUserId, slot, 'Cliente já está conectado (com QR code válido), atualizando status...');
+                      await onStatusChange(normalizedUserId, slot, 'chatsAvailable', client);
+                    }
                   }
                 } catch (error) {
                   // Ignora erro na verificação inicial
+                  logger.warn(`[startClient] Erro ao verificar conexão no retry: ${error.message}`);
                 }
               })
               .catch((retryError) => {

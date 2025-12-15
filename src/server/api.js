@@ -187,6 +187,7 @@ export async function startConnection(req, res) {
     }
 
     const normalizedUserId = String(userId).trim();
+    const slot = 1; // SLOT FIXO
 
     // LOG DETALHADO para rastreamento
     logger.info(`[startConnection] ==========================================`);
@@ -196,6 +197,20 @@ export async function startConnection(req, res) {
     logger.info(`[startConnection] userId type: ${typeof normalizedUserId}`);
     logger.info(`[startConnection] userId length: ${normalizedUserId.length}`);
     logger.info(`[startConnection] ==========================================`);
+
+    // CRÍTICO: Parar worker existente ANTES de iniciar novo
+    // Isso garante que não há sessão sendo reutilizada
+    logger.info(`[startConnection] 🛑 Parando worker existente (se houver) para userId: "${normalizedUserId}"...`);
+    try {
+      await stopWhatsappWorker(normalizedUserId);
+      // Limpar banco de dados também
+      await WhatsAppBotModel.clearSession(normalizedUserId, slot);
+      logger.info(`[startConnection] ✅ Worker anterior parado e banco limpo`);
+      // Aguardar um pouco para garantir que processos foram encerrados
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } catch (stopError) {
+      logger.warn(`[startConnection] ⚠️ Erro ao parar worker anterior (continuando mesmo assim): ${stopError.message}`);
+    }
 
     const result = await startWhatsappWorker(normalizedUserId);
 
