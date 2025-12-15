@@ -293,13 +293,18 @@ export async function startClient(userId) {
       "/var/www/whatsapp-sessions";
 
     // tokenDir: onde ficam tokens do WPPConnect (pode limpar se quiser forçar QR)
+    // Mantemos UM diretório fixo de token por usuário (para reaproveitar sessão)
     const tokenDir = path.join(baseSessionsDir, sessionName);
 
-    // chromeUserDataDir: perfil do Chrome (NÃO delete automaticamente)
-    const chromeUserDataDir = path.join(
+    // chromeUserDataDir: perfil do Chrome.
+    // Para evitar completamente o erro "browser already running" e qualquer
+    // interferência entre execuções, usamos SEMPRE um diretório NOVO por start.
+    // Exemplo: /var/www/whatsapp-sessions/whatsapp_<user>__chrome_abcd123
+    const chromeBaseDir = path.join(
       baseSessionsDir,
       `${sessionName}__chrome`
     );
+    const chromeUserDataDir = `${chromeBaseDir}_${Date.now().toString(36)}`;
 
     // Garantir diretórios
     if (!fs.existsSync(baseSessionsDir))
