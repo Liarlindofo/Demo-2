@@ -379,6 +379,10 @@ export async function startClient(userId) {
     wppconnect
       .create({
         session: sessionName,
+        // CRÍTICO: garantir que o token/sessão do WhatsApp seja salvo no diretório isolado por usuário.
+        // Sem isso, o WPPConnect pode reutilizar tokens em uma pasta padrão e "conectar direto"
+        // mesmo após deletarmos o userDataDir.
+        folderNameToken: userDataDir,
         headless: headless,
         puppeteerOptions: puppeteerOptions,
         // Não fechar automaticamente a sessão enquanto aguarda leitura do QR
@@ -476,6 +480,8 @@ export async function startClient(userId) {
             wppconnect
               .create({
                 session: sessionName,
+                // CRÍTICO: manter tokens no diretório isolado por usuário também no retry
+                folderNameToken: userDataDir,
                 headless: headless,
                 puppeteerOptions: puppeteerOptions,
                 autoClose: 0,
