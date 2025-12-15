@@ -54,13 +54,65 @@ export function isChatPaused(userId, slot, phone) {
  */
 async function cleanupOrphanBrowser(userDataDir) {
   try {
-    logger.info(`🧹 Iniciando limpeza DRÁSTICA para: ${userDataDir}`);
+    logger.info(`🧹 Iniciando limpeza ULTRA AGRESSIVA para: ${userDataDir}`);
     
     // Extrair o nome da sessão do userDataDir (última parte do caminho)
     const sessionName = path.basename(userDataDir);
     logger.info(`📌 Nome da sessão: ${sessionName}`);
     
-    // PASSO 1: Matar processos Chrome/Chromium relacionados APENAS a esta sessão.
+    // PASSO 1: REMOVER LOCK FILES DO CHROME ANTES DE TUDO
+    // Chrome cria locks que impedem a criação de novas instâncias
+    if (fs.existsSync(userDataDir)) {
+      try {
+        const lockFiles = [
+          path.join(userDataDir, 'SingletonLock'),
+          path.join(userDataDir, 'LockFile'),
+          path.join(userDataDir, 'lockfile'),
+          path.join(userDataDir, 'Default', 'SingletonLock'),
+          path.join(userDataDir, 'Default', 'LockFile'),
+          path.join(userDataDir, 'Default', 'lockfile'),
+        ];
+        
+        for (const lockFile of lockFiles) {
+          try {
+            if (fs.existsSync(lockFile)) {
+              fs.unlinkSync(lockFile);
+              logger.info(`🔓 Lock file removido: ${lockFile}`);
+            }
+          } catch (lockError) {
+            // Ignorar erro se arquivo não existe ou está em uso
+          }
+        }
+      } catch (lockCleanError) {
+        logger.warn(`⚠️ Erro ao remover locks: ${lockCleanError.message}`);
+      }
+    }
+    
+    // PASSO 2: Usar lsof para encontrar processos usando arquivos na pasta (MÉTODO MAIS PRECISO)
+    try {
+      const { stdout: lsofStdout } = await execAsync(
+        `lsof +D "${userDataDir}" 2>/dev/null | grep -iE "chrome|chromium" | awk '{print $2}' | sort -u`
+      ).catch(() => ({ stdout: '' }));
+      
+      const lsofPids = lsofStdout.trim().split('\n').filter(pid => pid && !isNaN(pid));
+      
+      if (lsofPids.length > 0) {
+        logger.warn(`⚠️ [lsof] Encontrados ${lsofPids.length} processos usando arquivos em ${userDataDir}`);
+        for (const pid of lsofPids) {
+          try {
+            logger.info(`💀 [lsof] Finalizando processo ${pid}...`);
+            await execAsync(`kill -9 ${pid} 2>/dev/null`).catch(() => {});
+            logger.info(`✅ [lsof] Processo ${pid} finalizado`);
+          } catch (killError) {
+            logger.warn(`⚠️ [lsof] Não foi possível finalizar processo ${pid}: ${killError.message}`);
+          }
+        }
+      }
+    } catch (lsofError) {
+      logger.warn(`⚠️ lsof não disponível ou falhou: ${lsofError.message}`);
+    }
+    
+    // PASSO 3: Matar processos Chrome/Chromium relacionados APENAS a esta sessão.
     // IMPORTANTE (multi-tenant): NUNCA matar processos pelo diretório pai (ex: /var/www/whatsapp-sessions),
     // pois isso derruba sessões de outros usuários e causa "browserClose".
     // Método 1: Buscar por userDataDir completo
@@ -80,24 +132,24 @@ async function cleanupOrphanBrowser(userDataDir) {
       const allPids = [...new Set([...pids1, ...pids2])];
       
       if (allPids.length > 0) {
-        logger.warn(`⚠️ Encontrados ${allPids.length} processos órfãos para ${sessionName}`);
+        logger.warn(`⚠️ [ps] Encontrados ${allPids.length} processos órfãos para ${sessionName}`);
         for (const pid of allPids) {
           try {
-            logger.info(`💀 Finalizando processo ${pid}...`);
+            logger.info(`💀 [ps] Finalizando processo ${pid}...`);
             await execAsync(`kill -9 ${pid} 2>/dev/null`).catch(() => {});
-            logger.info(`✅ Processo ${pid} finalizado`);
+            logger.info(`✅ [ps] Processo ${pid} finalizado`);
           } catch (killError) {
-            logger.warn(`⚠️ Não foi possível finalizar processo ${pid}: ${killError.message}`);
+            logger.warn(`⚠️ [ps] Não foi possível finalizar processo ${pid}: ${killError.message}`);
           }
         }
       } else {
-        logger.info('✅ Nenhum processo órfão encontrado pelo método ps');
+        logger.info('✅ [ps] Nenhum processo órfão encontrado');
       }
     } catch (psError) {
       logger.warn(`⚠️ Método ps falhou: ${psError.message}`);
     }
     
-    // PASSO 1.5: Usar pkill como método adicional (mais agressivo)
+    // PASSO 4: Usar pkill como método adicional (mais agressivo)
     try {
       // Matar processos pelo userDataDir
       await execAsync(`pkill -9 -f "${userDataDir}" 2>/dev/null`).catch(() => {});
@@ -110,30 +162,45 @@ async function cleanupOrphanBrowser(userDataDir) {
       logger.warn(`⚠️ pkill falhou: ${pkillError.message}`);
     }
 
-    // PASSO 1.8: Confirmar que não sobrou nenhum Chrome/Chromium usando esse userDataDir
+    // PASSO 5: Confirmar que não sobrou nenhum Chrome/Chromium usando esse userDataDir
     // (evita falso-positivo de "pgrep" se auto-encontrando e entrando em loop)
-    for (let i = 0; i < 10; i++) {
-      const { stdout: stillStdout } = await execAsync(
-        `ps aux | grep -iE "chrome|chromium" | grep "${userDataDir}" | grep -v grep || true`
-      ).catch(() => ({ stdout: '' }));
-      const still = (stillStdout || '').trim();
-      if (!still) {
+    for (let i = 0; i < 15; i++) {
+      // Verificar com lsof primeiro (mais preciso)
+      let stillRunning = false;
+      try {
+        const { stdout: lsofCheck } = await execAsync(
+          `lsof +D "${userDataDir}" 2>/dev/null | grep -iE "chrome|chromium" | wc -l`
+        ).catch(() => ({ stdout: '0' }));
+        const lsofCount = parseInt(lsofCheck.trim()) || 0;
+        if (lsofCount > 0) {
+          stillRunning = true;
+        }
+      } catch {}
+      
+      // Verificar com ps também
+      if (!stillRunning) {
+        const { stdout: stillStdout } = await execAsync(
+          `ps aux | grep -iE "chrome|chromium" | grep "${userDataDir}" | grep -v grep || true`
+        ).catch(() => ({ stdout: '' }));
+        const still = (stillStdout || '').trim();
+        if (still) {
+          stillRunning = true;
+        }
+      }
+      
+      if (!stillRunning) {
         logger.info('✅ Nenhum Chrome/Chromium restante usando userDataDir');
         break;
       }
-      logger.warn(`⚠️ Ainda existem Chrome/Chromium usando userDataDir (tentativa ${i + 1}/10). Aguardando...`);
-      await new Promise(resolve => setTimeout(resolve, 800));
+      logger.warn(`⚠️ Ainda existem Chrome/Chromium usando userDataDir (tentativa ${i + 1}/15). Aguardando...`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
     // Aguardar para garantir que processos foram encerrados
-    logger.info('⏳ Aguardando 3 segundos para processos encerrarem...');
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    logger.info('⏳ Aguardando 5 segundos para processos encerrarem completamente...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
     
-    // PASSO 1.6 (REMOVIDO):
-    // Nunca matar processos globalmente (pkill "whatsapp"/"wppconnect"), pois isso derruba
-    // sessões de OUTROS usuários e causa "browserClose" / bot parar de responder.
-
-    // PASSO 2: DELETAR A PASTA INTEIRA E RECRIAR (método mais drástico)
+    // PASSO 6: DELETAR A PASTA INTEIRA E RECRIAR (método mais drástico)
     if (fs.existsSync(userDataDir)) {
       try {
         logger.warn(`🗑️ DELETANDO pasta inteira: ${userDataDir}`);
@@ -151,6 +218,12 @@ async function cleanupOrphanBrowser(userDataDir) {
             logger.info('✅ Pasta deletada com rm -rf');
           } catch (rmRfError) {
             logger.error(`❌ rm -rf também falhou: ${rmRfError.message}`);
+            // Última tentativa: forçar com fuser (se disponível)
+            try {
+              await execAsync(`fuser -k -9 "${userDataDir}" 2>/dev/null`).catch(() => {});
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              await execAsync(`rm -rf "${userDataDir}"`).catch(() => {});
+            } catch {}
           }
         }
         
@@ -170,7 +243,7 @@ async function cleanupOrphanBrowser(userDataDir) {
       fs.mkdirSync(userDataDir, { recursive: true });
     }
     
-    logger.info('✅ Limpeza DRÁSTICA concluída - pasta completamente resetada');
+    logger.info('✅ Limpeza ULTRA AGRESSIVA concluída - pasta completamente resetada');
   } catch (error) {
     logger.error(`❌ Erro ao limpar processos órfãos: ${error.message}`);
   }
@@ -446,53 +519,60 @@ export async function startClient(userId) {
         
         // Se o erro for "browser already running", tentar limpar e tentar novamente uma vez
         if (error.message && (error.message.includes('browser is already running') || error.message.includes('already running'))) {
-          logger.warn(`Browser já está rodando para ${chromeUserDataDir}, tentando limpeza EXTRA AGRESSIVA...`);
+          logger.warn(`🚨 Browser já está rodando para ${chromeUserDataDir}, tentando SOLUÇÃO DEFINITIVA...`);
           
-          // Limpeza EXTRA AGRESSIVA
+          // SOLUÇÃO DEFINITIVA: Usar um userDataDir temporário único com timestamp
+          // Isso força o Puppeteer a criar um novo perfil completamente isolado
+          const timestamp = Date.now();
+          const tempChromeUserDataDir = `${chromeUserDataDir}_temp_${timestamp}`;
+          
+          logger.warn(`🔄 Usando userDataDir temporário único: ${tempChromeUserDataDir}`);
+          
+          // Limpeza EXTRA AGRESSIVA do diretório original
           try {
             // Matar TODOS os processos Chrome relacionados
             await execAsync(`pkill -9 -f "${sessionName}" 2>/dev/null`).catch(() => {});
             await execAsync(`pkill -9 -f "${chromeUserDataDir}" 2>/dev/null`).catch(() => {});
             await execAsync(`pkill -9 -f "whatsapp.*${sessionName}" 2>/dev/null`).catch(() => {});
             
-            // Deletar a pasta inteira e recriar
+            // Usar lsof para encontrar processos usando arquivos
+            try {
+              const { stdout: lsofPids } = await execAsync(
+                `lsof +D "${chromeUserDataDir}" 2>/dev/null | awk '{print $2}' | sort -u | xargs -r kill -9 2>/dev/null`
+              ).catch(() => {});
+            } catch {}
+            
+            // Deletar a pasta inteira
             if (fs.existsSync(chromeUserDataDir)) {
               try {
                 fs.rmSync(chromeUserDataDir, { recursive: true, force: true });
-                logger.info('✅ Pasta deletada durante limpeza extra');
+                logger.info('✅ Pasta original deletada durante limpeza extra');
               } catch (rmError) {
                 await execAsync(`rm -rf "${chromeUserDataDir}" 2>/dev/null`).catch(() => {});
-              }
-              await new Promise(resolve => setTimeout(resolve, 2000));
-              if (!fs.existsSync(chromeUserDataDir)) {
-                fs.mkdirSync(chromeUserDataDir, { recursive: true });
-                logger.info('✅ Pasta recriada durante limpeza extra');
               }
             }
             
             // Aguardar mais tempo
             await new Promise(resolve => setTimeout(resolve, 5000));
             
-            logger.wpp(normalizedUserId, slot, 'Limpeza extra concluída. Tentando criar cliente novamente...');
+            logger.wpp(normalizedUserId, slot, 'Limpeza extra concluída. Criando cliente com userDataDir temporário único...');
           } catch (cleanupError) {
             logger.error(`Erro na limpeza extra: ${cleanupError.message}`);
           }
-          
-          // CRÍTICO: Deletar diretório novamente antes de retry
-          if (fs.existsSync(chromeUserDataDir)) {
-            try {
-              fs.rmSync(chromeUserDataDir, { recursive: true, force: true });
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              fs.mkdirSync(chromeUserDataDir, { recursive: true });
-              logger.info(`[startClient] ✅ Diretório deletado e recriado antes do retry`);
-            } catch (retryDeleteError) {
-              logger.warn(`[startClient] ⚠️ Erro ao deletar diretório no retry: ${retryDeleteError.message}`);
-            }
-          }
 
-          // Tentar criar novamente (apenas uma vez)
+          // Tentar criar novamente com userDataDir temporário único
           try {
-            logger.wpp(normalizedUserId, slot, 'Tentando criar cliente novamente após limpeza extra...');
+            logger.wpp(normalizedUserId, slot, `🔄 Tentando criar cliente com userDataDir temporário: ${tempChromeUserDataDir}`);
+            
+            // Criar diretório temporário
+            if (!fs.existsSync(tempChromeUserDataDir)) {
+              fs.mkdirSync(tempChromeUserDataDir, { recursive: true });
+            }
+            
+            // Puppeteer options com userDataDir temporário
+            const tempPuppeteerOptions = Object.assign({}, puppeteerOptions, {
+              userDataDir: tempChromeUserDataDir
+            });
             
             wppconnect
               .create({
@@ -500,7 +580,7 @@ export async function startClient(userId) {
                 // CRÍTICO: manter tokens no diretório isolado por usuário também no retry
                 folderNameToken: tokenDir,
                 headless: headless,
-                puppeteerOptions: puppeteerOptions,
+                puppeteerOptions: tempPuppeteerOptions,
                 autoClose: 0,
                 logQR: false,
                 disableWelcome: true,
@@ -514,7 +594,7 @@ export async function startClient(userId) {
                 },
               })
               .then(async (client) => {
-                logger.wpp(normalizedUserId, slot, '✅ Cliente WPPConnect criado após limpeza extra.');
+                logger.wpp(normalizedUserId, slot, '✅ Cliente WPPConnect criado com userDataDir temporário.');
                 sessionManager.setClient(normalizedUserId, slot, client);
                 setupMessageListener(client, normalizedUserId, slot);
                 
@@ -531,7 +611,7 @@ export async function startClient(userId) {
                 }
               })
               .catch((retryError) => {
-                logger.error(`❌ Erro ao criar cliente após limpeza extra [${normalizedUserId}:${slot}]:`, retryError);
+                logger.error(`❌ Erro ao criar cliente mesmo com userDataDir temporário [${normalizedUserId}:${slot}]:`, retryError);
                 sessionManager.removeClient(normalizedUserId, slot);
                 WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
                 
