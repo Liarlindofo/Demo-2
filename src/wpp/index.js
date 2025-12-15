@@ -84,35 +84,82 @@ async function safeCleanupUserChrome(userDataDir, userLabel = "") {
       }
     }
 
-    // 2) Matar SOMENTE processos que estão com arquivos abertos nesse userDataDir
-    // (isso garante que não derruba o Chrome de outro usuário)
-    // Obs: se lsof não existir, apenas não mata nada (seguro).
+    // 2) Matar SOMENTE processos Chrome que estão usando este userDataDir específico
+    // Método 1: lsof (mais preciso)
+    let pids = [];
     try {
       const { stdout } = await execAsync(
         `lsof +D "${userDataDir}" 2>/dev/null | awk '{print $2}' | sort -u`
       ).catch(() => ({ stdout: "" }));
 
-      const pids = stdout
+      pids = stdout
         .trim()
         .split("\n")
         .map((x) => x.trim())
         .filter((x) => x && !isNaN(Number(x)));
-
-      if (pids.length > 0) {
-        logger.warn(
-          `⚠️ [safeCleanup] Encontrados ${pids.length} PID(s) usando ${userDataDir}. Finalizando APENAS esses PIDs...`
-        );
-        for (const pid of pids) {
-          await execAsync(`kill -9 ${pid} 2>/dev/null`).catch(() => {});
-        }
-      } else {
-        logger.info(
-          `✅ [safeCleanup] Nenhum PID encontrado usando arquivos em ${userDataDir}`
-        );
-      }
     } catch (err) {
+      logger.warn(`⚠️ [safeCleanup] lsof falhou: ${err.message}`);
+    }
+
+    // Método 2: ps + grep pelo userDataDir (backup, mais agressivo mas ainda específico)
+    if (pids.length === 0) {
+      try {
+        const { stdout } = await execAsync(
+          `ps aux | grep -iE "chrome|chromium" | grep "${userDataDir}" | grep -v grep | awk '{print $2}'`
+        ).catch(() => ({ stdout: "" }));
+
+        const pids2 = stdout
+          .trim()
+          .split("\n")
+          .map((x) => x.trim())
+          .filter((x) => x && !isNaN(Number(x)));
+
+        pids = [...new Set([...pids, ...pids2])];
+      } catch (err) {
+        logger.warn(`⚠️ [safeCleanup] ps+grep falhou: ${err.message}`);
+      }
+    }
+
+    // Matar processos encontrados
+    if (pids.length > 0) {
       logger.warn(
-        `⚠️ [safeCleanup] lsof indisponível/falhou (seguindo sem matar nada): ${err.message}`
+        `⚠️ [safeCleanup] Encontrados ${pids.length} PID(s) usando ${userDataDir}. Finalizando APENAS esses PIDs...`
+      );
+      for (const pid of pids) {
+        try {
+          await execAsync(`kill -9 ${pid} 2>/dev/null`).catch(() => {});
+          logger.info(`💀 [safeCleanup] PID ${pid} finalizado`);
+        } catch (killErr) {
+          logger.warn(`⚠️ [safeCleanup] Erro ao matar PID ${pid}`);
+        }
+      }
+      // Aguardar processos encerrarem completamente
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      
+      // Verificar novamente se ainda há processos
+      try {
+        const { stdout: recheck } = await execAsync(
+          `ps aux | grep -iE "chrome|chromium" | grep "${userDataDir}" | grep -v grep | awk '{print $2}'`
+        ).catch(() => ({ stdout: "" }));
+        
+        const remaining = recheck
+          .trim()
+          .split("\n")
+          .filter((x) => x && !isNaN(Number(x)));
+        
+        if (remaining.length > 0) {
+          logger.warn(`⚠️ [safeCleanup] Ainda há ${remaining.length} processo(s) rodando. Tentando novamente...`);
+          for (const pid of remaining) {
+            await execAsync(`kill -9 ${pid} 2>/dev/null`).catch(() => {});
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      } catch (recheckErr) {
+        // Ignorar erro de recheck
+      }
+    } else {
+      logger.info(
+        `✅ [safeCleanup] Nenhum PID encontrado usando arquivos em ${userDataDir}`
       );
     }
 
@@ -222,6 +269,24 @@ export async function startClient(userId) {
     // ✅ Limpeza segura: remove locks e mata APENAS PIDs que usam esse userDataDir
     // (não derruba Chrome de outro usuário)
     await safeCleanupUserChrome(chromeUserDataDir, normalizedUserId);
+
+    // ✅ Verificação final: garantir que não há processo rodando ANTES de criar cliente
+    try {
+      const { stdout: finalCheck } = await execAsync(
+        `ps aux | grep -iE "chrome|chromium" | grep "${chromeUserDataDir}" | grep -v grep | wc -l`
+      ).catch(() => ({ stdout: "0" }));
+      
+      const stillRunning = parseInt(finalCheck.trim()) || 0;
+      if (stillRunning > 0) {
+        logger.warn(
+          `⚠️ [startClient] Ainda há ${stillRunning} processo(s) Chrome rodando para ${normalizedUserId}. Limpando novamente...`
+        );
+        await safeCleanupUserChrome(chromeUserDataDir, normalizedUserId);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    } catch (checkErr) {
+      logger.warn(`⚠️ [startClient] Erro na verificação final: ${checkErr.message}`);
+    }
 
     // ⚠️ IMPORTANTE:
     // NÃO deletar chromeUserDataDir automaticamente (isso é o que causava conflitos e te fazia matar chrome global).
