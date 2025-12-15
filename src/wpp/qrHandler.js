@@ -85,7 +85,9 @@ export async function onStatusChange(userId, slot, status, client = null) {
     } else if (
       status === 'desconnectedMobile' || 
       status === 'serverClose' || 
-      status === 'deleteToken'
+      status === 'deleteToken' ||
+      status === 'browserClose' ||
+      status === 'autocloseCalled'
     ) {
       logger.warn(`⚠ WhatsApp desconectado [${userId}:${slot}]`);
       await WhatsAppBotModel.setDisconnected(userId, slot);

@@ -113,20 +113,9 @@ async function cleanupOrphanBrowser(userDataDir) {
     logger.info('⏳ Aguardando 3 segundos para processos encerrarem...');
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    // PASSO 1.6: Verificar se ainda há processos e matar TODOS os Chrome se necessário
-    try {
-      const { stdout: checkStdout } = await execAsync(`ps aux | grep -iE "chrome|chromium" | grep -v grep | wc -l`).catch(() => ({ stdout: '0' }));
-      const chromeCount = parseInt(checkStdout.trim()) || 0;
-      
-      if (chromeCount > 10) {
-        logger.warn(`⚠️ Muitos processos Chrome rodando (${chromeCount}). Matando todos os processos Chrome relacionados ao WhatsApp...`);
-        await execAsync(`pkill -9 -f "whatsapp" 2>/dev/null`).catch(() => {});
-        await execAsync(`pkill -9 -f "wppconnect" 2>/dev/null`).catch(() => {});
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    } catch (checkError) {
-      // Ignorar erro de verificação
-    }
+    // PASSO 1.6 (REMOVIDO):
+    // Nunca matar processos globalmente (pkill "whatsapp"/"wppconnect"), pois isso derruba
+    // sessões de OUTROS usuários e causa "browserClose" / bot parar de responder.
 
     // PASSO 2: DELETAR A PASTA INTEIRA E RECRIAR (método mais drástico)
     if (fs.existsSync(userDataDir)) {
