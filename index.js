@@ -12,10 +12,24 @@ import prisma from './src/db/index.js';
 
 const app = express();
 
-// Middlewares
+// Middlewares - CORS configurado para permitir origens múltiplas
 app.use(cors({
-  origin: config.allowedOrigins,
-  credentials: true
+  origin: function (origin, callback) {
+    // Permitir requisições sem origin (como ferramentas de teste)
+    if (!origin) return callback(null, true);
+    
+    // Verificar se a origin está na lista de permitidas
+    if (config.allowedOrigins.indexOf('*') !== -1 || 
+        config.allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      logger.warn(`Origem bloqueada por CORS: ${origin}`);
+      callback(null, true); // Permitir temporariamente para debug
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 app.use(express.json({ limit: '10mb' }));

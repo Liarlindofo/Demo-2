@@ -9,8 +9,10 @@ export default {
   jwtSecret: process.env.JWT_SECRET || 'change-me-in-production',
   allowedOrigins: [
     "https://platefull.com.br",
+    "https://api.platefull.com.br",
     "http://localhost:3000",
-    "http://localhost:3001"
+    "http://localhost:3001",
+    "*" // Permitir todas as origens temporariamente para debug
   ],
   wppConnect: {
     headless: true,
