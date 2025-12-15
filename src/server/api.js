@@ -2,6 +2,9 @@ import { UserModel, WhatsAppBotModel, BotSettingsModel } from '../db/models.js';
 import prisma from '../db/index.js';
 import logger from '../utils/logger.js';
 import { startWhatsappWorker, stopWhatsappWorker } from '../services/pm2.service.js';
+import config from '../../config.js';
+import * as path from 'path';
+import * as fs from 'fs';
 
 /**
  * GET /api/status/:userId
@@ -333,6 +336,9 @@ export async function stopConnection(req, res) {
     const { userId } = req.params;
     // SLOT FIXO: sempre 1
     const slot = 1;
+    const forget =
+      String(req.query?.forget || '').toLowerCase() === '1' ||
+      String(req.query?.forget || '').toLowerCase() === 'true';
 
     // VALIDAÇÃO CRÍTICA
     if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
@@ -356,11 +362,37 @@ export async function stopConnection(req, res) {
     // Além de parar o processo PM2, o banco precisa refletir o estado "desconectado"
     // para que o frontend não veja o usuário como ainda conectado.
     try {
-      await WhatsAppBotModel.setDisconnected(normalizedUserId, slot);
-      logger.info(`[stopConnection] ✅ Bot marcado como desconectado no banco para [${normalizedUserId}:${slot}]`);
+      // Se o usuário está desconectando, geralmente ele quer "esquecer" a sessão.
+      // Isso também evita que ao clicar em "Gerar QR Code" ele reconecte direto.
+      if (forget) {
+        await WhatsAppBotModel.clearSession(normalizedUserId, slot);
+        logger.info(`[stopConnection] ✅ (forget=1) Sessão limpa no banco para [${normalizedUserId}:${slot}]`);
+      } else {
+        await WhatsAppBotModel.setDisconnected(normalizedUserId, slot);
+        logger.info(`[stopConnection] ✅ Bot marcado como desconectado no banco para [${normalizedUserId}:${slot}]`);
+      }
     } catch (dbError) {
       // Não falhar a requisição por erro de banco aqui, apenas logar.
       logger.error(`[stopConnection] Erro ao marcar bot como desconectado para [${normalizedUserId}:${slot}]:`, dbError);
+    }
+
+    // (forget=1) também remove os arquivos de sessão/token no disco
+    // para forçar novo QR na próxima conexão (troca de número).
+    if (forget) {
+      try {
+        const baseSessionsDir =
+          (config.wppConnect && config.wppConnect.sessionsDir) || '/var/www/whatsapp-sessions';
+        const sanitizedUserId = normalizedUserId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const sessionName = `whatsapp_${sanitizedUserId}`;
+        const userSessionDir = path.join(baseSessionsDir, sessionName);
+
+        if (fs.existsSync(userSessionDir)) {
+          logger.warn(`[stopConnection] (forget=1) 🗑️ Deletando diretório de sessão: ${userSessionDir}`);
+          fs.rmSync(userSessionDir, { recursive: true, force: true });
+        }
+      } catch (fsError) {
+        logger.warn(`[stopConnection] (forget=1) ⚠️ Erro ao deletar diretório de sessão: ${fsError.message}`);
+      }
     }
 
     logger.info(`[stopConnection] ✅ Worker parado com sucesso para userId: "${normalizedUserId}"`);

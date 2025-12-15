@@ -605,7 +605,9 @@ export default function ConnectionsPage() {
 
     try {
       // SLOT FIXO = 1 - Removido parâmetro slot da URL
-      const response = await fetch(`${API_URL}/api/stop/${clientId}`, {
+      // forget=1: ao desconectar, também apaga token/sessão no servidor
+      // para permitir conectar outro número (gerar novo QR) sem reconectar direto.
+      const response = await fetch(`${API_URL}/api/stop/${clientId}?forget=1`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

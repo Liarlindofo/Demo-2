@@ -224,7 +224,9 @@ export async function startClient(userId) {
     // Diretório de sessão 100% isolado por usuário
     // Slot é fixo = 1, então nunca há mais de uma sessão por StackUser.
     // NUNCA reutilizar diretórios, NUNCA compartilhar Chrome entre usuários.
-    const userDataDir = `/var/www/whatsapp-sessions/${sessionName}`;
+    const baseSessionsDir =
+      (config.wppConnect && config.wppConnect.sessionsDir) || '/var/www/whatsapp-sessions';
+    const userDataDir = path.join(baseSessionsDir, sessionName);
     
     // LOG DE DEBUG - ISOLAMENTO (CRÍTICO PARA DIAGNÓSTICO)
     console.log('='.repeat(70));
