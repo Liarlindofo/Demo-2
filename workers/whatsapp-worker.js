@@ -51,13 +51,22 @@ try {
   logger.success(`[whatsapp-worker] ✅ startClient() retornou com sucesso para userId: "${userId}"`);
   logger.info(`[whatsapp-worker] 📦 Resultado:`, result);
   logger.success(`[whatsapp-worker] ✅ Cliente iniciado com sucesso para userId: "${userId}"`);
+  
+  // IMPORTANTE: Não sair do processo! O startClient é assíncrono e o WPPConnect
+  // continua rodando em background. O worker deve ficar vivo para manter o processo.
+  // O WPPConnect cria event listeners que mantêm o processo vivo automaticamente.
+  logger.info(`[whatsapp-worker] ✅ Worker mantido vivo. WPPConnect rodando em background.`);
+  
 } catch (error) {
   logger.error(`[whatsapp-worker] ❌ ERRO ao iniciar cliente para userId: "${userId}"`);
   logger.error(`[whatsapp-worker] ❌ Tipo do erro: ${error.constructor.name}`);
   logger.error(`[whatsapp-worker] ❌ Mensagem: ${error.message}`);
   logger.error(`[whatsapp-worker] ❌ Stack trace:`, error.stack);
   logger.error(`[whatsapp-worker] ❌ Erro completo:`, error);
-  process.exit(1);
+  
+  // NÃO matar o processo! Deixa o PM2 gerenciar os restarts.
+  // Se matar com exit(1), o PM2 vai reiniciar infinitamente.
+  logger.warn(`[whatsapp-worker] ⚠️ Erro capturado, mas mantendo processo vivo. PM2 vai gerenciar.`);
 }
 
 

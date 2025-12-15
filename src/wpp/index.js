@@ -85,38 +85,58 @@ async function safeCleanupUserChrome(userDataDir, userLabel = "") {
     }
 
     // 2) Matar SOMENTE processos Chrome que estão usando este userDataDir específico
-    // Método 1: lsof (mais preciso)
+    // Método 1: ps + grep pelo userDataDir (mais confiável que lsof)
     let pids = [];
+    try {
+      const { stdout } = await execAsync(
+        `ps aux | grep -iE "chrome|chromium" | grep "${userDataDir}" | grep -v grep | awk '{print $2}'`
+      ).catch(() => ({ stdout: "" }));
+
+      const pids1 = stdout
+        .trim()
+        .split("\n")
+        .map((x) => x.trim())
+        .filter((x) => x && !isNaN(Number(x)));
+
+      pids = [...pids, ...pids1];
+    } catch (err) {
+      logger.warn(`⚠️ [safeCleanup] ps+grep falhou: ${err.message}`);
+    }
+
+    // Método 2: lsof (backup, mais preciso mas pode não estar instalado)
     try {
       const { stdout } = await execAsync(
         `lsof +D "${userDataDir}" 2>/dev/null | awk '{print $2}' | sort -u`
       ).catch(() => ({ stdout: "" }));
 
-      pids = stdout
+      const pids2 = stdout
         .trim()
         .split("\n")
         .map((x) => x.trim())
         .filter((x) => x && !isNaN(Number(x)));
+
+      pids = [...new Set([...pids, ...pids2])];
     } catch (err) {
-      logger.warn(`⚠️ [safeCleanup] lsof falhou: ${err.message}`);
+      // lsof pode não estar instalado, não é crítico
     }
 
-    // Método 2: ps + grep pelo userDataDir (backup, mais agressivo mas ainda específico)
+    // Método 3: Buscar por nome da sessão (último recurso)
     if (pids.length === 0) {
+      const sessionName = path.basename(userDataDir);
       try {
         const { stdout } = await execAsync(
-          `ps aux | grep -iE "chrome|chromium" | grep "${userDataDir}" | grep -v grep | awk '{print $2}'`
+          `ps aux | grep -iE "chrome|chromium" | grep "${sessionName}" | grep -v grep | awk '{print $2}'`
         ).catch(() => ({ stdout: "" }));
 
-        const pids2 = stdout
+        const pids3 = stdout
           .trim()
           .split("\n")
           .map((x) => x.trim())
           .filter((x) => x && !isNaN(Number(x)));
 
-        pids = [...new Set([...pids, ...pids2])];
+        pids = [...new Set([...pids, ...pids3])];
       } catch (err) {
-        logger.warn(`⚠️ [safeCleanup] ps+grep falhou: ${err.message}`);
+        // Ignorar erro
       }
     }
 
@@ -391,23 +411,84 @@ export async function startClient(userId) {
         );
         logger.error(error.stack || error);
 
-        // Se for "browser already running", limpa de forma SEGURA e encerra:
-        // (o front pode pedir start novamente)
+        // Se for "browser already running", limpa de forma SEGURA e tenta novamente UMA vez
         if (
           error.message &&
           (error.message.includes("browser is already running") ||
             error.message.includes("already running"))
         ) {
           logger.warn(
-            `[startClient] ⚠️ "browser already running" para ESTE usuário. Limpando APENAS seu userDataDir e marcando como desconectado.`
+            `[startClient] ⚠️ "browser already running" para ${normalizedUserId}. Limpando e tentando novamente...`
           );
+          
+          // Limpeza mais agressiva
           await safeCleanupUserChrome(chromeUserDataDir, normalizedUserId);
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          
+          // Verificar novamente se ainda há processo
+          try {
+            const { stdout: finalCheck } = await execAsync(
+              `ps aux | grep -iE "chrome|chromium" | grep "${chromeUserDataDir}" | grep -v grep | wc -l`
+            ).catch(() => ({ stdout: "0" }));
+            
+            const stillRunning = parseInt(finalCheck.trim()) || 0;
+            if (stillRunning > 0) {
+              logger.error(
+                `[startClient] ❌ Ainda há ${stillRunning} processo(s) rodando após limpeza. Não é possível criar cliente.`
+              );
+              sessionManager.removeClient(normalizedUserId, slot);
+              await WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
+              return; // Não tenta novamente, deixa o frontend pedir start de novo
+            }
+          } catch (checkErr) {
+            // Ignorar erro de verificação
+          }
+          
+          // Tentar criar novamente UMA vez
+          logger.info(`[startClient] 🔄 Tentando criar cliente novamente após limpeza...`);
+          try {
+            const retryClient = await wppconnect.create({
+              session: sessionName,
+              folderNameToken: tokenDir,
+              headless,
+              puppeteerOptions,
+              autoClose: 0,
+              logQR: false,
+              disableWelcome: true,
+              updatesLog: false,
+              catchQR: async (base64Qr) => {
+                logger.info(`[startClient] 🎯 catchQR (retry) para userId="${normalizedUserId}"`);
+                await onQRCode(normalizedUserId, slot, base64Qr);
+              },
+              statusFind: async (status) => {
+                logger.info(`[startClient] 📊 statusFind="${status}" (retry) userId="${normalizedUserId}"`);
+                const client = sessionManager.getClient(normalizedUserId, slot);
+                await onStatusChange(normalizedUserId, slot, status, client);
+              },
+            });
+            
+            logger.wpp(normalizedUserId, slot, "✅ Cliente WPPConnect criado após retry!");
+            sessionManager.setClient(normalizedUserId, slot, retryClient);
+            setupMessageListener(retryClient, normalizedUserId, slot);
+            
+            try {
+              const isConnected = await retryClient.isConnected().catch(() => false);
+              if (isConnected) {
+                await onStatusChange(normalizedUserId, slot, "chatsAvailable", retryClient);
+              }
+            } catch (err) {
+              logger.warn(`[startClient] ⚠️ Falha ao checar isConnected (retry): ${err.message}`);
+            }
+          } catch (retryError) {
+            logger.error(`[startClient] ❌ Retry também falhou: ${retryError.message}`);
+            sessionManager.removeClient(normalizedUserId, slot);
+            await WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
+          }
+        } else {
+          // Para outros erros, apenas remove e marca como desconectado
+          sessionManager.removeClient(normalizedUserId, slot);
+          await WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
         }
-
-        sessionManager.removeClient(normalizedUserId, slot);
-        await WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(
-          () => {}
-        );
       });
 
     return {
