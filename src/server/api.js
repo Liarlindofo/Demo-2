@@ -8,6 +8,8 @@ import { startWhatsappWorker, stopWhatsappWorker } from '../services/pm2.service
  * SLOT FIXO = 1 (apenas uma sessão por usuário)
  */
 export async function getStatus(req, res) {
+  let normalizedUserId = null;
+  
   try {
     const { userId } = req.params;
     // SLOT FIXO: sempre 1
@@ -19,37 +21,70 @@ export async function getStatus(req, res) {
       return res.status(400).json({ 
         success: false, 
         message: 'userId inválido',
-        session: null
+        session: null,
+        connection: null
       });
     }
 
-    const normalizedUserId = String(userId).trim();
+    normalizedUserId = String(userId).trim();
 
-    // LOG DETALHADO para rastreamento
-    logger.info(`[getStatus] ==========================================`);
-    logger.info(`[getStatus] Buscando status WhatsApp`);
-    logger.info(`[getStatus] userId original: "${userId}"`);
-    logger.info(`[getStatus] userId normalizado: "${normalizedUserId}"`);
-    logger.info(`[getStatus] ==========================================`);
+    // LOG DETALHADO para rastreamento (reduzido para não poluir logs)
+    logger.info(`[getStatus] Buscando status para userId: "${normalizedUserId}"`);
     
     // Validar que o userId existe na tabela stack_users
-    const stackUser = await prisma.stackUser.findUnique({
-      where: { id: normalizedUserId }
-    });
+    let stackUser;
+    try {
+      stackUser = await prisma.stackUser.findUnique({
+        where: { id: normalizedUserId }
+      });
+    } catch (dbError) {
+      logger.error(`[getStatus] Erro ao buscar usuário no banco:`, dbError);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Erro ao buscar usuário no banco de dados',
+        error: dbError.message,
+        session: null,
+        connection: null
+      });
+    }
     
     if (!stackUser) {
       logger.warn(`[getStatus] Usuário ${normalizedUserId} não encontrado em stack_users`);
-      return res.status(404).json({ 
-        success: false, 
+      // Retornar status vazio ao invés de 404 para não quebrar o frontend
+      return res.json({ 
+        success: true, 
+        userId: normalizedUserId,
         message: `Usuário ${normalizedUserId} não encontrado`,
-        session: null
+        session: {
+          status: 'DISCONNECTED',
+          qrCode: null,
+          isActive: false,
+          isConnected: false,
+          connectedNumber: null,
+          updatedAt: null,
+        },
+        connection: {
+          isConnected: false,
+          connectedNumber: null,
+          qrCode: null,
+          state: 'offline',
+          isActive: false,
+          updatedAt: null,
+        }
       });
     }
     
     logger.info(`[getStatus] ✅ Usuário encontrado: ${stackUser.id} (${stackUser.primaryEmail})`);
     
     // Buscar apenas a sessão do slot 1 - USAR normalizedUserId
-    const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
+    let bot;
+    try {
+      bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
+    } catch (botError) {
+      logger.error(`[getStatus] Erro ao buscar bot no banco:`, botError);
+      // Retornar status vazio ao invés de erro para não quebrar o frontend
+      bot = null;
+    }
 
     // Sem acesso direto ao WPPConnect neste processo,
     // o estado vem exclusivamente do banco (whatsapp_bots)
@@ -68,7 +103,7 @@ export async function getStatus(req, res) {
             ? 'connecting'
             : 'offline',
       isActive,
-      updatedAt: (bot && bot.updatedAt) || null,
+      updatedAt: (bot && bot.updatedAt) ? bot.updatedAt.toISOString() : null,
     };
 
     // Formato simplificado: apenas uma sessão
@@ -85,14 +120,43 @@ export async function getStatus(req, res) {
       isActive: connection.isActive,
       isConnected: connection.isConnected,
       connectedNumber: connection.connectedNumber || null,
-      updatedAt: connection.updatedAt || null,
+      updatedAt: connection.updatedAt,
     };
 
-    res.json({ success: true, userId: normalizedUserId, connection, session });
+    return res.json({ 
+      success: true, 
+      userId: normalizedUserId, 
+      connection, 
+      session 
+    });
 
   } catch (error) {
-    logger.error(`[getStatus] ❌ Erro ao buscar status para userId: ${req.params.userId}:`, error);
-    res.status(500).json({ success: false, message: 'Erro ao buscar status', error: error.message });
+    logger.error(`[getStatus] ❌ Erro inesperado ao buscar status para userId: ${req.params?.userId || 'unknown'}:`, error);
+    logger.error(`[getStatus] Stack trace:`, error.stack);
+    
+    // Sempre retornar uma resposta válida, mesmo em caso de erro
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Erro ao buscar status', 
+      error: error.message || 'Erro desconhecido',
+      userId: normalizedUserId || req.params?.userId || null,
+      session: {
+        status: 'DISCONNECTED',
+        qrCode: null,
+        isActive: false,
+        isConnected: false,
+        connectedNumber: null,
+        updatedAt: null,
+      },
+      connection: {
+        isConnected: false,
+        connectedNumber: null,
+        qrCode: null,
+        state: 'offline',
+        isActive: false,
+        updatedAt: null,
+      }
+    });
   }
 }
 
@@ -120,7 +184,21 @@ export async function getQRCode(req, res) {
 
     logger.info(`[getQRCode] Buscando QR Code para userId: "${normalizedUserId}"`);
 
-    const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
+    let bot;
+    try {
+      bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
+    } catch (dbError) {
+      logger.error(`[getQRCode] Erro ao buscar bot no banco:`, dbError);
+      // Retornar resposta válida mesmo com erro
+      return res.json({
+        success: true,
+        qrCode: null,
+        slot,
+        isConnected: false,
+        updatedAt: null,
+        message: 'Erro ao buscar dados do bot',
+      });
+    }
 
     if (!bot) {
       // Com a nova arquitetura com workers isolados,
@@ -144,25 +222,30 @@ export async function getQRCode(req, res) {
         success: true,
         qrCode: null,
         slot: bot.slot,
-        isConnected: bot.isConnected,
-        updatedAt: bot.updatedAt,
+        isConnected: bot.isConnected || false,
+        updatedAt: bot.updatedAt ? bot.updatedAt.toISOString() : null,
         message: 'Aguardando geração do QR Code'
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       qrCode: bot.qrCode,
       slot: bot.slot,
-      updatedAt: bot.updatedAt,
+      updatedAt: bot.updatedAt ? bot.updatedAt.toISOString() : null,
     });
 
   } catch (error) {
-    logger.error('Erro em getQRCode:', error);
-    res.status(500).json({ 
+    logger.error(`[getQRCode] ❌ Erro inesperado:`, error);
+    logger.error(`[getQRCode] Stack trace:`, error.stack);
+    // Sempre retornar resposta válida
+    return res.status(500).json({ 
       success: false, 
       message: 'Erro ao buscar QR Code', 
-      error: error.message 
+      error: error.message || 'Erro desconhecido',
+      qrCode: null,
+      slot: 1,
+      updatedAt: null
     });
   }
 }

@@ -4,6 +4,15 @@ import * as api from './api.js';
 const router = express.Router();
 
 /**
+ * Wrapper para capturar erros de funções async
+ */
+const asyncHandler = (fn) => {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+};
+
+/**
  * Rotas da API REST
  */
 
@@ -11,18 +20,18 @@ const router = express.Router();
 router.get('/health', api.healthCheck);
 
 // Status de conexões WhatsApp (SLOT FIXO = 1)
-router.get('/status/:userId', api.getStatus);
+router.get('/status/:userId', asyncHandler(api.getStatus));
 
 // QR Code (SLOT FIXO = 1)
-router.get('/qr/:userId', api.getQRCode);
+router.get('/qr/:userId', asyncHandler(api.getQRCode));
 
 // Gerenciar conexões WhatsApp (SLOT FIXO = 1)
-router.post('/start/:userId', api.startConnection);
-router.post('/stop/:userId', api.stopConnection);
+router.post('/start/:userId', asyncHandler(api.startConnection));
+router.post('/stop/:userId', asyncHandler(api.stopConnection));
 
 // Configurações do bot
-router.get('/settings/:userId', api.getSettings);
-router.post('/settings/:userId', api.updateSettings);
+router.get('/settings/:userId', asyncHandler(api.getSettings));
+router.post('/settings/:userId', asyncHandler(api.updateSettings));
 
 export default router;
 
