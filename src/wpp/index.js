@@ -622,7 +622,17 @@ export async function stopClient(userId) {
     }
 
     logger.info(`[stopClient] ✅ Cliente encontrado. Fechando...`);
-    await client.close();
+    // Tentar logout antes de fechar para invalidar sessão no WhatsApp Web
+    // (evita conflitos quando outro usuário tenta conectar e fica "conectando" até falhar)
+    try {
+      if (typeof client.logout === 'function') {
+        await client.logout().catch(() => {});
+      }
+    } catch (logoutError) {
+      logger.warn(`[stopClient] ⚠️ Erro ao fazer logout (seguindo): ${logoutError.message}`);
+    }
+
+    await client.close().catch(() => {});
     sessionManager.removeClient(normalizedUserId, slot);
     sessionManager.clearAllConversations(normalizedUserId, slot);
     await WhatsAppBotModel.setDisconnected(normalizedUserId, slot);

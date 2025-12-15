@@ -271,6 +271,9 @@ export async function startConnection(req, res) {
 
     const normalizedUserId = String(userId).trim();
     const slot = 1; // SLOT FIXO
+    const force =
+      String(req.query?.force || '').toLowerCase() === '1' ||
+      String(req.query?.force || '').toLowerCase() === 'true';
 
     // LOG DETALHADO para rastreamento
     logger.info(`[startConnection] ==========================================`);
@@ -281,18 +284,28 @@ export async function startConnection(req, res) {
     logger.info(`[startConnection] userId length: ${normalizedUserId.length}`);
     logger.info(`[startConnection] ==========================================`);
 
-    // CRÍTICO: Parar worker existente ANTES de iniciar novo
-    // Isso garante que não há sessão sendo reutilizada
-    logger.info(`[startConnection] 🛑 Parando worker existente (se houver) para userId: "${normalizedUserId}"...`);
-    try {
-      await stopWhatsappWorker(normalizedUserId);
-      // Limpar banco de dados também
-      await WhatsAppBotModel.clearSession(normalizedUserId, slot);
-      logger.info(`[startConnection] ✅ Worker anterior parado e banco limpo`);
+    // IMPORTANTE (anti-bug): NÃO parar o worker por padrão.
+    // Se o usuário clicar 2x ou abrir 2 abas, parar/recriar no meio do pareamento
+    // costuma causar "conectando..." e falha ao ler o QR.
+    //
+    // Para "resetar" e forçar novo QR, usar:
+    //   POST /api/start/:userId?force=1
+    if (force) {
+      logger.info(`[startConnection] 🧨 force=1: resetando sessão (parar worker + limpar banco) para userId: "${normalizedUserId}"...`);
+      try {
+        await stopWhatsappWorker(normalizedUserId);
+      } catch (stopError) {
+        logger.warn(`[startConnection] ⚠️ force=1: erro ao parar worker (seguindo): ${stopError.message}`);
+      }
+
+      try {
+        await WhatsAppBotModel.clearSession(normalizedUserId, slot);
+      } catch (dbError) {
+        logger.warn(`[startConnection] ⚠️ force=1: erro ao limpar sessão no banco (seguindo): ${dbError.message}`);
+      }
+
       // Aguardar um pouco para garantir que processos foram encerrados
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    } catch (stopError) {
-      logger.warn(`[startConnection] ⚠️ Erro ao parar worker anterior (continuando mesmo assim): ${stopError.message}`);
+      await new Promise(resolve => setTimeout(resolve, 1500));
     }
 
     const result = await startWhatsappWorker(normalizedUserId);

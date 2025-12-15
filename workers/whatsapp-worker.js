@@ -1,4 +1,4 @@
-import { startClient } from "../src/wpp/index.js";
+import { startClient, stopClient } from "../src/wpp/index.js";
 import logger from "../src/utils/logger.js";
 
 const arg = process.argv.find((a) => a.startsWith("--userId="));
@@ -31,6 +31,19 @@ console.log(`📌 Timestamp: ${new Date().toISOString()}`);
 console.log('='.repeat(60));
 
 logger.info(`[whatsapp-worker] Worker iniciado para userId: "${userId}" (PID: ${process.pid})`);
+
+// Graceful shutdown: quando o PM2 parar/deletar, tentar logout/close antes de sair
+const shutdown = async (signal) => {
+  try {
+    logger.warn(`[whatsapp-worker] ${signal} recebido. Encerrando sessão para userId="${userId}"...`);
+    await stopClient(userId).catch(() => {});
+  } finally {
+    process.exit(0);
+  }
+};
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 try {
   await startClient(userId);

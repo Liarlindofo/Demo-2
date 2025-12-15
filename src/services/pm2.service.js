@@ -56,8 +56,10 @@ export async function stopWhatsappWorker(userId) {
   logger.info(`[stopWhatsappWorker] Parando worker para userId: "${normalizedUserId}" (processo: ${name})`);
 
   try {
+    // Tentar parada graciosa primeiro (permite logout/cleanup via SIGINT/SIGTERM)
+    await execAsync(`pm2 stop "${name}"`).catch(() => {});
     await execAsync(`pm2 delete "${name}"`);
-    logger.success(`[stopWhatsappWorker] ✅ Worker ${name} parado com sucesso`);
+    logger.success(`[stopWhatsappWorker] ✅ Worker ${name} parado/removido com sucesso`);
   } catch (error) {
     // Para o fluxo da API, o stop deve ser SEMPRE idempotente.
     // Se o processo já não existir ou o PM2 retornar erro,
