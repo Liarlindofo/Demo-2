@@ -60,7 +60,9 @@ async function cleanupOrphanBrowser(userDataDir) {
     const sessionName = path.basename(userDataDir);
     logger.info(`📌 Nome da sessão: ${sessionName}`);
     
-    // PASSO 1: Matar TODOS os processos Chrome relacionados a esta sessão
+    // PASSO 1: Matar processos Chrome relacionados APENAS a esta sessão.
+    // IMPORTANTE (multi-tenant): NUNCA matar processos pelo diretório pai (ex: /var/www/whatsapp-sessions),
+    // pois isso derruba sessões de outros usuários e causa "browserClose".
     // Método 1: Buscar por userDataDir completo
     try {
       const { stdout: stdout1 } = await execAsync(`ps aux | grep -i "chrome" | grep "${userDataDir}" | grep -v grep | awk '{print $2}'`).catch(() => ({ stdout: '' }));
@@ -69,14 +71,9 @@ async function cleanupOrphanBrowser(userDataDir) {
       // Método 2: Buscar por nome da sessão
       const { stdout: stdout2 } = await execAsync(`ps aux | grep -i "chrome" | grep "${sessionName}" | grep -v grep | awk '{print $2}'`).catch(() => ({ stdout: '' }));
       const pids2 = stdout2.trim().split('\n').filter(pid => pid && !isNaN(pid));
-      
-      // Método 3: Buscar todos os processos Chrome que usam o diretório de sessões
-      const sessionsDir = path.dirname(userDataDir);
-      const { stdout: stdout3 } = await execAsync(`ps aux | grep -i "chrome" | grep "${sessionsDir}" | grep -v grep | awk '{print $2}'`).catch(() => ({ stdout: '' }));
-      const pids3 = stdout3.trim().split('\n').filter(pid => pid && !isNaN(pid));
-      
-      // Combinar todos os PIDs únicos
-      const allPids = [...new Set([...pids1, ...pids2, ...pids3])];
+
+      // Combinar todos os PIDs únicos (apenas do userDataDir/sessionName)
+      const allPids = [...new Set([...pids1, ...pids2])];
       
       if (allPids.length > 0) {
         logger.warn(`⚠️ Encontrados ${allPids.length} processos órfãos para ${sessionName}`);
