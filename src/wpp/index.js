@@ -110,21 +110,19 @@ async function cleanupOrphanBrowser(userDataDir) {
       logger.warn(`⚠️ pkill falhou: ${pkillError.message}`);
     }
 
-    // PASSO 1.8: Confirmar que não sobrou nenhum processo usando esse userDataDir
-    // (sem isso, o Puppeteer ainda acusa "The browser is already running for ...")
-    try {
-      for (let i = 0; i < 10; i++) {
-        const { stdout: pgrepStdout } = await execAsync(`pgrep -fa "${userDataDir}" || true`).catch(() => ({ stdout: '' }));
-        const still = (pgrepStdout || '').trim();
-        if (!still) {
-          logger.info('✅ Nenhum processo restante usando userDataDir');
-          break;
-        }
-        logger.warn(`⚠️ Ainda existem processos usando userDataDir (tentativa ${i + 1}/10). Aguardando...`);
-        await new Promise(resolve => setTimeout(resolve, 800));
+    // PASSO 1.8: Confirmar que não sobrou nenhum Chrome/Chromium usando esse userDataDir
+    // (evita falso-positivo de "pgrep" se auto-encontrando e entrando em loop)
+    for (let i = 0; i < 10; i++) {
+      const { stdout: stillStdout } = await execAsync(
+        `ps aux | grep -iE "chrome|chromium" | grep "${userDataDir}" | grep -v grep || true`
+      ).catch(() => ({ stdout: '' }));
+      const still = (stillStdout || '').trim();
+      if (!still) {
+        logger.info('✅ Nenhum Chrome/Chromium restante usando userDataDir');
+        break;
       }
-    } catch (pgrepError) {
-      // Se pgrep não existir, seguimos — não é crítico
+      logger.warn(`⚠️ Ainda existem Chrome/Chromium usando userDataDir (tentativa ${i + 1}/10). Aguardando...`);
+      await new Promise(resolve => setTimeout(resolve, 800));
     }
     
     // Aguardar para garantir que processos foram encerrados
