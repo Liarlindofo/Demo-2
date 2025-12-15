@@ -29,7 +29,20 @@ export async function startWhatsappWorker(userId) {
 
 export async function stopWhatsappWorker(userId) {
   const name = processName(userId);
-  await execAsync(`pm2 delete ${name}`);
+
+  try {
+    await execAsync(`pm2 delete ${name}`);
+  } catch (error) {
+    const msg = `${error.stdout || ''} ${error.stderr || ''} ${error.message || ''}`.toLowerCase();
+
+    // Se o processo não existe mais, consideramos como sucesso (idempotente)
+    if (msg.includes('process or namespace') && msg.includes('not found')) {
+      return;
+    }
+
+    // Para outros erros, propagamos
+    throw error;
+  }
 }
 
 
