@@ -64,6 +64,7 @@ async function cleanupOrphanBrowser(userDataDir) {
     // Chrome cria locks que impedem a criação de novas instâncias
     if (fs.existsSync(userDataDir)) {
       try {
+        // Lista completa de possíveis lock files
         const lockFiles = [
           path.join(userDataDir, 'SingletonLock'),
           path.join(userDataDir, 'LockFile'),
@@ -71,8 +72,11 @@ async function cleanupOrphanBrowser(userDataDir) {
           path.join(userDataDir, 'Default', 'SingletonLock'),
           path.join(userDataDir, 'Default', 'LockFile'),
           path.join(userDataDir, 'Default', 'lockfile'),
+          path.join(userDataDir, 'SingletonSocket'),
+          path.join(userDataDir, 'Default', 'SingletonSocket'),
         ];
         
+        // Remover locks conhecidos
         for (const lockFile of lockFiles) {
           try {
             if (fs.existsSync(lockFile)) {
@@ -80,8 +84,28 @@ async function cleanupOrphanBrowser(userDataDir) {
               logger.info(`🔓 Lock file removido: ${lockFile}`);
             }
           } catch (lockError) {
-            // Ignorar erro se arquivo não existe ou está em uso
+            // Tentar com rm -f se unlinkSync falhar
+            try {
+              await execAsync(`rm -f "${lockFile}" 2>/dev/null`).catch(() => {});
+            } catch {}
           }
+        }
+        
+        // Buscar e remover TODOS os arquivos que contenham "lock" ou "singleton" no nome
+        try {
+          const findLockFiles = await execAsync(
+            `find "${userDataDir}" -type f \\( -name "*lock*" -o -name "*singleton*" -o -name "*Lock*" -o -name "*Singleton*" \\) 2>/dev/null`
+          ).catch(() => ({ stdout: '' }));
+          
+          const foundLocks = findLockFiles.stdout.trim().split('\n').filter(f => f);
+          for (const foundLock of foundLocks) {
+            try {
+              await execAsync(`rm -f "${foundLock}" 2>/dev/null`).catch(() => {});
+              logger.info(`🔓 Lock file encontrado e removido: ${foundLock}`);
+            } catch {}
+          }
+        } catch (findError) {
+          // Ignorar erro se find não estiver disponível
         }
       } catch (lockCleanError) {
         logger.warn(`⚠️ Erro ao remover locks: ${lockCleanError.message}`);
@@ -160,6 +184,43 @@ async function cleanupOrphanBrowser(userDataDir) {
       logger.info('✅ Processos finalizados via pkill');
     } catch (pkillError) {
       logger.warn(`⚠️ pkill falhou: ${pkillError.message}`);
+    }
+    
+    // PASSO 4.5: MÉTODO EXTREMO - Matar TODOS os processos Chrome que usam arquivos nesta pasta
+    // Isso é necessário quando processos órfãos não são detectados pelos métodos anteriores
+    try {
+      if (fs.existsSync(userDataDir)) {
+        // Usar fuser para matar processos usando arquivos na pasta
+        await execAsync(`fuser -k -9 "${userDataDir}" 2>/dev/null`).catch(() => {});
+        logger.info('✅ fuser executado para matar processos usando arquivos na pasta');
+        
+        // Aguardar um pouco
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    } catch (fuserError) {
+      logger.warn(`⚠️ fuser não disponível ou falhou: ${fuserError.message}`);
+    }
+    
+    // PASSO 4.6: MÉTODO EXTREMO - Matar TODOS os processos Chrome do sistema (último recurso)
+    // IMPORTANTE: Isso pode afetar outros usuários, mas é necessário quando nada mais funciona
+    try {
+      logger.warn(`🚨 MÉTODO EXTREMO: Matando TODOS os processos Chrome/Chromium do sistema...`);
+      
+      // Matar todos os processos Chrome
+      await execAsync(`pkill -9 -f "chrome" 2>/dev/null`).catch(() => {});
+      await execAsync(`pkill -9 -f "chromium" 2>/dev/null`).catch(() => {});
+      
+      // Matar processos pelo executável
+      await execAsync(`killall -9 chrome 2>/dev/null`).catch(() => {});
+      await execAsync(`killall -9 chromium 2>/dev/null`).catch(() => {});
+      await execAsync(`killall -9 chromium-browser 2>/dev/null`).catch(() => {});
+      
+      logger.warn(`✅ Todos os processos Chrome/Chromium foram finalizados (método extremo)`);
+      
+      // Aguardar mais tempo após método extremo
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    } catch (extremeError) {
+      logger.warn(`⚠️ Método extremo falhou: ${extremeError.message}`);
     }
 
     // PASSO 5: Confirmar que não sobrou nenhum Chrome/Chromium usando esse userDataDir
@@ -429,7 +490,7 @@ export async function startClient(userId) {
     // Aguardar um pouco após limpeza para garantir que os processos foram encerrados
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    // VERIFICAÇÃO PREVENTIVA: Se ainda há processos Chrome rodando, usar userDataDir temporário único
+    // VERIFICAÇÃO PREVENTIVA: Se ainda há processos Chrome rodando, usar userDataDir completamente novo
     // Isso evita o erro "browser already running" antes mesmo de tentar criar o cliente
     let finalChromeUserDataDir = chromeUserDataDir;
     try {
@@ -445,17 +506,44 @@ export async function startClient(userId) {
       ).catch(() => ({ stdout: '0' }));
       const psCount = parseInt(psCheck.trim()) || 0;
       
-      if (lsofCount > 0 || psCount > 0) {
-        logger.warn(`🚨 PREVENÇÃO: Detectados processos Chrome rodando (lsof: ${lsofCount}, ps: ${psCount}). Usando userDataDir temporário único para evitar "browser already running"...`);
+      // Verificar se há lock files
+      let hasLockFiles = false;
+      try {
+        const lockCheck = await execAsync(
+          `find "${chromeUserDataDir}" -type f \\( -name "*lock*" -o -name "*singleton*" -o -name "*Lock*" -o -name "*Singleton*" \\) 2>/dev/null | wc -l`
+        ).catch(() => ({ stdout: '0' }));
+        const lockCount = parseInt(lockCheck.stdout.trim()) || 0;
+        hasLockFiles = lockCount > 0;
+      } catch {}
+      
+      if (lsofCount > 0 || psCount > 0 || hasLockFiles) {
+        logger.warn(`🚨 PREVENÇÃO: Detectados processos Chrome rodando (lsof: ${lsofCount}, ps: ${psCount}) ou lock files (${hasLockFiles}). Usando userDataDir completamente novo para evitar "browser already running"...`);
         
-        // Usar userDataDir temporário único com timestamp
+        // MÉTODO EXTREMO: Matar TODOS os processos Chrome antes de usar novo userDataDir
+        try {
+          logger.warn(`🚨 Matando TODOS os processos Chrome antes de criar novo userDataDir...`);
+          await execAsync(`pkill -9 -f "chrome" 2>/dev/null`).catch(() => {});
+          await execAsync(`pkill -9 -f "chromium" 2>/dev/null`).catch(() => {});
+          await execAsync(`killall -9 chrome chromium chromium-browser 2>/dev/null`).catch(() => {});
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        } catch {}
+        
+        // Usar userDataDir completamente novo com timestamp e random
         const timestamp = Date.now();
-        finalChromeUserDataDir = `${chromeUserDataDir}_temp_${timestamp}`;
+        const random = Math.random().toString(36).substring(7);
+        finalChromeUserDataDir = `${chromeUserDataDir}_new_${timestamp}_${random}`;
         
-        // Criar diretório temporário
+        // Deletar diretório original se existir
+        if (fs.existsSync(chromeUserDataDir)) {
+          try {
+            await execAsync(`rm -rf "${chromeUserDataDir}" 2>/dev/null`).catch(() => {});
+          } catch {}
+        }
+        
+        // Criar diretório completamente novo
         if (!fs.existsSync(finalChromeUserDataDir)) {
           fs.mkdirSync(finalChromeUserDataDir, { recursive: true });
-          logger.info(`✅ userDataDir temporário criado: ${finalChromeUserDataDir}`);
+          logger.info(`✅ userDataDir completamente novo criado: ${finalChromeUserDataDir}`);
         }
       }
     } catch (preventCheckError) {
