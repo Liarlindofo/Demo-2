@@ -494,38 +494,42 @@ export async function startClient(userId) {
           await safeCleanupUserChrome(chromeUserDataDir, normalizedUserId);
           await new Promise((resolve) => setTimeout(resolve, 3000));
           
-          // PASSO 2: DELETAR COMPLETAMENTE o chromeUserDataDir (solução definitiva)
+          // PASSO 2: DELETAR COMPLETAMENTE chromeUserDataDir E tokenDir (reset total)
           try {
+            // Deletar chromeUserDataDir
             if (fs.existsSync(chromeUserDataDir)) {
               logger.warn(
-                `[startClient] 🗑️ DELETANDO completamente: ${chromeUserDataDir}`
+                `[startClient] 🗑️ DELETANDO chromeUserDataDir: ${chromeUserDataDir}`
               );
               
-              // Tentar deletar com fs.rmSync primeiro
               try {
                 fs.rmSync(chromeUserDataDir, { recursive: true, force: true });
-                logger.info(`[startClient] ✅ Pasta deletada com fs.rmSync`);
+                logger.info(`[startClient] ✅ chromeUserDataDir deletado`);
               } catch (rmError) {
-                logger.warn(
-                  `[startClient] ⚠️ fs.rmSync falhou, tentando rm -rf: ${rmError.message}`
-                );
-                // Tentar com comando shell
                 await execAsync(`rm -rf "${chromeUserDataDir}" 2>/dev/null`).catch(() => {});
-                logger.info(`[startClient] ✅ Pasta deletada com rm -rf`);
+                logger.info(`[startClient] ✅ chromeUserDataDir deletado com rm -rf`);
               }
-              
-              // Aguardar para garantir que foi deletado
-              await new Promise((resolve) => setTimeout(resolve, 2000));
             }
             
-            // PASSO 3: Recriar pasta vazia
-            if (!fs.existsSync(chromeUserDataDir)) {
-              fs.mkdirSync(chromeUserDataDir, { recursive: true });
-              logger.info(`[startClient] ✅ Pasta recriada do zero: ${chromeUserDataDir}`);
+            // Deletar tokenDir também (força geração de novo QR)
+            if (fs.existsSync(tokenDir)) {
+              logger.warn(
+                `[startClient] 🗑️ DELETANDO tokenDir (força novo QR): ${tokenDir}`
+              );
+              
+              try {
+                fs.rmSync(tokenDir, { recursive: true, force: true });
+                logger.info(`[startClient] ✅ tokenDir deletado`);
+              } catch (rmError) {
+                await execAsync(`rm -rf "${tokenDir}" 2>/dev/null`).catch(() => {});
+                logger.info(`[startClient] ✅ tokenDir deletado com rm -rf`);
+              }
             }
+            
+            await new Promise((resolve) => setTimeout(resolve, 3000));
           } catch (deleteError) {
             logger.error(
-              `[startClient] ❌ Erro ao deletar/recriar userDataDir: ${deleteError.message}`
+              `[startClient] ❌ Erro ao deletar pastas: ${deleteError.message}`
             );
           }
           
@@ -551,23 +555,47 @@ export async function startClient(userId) {
           }
           
           // PASSO 5: Criar novo userDataDir com timestamp (garantir que é único)
-          const newChromeUserDataDir = `${chromeUserDataDir}_${Date.now().toString(36)}`;
+          const newChromeUserDataDir = `${chromeUserDataDir}_retry_${Date.now().toString(36)}`;
           fs.mkdirSync(newChromeUserDataDir, { recursive: true });
           
-          // Atualizar puppeteerOptions com novo diretório
-          const newPuppeteerOptions = Object.assign({}, basePuppeteerOptions, {
+          // Recriar tokenDir também
+          const newTokenDir = `${tokenDir}_retry_${Date.now().toString(36)}`;
+          fs.mkdirSync(newTokenDir, { recursive: true });
+          
+          // Atualizar puppeteerOptions com novo diretório + flags extras
+          const extraArgs = [
+            '--disable-background-networking',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-breakpad',
+            '--disable-client-side-phishing-detection',
+            '--disable-default-apps',
+            '--disable-hang-monitor',
+            '--disable-popup-blocking',
+            '--disable-prompt-on-repost',
+            '--disable-sync',
+            '--metrics-recording-only',
+            '--no-default-browser-check',
+            '--no-first-run',
+            '--safebrowsing-disable-auto-update',
+            `--user-data-dir=${newChromeUserDataDir}`
+          ];
+          
+          const newPuppeteerOptions = {
+            headless,
+            args: [...(basePuppeteerOptions.args || []), ...extraArgs],
             userDataDir: newChromeUserDataDir,
-          });
+          };
           
           logger.info(
             `[startClient] 🔄 Tentando criar cliente com NOVO userDataDir: ${newChromeUserDataDir}`
           );
           
-          // PASSO 6: Tentar criar novamente com novo userDataDir
+          // PASSO 6: Tentar criar novamente com TUDO NOVO (userDataDir + tokenDir)
           try {
             const retryClient = await wppconnect.create({
-              session: sessionName,
-              folderNameToken: tokenDir, // tokenDir continua o mesmo (para manter sessão WhatsApp)
+              session: `${sessionName}_retry`,
+              folderNameToken: newTokenDir, // Novo tokenDir = força geração de novo QR
               headless,
               puppeteerOptions: newPuppeteerOptions,
               autoClose: 0,
@@ -576,7 +604,7 @@ export async function startClient(userId) {
               updatesLog: false,
               catchQR: async (base64Qr) => {
                 logger.info(
-                  `[startClient] 🎯 catchQR (retry com novo userDataDir) para userId="${normalizedUserId}"`
+                  `[startClient] 🎯 catchQR (retry com tudo novo) para userId="${normalizedUserId}"`
                 );
                 await onQRCode(normalizedUserId, slot, base64Qr);
               },
@@ -652,6 +680,25 @@ export async function stopClient(userId) {
 
     if (!client) {
       logger.warn(`[stopClient] Cliente não encontrado para ${normalizedUserId}`);
+      
+      // Mesmo sem cliente em memória, limpar pastas para garantir próximo start limpo
+      const sanitizedUserId = normalizedUserId.replace(/[^a-zA-Z0-9_-]/g, "_");
+      const sessionName = `whatsapp_${sanitizedUserId}`;
+      const baseSessionsDir =
+        (config.wppConnect && config.wppConnect.sessionsDir) ||
+        "/var/www/whatsapp-sessions";
+      
+      const tokenDir = path.join(baseSessionsDir, sessionName);
+      const chromeBaseDir = path.join(baseSessionsDir, `${sessionName}__chrome`);
+      
+      // Limpar todas as pastas relacionadas a este usuário (incluindo versões com timestamp)
+      try {
+        await execAsync(`rm -rf "${chromeBaseDir}"* 2>/dev/null`).catch(() => {});
+        logger.info(`[stopClient] 🧹 Pastas Chrome limpas para ${normalizedUserId}`);
+      } catch (cleanErr) {
+        // Ignorar erro
+      }
+      
       return { success: false, message: "Cliente não está ativo" };
     }
 
@@ -666,8 +713,28 @@ export async function stopClient(userId) {
     sessionManager.removeClient(normalizedUserId, slot);
     sessionManager.clearAllConversations(normalizedUserId, slot);
     await WhatsAppBotModel.setDisconnected(normalizedUserId, slot);
+    
+    // Limpar pastas Chrome após fechar (preparar para próximo start)
+    const sanitizedUserId = normalizedUserId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const sessionName = `whatsapp_${sanitizedUserId}`;
+    const baseSessionsDir =
+      (config.wppConnect && config.wppConnect.sessionsDir) ||
+      "/var/www/whatsapp-sessions";
+    
+    const chromeBaseDir = path.join(baseSessionsDir, `${sessionName}__chrome`);
+    
+    // Aguardar um pouco para Chrome fechar completamente
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    
+    // Limpar todas as variações de chromeUserDataDir
+    try {
+      await execAsync(`rm -rf "${chromeBaseDir}"* 2>/dev/null`).catch(() => {});
+      logger.info(`[stopClient] 🧹 Pastas Chrome limpas após desconexão`);
+    } catch (cleanErr) {
+      // Ignorar erro
+    }
 
-    logger.info(`[stopClient] ✅ Cliente parado para ${normalizedUserId}`);
+    logger.info(`[stopClient] ✅ Cliente parado e pastas limpas para ${normalizedUserId}`);
     return { success: true, message: "Cliente desconectado com sucesso" };
   } catch (error) {
     logger.error(`Erro ao parar cliente [${normalizedUserId}]:`, error);
