@@ -92,9 +92,17 @@ export async function getQRCode(req, res) {
     const bot = await WhatsAppBotModel.findByUserAndSlot(userId, slot);
 
     if (!bot) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Bot não encontrado' 
+      // Com a nova arquitetura com workers isolados,
+      // é possível que o worker ainda esteja subindo ou que o banco tenha sido limpo.
+      // Neste caso, NÃO devemos retornar erro para o frontend, apenas indicar que
+      // ainda não há QR disponível.
+      return res.json({
+        success: true,
+        qrCode: null,
+        slot,
+        isConnected: false,
+        updatedAt: null,
+        message: 'Bot ainda não iniciado ou aguardando geração do QR Code',
       });
     }
 

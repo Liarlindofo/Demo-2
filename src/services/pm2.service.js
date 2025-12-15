@@ -33,15 +33,10 @@ export async function stopWhatsappWorker(userId) {
   try {
     await execAsync(`pm2 delete ${name}`);
   } catch (error) {
-    const msg = `${error.stdout || ''} ${error.stderr || ''} ${error.message || ''}`.toLowerCase();
-
-    // Se o processo não existe mais, consideramos como sucesso (idempotente)
-    if (msg.includes('process or namespace') && msg.includes('not found')) {
-      return;
-    }
-
-    // Para outros erros, propagamos
-    throw error;
+    // Para o fluxo da API, o stop deve ser SEMPRE idempotente.
+    // Se o processo já não existir ou o PM2 retornar erro,
+    // consideramos como "parado" e não propagamos o erro.
+    return;
   }
 }
 
