@@ -169,10 +169,22 @@ export async function startConnection(req, res) {
 export async function stopConnection(req, res) {
   try {
     const { userId } = req.params;
+    // SLOT FIXO: sempre 1
+    const slot = 1;
 
     logger.info(`[stopConnection] Parando worker WhatsApp para userId: ${userId}`);
 
     await stopWhatsappWorker(userId);
+
+    // Além de parar o processo PM2, o banco precisa refletir o estado "desconectado"
+    // para que o frontend não veja o usuário como ainda conectado.
+    try {
+      await WhatsAppBotModel.setDisconnected(userId, slot);
+      logger.info(`[stopConnection] Bot marcado como desconectado no banco para [${userId}:${slot}]`);
+    } catch (dbError) {
+      // Não falhar a requisição por erro de banco aqui, apenas logar.
+      logger.error(`[stopConnection] Erro ao marcar bot como desconectado para [${userId}:${slot}]:`, dbError);
+    }
 
     res.json({ success: true });
 
