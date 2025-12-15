@@ -501,6 +501,13 @@ export async function startClient(userId) {
       ? config.wppConnect.headless 
       : true;
     
+    logger.info(`[startClient] 🚀 Iniciando wppconnect.create() para userId: "${normalizedUserId}"`);
+    logger.info(`[startClient] 📋 Configuração:`);
+    logger.info(`[startClient]   - session: ${sessionName}`);
+    logger.info(`[startClient]   - folderNameToken: ${tokenDir}`);
+    logger.info(`[startClient]   - userDataDir: ${finalChromeUserDataDir}`);
+    logger.info(`[startClient]   - headless: ${headless}`);
+    
     wppconnect
       .create({
         session: sessionName,
@@ -518,42 +525,59 @@ export async function startClient(userId) {
         updatesLog: false,
 
         catchQR: async (base64Qr) => {
+          logger.info(`[startClient] 🎯 catchQR chamado! QR Code recebido para userId: "${normalizedUserId}"`);
           await onQRCode(normalizedUserId, slot, base64Qr);
         },
 
         statusFind: async (status, session) => {
+          logger.info(`[startClient] 📊 statusFind chamado! Status: "${status}" para userId: "${normalizedUserId}"`);
           // Obtém o client do sessionManager para passar ao onStatusChange
           const client = sessionManager.getClient(normalizedUserId, slot);
           await onStatusChange(normalizedUserId, slot, status, client);
         },
       })
       .then(async (client) => {
-        logger.wpp(normalizedUserId, slot, 'Cliente WPPConnect criado.');
+        logger.wpp(normalizedUserId, slot, '✅ Cliente WPPConnect criado com sucesso!');
+        logger.info(`[startClient] ✅ wppconnect.create() resolveu com sucesso para userId: "${normalizedUserId}"`);
+        logger.info(`[startClient] 📦 Client object type: ${typeof client}`);
+        logger.info(`[startClient] 📦 Client has isConnected: ${typeof client.isConnected === 'function'}`);
+        
         // IMPORTANTE: Usar normalizedUserId para garantir consistência
         sessionManager.setClient(normalizedUserId, slot, client);
+        logger.info(`[startClient] ✅ Cliente salvo no sessionManager para userId: "${normalizedUserId}"`);
         
         // Configurar listener de mensagens (usar normalizedUserId)
         setupMessageListener(client, normalizedUserId, slot);
+        logger.info(`[startClient] ✅ Message listener configurado para userId: "${normalizedUserId}"`);
         
         // Verifica se já está conectado após criar o client.
         // IMPORTANTE: Não use "qrCode no banco" como sinal de validade, porque ao conectar
         // o fluxo normal limpa o qrCode no banco (WhatsAppBotModel.setConnected limpa qrCode).
         try {
+          logger.info(`[startClient] 🔍 Verificando se cliente já está conectado...`);
           const isConnected = await client.isConnected().catch(() => false);
+          logger.info(`[startClient] 🔍 Cliente está conectado? ${isConnected}`);
           if (isConnected) {
             logger.wpp(normalizedUserId, slot, 'Cliente já está conectado, atualizando status...');
             await onStatusChange(normalizedUserId, slot, 'chatsAvailable', client);
+          } else {
+            logger.info(`[startClient] ⏳ Cliente não está conectado ainda. Aguardando QR Code...`);
           }
         } catch (error) {
           // Ignora erro na verificação inicial
-          logger.warn(`[startClient] Erro ao verificar conexão inicial: ${error.message}`);
+          logger.warn(`[startClient] ⚠️ Erro ao verificar conexão inicial: ${error.message}`);
         }
       })
       .catch(async (error) => {
-        logger.error(`Erro ao criar cliente [${normalizedUserId}:${slot}]`, error);
+        logger.error(`❌ ERRO ao criar cliente [${normalizedUserId}:${slot}]`);
+        logger.error(`[startClient] ❌ Tipo do erro: ${error.constructor.name}`);
+        logger.error(`[startClient] ❌ Mensagem do erro: ${error.message}`);
+        logger.error(`[startClient] ❌ Stack trace:`, error.stack);
+        logger.error(`[startClient] ❌ Erro completo:`, error);
         
         // Se o erro for "browser already running", tentar limpar e tentar novamente uma vez
         if (error.message && (error.message.includes('browser is already running') || error.message.includes('already running'))) {
+          logger.warn(`[startClient] 🚨 Erro "browser already running" detectado!`);
           logger.warn(`🚨 Browser já está rodando para ${chromeUserDataDir}, tentando SOLUÇÃO DEFINITIVA...`);
           
           // SOLUÇÃO DEFINITIVA: Usar um userDataDir temporário único com timestamp

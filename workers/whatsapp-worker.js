@@ -46,10 +46,17 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 try {
-  await startClient(userId);
+  logger.info(`[whatsapp-worker] 🚀 Chamando startClient(${userId})...`);
+  const result = await startClient(userId);
+  logger.success(`[whatsapp-worker] ✅ startClient() retornou com sucesso para userId: "${userId}"`);
+  logger.info(`[whatsapp-worker] 📦 Resultado:`, result);
   logger.success(`[whatsapp-worker] ✅ Cliente iniciado com sucesso para userId: "${userId}"`);
 } catch (error) {
-  logger.error(`[whatsapp-worker] ❌ Erro ao iniciar cliente para userId: "${userId}":`, error);
+  logger.error(`[whatsapp-worker] ❌ ERRO ao iniciar cliente para userId: "${userId}"`);
+  logger.error(`[whatsapp-worker] ❌ Tipo do erro: ${error.constructor.name}`);
+  logger.error(`[whatsapp-worker] ❌ Mensagem: ${error.message}`);
+  logger.error(`[whatsapp-worker] ❌ Stack trace:`, error.stack);
+  logger.error(`[whatsapp-worker] ❌ Erro completo:`, error);
   process.exit(1);
 }
 
