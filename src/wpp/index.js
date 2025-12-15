@@ -231,7 +231,11 @@ export async function startClient(userId) {
     // NUNCA reutilizar diretórios, NUNCA compartilhar Chrome entre usuários.
     const baseSessionsDir =
       (config.wppConnect && config.wppConnect.sessionsDir) || '/var/www/whatsapp-sessions';
-    const userDataDir = path.join(baseSessionsDir, sessionName);
+
+    // Separar tokenDir (sessão) do chromeUserDataDir (perfil do navegador).
+    // Isso evita loop "browser already running" por locks do Chrome.
+    const tokenDir = path.join(baseSessionsDir, sessionName);
+    const chromeUserDataDir = path.join(baseSessionsDir, `${sessionName}__chrome`);
     
     // LOG DE DEBUG - ISOLAMENTO (CRÍTICO PARA DIAGNÓSTICO)
     console.log('='.repeat(70));
@@ -244,12 +248,15 @@ export async function startClient(userId) {
     console.log('📌 userId length:', normalizedUserId.length);
     console.log('📌 slot: 1 (FIXO)');
     console.log('📌 sessionName gerado:', sessionName);
-    console.log('📌 userDataDir:', userDataDir);
+    console.log('📌 tokenDir:', tokenDir);
+    console.log('📌 chromeUserDataDir:', chromeUserDataDir);
     console.log('📌 Process ID:', process.pid);
     console.log('📌 Timestamp:', new Date().toISOString());
     console.log('='.repeat(70));
     
-    logger.info(`[startClient] ISOLAMENTO - userId: "${normalizedUserId}" -> sessionName: "${sessionName}" -> userDataDir: "${userDataDir}"`);
+    logger.info(
+      `[startClient] ISOLAMENTO - userId: "${normalizedUserId}" -> sessionName: "${sessionName}" -> tokenDir: "${tokenDir}" -> chromeUserDataDir: "${chromeUserDataDir}"`
+    );
     
     // CRÍTICO: Limpar banco de dados ANTES de iniciar nova sessão
     // Isso garante que não vamos reutilizar dados de uma sessão anterior
@@ -263,12 +270,12 @@ export async function startClient(userId) {
 
     // VERIFICAÇÃO CRÍTICA: Garantir que o diretório de sessão é único para este usuário
     // Se outro usuário estiver usando o mesmo diretório, isso é um BUG CRÍTICO
-    if (fs.existsSync(userDataDir)) {
+    if (fs.existsSync(chromeUserDataDir)) {
       // Verificar se há algum arquivo de lock ou sessão de outro usuário
       try {
-        const lockFiles = fs.readdirSync(userDataDir).filter(f => f.includes('lock') || f.includes('session'));
+        const lockFiles = fs.readdirSync(chromeUserDataDir).filter(f => f.includes('lock') || f.includes('session'));
         if (lockFiles.length > 0) {
-          logger.warn(`[startClient] ⚠️ Diretório ${userDataDir} já existe com arquivos. DELETANDO para forçar novo QR code...`);
+          logger.warn(`[startClient] ⚠️ Diretório ${chromeUserDataDir} já existe com arquivos. DELETANDO para forçar novo QR code...`);
         }
       } catch (err) {
         // Ignorar erro de leitura
@@ -277,39 +284,42 @@ export async function startClient(userId) {
 
     // IMPORTANTE: Limpar processos órfãos AGRESSIVAMENTE
     logger.wpp(normalizedUserId, slot, `🧹 Limpando processos órfãos e locks para userId: "${normalizedUserId}"...`);
-    await cleanupOrphanBrowser(userDataDir);
+    await cleanupOrphanBrowser(chromeUserDataDir);
 
-    // CRÍTICO: DELETAR diretório de sessão ANTES de criar nova sessão
-    // Isso FORÇA o WPPConnect a gerar um novo QR code ao invés de reutilizar sessão salva
-    if (fs.existsSync(userDataDir)) {
-      logger.warn(`[startClient] 🗑️ DELETANDO diretório de sessão ${userDataDir} para forçar novo QR code...`);
+    // CRÍTICO: DELETAR diretórios ANTES de criar nova sessão
+    // - tokenDir: força novo QR (sessão)
+    // - chromeUserDataDir: remove locks do Chrome
+    if (fs.existsSync(tokenDir)) {
+      logger.warn(`[startClient] 🗑️ DELETANDO tokenDir ${tokenDir} para forçar novo QR code...`);
       try {
-        fs.rmSync(userDataDir, { recursive: true, force: true });
-        logger.info(`[startClient] ✅ Diretório ${userDataDir} deletado com sucesso`);
-        // Aguardar um pouco para garantir que o sistema de arquivos processou a deleção
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        fs.rmSync(tokenDir, { recursive: true, force: true });
+        await new Promise(resolve => setTimeout(resolve, 500));
       } catch (deleteError) {
-        logger.error(`[startClient] ❌ Erro ao deletar diretório ${userDataDir}: ${deleteError.message}`);
-        // Tentar com comando do sistema
-        try {
-          await execAsync(`rm -rf "${userDataDir}" 2>/dev/null`);
-          logger.info(`[startClient] ✅ Diretório deletado via rm -rf`);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch (rmError) {
-          logger.error(`[startClient] ❌ Erro ao deletar via rm -rf: ${rmError.message}`);
-          // Continuar mesmo assim, mas avisar
-          logger.warn(`[startClient] ⚠️ Continuando mesmo com diretório existente. Pode reutilizar sessão antiga!`);
-        }
+        logger.warn(`[startClient] ⚠️ Erro ao deletar tokenDir (seguindo): ${deleteError.message}`);
       }
     }
 
-    // Recriar diretório vazio para nova sessão
-    if (!fs.existsSync(userDataDir)) {
-      fs.mkdirSync(userDataDir, { recursive: true });
-      logger.info(`[startClient] ✅ Diretório ${userDataDir} recriado (vazio) para nova sessão`);
+    if (fs.existsSync(chromeUserDataDir)) {
+      logger.warn(`[startClient] 🗑️ DELETANDO chromeUserDataDir ${chromeUserDataDir} para evitar lock do Chrome...`);
+      try {
+        fs.rmSync(chromeUserDataDir, { recursive: true, force: true });
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (deleteError) {
+        logger.warn(`[startClient] ⚠️ Erro ao deletar chromeUserDataDir (seguindo): ${deleteError.message}`);
+      }
+    }
+
+    // Recriar diretórios vazios
+    if (!fs.existsSync(tokenDir)) {
+      fs.mkdirSync(tokenDir, { recursive: true });
+      logger.info(`[startClient] ✅ tokenDir recriado (vazio) para nova sessão: ${tokenDir}`);
+    }
+    if (!fs.existsSync(chromeUserDataDir)) {
+      fs.mkdirSync(chromeUserDataDir, { recursive: true });
+      logger.info(`[startClient] ✅ chromeUserDataDir recriado (vazio) para nova sessão: ${chromeUserDataDir}`);
     }
     
-    // Verificar se ainda há processos rodando ANTES de tentar criar o cliente
+    // Verificar se ainda há processos rodando ANTES de tentar criar o cliente (só para este userDataDir)
     try {
       const { stdout: checkStdout } = await execAsync(`ps aux | grep -iE "chrome|chromium" | grep "${sessionName}" | grep -v grep | wc -l`).catch(() => ({ stdout: '0' }));
       const stillRunning = parseInt(checkStdout.trim()) || 0;
@@ -320,7 +330,7 @@ export async function startClient(userId) {
         // Limpeza adicional mais agressiva
         try {
           await execAsync(`pkill -9 -f "${sessionName}" 2>/dev/null`).catch(() => {});
-          await execAsync(`pkill -9 -f "${userDataDir}" 2>/dev/null`).catch(() => {});
+          await execAsync(`pkill -9 -f "${chromeUserDataDir}" 2>/dev/null`).catch(() => {});
           await new Promise(resolve => setTimeout(resolve, 3000));
           
           // Verificar novamente
@@ -349,7 +359,7 @@ export async function startClient(userId) {
     // Prepara opções do Puppeteer com userDataDir
     const basePuppeteerOptions = (config.wppConnect && config.wppConnect.puppeteerOptions) || {};
     const puppeteerOptions = Object.assign({}, basePuppeteerOptions, {
-      userDataDir: userDataDir
+      userDataDir: chromeUserDataDir
     });
 
     // Garante que o bot existe no banco antes de iniciar
@@ -389,7 +399,7 @@ export async function startClient(userId) {
         // CRÍTICO: garantir que o token/sessão do WhatsApp seja salvo no diretório isolado por usuário.
         // Sem isso, o WPPConnect pode reutilizar tokens em uma pasta padrão e "conectar direto"
         // mesmo após deletarmos o userDataDir.
-        folderNameToken: userDataDir,
+        folderNameToken: tokenDir,
         headless: headless,
         puppeteerOptions: puppeteerOptions,
         // Não fechar automaticamente a sessão enquanto aguarda leitura do QR
@@ -436,26 +446,26 @@ export async function startClient(userId) {
         
         // Se o erro for "browser already running", tentar limpar e tentar novamente uma vez
         if (error.message && (error.message.includes('browser is already running') || error.message.includes('already running'))) {
-          logger.warn(`Browser já está rodando para ${userDataDir}, tentando limpeza EXTRA AGRESSIVA...`);
+          logger.warn(`Browser já está rodando para ${chromeUserDataDir}, tentando limpeza EXTRA AGRESSIVA...`);
           
           // Limpeza EXTRA AGRESSIVA
           try {
             // Matar TODOS os processos Chrome relacionados
             await execAsync(`pkill -9 -f "${sessionName}" 2>/dev/null`).catch(() => {});
-            await execAsync(`pkill -9 -f "${userDataDir}" 2>/dev/null`).catch(() => {});
+            await execAsync(`pkill -9 -f "${chromeUserDataDir}" 2>/dev/null`).catch(() => {});
             await execAsync(`pkill -9 -f "whatsapp.*${sessionName}" 2>/dev/null`).catch(() => {});
             
             // Deletar a pasta inteira e recriar
-            if (fs.existsSync(userDataDir)) {
+            if (fs.existsSync(chromeUserDataDir)) {
               try {
-                fs.rmSync(userDataDir, { recursive: true, force: true });
+                fs.rmSync(chromeUserDataDir, { recursive: true, force: true });
                 logger.info('✅ Pasta deletada durante limpeza extra');
               } catch (rmError) {
-                await execAsync(`rm -rf "${userDataDir}" 2>/dev/null`).catch(() => {});
+                await execAsync(`rm -rf "${chromeUserDataDir}" 2>/dev/null`).catch(() => {});
               }
               await new Promise(resolve => setTimeout(resolve, 2000));
-              if (!fs.existsSync(userDataDir)) {
-                fs.mkdirSync(userDataDir, { recursive: true });
+              if (!fs.existsSync(chromeUserDataDir)) {
+                fs.mkdirSync(chromeUserDataDir, { recursive: true });
                 logger.info('✅ Pasta recriada durante limpeza extra');
               }
             }
@@ -469,11 +479,11 @@ export async function startClient(userId) {
           }
           
           // CRÍTICO: Deletar diretório novamente antes de retry
-          if (fs.existsSync(userDataDir)) {
+          if (fs.existsSync(chromeUserDataDir)) {
             try {
-              fs.rmSync(userDataDir, { recursive: true, force: true });
+              fs.rmSync(chromeUserDataDir, { recursive: true, force: true });
               await new Promise(resolve => setTimeout(resolve, 1000));
-              fs.mkdirSync(userDataDir, { recursive: true });
+              fs.mkdirSync(chromeUserDataDir, { recursive: true });
               logger.info(`[startClient] ✅ Diretório deletado e recriado antes do retry`);
             } catch (retryDeleteError) {
               logger.warn(`[startClient] ⚠️ Erro ao deletar diretório no retry: ${retryDeleteError.message}`);
@@ -488,7 +498,7 @@ export async function startClient(userId) {
               .create({
                 session: sessionName,
                 // CRÍTICO: manter tokens no diretório isolado por usuário também no retry
-                folderNameToken: userDataDir,
+                folderNameToken: tokenDir,
                 headless: headless,
                 puppeteerOptions: puppeteerOptions,
                 autoClose: 0,
