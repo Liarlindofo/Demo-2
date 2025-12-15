@@ -194,12 +194,14 @@ export async function startClient(userId) {
     logger.wpp(normalizedUserId, slot, 'Iniciando cliente WPPConnect (não bloqueante)...');
 
     // ❌ BLOQUEAR: Este usuário já possui uma sessão WhatsApp ativa
+    // IMPORTANTE: Verificar usando normalizedUserId para garantir consistência
     if (sessionManager.hasClient(normalizedUserId, slot)) {
-      logger.warn(`[startClient] ⚠️ Usuário ${normalizedUserId} já possui uma sessão WhatsApp ativa`);
+      logger.warn(`[startClient] ⚠️ Usuário ${normalizedUserId} já possui uma sessão WhatsApp ativa em memória`);
       
-      // Verificar se está realmente conectado
+      // Verificar se está realmente conectado no banco
       const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
       if (bot && bot.qrCode) {
+        logger.info(`[startClient] ✅ Sessão já existe com QR Code para userId: "${normalizedUserId}"`);
         return { 
           success: true, 
           message: 'Cliente já está ativo com QR Code',
@@ -208,34 +210,56 @@ export async function startClient(userId) {
         };
       }
       
-      return { 
-        success: false, 
-        message: 'Este usuário já possui uma sessão WhatsApp ativa. Desconecte antes de criar uma nova.' 
-      };
+      logger.warn(`[startClient] ⚠️ Sessão em memória mas sem QR Code no banco. Removendo sessão em memória...`);
+      // Remover sessão em memória se não há QR Code no banco (pode ser sessão órfã)
+      sessionManager.removeClient(normalizedUserId, slot);
+      // Continuar para criar nova sessão
     }
     
     // ISOLAMENTO TOTAL: Gerar sessionName único por usuário (SEM slot no nome)
-    const sessionName = `whatsapp_${normalizedUserId}`;
+    // IMPORTANTE: Sanitizar userId para evitar problemas com caracteres especiais no nome do arquivo
+    const sanitizedUserId = normalizedUserId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const sessionName = `whatsapp_${sanitizedUserId}`;
     
     // Diretório de sessão 100% isolado por usuário
     // Slot é fixo = 1, então nunca há mais de uma sessão por StackUser.
     // NUNCA reutilizar diretórios, NUNCA compartilhar Chrome entre usuários.
     const userDataDir = `/var/www/whatsapp-sessions/${sessionName}`;
     
-    // LOG DE DEBUG - ISOLAMENTO
-    console.log('=== 🔍 DEBUG ISOLAMENTO SESSÃO ===');
-    console.log('📌 userId recebido:', userId);
-    console.log('📌 userId normalizado:', normalizedUserId);
+    // LOG DE DEBUG - ISOLAMENTO (CRÍTICO PARA DIAGNÓSTICO)
+    console.log('='.repeat(70));
+    console.log('🔍 DEBUG ISOLAMENTO SESSÃO - CRÍTICO');
+    console.log('='.repeat(70));
+    console.log('📌 userId recebido (original):', JSON.stringify(userId));
+    console.log('📌 userId normalizado:', JSON.stringify(normalizedUserId));
+    console.log('📌 userId sanitizado (para arquivo):', JSON.stringify(sanitizedUserId));
     console.log('📌 userId type:', typeof normalizedUserId);
     console.log('📌 userId length:', normalizedUserId.length);
     console.log('📌 slot: 1 (FIXO)');
     console.log('📌 sessionName gerado:', sessionName);
     console.log('📌 userDataDir:', userDataDir);
+    console.log('📌 Process ID:', process.pid);
     console.log('📌 Timestamp:', new Date().toISOString());
-    console.log('==================================');
+    console.log('='.repeat(70));
     
+    logger.info(`[startClient] ISOLAMENTO - userId: "${normalizedUserId}" -> sessionName: "${sessionName}" -> userDataDir: "${userDataDir}"`);
+    
+    // VERIFICAÇÃO CRÍTICA: Garantir que o diretório de sessão é único para este usuário
+    // Se outro usuário estiver usando o mesmo diretório, isso é um BUG CRÍTICO
+    if (fs.existsSync(userDataDir)) {
+      // Verificar se há algum arquivo de lock ou sessão de outro usuário
+      try {
+        const lockFiles = fs.readdirSync(userDataDir).filter(f => f.includes('lock') || f.includes('session'));
+        if (lockFiles.length > 0) {
+          logger.warn(`[startClient] ⚠️ Diretório ${userDataDir} já existe com arquivos. Isso é normal se for a primeira vez após limpeza.`);
+        }
+      } catch (err) {
+        // Ignorar erro de leitura
+      }
+    }
+
     // IMPORTANTE: Limpar processos órfãos AGRESSIVAMENTE
-    logger.wpp(userId, slot, '🧹 Limpando processos órfãos e locks...');
+    logger.wpp(normalizedUserId, slot, `🧹 Limpando processos órfãos e locks para userId: "${normalizedUserId}"...`);
     await cleanupOrphanBrowser(userDataDir);
     
     // Verificar se ainda há processos rodando ANTES de tentar criar o cliente
