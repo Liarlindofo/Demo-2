@@ -345,11 +345,39 @@ export async function startClient(userId) {
 
         setupMessageListener(client, normalizedUserId, slot);
 
-        // Atualiza status inicial se já conectado
+        // Verificar status inicial e forçar QR se necessário
         try {
           const isConnected = await client.isConnected().catch(() => false);
+          logger.info(
+            `[startClient] 📊 Status inicial do cliente: isConnected=${isConnected}`
+          );
+          
           if (isConnected) {
+            logger.warn(
+              `[startClient] ⚠️ Cliente já está conectado! Isso pode impedir a geração de QR.`
+            );
             await onStatusChange(normalizedUserId, slot, "chatsAvailable", client);
+          } else {
+            logger.info(
+              `[startClient] ✅ Cliente não está conectado. Aguardando QR Code...`
+            );
+            
+            // Se após 10 segundos não gerou QR, verificar novamente
+            setTimeout(async () => {
+              const bot = await WhatsAppBotModel.findByUserAndSlot(
+                normalizedUserId,
+                slot
+              ).catch(() => null);
+              
+              if (!bot?.qrCode && !bot?.isConnected) {
+                logger.warn(
+                  `[startClient] ⚠️ QR Code não foi gerado após 10 segundos para ${normalizedUserId}`
+                );
+                logger.warn(
+                  `[startClient] ⚠️ Verifique os logs do WPPConnect para erros`
+                );
+              }
+            }, 10000);
           }
         } catch (err) {
           logger.warn(
