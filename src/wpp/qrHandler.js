@@ -11,14 +11,18 @@ import sessionManager from './sessionManager.js';
  */
 export async function onQRCode(userId, slot, qrCode) {
   try {
-    logger.wpp(userId, slot, 'QR Code gerado');
+    logger.wpp(userId, slot, '🎯 QR Code gerado pelo WPPConnect!');
+    logger.info(`[onQRCode] QR Code recebido para userId: "${userId}", slot: ${slot}`);
+    logger.info(`[onQRCode] QR Code length: ${qrCode ? qrCode.length : 0} caracteres`);
     
     // Salva QR Code no banco (base64)
     await WhatsAppBotModel.saveQrCode(userId, slot, qrCode);
     
-    logger.wpp(userId, slot, 'QR Code salvo no banco');
+    logger.wpp(userId, slot, '✅ QR Code salvo no banco de dados');
+    logger.success(`[onQRCode] ✅ QR Code salvo com sucesso para userId: "${userId}", slot: ${slot}`);
   } catch (error) {
-    logger.error(`Erro ao salvar QR Code [${userId}:${slot}]:`, error);
+    logger.error(`❌ Erro ao salvar QR Code [${userId}:${slot}]:`, error);
+    logger.error(`[onQRCode] Stack trace:`, error.stack);
   }
 }
 

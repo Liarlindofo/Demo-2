@@ -429,11 +429,46 @@ export async function startClient(userId) {
     // Aguardar um pouco após limpeza para garantir que os processos foram encerrados
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    // Prepara opções do Puppeteer com userDataDir
+    // VERIFICAÇÃO PREVENTIVA: Se ainda há processos Chrome rodando, usar userDataDir temporário único
+    // Isso evita o erro "browser already running" antes mesmo de tentar criar o cliente
+    let finalChromeUserDataDir = chromeUserDataDir;
+    try {
+      // Verificar com lsof (mais preciso)
+      const { stdout: lsofCheck } = await execAsync(
+        `lsof +D "${chromeUserDataDir}" 2>/dev/null | grep -iE "chrome|chromium" | wc -l`
+      ).catch(() => ({ stdout: '0' }));
+      const lsofCount = parseInt(lsofCheck.trim()) || 0;
+      
+      // Verificar com ps também
+      const { stdout: psCheck } = await execAsync(
+        `ps aux | grep -iE "chrome|chromium" | grep "${sessionName}" | grep -v grep | wc -l`
+      ).catch(() => ({ stdout: '0' }));
+      const psCount = parseInt(psCheck.trim()) || 0;
+      
+      if (lsofCount > 0 || psCount > 0) {
+        logger.warn(`🚨 PREVENÇÃO: Detectados processos Chrome rodando (lsof: ${lsofCount}, ps: ${psCount}). Usando userDataDir temporário único para evitar "browser already running"...`);
+        
+        // Usar userDataDir temporário único com timestamp
+        const timestamp = Date.now();
+        finalChromeUserDataDir = `${chromeUserDataDir}_temp_${timestamp}`;
+        
+        // Criar diretório temporário
+        if (!fs.existsSync(finalChromeUserDataDir)) {
+          fs.mkdirSync(finalChromeUserDataDir, { recursive: true });
+          logger.info(`✅ userDataDir temporário criado: ${finalChromeUserDataDir}`);
+        }
+      }
+    } catch (preventCheckError) {
+      logger.warn(`⚠️ Erro na verificação preventiva (seguindo com userDataDir original): ${preventCheckError.message}`);
+    }
+    
+    // Prepara opções do Puppeteer com userDataDir (original ou temporário)
     const basePuppeteerOptions = (config.wppConnect && config.wppConnect.puppeteerOptions) || {};
     const puppeteerOptions = Object.assign({}, basePuppeteerOptions, {
-      userDataDir: chromeUserDataDir
+      userDataDir: finalChromeUserDataDir
     });
+    
+    logger.info(`[startClient] 📌 Usando userDataDir: ${finalChromeUserDataDir}`);
 
     // Garante que o bot existe no banco antes de iniciar
     try {
