@@ -60,7 +60,7 @@ async function safeCleanupUserChrome(userDataDir, userLabel = "") {
       `🧹 [safeCleanup] Iniciando limpeza segura para ${userLabel} -> ${userDataDir}`
     );
 
-    // 1) Remover lock files conhecidos (isso não derruba outros usuários)
+    // 1) PRIMEIRO: Remover TODOS os lock files conhecidos (isso é crítico!)
     const lockFiles = [
       path.join(userDataDir, "SingletonLock"),
       path.join(userDataDir, "LockFile"),
@@ -70,18 +70,28 @@ async function safeCleanupUserChrome(userDataDir, userLabel = "") {
       path.join(userDataDir, "Default", "LockFile"),
       path.join(userDataDir, "Default", "lockfile"),
       path.join(userDataDir, "Default", "SingletonSocket"),
+      path.join(userDataDir, "Default", "SingletonCookie"),
     ];
 
     for (const lf of lockFiles) {
       try {
         if (fs.existsSync(lf)) {
           fs.unlinkSync(lf);
-          logger.info(`🔓 [safeCleanup] Lock removido: ${lf}`);
+          logger.info(`🔓 [safeCleanup] Lock removido: ${path.basename(lf)}`);
         }
       } catch {
         // best effort
         await execAsync(`rm -f "${lf}" 2>/dev/null`).catch(() => {});
       }
+    }
+    
+    // Remover também locks na raiz do userDataDir (recursivo)
+    try {
+      await execAsync(`find "${userDataDir}" -name "Singleton*" -type f -delete 2>/dev/null`).catch(() => {});
+      await execAsync(`find "${userDataDir}" -name "LockFile" -type f -delete 2>/dev/null`).catch(() => {});
+      await execAsync(`find "${userDataDir}" -name "lockfile" -type f -delete 2>/dev/null`).catch(() => {});
+    } catch (err) {
+      // Ignorar erros de find
     }
 
     // 2) Matar SOMENTE processos Chrome que estão usando este userDataDir específico
@@ -140,6 +150,23 @@ async function safeCleanupUserChrome(userDataDir, userLabel = "") {
       }
     }
 
+    // Método 4: fuser (mais confiável que lsof, se disponível)
+    try {
+      const { stdout: fuserOut } = await execAsync(
+        `fuser "${userDataDir}" 2>/dev/null | awk '{print $1}'`
+      ).catch(() => ({ stdout: "" }));
+      
+      const fuserPids = fuserOut
+        .trim()
+        .split(/\s+/)
+        .map((x) => x.trim())
+        .filter((x) => x && !isNaN(Number(x)));
+      
+      pids = [...new Set([...pids, ...fuserPids])];
+    } catch (err) {
+      // fuser pode não estar instalado, não é crítico
+    }
+
     // Matar processos encontrados
     if (pids.length > 0) {
       logger.warn(
@@ -154,7 +181,7 @@ async function safeCleanupUserChrome(userDataDir, userLabel = "") {
         }
       }
       // Aguardar processos encerrarem completamente
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 5000));
       
       // Verificar novamente se ainda há processos
       try {
@@ -172,7 +199,7 @@ async function safeCleanupUserChrome(userDataDir, userLabel = "") {
           for (const pid of remaining) {
             await execAsync(`kill -9 ${pid} 2>/dev/null`).catch(() => {});
           }
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          await new Promise((resolve) => setTimeout(resolve, 3000));
         }
       } catch (recheckErr) {
         // Ignorar erro de recheck
@@ -181,6 +208,26 @@ async function safeCleanupUserChrome(userDataDir, userLabel = "") {
       logger.info(
         `✅ [safeCleanup] Nenhum PID encontrado usando arquivos em ${userDataDir}`
       );
+    }
+    
+    // ÚLTIMO RECURSO: Se ainda houver lock files após tudo isso, deletar a pasta Default inteira
+    // (isso força o Chrome a criar um novo perfil)
+    const defaultDir = path.join(userDataDir, "Default");
+    if (fs.existsSync(defaultDir)) {
+      try {
+        const { stdout: stillLocked } = await execAsync(
+          `find "${defaultDir}" -name "Singleton*" -o -name "LockFile" 2>/dev/null | head -1`
+        ).catch(() => ({ stdout: "" }));
+        
+        if (stillLocked.trim()) {
+          logger.warn(`⚠️ [safeCleanup] Ainda há locks após limpeza. Deletando pasta Default...`);
+          await execAsync(`rm -rf "${defaultDir}" 2>/dev/null`).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          logger.info(`✅ [safeCleanup] Pasta Default deletada e será recriada pelo Chrome`);
+        }
+      } catch (err) {
+        // Ignorar erro
+      }
     }
 
     logger.info(`✅ [safeCleanup] Limpeza segura concluída`);
@@ -302,7 +349,24 @@ export async function startClient(userId) {
           `⚠️ [startClient] Ainda há ${stillRunning} processo(s) Chrome rodando para ${normalizedUserId}. Limpando novamente...`
         );
         await safeCleanupUserChrome(chromeUserDataDir, normalizedUserId);
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
+      
+      // Verificar também se há locks restantes
+      const defaultDir = path.join(chromeUserDataDir, "Default");
+      if (fs.existsSync(defaultDir)) {
+        const { stdout: locks } = await execAsync(
+          `find "${defaultDir}" -name "Singleton*" -o -name "LockFile" 2>/dev/null | wc -l`
+        ).catch(() => ({ stdout: "0" }));
+        
+        const lockCount = parseInt(locks.trim()) || 0;
+        if (lockCount > 0) {
+          logger.warn(
+            `⚠️ [startClient] Ainda há ${lockCount} lock file(s). Removendo...`
+          );
+          await execAsync(`find "${defaultDir}" -name "Singleton*" -o -name "LockFile" -type f -delete 2>/dev/null`).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
       }
     } catch (checkErr) {
       logger.warn(`⚠️ [startClient] Erro na verificação final: ${checkErr.message}`);
@@ -423,7 +487,9 @@ export async function startClient(userId) {
           
           // Limpeza mais agressiva
           await safeCleanupUserChrome(chromeUserDataDir, normalizedUserId);
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+          
+          // Aguardar mais tempo para garantir que tudo foi limpo
+          await new Promise((resolve) => setTimeout(resolve, 8000));
           
           // Verificar novamente se ainda há processo
           try {
