@@ -406,47 +406,14 @@ export async function startClient(userId) {
         // Configurar listener de mensagens (usar normalizedUserId)
         setupMessageListener(client, normalizedUserId, slot);
         
-        // CRÍTICO: Verificar se já está conectado após criar o client
-        // Se estiver conectado SEM ter gerado QR code, isso indica que reutilizou sessão antiga
-        // Neste caso, devemos FORÇAR desconexão e gerar novo QR
+        // Verifica se já está conectado após criar o client.
+        // IMPORTANTE: Não use "qrCode no banco" como sinal de validade, porque ao conectar
+        // o fluxo normal limpa o qrCode no banco (WhatsAppBotModel.setConnected limpa qrCode).
         try {
           const isConnected = await client.isConnected().catch(() => false);
           if (isConnected) {
-            // Verificar se há QR code no banco (se não há, significa que conectou sem QR = sessão reutilizada)
-            const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
-            
-            if (!bot || !bot.qrCode) {
-              logger.warn(`[startClient] ⚠️ Cliente conectado SEM QR code no banco! Isso indica sessão reutilizada.`);
-              logger.warn(`[startClient] ⚠️ Forçando desconexão e limpeza para gerar novo QR code...`);
-              
-              // Forçar logout e limpeza
-              try {
-                await client.logout().catch(() => {});
-                await client.close().catch(() => {});
-              } catch (logoutError) {
-                logger.warn(`[startClient] Erro ao fazer logout: ${logoutError.message}`);
-              }
-              
-              // Limpar banco e diretório novamente
-              await WhatsAppBotModel.clearSession(normalizedUserId, slot);
-              if (fs.existsSync(userDataDir)) {
-                fs.rmSync(userDataDir, { recursive: true, force: true });
-                fs.mkdirSync(userDataDir, { recursive: true });
-              }
-              
-              // Remover da memória
-              sessionManager.removeClient(normalizedUserId, slot);
-              
-              logger.error(`[startClient] ❌ Sessão reutilizada detectada! Limpeza forçada. Reinicie o processo para gerar novo QR code.`);
-              return {
-                success: false,
-                message: 'Sessão antiga detectada. Por favor, tente novamente em alguns segundos.'
-              };
-            } else {
-              // QR code existe no banco, então a conexão é válida
-              logger.wpp(normalizedUserId, slot, 'Cliente já está conectado (com QR code válido), atualizando status...');
-              await onStatusChange(normalizedUserId, slot, 'chatsAvailable', client);
-            }
+            logger.wpp(normalizedUserId, slot, 'Cliente já está conectado, atualizando status...');
+            await onStatusChange(normalizedUserId, slot, 'chatsAvailable', client);
           }
         } catch (error) {
           // Ignora erro na verificação inicial
@@ -528,27 +495,12 @@ export async function startClient(userId) {
                 sessionManager.setClient(normalizedUserId, slot, client);
                 setupMessageListener(client, normalizedUserId, slot);
                 
-                // CRÍTICO: Verificar se conectou sem QR (mesma lógica do primeiro create)
+                // Verifica se já conectou após o retry e atualiza status.
                 try {
                   const isConnected = await client.isConnected().catch(() => false);
                   if (isConnected) {
-                    const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
-                    if (!bot || !bot.qrCode) {
-                      logger.warn(`[startClient] ⚠️ [RETRY] Cliente conectado SEM QR code! Forçando limpeza...`);
-                      await client.logout().catch(() => {});
-                      await client.close().catch(() => {});
-                      await WhatsAppBotModel.clearSession(normalizedUserId, slot);
-                      if (fs.existsSync(userDataDir)) {
-                        fs.rmSync(userDataDir, { recursive: true, force: true });
-                        fs.mkdirSync(userDataDir, { recursive: true });
-                      }
-                      sessionManager.removeClient(normalizedUserId, slot);
-                      logger.error(`[startClient] ❌ [RETRY] Sessão reutilizada detectada após retry!`);
-                      return;
-                    } else {
-                      logger.wpp(normalizedUserId, slot, 'Cliente já está conectado (com QR code válido), atualizando status...');
-                      await onStatusChange(normalizedUserId, slot, 'chatsAvailable', client);
-                    }
+                    logger.wpp(normalizedUserId, slot, 'Cliente já está conectado (retry), atualizando status...');
+                    await onStatusChange(normalizedUserId, slot, 'chatsAvailable', client);
                   }
                 } catch (error) {
                   // Ignora erro na verificação inicial

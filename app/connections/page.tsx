@@ -334,7 +334,7 @@ export default function ConnectionsPage() {
 
         // SLOT FIXO = 1 - Removido parâmetro slot da URL
         const response = await fetch(
-          `${API_URL}/api/start/${defaultClientId}`,
+          `${API_URL}/api/start/${defaultClientId}?force=1`,
         {
           method: "POST",
           headers: {
@@ -497,7 +497,9 @@ export default function ConnectionsPage() {
       }
 
       // SLOT FIXO = 1 - Removido parâmetro slot da URL
-      const response = await fetch(`${API_URL}/api/start/${clientId}`, {
+      // force=1: quando o usuário pede "Gerar QR Code", queremos resetar a sessão desse usuário
+      // (sem depender de estado anterior). O backend trata isso de forma segura.
+      const response = await fetch(`${API_URL}/api/start/${clientId}?force=1`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
