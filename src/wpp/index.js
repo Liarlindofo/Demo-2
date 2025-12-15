@@ -60,16 +60,20 @@ async function cleanupOrphanBrowser(userDataDir) {
     const sessionName = path.basename(userDataDir);
     logger.info(`📌 Nome da sessão: ${sessionName}`);
     
-    // PASSO 1: Matar processos Chrome relacionados APENAS a esta sessão.
+    // PASSO 1: Matar processos Chrome/Chromium relacionados APENAS a esta sessão.
     // IMPORTANTE (multi-tenant): NUNCA matar processos pelo diretório pai (ex: /var/www/whatsapp-sessions),
     // pois isso derruba sessões de outros usuários e causa "browserClose".
     // Método 1: Buscar por userDataDir completo
     try {
-      const { stdout: stdout1 } = await execAsync(`ps aux | grep -i "chrome" | grep "${userDataDir}" | grep -v grep | awk '{print $2}'`).catch(() => ({ stdout: '' }));
+      const { stdout: stdout1 } = await execAsync(
+        `ps aux | grep -iE "chrome|chromium" | grep "${userDataDir}" | grep -v grep | awk '{print $2}'`
+      ).catch(() => ({ stdout: '' }));
       const pids1 = stdout1.trim().split('\n').filter(pid => pid && !isNaN(pid));
       
       // Método 2: Buscar por nome da sessão
-      const { stdout: stdout2 } = await execAsync(`ps aux | grep -i "chrome" | grep "${sessionName}" | grep -v grep | awk '{print $2}'`).catch(() => ({ stdout: '' }));
+      const { stdout: stdout2 } = await execAsync(
+        `ps aux | grep -iE "chrome|chromium" | grep "${sessionName}" | grep -v grep | awk '{print $2}'`
+      ).catch(() => ({ stdout: '' }));
       const pids2 = stdout2.trim().split('\n').filter(pid => pid && !isNaN(pid));
 
       // Combinar todos os PIDs únicos (apenas do userDataDir/sessionName)
@@ -104,6 +108,23 @@ async function cleanupOrphanBrowser(userDataDir) {
       logger.info('✅ Processos finalizados via pkill');
     } catch (pkillError) {
       logger.warn(`⚠️ pkill falhou: ${pkillError.message}`);
+    }
+
+    // PASSO 1.8: Confirmar que não sobrou nenhum processo usando esse userDataDir
+    // (sem isso, o Puppeteer ainda acusa "The browser is already running for ...")
+    try {
+      for (let i = 0; i < 10; i++) {
+        const { stdout: pgrepStdout } = await execAsync(`pgrep -fa "${userDataDir}" || true`).catch(() => ({ stdout: '' }));
+        const still = (pgrepStdout || '').trim();
+        if (!still) {
+          logger.info('✅ Nenhum processo restante usando userDataDir');
+          break;
+        }
+        logger.warn(`⚠️ Ainda existem processos usando userDataDir (tentativa ${i + 1}/10). Aguardando...`);
+        await new Promise(resolve => setTimeout(resolve, 800));
+      }
+    } catch (pgrepError) {
+      // Se pgrep não existir, seguimos — não é crítico
     }
     
     // Aguardar para garantir que processos foram encerrados
