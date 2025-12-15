@@ -24,7 +24,10 @@ export default {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--remote-debugging-port=0', // CRÍTICO: porta aleatória para cada instância
+        '--disable-features=TranslateUI',
+        '--disable-extensions'
       ]
     },
     // Diretório base para sessões do WhatsApp

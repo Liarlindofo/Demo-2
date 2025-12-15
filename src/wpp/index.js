@@ -392,8 +392,15 @@ export async function startClient(userId) {
 
     const basePuppeteerOptions =
       (config.wppConnect && config.wppConnect.puppeteerOptions) || {};
+    
+    // Garantir que --remote-debugging-port=0 está presente (porta aleatória por instância)
+    const baseArgs = (basePuppeteerOptions.args || []).filter(
+      arg => !arg.includes('--remote-debugging-port')
+    );
+    
     const puppeteerOptions = Object.assign({}, basePuppeteerOptions, {
       userDataDir: chromeUserDataDir,
+      args: [...baseArgs, '--remote-debugging-port=0'] // CRÍTICO para múltiplos workers
     });
 
     logger.info(`[startClient] 🚀 Criando WPPConnect...`);
@@ -578,12 +585,18 @@ export async function startClient(userId) {
             '--no-default-browser-check',
             '--no-first-run',
             '--safebrowsing-disable-auto-update',
+            '--remote-debugging-port=0', // CRÍTICO: porta aleatória para evitar conflito
             `--user-data-dir=${newChromeUserDataDir}`
           ];
           
+          // Filtrar args do basePuppeteerOptions para não duplicar --remote-debugging-port
+          const baseArgs = (basePuppeteerOptions.args || []).filter(
+            arg => !arg.includes('--remote-debugging-port')
+          );
+          
           const newPuppeteerOptions = {
             headless,
-            args: [...(basePuppeteerOptions.args || []), ...extraArgs],
+            args: [...baseArgs, ...extraArgs],
             userDataDir: newChromeUserDataDir,
           };
           
