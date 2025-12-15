@@ -480,23 +480,56 @@ export async function startClient(userId) {
         );
         logger.error(error.stack || error);
 
-        // Se for "browser already running", limpa de forma SEGURA e tenta novamente UMA vez
+        // Se for "browser already running", DELETA COMPLETAMENTE o userDataDir e recria do zero
         if (
           error.message &&
           (error.message.includes("browser is already running") ||
             error.message.includes("already running"))
         ) {
           logger.warn(
-            `[startClient] ⚠️ "browser already running" para ${normalizedUserId}. Limpando e tentando novamente...`
+            `[startClient] ⚠️ "browser already running" para ${normalizedUserId}. DELETANDO userDataDir completamente e recriando...`
           );
           
-          // Limpeza mais agressiva
+          // PASSO 1: Tentar limpeza normal primeiro
           await safeCleanupUserChrome(chromeUserDataDir, normalizedUserId);
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           
-          // Aguardar mais tempo para garantir que tudo foi limpo
-          await new Promise((resolve) => setTimeout(resolve, 8000));
+          // PASSO 2: DELETAR COMPLETAMENTE o chromeUserDataDir (solução definitiva)
+          try {
+            if (fs.existsSync(chromeUserDataDir)) {
+              logger.warn(
+                `[startClient] 🗑️ DELETANDO completamente: ${chromeUserDataDir}`
+              );
+              
+              // Tentar deletar com fs.rmSync primeiro
+              try {
+                fs.rmSync(chromeUserDataDir, { recursive: true, force: true });
+                logger.info(`[startClient] ✅ Pasta deletada com fs.rmSync`);
+              } catch (rmError) {
+                logger.warn(
+                  `[startClient] ⚠️ fs.rmSync falhou, tentando rm -rf: ${rmError.message}`
+                );
+                // Tentar com comando shell
+                await execAsync(`rm -rf "${chromeUserDataDir}" 2>/dev/null`).catch(() => {});
+                logger.info(`[startClient] ✅ Pasta deletada com rm -rf`);
+              }
+              
+              // Aguardar para garantir que foi deletado
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+            
+            // PASSO 3: Recriar pasta vazia
+            if (!fs.existsSync(chromeUserDataDir)) {
+              fs.mkdirSync(chromeUserDataDir, { recursive: true });
+              logger.info(`[startClient] ✅ Pasta recriada do zero: ${chromeUserDataDir}`);
+            }
+          } catch (deleteError) {
+            logger.error(
+              `[startClient] ❌ Erro ao deletar/recriar userDataDir: ${deleteError.message}`
+            );
+          }
           
-          // Verificar novamente se ainda há processo
+          // PASSO 4: Verificar se ainda há processos Chrome rodando
           try {
             const { stdout: finalCheck } = await execAsync(
               `ps aux | grep -iE "chrome|chromium" | grep "${chromeUserDataDir}" | grep -v grep | wc -l`
@@ -504,41 +537,63 @@ export async function startClient(userId) {
             
             const stillRunning = parseInt(finalCheck.trim()) || 0;
             if (stillRunning > 0) {
-              logger.error(
-                `[startClient] ❌ Ainda há ${stillRunning} processo(s) rodando após limpeza. Não é possível criar cliente.`
+              logger.warn(
+                `[startClient] ⚠️ Ainda há ${stillRunning} processo(s). Matando forçadamente...`
               );
-              sessionManager.removeClient(normalizedUserId, slot);
-              await WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
-              return; // Não tenta novamente, deixa o frontend pedir start de novo
+              // Matar processos restantes
+              await execAsync(
+                `ps aux | grep -iE "chrome|chromium" | grep "${chromeUserDataDir}" | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null`
+              ).catch(() => {});
+              await new Promise((resolve) => setTimeout(resolve, 3000));
             }
           } catch (checkErr) {
             // Ignorar erro de verificação
           }
           
-          // Tentar criar novamente UMA vez
-          logger.info(`[startClient] 🔄 Tentando criar cliente novamente após limpeza...`);
+          // PASSO 5: Criar novo userDataDir com timestamp (garantir que é único)
+          const newChromeUserDataDir = `${chromeUserDataDir}_${Date.now().toString(36)}`;
+          fs.mkdirSync(newChromeUserDataDir, { recursive: true });
+          
+          // Atualizar puppeteerOptions com novo diretório
+          const newPuppeteerOptions = Object.assign({}, basePuppeteerOptions, {
+            userDataDir: newChromeUserDataDir,
+          });
+          
+          logger.info(
+            `[startClient] 🔄 Tentando criar cliente com NOVO userDataDir: ${newChromeUserDataDir}`
+          );
+          
+          // PASSO 6: Tentar criar novamente com novo userDataDir
           try {
             const retryClient = await wppconnect.create({
               session: sessionName,
-              folderNameToken: tokenDir,
+              folderNameToken: tokenDir, // tokenDir continua o mesmo (para manter sessão WhatsApp)
               headless,
-              puppeteerOptions,
+              puppeteerOptions: newPuppeteerOptions,
               autoClose: 0,
               logQR: false,
               disableWelcome: true,
               updatesLog: false,
               catchQR: async (base64Qr) => {
-                logger.info(`[startClient] 🎯 catchQR (retry) para userId="${normalizedUserId}"`);
+                logger.info(
+                  `[startClient] 🎯 catchQR (retry com novo userDataDir) para userId="${normalizedUserId}"`
+                );
                 await onQRCode(normalizedUserId, slot, base64Qr);
               },
               statusFind: async (status) => {
-                logger.info(`[startClient] 📊 statusFind="${status}" (retry) userId="${normalizedUserId}"`);
+                logger.info(
+                  `[startClient] 📊 statusFind="${status}" (retry) userId="${normalizedUserId}"`
+                );
                 const client = sessionManager.getClient(normalizedUserId, slot);
                 await onStatusChange(normalizedUserId, slot, status, client);
               },
             });
             
-            logger.wpp(normalizedUserId, slot, "✅ Cliente WPPConnect criado após retry!");
+            logger.wpp(
+              normalizedUserId,
+              slot,
+              "✅ Cliente WPPConnect criado após deletar userDataDir!"
+            );
             sessionManager.setClient(normalizedUserId, slot, retryClient);
             setupMessageListener(retryClient, normalizedUserId, slot);
             
@@ -548,10 +603,14 @@ export async function startClient(userId) {
                 await onStatusChange(normalizedUserId, slot, "chatsAvailable", retryClient);
               }
             } catch (err) {
-              logger.warn(`[startClient] ⚠️ Falha ao checar isConnected (retry): ${err.message}`);
+              logger.warn(
+                `[startClient] ⚠️ Falha ao checar isConnected (retry): ${err.message}`
+              );
             }
           } catch (retryError) {
-            logger.error(`[startClient] ❌ Retry também falhou: ${retryError.message}`);
+            logger.error(
+              `[startClient] ❌ Retry também falhou mesmo após deletar userDataDir: ${retryError.message}`
+            );
             sessionManager.removeClient(normalizedUserId, slot);
             await WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
           }
