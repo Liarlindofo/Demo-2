@@ -1,5 +1,6 @@
 import express from 'express';
-import prisma from '../db/index.js';
+import { WhatsAppBotModel } from '../db/models.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -22,14 +23,17 @@ router.get('/status/:userId', async (req, res) => {
     }
 
     const normalizedUserId = userId.trim();
+    const slot = 1; // Slot fixo
 
-    // Busca bot no banco (slot fixo = 1)
-    const bot = await prisma.whatsAppBot.findFirst({
-      where: {
-        userId: normalizedUserId,
-        slot: 1
-      }
-    });
+    // Busca bot no banco usando o Model (mais seguro que acesso direto ao Prisma)
+    let bot;
+    try {
+      bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
+    } catch (dbError) {
+      logger.error('[status.routes] Erro ao buscar bot no banco:', dbError);
+      // Retorna not_found em caso de erro de banco
+      bot = null;
+    }
 
     // Se não encontrou bot, retorna not_found
     if (!bot) {
@@ -51,7 +55,7 @@ router.get('/status/:userId', async (req, res) => {
 
   } catch (error) {
     // Em caso de erro, retorna resposta segura para não quebrar o frontend
-    console.error('[status.routes] Erro ao buscar status:', error);
+    logger.error('[status.routes] Erro inesperado ao buscar status:', error);
     return res.json({
       exists: false,
       isConnected: false,
