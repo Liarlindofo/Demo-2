@@ -16,11 +16,12 @@ const asyncHandler = (fn) => {
  * Rotas da API REST
  */
 
-// Health check
+// Health check (mantido para compatibilidade, mas também está em /health)
 router.get('/health', api.healthCheck);
 
 // Status de conexões WhatsApp (SLOT FIXO = 1)
-router.get('/status/:userId', asyncHandler(api.getStatus));
+// ⚠️ REMOVIDO: Agora está em src/routes/status.routes.js conforme arquitetura solicitada
+// router.get('/status/:userId', asyncHandler(api.getStatus));
 
 // QR Code (SLOT FIXO = 1)
 router.get('/qr/:userId', asyncHandler(api.getQRCode));

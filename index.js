@@ -1,18 +1,43 @@
+/**
+ * ============================================
+ * PLATEFULL WHATSAPP BOT - API PRINCIPAL
+ * ============================================
+ * 
+ * Este arquivo é o entrypoint da API rodando no PM2.
+ * 
+ * ORDEM OBRIGATÓRIA:
+ * 1. Imports
+ * 2. const app = express()
+ * 3. Middlewares
+ * 4. Rotas (app.use)
+ * 5. app.listen()
+ * 6. Conexão ao banco dentro do listen
+ * 
+ * ⚠️ NUNCA usar app antes de const app = express()
+ * ⚠️ NUNCA usar rotas antes de middlewares
+ */
+
+// ============================================
+// 1. IMPORTS
+// ============================================
 import express from 'express';
 import cors from 'cors';
 import config from './config.js';
 import logger from './src/utils/logger.js';
 import router from './src/server/router.js';
+import statusRoutes from './src/routes/status.routes.js';
 import prisma from './src/db/index.js';
-// ❌ REMOVIDO: restoreAllSessions - Sessões só iniciam via ação explícita do usuário
 
-/**
- * Servidor principal do Platefull WhatsApp Bot
- */
-
+// ============================================
+// 2. INICIALIZAR EXPRESS
+// ============================================
 const app = express();
 
-// Middlewares - CORS configurado para permitir origens múltiplas
+// ============================================
+// 3. MIDDLEWARES
+// ============================================
+
+// CORS - Configurado para permitir origens múltiplas
 app.use(cors({
   origin: function (origin, callback) {
     // Permitir requisições sem origin (como ferramentas de teste)
@@ -32,6 +57,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
+// Body parser
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -44,21 +70,38 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rotas da API
+// ============================================
+// 4. ROTAS
+// ============================================
+
+// Healthcheck - GET /health
+app.get('/health', (req, res) => {
+  res.json({
+    success: true,
+    status: 'online',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Rotas de status (nova rota conforme prompt)
+app.use('/api', statusRoutes);
+
+// Rotas principais da API (WhatsApp, settings, etc.)
 app.use('/api', router);
 
-// Rota raiz
+// Rota raiz - Documentação da API
 app.get('/', (req, res) => {
   res.json({
     name: 'Platefull WhatsApp Bot',
     version: '1.0.0',
     status: 'online',
     endpoints: {
-      health: '/api/health',
+      health: '/health',
       status: '/api/status/:userId',
-      qr: '/api/qr/:userId/:slot',
-      start: 'POST /api/start/:userId/:slot',
-      stop: 'POST /api/stop/:userId/:slot',
+      qr: '/api/qr/:userId',
+      start: 'POST /api/start/:userId',
+      stop: 'POST /api/stop/:userId',
       settings: {
         get: '/api/settings/:userId',
         update: 'POST /api/settings/:userId'
@@ -66,6 +109,10 @@ app.get('/', (req, res) => {
     }
   });
 });
+
+// ============================================
+// 5. ERROR HANDLERS
+// ============================================
 
 // 404 handler
 app.use((req, res) => {
@@ -76,7 +123,7 @@ app.use((req, res) => {
   });
 });
 
-// Error handler
+// Error handler global
 app.use((err, req, res, next) => {
   logger.error('Erro não tratado:', err);
   res.status(500).json({
@@ -86,10 +133,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Inicia servidor
+// ============================================
+// 6. INICIAR SERVIDOR
+// ============================================
 const PORT = config.port;
 
 app.listen(PORT, async () => {
+  // Log de inicialização
   logger.success(`
 ╔═══════════════════════════════════════════════════╗
 ║                                                   ║
@@ -102,8 +152,19 @@ app.listen(PORT, async () => {
   `);
 
   logger.info('Endpoints disponíveis:');
-  logger.info(`  - Health Check: http://localhost:${PORT}/api/health`);
+  logger.info(`  - Health Check: http://localhost:${PORT}/health`);
+  logger.info(`  - Status: http://localhost:${PORT}/api/status/:userId`);
   logger.info(`  - API Docs: http://localhost:${PORT}/`);
+
+  // Conectar ao banco dentro do listen (conforme prompt)
+  try {
+    // Prisma já conecta automaticamente no import, mas garantimos aqui
+    await prisma.$connect();
+    logger.success('✓ Banco de dados conectado');
+  } catch (dbError) {
+    logger.error('✗ Erro ao conectar no banco de dados:', dbError);
+    // Não encerra o servidor, apenas loga o erro
+  }
 
   // ❌ DESATIVADO: Restauração automática de sessões
   // Sessões só iniciam via ação explícita do usuário (QR Code)
@@ -111,7 +172,9 @@ app.listen(PORT, async () => {
   logger.info('✓ Sistema iniciado. Sessões WhatsApp só iniciam via ação explícita do usuário.');
 });
 
-// Graceful shutdown
+// ============================================
+// 7. GRACEFUL SHUTDOWN
+// ============================================
 const shutdown = async (signal) => {
   logger.warn(`\n${signal} recebido. Encerrando servidor...`);
   
@@ -119,8 +182,6 @@ const shutdown = async (signal) => {
     // Fecha conexões do banco
     await prisma.$disconnect();
     logger.info('✓ Banco de dados desconectado');
-    
-    // Aqui você pode adicionar lógica para fechar clientes WPPConnect se necessário
     
     logger.success('✓ Servidor encerrado com sucesso');
     process.exit(0);
@@ -144,4 +205,3 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 export default app;
-
