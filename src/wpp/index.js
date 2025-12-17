@@ -251,12 +251,12 @@ export async function startClient(userId) {
 
   // ✅ Corrige o erro "Cannot access normalizedUserId before initialization"
   if (!userId || typeof userId !== "string" || userId.trim().length === 0) {
-    logger.error(`[startClient] userId inválido: ${userId}`);
+      logger.error(`[startClient] userId inválido: ${userId}`);
     return { success: false, message: "userId inválido" };
-  }
+    }
 
   const normalizedUserId = String(userId).trim();
-
+    
   try {
     logger.wpp(normalizedUserId, slot, "Iniciando cliente WPPConnect...");
 
@@ -272,8 +272,8 @@ export async function startClient(userId) {
         slot
       );
       if (bot?.qrCode) {
-        return {
-          success: true,
+        return { 
+          success: true, 
           message: "Cliente já está ativo com QR Code",
           qrCode: bot.qrCode,
           isConnected: bot.isConnected,
@@ -325,8 +325,8 @@ export async function startClient(userId) {
       logger.error(
         `[startClient] Usuário ${normalizedUserId} não encontrado em stack_users`
       );
-      return {
-        success: false,
+      return { 
+        success: false, 
         message: `Usuário ${normalizedUserId} não encontrado`,
       };
     }
@@ -395,12 +395,21 @@ export async function startClient(userId) {
     
     // Garantir que --remote-debugging-port=0 está presente (porta aleatória por instância)
     const baseArgs = (basePuppeteerOptions.args || []).filter(
-      arg => !arg.includes('--remote-debugging-port')
+      (arg) =>
+        arg &&
+        !arg.includes("--remote-debugging-port") &&
+        !arg.includes("--user-data-dir")
     );
+    
+    const puppeteerArgs = [
+      ...baseArgs,
+      "--remote-debugging-port=0",
+      `--user-data-dir=${chromeUserDataDir}`,
+    ];
     
     const puppeteerOptions = Object.assign({}, basePuppeteerOptions, {
       userDataDir: chromeUserDataDir,
-      args: [...baseArgs, '--remote-debugging-port=0'] // CRÍTICO para múltiplos workers
+      args: puppeteerArgs,
     });
 
     logger.info(`[startClient] 🚀 Criando WPPConnect...`);
@@ -408,11 +417,21 @@ export async function startClient(userId) {
     // Não precisa fazer "retry com userDataDir temporário + pkill chrome".
     // Se der erro "browser already running", é porque ESTE usuário tem um chrome preso.
     // A limpeza segura (lsof +D) já resolve sem afetar outros usuários.
+    // Caminho do Chrome: permite override por variável de ambiente
+    const executablePath =
+      process.env.CHROME_BIN ||
+      process.env.GOOGLE_CHROME_BIN ||
+      "/usr/bin/google-chrome";
+    
     wppconnect
       .create({
         session: sessionName,
         folderNameToken: tokenDir,
         headless,
+        // Força uso de Chrome externo (evita problemas com Snap/Chromium)
+        useChrome: true,
+        executablePath,
+        browserArgs: puppeteerArgs,
         puppeteerOptions,
         autoClose: 0,
         logQR: false,
@@ -438,9 +457,9 @@ export async function startClient(userId) {
         logger.wpp(normalizedUserId, slot, "✅ Cliente WPPConnect criado!");
 
         sessionManager.setClient(normalizedUserId, slot, client);
-
+        
         setupMessageListener(client, normalizedUserId, slot);
-
+        
         // Verificar status inicial e forçar QR se necessário
         try {
           const isConnected = await client.isConnected().catch(() => false);
@@ -590,23 +609,23 @@ export async function startClient(userId) {
               folderNameToken: tokenDir, // tokenDir original (forçar QR novo pois foi deletado)
               headless,
               puppeteerOptions: newPuppeteerOptions,
-              autoClose: 0,
-              logQR: false,
-              disableWelcome: true,
-              updatesLog: false,
-              catchQR: async (base64Qr) => {
+                autoClose: 0,
+                logQR: false,
+                disableWelcome: true,
+                updatesLog: false,
+                catchQR: async (base64Qr) => {
                 logger.info(
                   `[startClient] 🎯 catchQR (retry com tudo novo) para userId="${normalizedUserId}"`
                 );
-                await onQRCode(normalizedUserId, slot, base64Qr);
-              },
+                  await onQRCode(normalizedUserId, slot, base64Qr);
+                },
               statusFind: async (status) => {
                 logger.info(
                   `[startClient] 📊 statusFind="${status}" (retry) userId="${normalizedUserId}"`
                 );
-                const client = sessionManager.getClient(normalizedUserId, slot);
-                await onStatusChange(normalizedUserId, slot, status, client);
-              },
+                  const client = sessionManager.getClient(normalizedUserId, slot);
+                  await onStatusChange(normalizedUserId, slot, status, client);
+                },
             });
             
             logger.wpp(
@@ -619,7 +638,7 @@ export async function startClient(userId) {
             
             try {
               const isConnected = await retryClient.isConnected().catch(() => false);
-              if (isConnected) {
+                  if (isConnected) {
                 await onStatusChange(normalizedUserId, slot, "chatsAvailable", retryClient);
               }
             } catch (err) {
@@ -659,14 +678,14 @@ export async function startClient(userId) {
  */
 export async function stopClient(userId) {
   const slot = 1;
-
+  
   if (!userId || typeof userId !== "string" || userId.trim().length === 0) {
-    logger.error(`[stopClient] userId inválido: ${userId}`);
+      logger.error(`[stopClient] userId inválido: ${userId}`);
     return { success: false, message: "userId inválido" };
-  }
-
-  const normalizedUserId = String(userId).trim();
-
+    }
+    
+    const normalizedUserId = String(userId).trim();
+    
   try {
     const client = sessionManager.getClient(normalizedUserId, slot);
 
@@ -705,7 +724,7 @@ export async function stopClient(userId) {
     sessionManager.removeClient(normalizedUserId, slot);
     sessionManager.clearAllConversations(normalizedUserId, slot);
     await WhatsAppBotModel.setDisconnected(normalizedUserId, slot);
-    
+
     // Limpar pastas Chrome após fechar (preparar para próximo start)
     const sanitizedUserId = normalizedUserId.replace(/[^a-zA-Z0-9_-]/g, "_");
     const sessionName = `whatsapp_${sanitizedUserId}`;
@@ -741,11 +760,11 @@ export async function stopClient(userId) {
  */
 export async function getClientStatus(userId) {
   const slot = 1;
-
+  
   if (!userId || typeof userId !== "string") {
     return { isActive: false, isConnected: false };
   }
-
+  
   const normalizedUserId = String(userId).trim();
   const client = sessionManager.getClient(normalizedUserId, slot);
 
