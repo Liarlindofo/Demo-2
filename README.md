@@ -1,24 +1,27 @@
 # 🤖 Platefull WhatsApp Bot
 
-Bot WhatsApp multi-usuário com integração GPT-4o via OpenRouter. Cada usuário pode ter até 2 conexões simultâneas.
+Bot WhatsApp multi-usuário com integração GPT-4o via OpenRouter. Sistema totalmente isolado por usuário com suporte a conexões simultâneas.
 
 ## 📋 Características
 
-- ✅ **Multi-usuário**: Suporta múltiplos usuários
-- ✅ **Multi-conexão**: Cada usuário pode ter 2 slots de WhatsApp
+- ✅ **Multi-usuário REAL**: Múltiplos usuários conectam simultaneamente sem conflitos
+- ✅ **Isolamento Total**: Cada usuário tem seu próprio Chrome e processo isolado
+- ✅ **Lock por Usuário**: Sistema de locks impede conflitos e "browser already running"
 - ✅ **GPT-4o**: Integração com OpenAI GPT-4o via OpenRouter
 - ✅ **PostgreSQL**: Banco de dados via Prisma (Neon)
-- ✅ **QR Code**: Geração e exposição via API
-- ✅ **Sessões persistentes**: Sessões salvas no banco
+- ✅ **QR Code**: Geração e exposição via API com isolamento por usuário
+- ✅ **Sessões persistentes**: Sessões salvas no banco e disco (reutilizáveis)
 - ✅ **API REST**: Controle total via HTTP
 - ✅ **Configurável**: Prompt base, limites, personalidade por usuário
+- ✅ **PM2**: Workers isolados e independentes por usuário
+- ✅ **Graceful Shutdown**: Limpeza automática de recursos ao encerrar
 
 ## 🏗️ Arquitetura
 
 ```
 /src
   /wpp
-    index.js            # Gerenciamento de clientes WPPConnect
+    index.js            # Gerenciamento de clientes WPPConnect (com lock e isolamento)
     sessionManager.js   # Gerenciamento de sessões em memória
     qrHandler.js        # Manipulação de QR Codes
   /ai
@@ -26,14 +29,41 @@ Bot WhatsApp multi-usuário com integração GPT-4o via OpenRouter. Cada usuári
   /server
     router.js           # Rotas da API
     api.js              # Controllers
+  /services
+    pm2.service.js      # Gerenciamento de workers PM2
   /db
     index.js            # Cliente Prisma
     models.js           # Models e queries
   /utils
     logger.js           # Sistema de logs
+/workers
+  whatsapp-worker.js    # Worker isolado por usuário
+/scripts
+  cleanup-locks.sh      # Limpar locks stale
+  test-multi-user.sh    # Testar multi-usuário
+  reset-all-whatsapp.sh # Reset completo
 config.js               # Configurações gerais
-index.js                # Servidor principal
+index.js                # Servidor principal (API)
 ```
+
+### 🔐 Arquitetura Multi-Usuário
+
+**Cada usuário tem:**
+- ✅ 1 worker PM2 isolado (`whatsapp-<userId>`)
+- ✅ 1 processo Chrome isolado (`/var/www/whatsapp-sessions/whatsapp_<userId>__chrome/`)
+- ✅ 1 lock de sistema (`/tmp/whatsapp-locks/whatsapp_<userId>.lock`)
+- ✅ Porta de debug aleatória (evita conflitos)
+- ✅ Sessão persistente (tokens reutilizáveis)
+
+**Garantias:**
+- ❌ NUNCA um usuário afeta outro
+- ❌ NUNCA compartilha Chrome entre usuários
+- ❌ NUNCA permite dois processos para o mesmo usuário
+- ✅ Múltiplos usuários conectam simultaneamente
+- ✅ QR codes isolados por usuário
+- ✅ Graceful shutdown com limpeza automática
+
+📖 **Documentação completa:** Veja `COMECE-AQUI.txt`
 
 ## 🚀 Instalação Local
 

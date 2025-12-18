@@ -37,6 +37,7 @@ const shutdown = async (signal) => {
   try {
     logger.warn(`[whatsapp-worker] ${signal} recebido. Encerrando sessão para userId="${userId}"...`);
     await stopClient(userId).catch(() => {});
+    logger.info(`[whatsapp-worker] ✅ Sessão encerrada para userId="${userId}"`);
   } finally {
     process.exit(0);
   }
@@ -44,6 +45,27 @@ const shutdown = async (signal) => {
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+// Garantir limpeza em caso de erro não capturado
+process.on('uncaughtException', async (error) => {
+  logger.error(`[whatsapp-worker] ❌ Exceção não capturada:`, error);
+  try {
+    await stopClient(userId).catch(() => {});
+  } catch (err) {
+    // Ignorar erros na limpeza
+  }
+  process.exit(1);
+});
+
+process.on('unhandledRejection', async (reason) => {
+  logger.error(`[whatsapp-worker] ❌ Promise rejection não tratada:`, reason);
+  try {
+    await stopClient(userId).catch(() => {});
+  } catch (err) {
+    // Ignorar erros na limpeza
+  }
+  process.exit(1);
+});
 
 try {
   logger.info(`[whatsapp-worker] 🚀 Chamando startClient(${userId})...`);

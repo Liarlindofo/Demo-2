@@ -22,13 +22,41 @@ export async function startWhatsappWorker(userId) {
 
   logger.info(`[startWhatsappWorker] Iniciando worker para userId: "${normalizedUserId}" (processo: ${name})`);
 
+  // 🔒 GARANTIA: Verificar se JÁ existe worker rodando para este userId
   try {
     const { stdout } = await execAsync(`pm2 describe ${name}`);
     if (stdout.includes("online")) {
-      logger.info(`[startWhatsappWorker] Worker ${name} já está online`);
-      return { success: true, message: "Worker já ativo" };
+      logger.warn(`[startWhatsappWorker] ⚠️ Worker ${name} já está online. Não subindo novo worker.`);
+      return { success: true, message: "Worker já está ativo" };
+    }
+    if (stdout.includes("stopping") || stdout.includes("stopped")) {
+      logger.warn(`[startWhatsappWorker] ⚠️ Worker ${name} está parando. Aguardando...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Tentar deletar se ainda existir
+      await execAsync(`pm2 delete ${name}`).catch(() => {});
     }
   } catch {}
+
+  // 🔒 GARANTIA EXTRA: Verificar se há múltiplos processos com o mesmo nome
+  try {
+    const { stdout: listOutput } = await execAsync(`pm2 jlist`);
+    const processes = JSON.parse(listOutput);
+    const matchingProcesses = processes.filter(p => p.name === name);
+    
+    if (matchingProcesses.length > 0) {
+      logger.warn(`[startWhatsappWorker] ⚠️ Encontrados ${matchingProcesses.length} processo(s) com nome ${name}. Limpando...`);
+      for (const proc of matchingProcesses) {
+        if (proc.pm2_env && proc.pm2_env.status === 'online') {
+          logger.warn(`[startWhatsappWorker] ⚠️ Processo ${name} (PID ${proc.pid}) já está online. Não subindo novo worker.`);
+          return { success: true, message: "Worker já está ativo" };
+        }
+      }
+      // Se chegou aqui, todos os processos estão parados, limpar
+      await execAsync(`pm2 delete ${name}`).catch(() => {});
+    }
+  } catch (err) {
+    logger.warn(`[startWhatsappWorker] Não foi possível verificar lista de processos: ${err.message}`);
+  }
 
   // IMPORTANTE: Usar aspas para proteger o userId caso tenha caracteres especiais
   // E garantir que o userId seja passado corretamente para o worker
