@@ -304,8 +304,26 @@ export async function startClient(userId) {
       baseSessionsDir,
       `${sessionName}__chrome`
     );
-    const chromeUserDataDir = `${chromeBaseDir}_${Date.now().toString(36)}`;
-
+    
+    // =======================================================================
+    // 🔥 SOLUÇÃO DEFINITIVA: LIMPEZA ULTRA-AGRESSIVA
+    // =======================================================================
+    logger.warn(`[startClient] 🧨 LIMPEZA ULTRA-AGRESSIVA para ${normalizedUserId}...`);
+    
+    // 1. MATAR TODOS os processos Chrome deste usuário (usando sessionName como filtro)
+    logger.info(`[startClient] 🗡️ Matando TODOS os processos Chrome do usuário ${normalizedUserId}...`);
+    await execAsync(`ps aux | grep -iE "chrome|chromium" | grep "${sessionName}" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null`).catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    
+    // 2. DELETAR TODAS as pastas __chrome_* antigas deste usuário
+    logger.info(`[startClient] 🗑️ Deletando TODAS as pastas Chrome antigas do usuário ${normalizedUserId}...`);
+    await execAsync(`rm -rf "${chromeBaseDir}"* 2>/dev/null`).catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    
+    // 3. CRIAR um userDataDir completamente novo com timestamp único
+    const chromeUserDataDir = `${chromeBaseDir}_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 5)}`;
+    logger.info(`[startClient] 📁 Criando novo userDataDir: ${chromeUserDataDir}`);
+    
     // Garantir diretórios
     if (!fs.existsSync(baseSessionsDir))
       fs.mkdirSync(baseSessionsDir, { recursive: true });
@@ -338,52 +356,30 @@ export async function startClient(userId) {
       connectedNumber: null,
     });
 
-    // ✅ Limpeza segura: remove locks e mata APENAS PIDs que usam esse userDataDir
-    // (não derruba Chrome de outro usuário)
-    await safeCleanupUserChrome(chromeUserDataDir, normalizedUserId);
-
-    // ✅ Verificação final: garantir que não há processo rodando ANTES de criar cliente
+    // 4. VERIFICAÇÃO FINAL: garantir que NÃO há processos Chrome deste usuário
+    logger.info(`[startClient] 🔍 Verificação final de processos Chrome para ${normalizedUserId}...`);
     try {
       const { stdout: finalCheck } = await execAsync(
-        `ps aux | grep -iE "chrome|chromium" | grep "${chromeUserDataDir}" | grep -v grep | wc -l`
+        `ps aux | grep -iE "chrome|chromium" | grep "${sessionName}" | grep -v grep | wc -l`
       ).catch(() => ({ stdout: "0" }));
       
       const stillRunning = parseInt(finalCheck.trim()) || 0;
       if (stillRunning > 0) {
-        logger.warn(
-          `⚠️ [startClient] Ainda há ${stillRunning} processo(s) Chrome rodando para ${normalizedUserId}. Limpando novamente...`
+        logger.error(
+          `❌ [startClient] AINDA HÁ ${stillRunning} processo(s) Chrome rodando para ${normalizedUserId}!`
         );
-        await safeCleanupUserChrome(chromeUserDataDir, normalizedUserId);
+        logger.error(`❌ [startClient] Matando novamente com SIGKILL...`);
+        await execAsync(`ps aux | grep -iE "chrome|chromium" | grep "${sessionName}" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null`).catch(() => {});
         await new Promise((resolve) => setTimeout(resolve, 5000));
-      }
-      
-      // Verificar também se há locks restantes
-      const defaultDir = path.join(chromeUserDataDir, "Default");
-      if (fs.existsSync(defaultDir)) {
-        const { stdout: locks } = await execAsync(
-          `find "${defaultDir}" -name "Singleton*" -o -name "LockFile" 2>/dev/null | wc -l`
-        ).catch(() => ({ stdout: "0" }));
-        
-        const lockCount = parseInt(locks.trim()) || 0;
-        if (lockCount > 0) {
-          logger.warn(
-            `⚠️ [startClient] Ainda há ${lockCount} lock file(s). Removendo...`
-          );
-          await execAsync(`find "${defaultDir}" -name "Singleton*" -o -name "LockFile" -type f -delete 2>/dev/null`).catch(() => {});
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
+      } else {
+        logger.success(`✅ [startClient] Nenhum processo Chrome rodando para ${normalizedUserId}. Prosseguindo...`);
       }
     } catch (checkErr) {
       logger.warn(`⚠️ [startClient] Erro na verificação final: ${checkErr.message}`);
     }
-
-    // ⚠️ IMPORTANTE:
-    // NÃO deletar chromeUserDataDir automaticamente (isso é o que causava conflitos e te fazia matar chrome global).
-    // Se quiser forçar NOVO QR, você pode limpar APENAS o tokenDir (opcional).
-    // Deixo DESATIVADO por padrão:
-    //
-    // if (fs.existsSync(tokenDir)) fs.rmSync(tokenDir, { recursive: true, force: true });
-    // fs.mkdirSync(tokenDir, { recursive: true });
+    
+    // 5. DELAY de segurança antes de criar cliente
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     const headless =
       (config.wppConnect && config.wppConnect.headless) !== undefined
@@ -506,155 +502,126 @@ export async function startClient(userId) {
         );
         logger.error(error.stack || error);
 
-        // Se for "browser already running", DELETA COMPLETAMENTE o userDataDir e recria do zero
+        // Se for "browser already running", DELETA COMPLETAMENTE tudo e recria do zero
         if (
           error.message &&
           (error.message.includes("browser is already running") ||
             error.message.includes("already running"))
         ) {
-          logger.warn(
-            `[startClient] ⚠️ "browser already running" para ${normalizedUserId}. DELETANDO userDataDir completamente e recriando...`
+          logger.error(
+            `[startClient] ❌ "browser already running" AINDA OCORREU para ${normalizedUserId}!`
+          );
+          logger.error(
+            `[startClient] ❌ Isso significa que a limpeza inicial não foi suficiente.`
+          );
+          logger.error(
+            `[startClient] ❌ Tentando retry com limpeza AINDA MAIS agressiva...`
           );
           
-          // PASSO 1: Matar TODOS os processos Chrome desse usuário (incluindo todos os _retry)
           const chromeBaseDir = path.join(baseSessionsDir, `${sessionName}__chrome`);
           
-          logger.warn(
-            `[startClient] 🗑️ Matando TODOS os processos Chrome do usuário ${normalizedUserId}...`
-          );
+          // RETRY 1: Matar TUDO que tenha o sessionName (não apenas chromeBaseDir)
+          logger.warn(`[startClient] 🗡️ RETRY: Matando processos Chrome com "${sessionName}" no comando...`);
+          await execAsync(`ps aux | grep -iE "chrome|chromium" | grep "${sessionName}" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null`).catch(() => {});
+          await new Promise((resolve) => setTimeout(resolve, 5000));
           
-          try {
-            // Matar processos pelo prefixo base (pega TODOS os _retry também)
-            await execAsync(
-              `ps aux | grep -iE "chrome|chromium" | grep "${chromeBaseDir}" | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null`
-            ).catch(() => {});
-            
-            logger.info(`[startClient] ✅ Processos Chrome mortos`);
-            await new Promise((resolve) => setTimeout(resolve, 5000));
-          } catch (killErr) {
-            logger.warn(`[startClient] ⚠️ Erro ao matar processos: ${killErr.message}`);
-          }
-          
-          // PASSO 2: DELETAR TODAS as pastas Chrome desse usuário (incluindo todos os _retry)
-          logger.warn(
-            `[startClient] 🗑️ Deletando TODAS as pastas Chrome do usuário ${normalizedUserId}...`
-          );
-          
-          try {
-            await execAsync(`rm -rf "${chromeBaseDir}"* 2>/dev/null`).catch(() => {});
-            logger.info(`[startClient] ✅ Todas as pastas Chrome deletadas`);
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-          } catch (deleteErr) {
-            logger.warn(`[startClient] ⚠️ Erro ao deletar pastas: ${deleteErr.message}`);
-          }
-          
-          logger.warn(
-            `[startClient] 🗑️ Deletando também pastas tokenDir _retry...`
-          );
-          
-          try {
-            await execAsync(`rm -rf "${tokenDir}"_retry* 2>/dev/null`).catch(() => {});
-            logger.info(`[startClient] ✅ Pastas tokenDir _retry deletadas`);
-          } catch (err) {
-            // Ignorar erro
-          }
-          
+          // RETRY 2: Deletar tudo novamente
+          logger.warn(`[startClient] 🗑️ RETRY: Deletando TODAS as pastas Chrome e Token do usuário...`);
+          await execAsync(`rm -rf "${chromeBaseDir}"* "${tokenDir}"* 2>/dev/null`).catch(() => {});
           await new Promise((resolve) => setTimeout(resolve, 3000));
           
-          // PASSO 4: Criar novo chromeUserDataDir DO ZERO (sem suffixo retry, apenas timestamp)
-          const timestamp = Date.now().toString(36);
-          const newChromeUserDataDir = `${chromeBaseDir}_${timestamp}`;
-          fs.mkdirSync(newChromeUserDataDir, { recursive: true });
-          logger.info(`[startClient] ✅ Novo chromeUserDataDir criado: ${newChromeUserDataDir}`);
+          // RETRY 3: Recriar diretórios
+          const retryTimestamp = `retry_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 5)}`;
+          const retryUserDataDir = `${chromeBaseDir}_${retryTimestamp}`;
+          const retryTokenDir = `${tokenDir}_${retryTimestamp}`;
           
-          // PASSO 5: Preparar puppeteerOptions com o novo userDataDir limpo
-          const extraArgs = [
-            '--disable-background-networking',
-            '--disable-background-timer-throttling',
-            '--disable-backgrounding-occluded-windows',
-            '--disable-breakpad',
-            '--disable-client-side-phishing-detection',
-            '--disable-default-apps',
-            '--disable-hang-monitor',
-            '--disable-popup-blocking',
-            '--disable-prompt-on-repost',
-            '--disable-sync',
-            '--metrics-recording-only',
-            '--no-default-browser-check',
-            '--no-first-run',
-            '--safebrowsing-disable-auto-update',
-            '--remote-debugging-port=0', // CRÍTICO: porta aleatória
-            `--user-data-dir=${newChromeUserDataDir}`
-          ];
+          fs.mkdirSync(retryUserDataDir, { recursive: true });
+          fs.mkdirSync(retryTokenDir, { recursive: true });
           
-          // Filtrar args do basePuppeteerOptions para não duplicar
-          const baseArgs = (basePuppeteerOptions.args || []).filter(
-            arg => !arg.includes('--remote-debugging-port') && !arg.includes('--user-data-dir')
-          );
+          logger.info(`[startClient] 🔄 RETRY: Novo userDataDir: ${retryUserDataDir}`);
+          logger.info(`[startClient] 🔄 RETRY: Novo tokenDir: ${retryTokenDir}`);
           
-          const newPuppeteerOptions = {
-            headless,
-            args: [...baseArgs, ...extraArgs],
-            userDataDir: newChromeUserDataDir,
-          };
+          // RETRY 4: Delay extra de segurança
+          await new Promise((resolve) => setTimeout(resolve, 5000));
           
-          logger.info(
-            `[startClient] 🔄 Tentando criar cliente DO ZERO com novo userDataDir: ${newChromeUserDataDir}`
-          );
-          
-          // PASSO 6: Tentar criar novamente (agora SEM processos Chrome antigos rodando)
+          // RETRY 5: Tentar criar cliente novamente com tudo novo
           try {
-            const retryClient = await wppconnect.create({
-              session: sessionName, // Manter sessionName original (sem _retry)
-              folderNameToken: tokenDir, // tokenDir original (forçar QR novo pois foi deletado)
+            const retryPuppeteerArgs = [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-accelerated-2d-canvas',
+              '--no-first-run',
+              '--no-zygote',
+              '--disable-gpu',
+              '--disable-features=TranslateUI',
+              '--disable-extensions',
+              '--disable-background-networking',
+              '--disable-sync',
+              '--metrics-recording-only',
+              '--remote-debugging-port=0',
+              `--user-data-dir=${retryUserDataDir}`
+            ];
+            
+            const retryPuppeteerOptions = {
               headless,
-              puppeteerOptions: newPuppeteerOptions,
-                autoClose: 0,
-                logQR: false,
-                disableWelcome: true,
-                updatesLog: false,
-                catchQR: async (base64Qr) => {
-                logger.info(
-                  `[startClient] 🎯 catchQR (retry com tudo novo) para userId="${normalizedUserId}"`
-                );
-                  await onQRCode(normalizedUserId, slot, base64Qr);
-                },
+              args: retryPuppeteerArgs,
+              userDataDir: retryUserDataDir,
+            };
+            
+            // Caminho do Chrome: permitir override
+            const executablePath =
+              process.env.CHROME_BIN ||
+              process.env.GOOGLE_CHROME_BIN ||
+              "/usr/bin/google-chrome";
+            
+            logger.info(`[startClient] 🔄 RETRY: Criando cliente com executablePath=${executablePath}...`);
+            
+            const retryClient = await wppconnect.create({
+              session: `${sessionName}_${retryTimestamp}`, // Session name único também
+              folderNameToken: retryTokenDir,
+              headless,
+              useChrome: true,
+              executablePath,
+              browserArgs: retryPuppeteerArgs,
+              puppeteerOptions: retryPuppeteerOptions,
+              autoClose: 0,
+              logQR: false,
+              disableWelcome: true,
+              updatesLog: false,
+              catchQR: async (base64Qr) => {
+                logger.info(`[startClient] 🎯 RETRY: catchQR para ${normalizedUserId}`);
+                await onQRCode(normalizedUserId, slot, base64Qr);
+              },
               statusFind: async (status) => {
-                logger.info(
-                  `[startClient] 📊 statusFind="${status}" (retry) userId="${normalizedUserId}"`
-                );
-                  const client = sessionManager.getClient(normalizedUserId, slot);
-                  await onStatusChange(normalizedUserId, slot, status, client);
-                },
+                logger.info(`[startClient] 📊 RETRY: statusFind="${status}" para ${normalizedUserId}`);
+                const client = sessionManager.getClient(normalizedUserId, slot);
+                await onStatusChange(normalizedUserId, slot, status, client);
+              },
             });
             
-            logger.wpp(
-              normalizedUserId,
-              slot,
-              "✅ Cliente WPPConnect criado após deletar userDataDir!"
-            );
+            logger.success(`[startClient] ✅ RETRY BEM-SUCEDIDO! Cliente criado para ${normalizedUserId}`);
             sessionManager.setClient(normalizedUserId, slot, retryClient);
             setupMessageListener(retryClient, normalizedUserId, slot);
             
             try {
               const isConnected = await retryClient.isConnected().catch(() => false);
-                  if (isConnected) {
+              if (isConnected) {
                 await onStatusChange(normalizedUserId, slot, "chatsAvailable", retryClient);
               }
             } catch (err) {
-              logger.warn(
-                `[startClient] ⚠️ Falha ao checar isConnected (retry): ${err.message}`
-              );
+              logger.warn(`[startClient] ⚠️ RETRY: Falha ao checar isConnected: ${err.message}`);
             }
           } catch (retryError) {
-            logger.error(
-              `[startClient] ❌ Retry também falhou mesmo após deletar userDataDir: ${retryError.message}`
-            );
+            logger.error(`[startClient] ❌ RETRY FALHOU: ${retryError.message}`);
+            logger.error(`[startClient] ❌ Não foi possível criar cliente para ${normalizedUserId} mesmo com todas as tentativas.`);
+            logger.error(`[startClient] ❌ Verifique se há algum Chrome/Chromium rodando manualmente: ps aux | grep chrome`);
             sessionManager.removeClient(normalizedUserId, slot);
             await WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
           }
         } else {
           // Para outros erros, apenas remove e marca como desconectado
+          logger.error(`[startClient] ❌ Erro NÃO relacionado a "browser already running": ${error.message}`);
           sessionManager.removeClient(normalizedUserId, slot);
           await WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
         }
@@ -687,65 +654,54 @@ export async function stopClient(userId) {
     const normalizedUserId = String(userId).trim();
     
   try {
-    const client = sessionManager.getClient(normalizedUserId, slot);
-
-    if (!client) {
-      logger.warn(`[stopClient] Cliente não encontrado para ${normalizedUserId}`);
-      
-      // Mesmo sem cliente em memória, limpar pastas para garantir próximo start limpo
-      const sanitizedUserId = normalizedUserId.replace(/[^a-zA-Z0-9_-]/g, "_");
-      const sessionName = `whatsapp_${sanitizedUserId}`;
-      const baseSessionsDir =
-        (config.wppConnect && config.wppConnect.sessionsDir) ||
-        "/var/www/whatsapp-sessions";
-      
-      const tokenDir = path.join(baseSessionsDir, sessionName);
-      const chromeBaseDir = path.join(baseSessionsDir, `${sessionName}__chrome`);
-      
-      // Limpar todas as pastas relacionadas a este usuário (incluindo versões com timestamp)
-      try {
-        await execAsync(`rm -rf "${chromeBaseDir}"* 2>/dev/null`).catch(() => {});
-        logger.info(`[stopClient] 🧹 Pastas Chrome limpas para ${normalizedUserId}`);
-      } catch (cleanErr) {
-        // Ignorar erro
-      }
-      
-      return { success: false, message: "Cliente não está ativo" };
-    }
-
-    // logout opcional
-    try {
-      if (typeof client.logout === "function") {
-        await client.logout().catch(() => {});
-      }
-    } catch {}
-
-    await client.close().catch(() => {});
-    sessionManager.removeClient(normalizedUserId, slot);
-    sessionManager.clearAllConversations(normalizedUserId, slot);
-    await WhatsAppBotModel.setDisconnected(normalizedUserId, slot);
-
-    // Limpar pastas Chrome após fechar (preparar para próximo start)
+    logger.info(`[stopClient] 🛑 Parando cliente para ${normalizedUserId}...`);
+    
     const sanitizedUserId = normalizedUserId.replace(/[^a-zA-Z0-9_-]/g, "_");
     const sessionName = `whatsapp_${sanitizedUserId}`;
     const baseSessionsDir =
       (config.wppConnect && config.wppConnect.sessionsDir) ||
       "/var/www/whatsapp-sessions";
     
+    const tokenDir = path.join(baseSessionsDir, sessionName);
     const chromeBaseDir = path.join(baseSessionsDir, `${sessionName}__chrome`);
     
-    // Aguardar um pouco para Chrome fechar completamente
+    const client = sessionManager.getClient(normalizedUserId, slot);
+
+    if (!client) {
+      logger.warn(`[stopClient] Cliente não encontrado em memória para ${normalizedUserId}`);
+    } else {
+      // Tentar fechar cliente gracefully
+      try {
+        logger.info(`[stopClient] Fechando cliente WPPConnect para ${normalizedUserId}...`);
+        await client.close().catch(() => {});
+        logger.info(`[stopClient] ✅ Cliente WPPConnect fechado`);
+      } catch (err) {
+        logger.warn(`[stopClient] ⚠️ Erro ao fechar cliente: ${err.message}`);
+      }
+      
+      sessionManager.removeClient(normalizedUserId, slot);
+    }
+    
+    // =======================================================================
+    // 🔥 LIMPEZA ULTRA-AGRESSIVA ao parar cliente
+    // =======================================================================
+    logger.warn(`[stopClient] 🧨 LIMPEZA ULTRA-AGRESSIVA para ${normalizedUserId}...`);
+    
+    // 1. MATAR TODOS os processos Chrome deste usuário
+    logger.info(`[stopClient] 🗡️ Matando TODOS os processos Chrome do usuário ${normalizedUserId}...`);
+    await execAsync(`ps aux | grep -iE "chrome|chromium" | grep "${sessionName}" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null`).catch(() => {});
     await new Promise((resolve) => setTimeout(resolve, 2000));
     
-    // Limpar todas as variações de chromeUserDataDir
-    try {
-      await execAsync(`rm -rf "${chromeBaseDir}"* 2>/dev/null`).catch(() => {});
-      logger.info(`[stopClient] 🧹 Pastas Chrome limpas após desconexão`);
-    } catch (cleanErr) {
-      // Ignorar erro
-    }
+    // 2. DELETAR TODAS as pastas __chrome_* deste usuário
+    logger.info(`[stopClient] 🗑️ Deletando TODAS as pastas Chrome do usuário ${normalizedUserId}...`);
+    await execAsync(`rm -rf "${chromeBaseDir}"* 2>/dev/null`).catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    
+    // 3. Limpar conversa em memória e marcar como desconectado no banco
+    sessionManager.clearAllConversations(normalizedUserId, slot);
+    await WhatsAppBotModel.setDisconnected(normalizedUserId, slot);
 
-    logger.info(`[stopClient] ✅ Cliente parado e pastas limpas para ${normalizedUserId}`);
+    logger.success(`[stopClient] ✅ Cliente parado e TODAS as pastas Chrome deletadas para ${normalizedUserId}`);
     return { success: true, message: "Cliente desconectado com sucesso" };
   } catch (error) {
     logger.error(`Erro ao parar cliente [${normalizedUserId}]:`, error);
