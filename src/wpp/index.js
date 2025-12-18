@@ -408,31 +408,61 @@ export async function startClient(userId) {
       args: puppeteerArgs,
     });
 
-    logger.info(`[startClient] 🚀 Criando WPPConnect...`);
-
-    // Não precisa fazer "retry com userDataDir temporário + pkill chrome".
-    // Se der erro "browser already running", é porque ESTE usuário tem um chrome preso.
-    // A limpeza segura (lsof +D) já resolve sem afetar outros usuários.
-    // Caminho do Chrome: permite override por variável de ambiente
-    const executablePath =
-      process.env.CHROME_BIN ||
-      process.env.GOOGLE_CHROME_BIN ||
-      "/usr/bin/google-chrome";
+    // Caminho do Chrome: tenta encontrar o melhor disponível
+    let executablePath = process.env.CHROME_BIN || process.env.GOOGLE_CHROME_BIN;
+    
+    // Se não foi setado via env, tentar encontrar automaticamente
+    if (!executablePath) {
+      const chromePaths = [
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/google-chrome",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+        "/snap/bin/chromium"
+      ];
+      
+      for (const chromePath of chromePaths) {
+        if (fs.existsSync(chromePath)) {
+          executablePath = chromePath;
+          break;
+        }
+      }
+    }
+    
+    logger.info(`[startClient] 🔍 Chrome detectado em: ${executablePath || "PADRÃO DO PUPPETEER"}`);
+    logger.info(`[startClient] 📦 userDataDir: ${chromeUserDataDir}`);
+    logger.info(`[startClient] 📦 tokenDir: ${tokenDir}`);
+    logger.info(`[startClient] 🎯 headless: ${headless}`);
+    logger.info(`[startClient] 🚀 Criando WPPConnect com isolamento TOTAL...`);
+    
+    // Criar puppeteerOptions final com TODAS as flags de isolamento
+    const finalPuppeteerOptions = {
+      headless,
+      executablePath: executablePath || undefined, // undefined = deixa Puppeteer escolher
+      userDataDir: chromeUserDataDir,
+      args: puppeteerArgs,
+      // Configurações críticas para evitar singleton
+      pipe: true, // Usa pipe em vez de WebSocket (evita porta compartilhada)
+      dumpio: false,
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false,
+    };
+    
+    logger.info(`[startClient] 🔧 Puppeteer args: ${JSON.stringify(puppeteerArgs.slice(0, 5))}... (total: ${puppeteerArgs.length})`);
     
     wppconnect
       .create({
         session: sessionName,
         folderNameToken: tokenDir,
         headless,
-        // Força uso de Chrome externo (evita problemas com Snap/Chromium)
-        useChrome: true,
-        executablePath,
-        browserArgs: puppeteerArgs,
-        puppeteerOptions,
+        puppeteerOptions: finalPuppeteerOptions,
         autoClose: 0,
         logQR: false,
         disableWelcome: true,
         updatesLog: false,
+        disableSpins: true,
+        disableGoogleAnalytics: true,
 
         catchQR: async (base64Qr) => {
           logger.info(
@@ -546,49 +576,57 @@ export async function startClient(userId) {
           
           // RETRY 5: Tentar criar cliente novamente com tudo novo
           try {
+            // Usar TODAS as flags de isolamento (incluindo --single-process)
             const retryPuppeteerArgs = [
-              '--no-sandbox',
-              '--disable-setuid-sandbox',
-              '--disable-dev-shm-usage',
-              '--disable-accelerated-2d-canvas',
-              '--no-first-run',
-              '--no-zygote',
-              '--disable-gpu',
-              '--disable-features=TranslateUI',
-              '--disable-extensions',
-              '--disable-background-networking',
-              '--disable-sync',
-              '--metrics-recording-only',
-              '--remote-debugging-port=0',
-              `--user-data-dir=${retryUserDataDir}`
+              ...puppeteerArgs.filter(arg => !arg.includes('--user-data-dir')),
+              `--user-data-dir=${retryUserDataDir}`,
+              '--single-process', // CRÍTICO: força processo único
             ];
+            
+            // Encontrar Chrome
+            let retryExecPath = process.env.CHROME_BIN || process.env.GOOGLE_CHROME_BIN;
+            if (!retryExecPath) {
+              const chromePaths = [
+                "/usr/bin/google-chrome-stable",
+                "/usr/bin/google-chrome",
+                "/usr/bin/chromium-browser",
+                "/usr/bin/chromium",
+              ];
+              for (const p of chromePaths) {
+                if (fs.existsSync(p)) {
+                  retryExecPath = p;
+                  break;
+                }
+              }
+            }
             
             const retryPuppeteerOptions = {
               headless,
-              args: retryPuppeteerArgs,
+              executablePath: retryExecPath || undefined,
               userDataDir: retryUserDataDir,
+              args: retryPuppeteerArgs,
+              pipe: true, // CRÍTICO: usa pipe em vez de WebSocket
+              dumpio: false,
+              handleSIGINT: false,
+              handleSIGTERM: false,
+              handleSIGHUP: false,
             };
             
-            // Caminho do Chrome: permitir override
-            const executablePath =
-              process.env.CHROME_BIN ||
-              process.env.GOOGLE_CHROME_BIN ||
-              "/usr/bin/google-chrome";
-            
-            logger.info(`[startClient] 🔄 RETRY: Criando cliente com executablePath=${executablePath}...`);
+            logger.info(`[startClient] 🔄 RETRY: Chrome em ${retryExecPath || "PADRÃO"}`);
+            logger.info(`[startClient] 🔄 RETRY: userDataDir: ${retryUserDataDir}`);
+            logger.info(`[startClient] 🔄 RETRY: Criando cliente com isolamento TOTAL...`);
             
             const retryClient = await wppconnect.create({
-              session: `${sessionName}_${retryTimestamp}`, // Session name único também
+              session: `${sessionName}_${retryTimestamp}`,
               folderNameToken: retryTokenDir,
               headless,
-              useChrome: true,
-              executablePath,
-              browserArgs: retryPuppeteerArgs,
               puppeteerOptions: retryPuppeteerOptions,
               autoClose: 0,
               logQR: false,
               disableWelcome: true,
               updatesLog: false,
+              disableSpins: true,
+              disableGoogleAnalytics: true,
               catchQR: async (base64Qr) => {
                 logger.info(`[startClient] 🎯 RETRY: catchQR para ${normalizedUserId}`);
                 await onQRCode(normalizedUserId, slot, base64Qr);

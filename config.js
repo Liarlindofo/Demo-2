@@ -24,10 +24,30 @@ export default {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
+        '--single-process', // CRÍTICO: força processo único (evita singleton)
         '--disable-gpu',
-        '--remote-debugging-port=0', // CRÍTICO: porta aleatória para cada instância
+        '--remote-debugging-port=0', // CRÍTICO: porta aleatória
         '--disable-features=TranslateUI',
-        '--disable-extensions'
+        '--disable-extensions',
+        '--disable-background-networking',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-breakpad',
+        '--disable-client-side-phishing-detection',
+        '--disable-component-extensions-with-background-pages',
+        '--disable-default-apps',
+        '--disable-hang-monitor',
+        '--disable-ipc-flooding-protection',
+        '--disable-popup-blocking',
+        '--disable-prompt-on-repost',
+        '--disable-renderer-backgrounding',
+        '--disable-sync',
+        '--force-color-profile=srgb',
+        '--metrics-recording-only',
+        '--no-default-browser-check',
+        '--safebrowsing-disable-auto-update',
+        '--password-store=basic',
+        '--use-mock-keychain'
       ]
     },
     // Diretório base para sessões do WhatsApp
