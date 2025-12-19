@@ -89,6 +89,10 @@ export default function ConnectionsPage() {
     [key: string]: boolean;
   }>({});
 
+  // Estados de proteção contra chamadas duplicadas
+  const [isStarting, setIsStarting] = useState<{ [key: string]: boolean }>({});
+  const [hasStarted, setHasStarted] = useState<{ [key: string]: boolean }>({});
+
   // Formulário para adicionar conexão
   const [formData, setFormData] = useState({
     name: "",
@@ -115,11 +119,9 @@ export default function ConnectionsPage() {
         const whatsappAPIs = data.filter((api) => api.type === "whatsapp");
         const saiposAPIs = data
           .filter((api) => api.type === "saipos")
-          .slice(0, 3); // Máximo 3 lojas
+          .slice(0, 3);
 
-        // Carregar status das conexões WhatsApp
-        // IMPORTANTE: Buscar status UMA ÚNICA VEZ por usuário (não por API)
-        // Cada usuário tem apenas UMA conexão WhatsApp com múltiplos slots
+        // Carregar status das conexões WhatsApp (APENAS STATUS, NUNCA START)
         let connectionsWithStatus: WhatsAppConnection[] = [];
         
         try {
@@ -132,8 +134,6 @@ export default function ConnectionsPage() {
 
           if (statusRes.ok) {
             const statusData = await statusRes.json();
-            // SLOT FIXO = 1: Criar UMA ÚNICA conexão WhatsApp para o usuário
-            // Formato simplificado: apenas uma sessão
             const session = statusData.session || {
               status: 'DISCONNECTED',
               isActive: false,
@@ -145,13 +145,12 @@ export default function ConnectionsPage() {
                 id: "main",
                 name: "WhatsApp",
                 clientId: user.id,
-                sessions: [session], // Apenas uma sessão
+                sessions: [session],
               },
             ];
           }
         } catch (error) {
           console.error("Erro ao buscar status WhatsApp:", error);
-          // Se falhar, criar conexão vazia
           connectionsWithStatus = [
             {
               id: "main",
@@ -202,10 +201,40 @@ export default function ConnectionsPage() {
       if (connection) {
         setTimeout(() => {
           setQrModal({ open: false });
-        }, 2000); // Aguarda 2s para o usuário ver que conectou
+        }, 2000);
       }
     }
   }, [whatsappConnections, qrModal.open]);
+
+  // Polling de QR Code (APENAS quando já iniciou)
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    const activeKeys = Object.keys(hasStarted).filter(key => hasStarted[key]);
+    if (activeKeys.length === 0) return;
+
+    const interval = setInterval(async () => {
+      for (const key of activeKeys) {
+        try {
+          const qrResponse = await fetch(`${API_URL}/api/qr/${user.id}`);
+          if (qrResponse.ok) {
+            const qrData = await qrResponse.json();
+            if (qrData.success && qrData.qrCode && !qrModal.open) {
+              setQrModal({
+                open: true,
+                qrCode: qrData.qrCode,
+                connectionName: "WhatsApp",
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Erro ao buscar QR Code:', err);
+        }
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [hasStarted, user?.id, qrModal.open]);
 
   // --------------------------------------------------------------
   // 2. ADICIONAR NOVA CONEXÃO
@@ -216,7 +245,6 @@ export default function ConnectionsPage() {
       return;
     }
 
-    // Validar limite de 3 lojas Saipos
     if (connectionType === "saipos" && saiposStores.length >= 3) {
       setErrorMsg("Você já possui 3 lojas Saipos cadastradas (limite máximo)");
       return;
@@ -242,11 +270,9 @@ export default function ConnectionsPage() {
       });
 
       if (response.ok) {
-        // Limpar formulário e fechar modal
         setFormData({ name: "", apiKey: "", storeId: "" });
         setAddConnectionModal(false);
         setErrorMsg(null);
-        // Recarregar conexões
         await loadConnections();
       } else {
         const error = await response.json();
@@ -268,7 +294,6 @@ export default function ConnectionsPage() {
       return;
     }
 
-    // Não permitir deletar a conexão "padrão" (fallback visual)
     if (id === "default") {
       alert("Esta conexão padrão não pode ser removida. Para remover, delete uma conexão cadastrada no Dashboard.");
       return;
@@ -291,215 +316,24 @@ export default function ConnectionsPage() {
   };
 
   // --------------------------------------------------------------
-  // 4. GERAR QR CODE SEM CONEXÃO (PRIMEIRA VEZ)
+  // 4. INICIAR SESSÃO - ÚNICA FUNÇÃO QUE CHAMA /api/start
   // --------------------------------------------------------------
-  const generateQRCodeWithoutConnection = async () => {
-    if (!user?.id) return;
-
-    setActionLoading({ ...actionLoading, generate: true });
-
-    try {
-      // Health check **não bloqueante** (apenas loga problema e segue)
-      try {
-        const healthController = new AbortController();
-        const healthTimeout = setTimeout(() => healthController.abort(), 5000); // 5 segundos para health check
-
-        const healthCheck = await fetch(`${API_URL}/api/health`, {
-          method: "GET",
-          signal: healthController.signal,
-        });
-
-        clearTimeout(healthTimeout);
-
-        if (!healthCheck.ok) {
-          console.warn(
-            `[Connections] Health check falhou com status ${healthCheck.status}. Tentando iniciar sessão mesmo assim...`,
-          );
-        }
-      } catch (healthError: any) {
-        console.warn(
-          "[Connections] Erro no health check. Tentando iniciar sessão mesmo assim...",
-          healthError,
-        );
-      }
-
-      // Usar exatamente o ID do usuário (sem prefixos) como clientId padrão
-      // SLOT FIXO = 1 (removido parâmetro slot)
-      const defaultClientId = `${user.id}`;
-
-      // Criar AbortController para timeout de 120 segundos (2 minutos)
-      // Iniciar conexão WhatsApp pode demorar para gerar o QR Code
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
-
-        // SLOT FIXO = 1 - Removido parâmetro slot da URL
-        const response = await fetch(
-          `${API_URL}/api/start/${defaultClientId}?force=1`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          signal: controller.signal,
-        },
-      );
-
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('[Connections] Resposta do servidor:', data);
-
-        // Se já está conectado
-        if (data.isConnected && data.connectedNumber) {
-          alert(`WhatsApp já está conectado com o número ${data.connectedNumber}`);
-          await loadConnections();
-          return;
-        }
-
-        // QR CODE DISPONÍVEL
-        if (data.qrCode) {
-          setQrModal({
-            open: true,
-            qrCode: data.qrCode,
-            connectionName: "Nova Conexão",
-          });
-          await loadConnections();
-        } else {
-          // Se não tem QR ainda, fazer polling no endpoint /api/qr
-          console.log('[Connections] QR Code não veio na resposta, iniciando polling...');
-          
-          let attempts = 0;
-          const maxAttempts = 120; // até 120s de tentativa (2 minutos)
-          const pollInterval = setInterval(async () => {
-            attempts++;
-            
-            try {
-              const qrResponse = await fetch(
-                // SLOT FIXO = 1 - Removido parâmetro slot da URL
-                `${API_URL}/api/qr/${defaultClientId}`
-              );
-              
-              if (qrResponse.ok) {
-                const qrData = await qrResponse.json();
-                if (qrData.success && qrData.qrCode) {
-                  clearInterval(pollInterval);
-                  setQrModal({
-                    open: true,
-                    qrCode: qrData.qrCode,
-                    connectionName: "Nova Conexão",
-                  });
-                  await loadConnections();
-                }
-              }
-            } catch (err) {
-              console.error('Erro ao buscar QR Code:', err);
-            }
-            
-            // Para polling após muitas tentativas
-            if (attempts >= maxAttempts) {
-              clearInterval(pollInterval);
-              alert('QR Code não foi gerado a tempo. Tente novamente ou verifique os logs do servidor.');
-            }
-          }, 1000); // Verifica a cada 1 segundo
-        }
-      } else {
-        // Se a resposta não está OK, tentar obter mensagem de erro
-        const errorText = await response.text();
-        let errorData;
-        try {
-          errorData = JSON.parse(errorText);
-        } catch {
-          errorData = { message: errorText || `Erro HTTP ${response.status}` };
-        }
-        throw new Error(errorData.message || `Erro HTTP ${response.status}`);
-      }
-    } catch (error: any) {
-      console.error("Erro ao gerar QR Code:", error);
-      let errorMessage = "Erro desconhecido";
-      
-      if (error.name === 'AbortError' || error.message?.includes('Timeout') || error.message?.includes('aborted')) {
-        errorMessage = "Timeout: A requisição demorou mais de 2 minutos. O servidor pode estar processando a conexão. Aguarde alguns segundos e tente novamente, ou verifique se o servidor está online.";
-      } else if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError') || error.name === 'TypeError') {
-        // Verificar se é problema de CORS ou servidor offline
-        const isCorsError = error.message?.includes('CORS') || error.message?.includes('Access-Control');
-        const serverUrl = API_URL;
-        
-        if (isCorsError) {
-          errorMessage = `Erro de CORS: O servidor em ${serverUrl} não está permitindo requisições do navegador. Verifique a configuração de CORS no backend.`;
-        } else {
-          errorMessage = `Erro de conexão: Não foi possível conectar ao servidor em ${serverUrl}.\n\nPossíveis causas:\n• A VPS está offline ou não está respondendo\n• O backend não está rodando na VPS\n• Problema de rede/firewall\n• URL da API incorreta\n\nVerifique se o servidor está acessível em: ${serverUrl}/api/health`;
-        }
-      } else if (error.message?.includes('browser is already running') || error.message?.includes('sessão já está rodando')) {
-        errorMessage = "Uma sessão já está ativa. Tente parar a sessão atual primeiro ou aguarde alguns segundos e tente buscar o QR Code novamente.";
-        // Tentar buscar QR Code existente
-        try {
-          // SLOT FIXO = 1 - Removido parâmetro slot da URL
-          const qrResponse = await fetch(`${API_URL}/api/qr/${user.id}`);
-          if (qrResponse.ok) {
-            const qrData = await qrResponse.json();
-            if (qrData.success && qrData.qrCode) {
-              setQrModal({
-                open: true,
-                qrCode: qrData.qrCode,
-                connectionName: "Nova Conexão",
-              });
-              return; // Não mostra erro se conseguiu buscar o QR
-            }
-          }
-        } catch (qrError) {
-          console.error('Erro ao buscar QR Code existente:', qrError);
-        }
-      } else {
-        errorMessage = error.message || "Erro ao gerar QR Code. Tente novamente.";
-      }
-      
-      alert(errorMessage);
-    } finally {
-      setActionLoading({ ...actionLoading, generate: false });
-    }
-  };
-
-  // --------------------------------------------------------------
-  // 5. INICIAR SESSÃO WHATSAPP (GERAR QR CODE)
-  // SLOT FIXO = 1 (apenas uma sessão por usuário)
-  // --------------------------------------------------------------
-  const startSession = async (
-    clientId: string,
-    connectionName: string,
-  ) => {
+  const handleStartWhatsApp = async (clientId: string, connectionName: string) => {
     const key = `whatsapp-${clientId}`;
+    
+    // Proteção contra chamadas duplicadas
+    if (isStarting[key] || hasStarted[key]) {
+      console.log('[handleStartWhatsApp] Bloqueado: sessão já iniciando ou iniciada');
+      return;
+    }
+
+    setIsStarting({ ...isStarting, [key]: true });
     setActionLoading({ ...actionLoading, [key]: true });
 
     try {
-      // Health check **não bloqueante** (apenas loga problema e segue)
-      try {
-        const healthController = new AbortController();
-        const healthTimeout = setTimeout(() => healthController.abort(), 5000);
-
-        const healthCheck = await fetch(`${API_URL}/api/health`, {
-          method: "GET",
-          signal: healthController.signal,
-        });
-
-        clearTimeout(healthTimeout);
-
-        if (!healthCheck.ok) {
-          console.warn(
-            `[Connections] Health check falhou com status ${healthCheck.status}. Tentando iniciar sessão mesmo assim...`,
-          );
-        }
-      } catch (healthError: any) {
-        console.warn(
-          "[Connections] Erro no health check. Tentando iniciar sessão mesmo assim...",
-          healthError,
-        );
-      }
-
-      // SLOT FIXO = 1 - Removido parâmetro slot da URL
-      // force=1: quando o usuário pede "Gerar QR Code", queremos resetar a sessão desse usuário
-      // (sem depender de estado anterior). O backend trata isso de forma segura.
-      const response = await fetch(`${API_URL}/api/start/${clientId}?force=1`, {
+      console.log('[handleStartWhatsApp] Iniciando sessão para:', clientId);
+      
+      const response = await fetch(`${API_URL}/api/start/${clientId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -508,105 +342,65 @@ export default function ConnectionsPage() {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('[Connections] Resposta startSession:', data);
+        console.log('[handleStartWhatsApp] Resposta:', data);
 
-        // Se já está conectado
-        if (data.isConnected && data.connectedNumber) {
-          alert(`WhatsApp já está conectado com o número ${data.connectedNumber}`);
-          await loadConnections();
-          return;
-        }
-
-        // QR CODE DISPONÍVEL
-        if (data.qrCode) {
-          setQrModal({
-            open: true,
-            qrCode: data.qrCode,
-            connectionName,
-          });
-          await loadConnections();
-        } else {
-          // Fazer polling para buscar QR Code
-          console.log('[Connections] QR Code não veio, iniciando polling...');
+        if (data.success) {
+          setHasStarted({ ...hasStarted, [key]: true });
           
-          let attempts = 0;
-          const maxAttempts = 120; // até 120s de tentativa (2 minutos)
-          const pollInterval = setInterval(async () => {
-            attempts++;
-            
-            try {
-              // SLOT FIXO = 1 - Removido parâmetro slot da URL
-              const qrResponse = await fetch(`${API_URL}/api/qr/${clientId}`);
-              if (qrResponse.ok) {
-                const qrData = await qrResponse.json();
-                if (qrData.success && qrData.qrCode) {
-                  clearInterval(pollInterval);
-                  setQrModal({
-                    open: true,
-                    qrCode: qrData.qrCode,
-                    connectionName,
-                  });
-                  await loadConnections();
-                }
-              }
-            } catch (err) {
-              console.error('Erro ao buscar QR Code:', err);
-            }
-            
-            if (attempts >= maxAttempts) {
-              clearInterval(pollInterval);
-              alert('QR Code não foi gerado a tempo. Tente novamente.');
-            }
-          }, 1000);
+          if (data.qrCode) {
+            setQrModal({
+              open: true,
+              qrCode: data.qrCode,
+              connectionName,
+            });
+          }
+          
+          await loadConnections();
         }
       } else {
-        // Se a resposta não está OK, tentar obter mensagem de erro
-        const errorText = await response.text();
-        let errorData;
-        try {
-          errorData = JSON.parse(errorText);
-        } catch {
-          errorData = { message: errorText || `Erro HTTP ${response.status}` };
-        }
+        const errorData = await response.json();
         throw new Error(errorData.message || `Erro HTTP ${response.status}`);
       }
     } catch (error: any) {
       console.error("Erro ao iniciar sessão:", error);
-      let errorMessage = "Erro desconhecido";
       
-      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError') || error.name === 'TypeError') {
-        const isCorsError = error.message?.includes('CORS') || error.message?.includes('Access-Control');
-        const serverUrl = API_URL;
+      if (error.message?.includes('browser is already running') || 
+          error.message?.includes('Sessão já está')) {
+        alert("Sessão já está ativa. Aguardando QR Code...");
+        setHasStarted({ ...hasStarted, [key]: true });
         
-        if (isCorsError) {
-          errorMessage = `Erro de CORS: O servidor em ${serverUrl} não está permitindo requisições do navegador. Verifique a configuração de CORS no backend.`;
-        } else {
-          errorMessage = `Erro de conexão: Não foi possível conectar ao servidor em ${serverUrl}.\n\nPossíveis causas:\n• A VPS está offline ou não está respondendo\n• O backend não está rodando na VPS\n• Problema de rede/firewall\n• URL da API incorreta\n\nVerifique se o servidor está acessível em: ${serverUrl}/api/health`;
+        try {
+          const qrResponse = await fetch(`${API_URL}/api/qr/${clientId}`);
+          if (qrResponse.ok) {
+            const qrData = await qrResponse.json();
+            if (qrData.success && qrData.qrCode) {
+              setQrModal({
+                open: true,
+                qrCode: qrData.qrCode,
+                connectionName,
+              });
+            }
+          }
+        } catch (qrError) {
+          console.error('Erro ao buscar QR Code existente:', qrError);
         }
       } else {
-        errorMessage = error.message || "Erro ao iniciar sessão. Tente novamente.";
+        alert(error.message || "Erro ao iniciar sessão. Tente novamente.");
       }
-      
-      alert(errorMessage);
     } finally {
+      setIsStarting({ ...isStarting, [key]: false });
       setActionLoading({ ...actionLoading, [key]: false });
     }
   };
 
   // --------------------------------------------------------------
-  // 5. DESCONECTAR SESSÃO WHATSAPP
-  // SLOT FIXO = 1 (apenas uma sessão por usuário)
+  // 5. DESCONECTAR SESSÃO
   // --------------------------------------------------------------
-  const stopSession = async (
-    clientId: string,
-  ) => {
+  const stopSession = async (clientId: string) => {
     const key = `whatsapp-${clientId}`;
     setActionLoading({ ...actionLoading, [key]: true });
 
     try {
-      // SLOT FIXO = 1 - Removido parâmetro slot da URL
-      // forget=1: ao desconectar, também apaga token/sessão no servidor
-      // para permitir conectar outro número (gerar novo QR) sem reconectar direto.
       const response = await fetch(`${API_URL}/api/stop/${clientId}?forget=1`, {
         method: "POST",
         headers: {
@@ -615,6 +409,7 @@ export default function ConnectionsPage() {
       });
 
       if (response.ok) {
+        setHasStarted({ ...hasStarted, [key]: false });
         await loadConnections();
       }
     } catch (error) {
@@ -747,11 +542,11 @@ export default function ConnectionsPage() {
                   Gere um QR Code para conectar seu WhatsApp
                 </p>
                 <Button
-                  onClick={generateQRCodeWithoutConnection}
-                  disabled={actionLoading.generate}
+                  onClick={() => user?.id && handleStartWhatsApp(user.id, "Nova Conexão")}
+                  disabled={isStarting[`whatsapp-${user?.id}`] || hasStarted[`whatsapp-${user?.id}`]}
                   className="bg-[#001F05] hover:bg-[#003308] text-white"
                 >
-                  {actionLoading.generate ? (
+                  {isStarting[`whatsapp-${user?.id}`] ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       Gerando QR Code...
@@ -851,20 +646,20 @@ export default function ConnectionsPage() {
                                 <>
                                   <Button
                                     onClick={() =>
-                                      startSession(
+                                      handleStartWhatsApp(
                                         connection.clientId,
                                         connection.name,
                                       )
                                     }
-                                    disabled={actionLoading[actionKey]}
+                                    disabled={isStarting[actionKey] || hasStarted[actionKey]}
                                     className="w-full bg-[#001F05] hover:bg-[#003308] text-white"
                                   >
-                                    {actionLoading[actionKey] ? (
+                                    {isStarting[actionKey] ? (
                                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                                     ) : (
                                       <QrCode className="h-4 w-4 mr-2" />
                                     )}
-                                    Gerar QR Code
+                                    {hasStarted[actionKey] ? "QR Solicitado" : "Gerar QR Code"}
                                   </Button>
 
                                   {session.status === "qrcode" &&
