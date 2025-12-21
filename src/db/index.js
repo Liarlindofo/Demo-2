@@ -1,26 +1,32 @@
-import { PrismaClient } from '@prisma/client';
-import logger from '../utils/logger.js';
+import { PrismaClient } from "@prisma/client";
+import logger from "../utils/logger.js";
 
-const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'production' 
-    ? ['error', 'warn'] 
-    : ['query', 'info', 'warn', 'error'],
-});
+const globalForPrisma = globalThis;
 
-// Test connection
-prisma.$connect()
-  .then(() => {
-    logger.success('✓ Conectado ao PostgreSQL (Neon)');
-  })
-  .catch((err) => {
-    logger.error('✗ Erro ao conectar no PostgreSQL:', err);
-    process.exit(1);
+const prisma =
+  globalForPrisma.prisma ||
+  new PrismaClient({
+    log:
+      process.env.NODE_ENV === "production"
+        ? ["error"]
+        : ["query", "info", "warn", "error"],
   });
 
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
+
+// ❗ NÃO chama prisma.$connect() aqui
+// ❗ Prisma conecta automaticamente quando a primeira query roda
+
 // Graceful shutdown
-process.on('beforeExit', async () => {
-  await prisma.$disconnect();
+process.on("beforeExit", async () => {
+  try {
+    await prisma.$disconnect();
+    logger.info("🔌 Prisma desconectado com sucesso");
+  } catch (err) {
+    logger.warn("⚠️ Erro ao desconectar Prisma", err);
+  }
 });
 
 export default prisma;
-
