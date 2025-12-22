@@ -182,7 +182,7 @@ export async function startClient(userId, slot = 1) {
         },
       })
       .then(async (client) => {
-        logger.wpp(normalizedUserId, slot, 'Cliente WPPConnect criado.');
+        logger.wpp(normalizedUserId, slot, '✅ Cliente WPPConnect criado com sucesso.');
         sessionManager.setClient(normalizedUserId, slot, client);
 
         setupMessageListener(client, normalizedUserId, slot);
@@ -195,8 +195,11 @@ export async function startClient(userId, slot = 1) {
         } catch {}
       })
       .catch(async (error) => {
-        logger.error(`Erro ao criar cliente [${normalizedUserId}:${slot}]`, error);
-        sessionManager.removeClient(normalizedUserId, slot);
+        logger.error(`❌ Erro CRÍTICO ao criar cliente [${normalizedUserId}:${slot}]`, error);
+        // ⚠️ IMPORTANTE: NÃO remover client automaticamente!
+        // O client pode ter sido criado parcialmente e ainda estar funcionando.
+        // Apenas log o erro e atualiza o banco. O cliente será removido SOMENTE
+        // por ação manual (stopClient) ou desconexão real do WhatsApp.
         await WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
       });
 

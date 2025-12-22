@@ -2,6 +2,7 @@ import { UserModel, WhatsAppBotModel, BotSettingsModel } from '../db/models.js';
 import prisma from '../db/index.js';
 import logger from '../utils/logger.js';
 import { startWhatsappWorker, stopWhatsappWorker } from '../services/pm2.service.js';
+import { stopClient } from '../wpp/index.js';
 import config from '../../config.js';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -352,11 +353,27 @@ export async function stopConnection(req, res) {
     const normalizedUserId = String(userId).trim();
 
     logger.info(`[stopConnection] ==========================================`);
-    logger.info(`[stopConnection] Parando worker WhatsApp`);
+    logger.info(`[stopConnection] Parando sessão WhatsApp`);
     logger.info(`[stopConnection] userId original: "${userId}"`);
     logger.info(`[stopConnection] userId normalizado: "${normalizedUserId}"`);
     logger.info(`[stopConnection] ==========================================`);
 
+    // IMPORTANTE: Fechar client ANTES de parar o worker
+    // Isso garante cleanup correto e evita processos órfãos
+    logger.info(`[stopConnection] 1️⃣ Fechando client WPPConnect...`);
+    try {
+      const stopResult = await stopClient(normalizedUserId, slot);
+      if (stopResult.success) {
+        logger.success(`[stopConnection] ✅ Client fechado com sucesso`);
+      } else {
+        logger.warn(`[stopConnection] ⚠️ Client não estava ativo ou erro ao fechar: ${stopResult.message}`);
+      }
+    } catch (clientError) {
+      logger.warn(`[stopConnection] ⚠️ Erro ao fechar client (continuando): ${clientError.message}`);
+    }
+
+    // Agora para o worker PM2
+    logger.info(`[stopConnection] 2️⃣ Parando worker PM2...`);
     await stopWhatsappWorker(normalizedUserId);
 
     // Além de parar o processo PM2, o banco precisa refletir o estado "desconectado"

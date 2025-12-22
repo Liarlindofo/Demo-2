@@ -32,39 +32,34 @@ console.log('='.repeat(60));
 
 logger.info(`[whatsapp-worker] Worker iniciado para userId: "${userId}" (PID: ${process.pid})`);
 
-// Graceful shutdown: quando o PM2 parar/deletar, tentar logout/close antes de sair
+// ⚠️ IMPORTANTE: Worker deve ser "long-lived" (processo duradouro)
+// NÃO encerrar sessão automaticamente em SIGINT/SIGTERM/erros
+// O PM2 gerencia o ciclo de vida do processo, mas o client WhatsApp
+// deve permanecer ATIVO até comando manual explícito de desconectar
+
+// Graceful shutdown: quando o PM2 parar/deletar, apenas logar e sair
+// NÃO chamar stopClient() automaticamente
 const shutdown = async (signal) => {
-  try {
-    logger.warn(`[whatsapp-worker] ${signal} recebido. Encerrando sessão para userId="${userId}"...`);
-    await stopClient(userId).catch(() => {});
-    logger.info(`[whatsapp-worker] ✅ Sessão encerrada para userId="${userId}"`);
-  } finally {
-    process.exit(0);
-  }
+  logger.warn(`[whatsapp-worker] ${signal} recebido. Mantendo sessão ativa para userId="${userId}"`);
+  logger.info(`[whatsapp-worker] ⚠️ Worker sendo finalizado, mas cliente WhatsApp permanece em memória.`);
+  logger.info(`[whatsapp-worker] ℹ️ Use comando explícito de desconectar para remover a sessão.`);
+  process.exit(0);
 };
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-// Garantir limpeza em caso de erro não capturado
+// Garantir que erros não capturados sejam logados, mas NÃO matar a sessão
 process.on('uncaughtException', async (error) => {
-  logger.error(`[whatsapp-worker] ❌ Exceção não capturada:`, error);
-  try {
-    await stopClient(userId).catch(() => {});
-  } catch (err) {
-    // Ignorar erros na limpeza
-  }
-  process.exit(1);
+  logger.error(`[whatsapp-worker] ❌ Exceção não capturada (sessão mantida):`, error);
+  // NÃO chamar stopClient() - apenas log do erro
+  // A sessão continua ativa para não interromper atendimento
 });
 
 process.on('unhandledRejection', async (reason) => {
-  logger.error(`[whatsapp-worker] ❌ Promise rejection não tratada:`, reason);
-  try {
-    await stopClient(userId).catch(() => {});
-  } catch (err) {
-    // Ignorar erros na limpeza
-  }
-  process.exit(1);
+  logger.error(`[whatsapp-worker] ❌ Promise rejection não tratada (sessão mantida):`, reason);
+  // NÃO chamar stopClient() - apenas log do erro
+  // A sessão continua ativa para não interromper atendimento
 });
 
 try {
