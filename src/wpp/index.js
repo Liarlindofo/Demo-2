@@ -185,14 +185,21 @@ export async function startClient(userId, slot = 1) {
         logger.wpp(normalizedUserId, slot, '✅ Cliente WPPConnect criado com sucesso.');
         sessionManager.setClient(normalizedUserId, slot, client);
 
+        logger.wpp(normalizedUserId, slot, '🎧 Registrando listener de mensagens...');
         setupMessageListener(client, normalizedUserId, slot);
+        logger.wpp(normalizedUserId, slot, '✅ Listener de mensagens registrado!');
 
         try {
           const isConnected = await client.isConnected().catch(() => false);
           if (isConnected) {
+            logger.wpp(normalizedUserId, slot, '✅ Cliente está conectado! Pronto para receber mensagens.');
             await onStatusChange(normalizedUserId, slot, 'chatsAvailable', client);
+          } else {
+            logger.warn(`[startClient] Cliente criado mas ainda não conectado [${normalizedUserId}:${slot}]`);
           }
-        } catch {}
+        } catch (connErr) {
+          logger.warn(`[startClient] Erro ao verificar conexão: ${connErr?.message || connErr}`);
+        }
       })
       .catch(async (error) => {
         logger.error(`❌ Erro CRÍTICO ao criar cliente [${normalizedUserId}:${slot}]`, error);
@@ -267,14 +274,50 @@ export async function getClientStatus(userId, slot = 1) {
  * Listener de mensagens (IA)
  */
 function setupMessageListener(client, userId, slot) {
+  logger.info(`[setupMessageListener] Configurando listeners para [${userId}:${slot}]`);
+  
+  // Registrar múltiplos listeners para garantir captura de mensagens
+  
+  // Listener 1: onMessage (recomendado)
+  client.onMessage(async (message) => {
+    logger.info(`[🔔 onMessage] Evento disparado! userId: ${userId}, slot: ${slot}`);
+    await handleIncomingMessage(message, client, userId, slot);
+  });
+  
+  // Listener 2: onAnyMessage (backup)
   client.onAnyMessage(async (message) => {
-    try {
-      if (message.isGroupMsg) return;
+    logger.info(`[🔔 onAnyMessage] Evento disparado! userId: ${userId}, slot: ${slot}`);
+    // Este é um backup, já será processado pelo onMessage
+  });
+  
+  logger.success(`[setupMessageListener] ✅ Listeners configurados com sucesso para [${userId}:${slot}]`);
+}
 
-      if (message.type !== 'chat' && message.type !== 'text') return;
+/**
+ * Processa mensagem recebida
+ */
+async function handleIncomingMessage(message, client, userId, slot) {
+    try {
+      // LOG CRÍTICO: Detectar quando mensagem chega
+      logger.info(`[📨 MENSAGEM RECEBIDA] userId: ${userId}, slot: ${slot}`);
+      logger.info(`[📨 MENSAGEM] De: ${message.from}, Tipo: ${message.type}, fromMe: ${message.fromMe}, isGroup: ${message.isGroupMsg}`);
+      logger.info(`[📨 MENSAGEM] Corpo: "${message.body || message.text || '(vazio)'}"`);
+      
+      if (message.isGroupMsg) {
+        logger.info(`[setupMessageListener] Ignorando mensagem de grupo`);
+        return;
+      }
+
+      if (message.type !== 'chat' && message.type !== 'text') {
+        logger.info(`[setupMessageListener] Ignorando mensagem do tipo: ${message.type}`);
+        return;
+      }
 
       const rawText = (message.body || message.text || '').trim();
-      if (!rawText) return;
+      if (!rawText) {
+        logger.info(`[setupMessageListener] Ignorando mensagem vazia`);
+        return;
+      }
 
       const text = rawText.toLowerCase();
 
@@ -283,10 +326,15 @@ function setupMessageListener(client, userId, slot) {
         : message.from;
 
       const phone = extractPhoneNumber(phoneRaw) || phoneRaw;
+      
+      logger.info(`[📱 PROCESSANDO] Telefone: ${phone}, fromMe: ${message.fromMe}, texto: "${rawText}"`);
 
       // comandos do atendente
       if (message.fromMe) {
+        logger.info(`[setupMessageListener] Mensagem fromMe (atendente humano)`);
+        
         if (text === '#boa noite') {
+          logger.wpp(userId, slot, `🛑 Comando #boa noite recebido para ${phone}`);
           pauseChat(userId, slot, phone);
           try {
             await client.sendText(message.from, `🛑 Bot pausado para ${phone}. Use #voltar para reativar.`);
@@ -295,6 +343,7 @@ function setupMessageListener(client, userId, slot) {
         }
 
         if (text === '#voltar') {
+          logger.wpp(userId, slot, `✅ Comando #voltar recebido para ${phone}`);
           resumeChat(userId, slot, phone);
           try {
             await client.sendText(message.from, `🤖 Bot reativado para ${phone}.`);
@@ -303,16 +352,31 @@ function setupMessageListener(client, userId, slot) {
         }
 
         // atendente digitando normal -> bot não responde (por design)
+        logger.info(`[setupMessageListener] Atendente humano digitando, bot não responderá`);
         return;
       }
+
+      logger.info(`[🤖 BOT] Processando mensagem de cliente externo: ${phone}`);
 
       if (isChatPaused(userId, slot, phone)) {
         logger.wpp(userId, slot, `🔕 Chat ${phone} está em modo humano. Bot não responderá.`);
         return;
       }
 
+      logger.info(`[🤖 BOT] Buscando configurações do bot...`);
       const botSettings = await BotSettingsModel.findByUser(userId).catch(() => null);
-      if (!botSettings || !botSettings.isActive) return;
+      
+      if (!botSettings) {
+        logger.warn(`[setupMessageListener] Bot settings não encontrado para userId: ${userId}`);
+        return;
+      }
+      
+      if (!botSettings.isActive) {
+        logger.warn(`[setupMessageListener] Bot está INATIVO para userId: ${userId}`);
+        return;
+      }
+      
+      logger.info(`[🤖 BOT] Bot ativo! Nome: ${botSettings.botName}, Tipo: ${botSettings.storeType}`);
 
       const conversationHistory = sessionManager.getConversation(
         userId,
@@ -337,8 +401,11 @@ function setupMessageListener(client, userId, slot) {
         timestamp: Date.now(),
       });
 
+      logger.info(`[🤖 BOT] Enviando para GPT: "${rawText}"`);
       const aiResponse = await sendToGPT(rawText, formattedHistory, gptSettings);
+      logger.info(`[🤖 BOT] Resposta GPT: "${aiResponse}"`);
 
+      logger.info(`[🤖 BOT] Enviando resposta para ${message.from}...`);
       await client.sendText(message.from, aiResponse);
 
       // salva resposta bot
@@ -348,11 +415,11 @@ function setupMessageListener(client, userId, slot) {
         timestamp: Date.now(),
       });
 
-      logger.success(`Resposta enviada para ${phone} (${message.from})`);
+      logger.success(`✅ Resposta enviada para ${phone} (${message.from})`);
     } catch (error) {
-      logger.error(`Erro ao processar mensagem [${userId}:${slot}]:`, error?.message || error);
+      logger.error(`❌ Erro ao processar mensagem [${userId}:${slot}]:`, error?.message || error);
+      logger.error(`❌ Stack trace:`, error?.stack);
     }
-  });
 }
 
 export async function restoreAllSessions() {
