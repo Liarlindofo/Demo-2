@@ -332,34 +332,45 @@ async function handleIncomingMessage(message, client, userId, slot) {
       // comandos do atendente
       if (message.fromMe) {
         logger.info(`[setupMessageListener] Mensagem fromMe (atendente humano)`);
+        logger.info(`[setupMessageListener] Texto recebido: "${text}"`);
+        logger.info(`[setupMessageListener] message.from (chat): ${message.from}`);
         
         if (text === '#boa noite') {
           logger.wpp(userId, slot, `🛑 Comando #boa noite recebido para ${phone}`);
           pauseChat(userId, slot, phone);
-          try {
-            await client.sendText(message.from, `🛑 Bot pausado para ${phone}. Use #voltar para reativar.`);
-          } catch {}
+          
+          // Usar sessionManager para consistência com modo manual
+          sessionManager.setManualMode(userId, slot, phone, true);
+          
+          logger.success(`[setupMessageListener] ✅ Chat ${phone} pausado. Atendente assumiu.`);
           return;
         }
 
         if (text === '#voltar') {
           logger.wpp(userId, slot, `✅ Comando #voltar recebido para ${phone}`);
           resumeChat(userId, slot, phone);
-          try {
-            await client.sendText(message.from, `🤖 Bot reativado para ${phone}.`);
-          } catch {}
+          
+          // Remover modo manual do sessionManager
+          sessionManager.setManualMode(userId, slot, phone, false);
+          
+          logger.success(`[setupMessageListener] ✅ Chat ${phone} reativado. Bot voltou.`);
           return;
         }
 
         // atendente digitando normal -> bot não responde (por design)
-        logger.info(`[setupMessageListener] Atendente humano digitando, bot não responderá`);
+        logger.info(`[setupMessageListener] Atendente humano digitando normalmente, bot não responderá`);
         return;
       }
 
       logger.info(`[🤖 BOT] Processando mensagem de cliente externo: ${phone}`);
 
-      if (isChatPaused(userId, slot, phone)) {
-        logger.wpp(userId, slot, `🔕 Chat ${phone} está em modo humano. Bot não responderá.`);
+      // Verificar DUAS fontes de modo manual (por segurança)
+      const isPausedLocal = isChatPaused(userId, slot, phone);
+      const isPausedSession = sessionManager.isManualMode(userId, slot, phone);
+      
+      if (isPausedLocal || isPausedSession) {
+        logger.wpp(userId, slot, `🔕 Chat ${phone} está em MODO MANUAL (atendente humano). Bot não responderá.`);
+        logger.info(`[🤖 BOT] isPausedLocal: ${isPausedLocal}, isPausedSession: ${isPausedSession}`);
         return;
       }
 
