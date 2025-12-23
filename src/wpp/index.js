@@ -324,6 +324,14 @@ async function handleIncomingMessage(message, client, userId, slot) {
         return;
       }
 
+      // Ignora mensagens de stories/status do WhatsApp
+      if (message.isStatus || message.isStory || 
+          (message.from && (message.from.includes('status') || message.from.includes('broadcast'))) ||
+          message.type === 'status') {
+        logger.info(`[setupMessageListener] Ignorando mensagem de story/status`);
+        return;
+      }
+
       if (message.type !== 'chat' && message.type !== 'text') {
         logger.info(`[setupMessageListener] Ignorando mensagem do tipo: ${message.type}`);
         return;

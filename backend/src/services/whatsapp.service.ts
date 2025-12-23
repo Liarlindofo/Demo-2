@@ -112,6 +112,13 @@ export class WhatsAppService {
           return;
         }
 
+        // Ignorar mensagens de stories/status do WhatsApp
+        if ((message as any).isStatus || (message as any).isStory || 
+            (message.from && (message.from.includes('status') || message.from.includes('broadcast'))) ||
+            message.type === 'status') {
+          return;
+        }
+
         // Processar apenas mensagens de texto
         if (message.type !== 'chat' && message.type !== 'text') {
           return;
