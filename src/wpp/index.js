@@ -297,22 +297,16 @@ export async function getClientStatus(userId, slot = 1) {
  */
 function setupMessageListener(client, userId, slot) {
   logger.info(`[setupMessageListener] Configurando listeners para [${userId}:${slot}]`);
-  
-  // Registrar múltiplos listeners para garantir captura de mensagens
-  
-  // Listener 1: onMessage (recomendado)
-  client.onMessage(async (message) => {
-    logger.info(`[🔔 onMessage] Evento disparado! userId: ${userId}, slot: ${slot}`);
-    await handleIncomingMessage(message, client, userId, slot);
-  });
-  
-  // Listener 2: onAnyMessage (backup)
+
+  // Usamos APENAS onAnyMessage, pois em muitos ambientes o WPPConnect
+  // dispara este evento para todas as mensagens (inclusive fromMe),
+  // enquanto onMessage pode não ser chamado de forma consistente.
   client.onAnyMessage(async (message) => {
     logger.info(`[🔔 onAnyMessage] Evento disparado! userId: ${userId}, slot: ${slot}`);
-    // Este é um backup, já será processado pelo onMessage
+    await handleIncomingMessage(message, client, userId, slot);
   });
-  
-  logger.success(`[setupMessageListener] ✅ Listeners configurados com sucesso para [${userId}:${slot}]`);
+
+  logger.success(`[setupMessageListener] ✅ Listener configurado com sucesso para [${userId}:${slot}]`);
 }
 
 /**
@@ -406,13 +400,15 @@ async function handleIncomingMessage(message, client, userId, slot) {
 
       logger.info(`[🤖 BOT] Processando mensagem de cliente externo: ${phone}`);
 
-      // Verificar DUAS fontes de modo manual (por segurança)
-      const isPausedLocal = isChatPaused(userId, slot, phone);
-      const isPausedSession = sessionManager.isManualMode(userId, slot, phone);
-      
-      if (isPausedLocal || isPausedSession) {
-        logger.wpp(userId, slot, `🔕 Chat ${phone} está em MODO MANUAL (atendente humano). Bot não responderá.`);
-        logger.info(`[🤖 BOT] isPausedLocal: ${isPausedLocal}, isPausedSession: ${isPausedSession}`);
+      // 🔒 VERIFICAÇÃO DE MODO MANUAL (PAUSADO)
+      // Modo simples: usamos apenas o SessionManager como fonte da verdade.
+      const isPaused = sessionManager.isManualMode(userId, slot, phone);
+      if (isPaused) {
+        logger.wpp(
+          userId,
+          slot,
+          `🔕 Chat ${phone} está em MODO MANUAL (atendente humano). Bot não responderá.`
+        );
         return;
       }
 
