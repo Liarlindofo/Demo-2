@@ -351,36 +351,56 @@ async function handleIncomingMessage(message, client, userId, slot) {
       
       logger.info(`[📱 PROCESSANDO] Telefone: ${phone}, fromMe: ${message.fromMe}, texto: "${rawText}"`);
 
-      // comandos do atendente
+      // LOG: sempre que alguém mandar #boa noite ou #voltar, registramos,
+      // independente de ser fromMe ou não (para facilitar debug).
+      if (text === '#boa noite' || text === '#voltar') {
+        logger.info(
+          `[setupMessageListener] Comando detectado: "${text}" | fromMe=${message.fromMe} | phone=${phone}`
+        );
+      }
+
+      // comandos do atendente (apenas quando for mensagem do próprio número / WhatsApp Web)
       if (message.fromMe) {
         logger.info(`[setupMessageListener] Mensagem fromMe (atendente humano)`);
         logger.info(`[setupMessageListener] Texto recebido: "${text}"`);
         logger.info(`[setupMessageListener] message.from (chat): ${message.from}`);
-        
+
+        // 🛑 COMANDO #boa noite → PAUSAR BOT PARA ESTE NÚMERO
         if (text === '#boa noite') {
           logger.wpp(userId, slot, `🛑 Comando #boa noite recebido para ${phone}`);
+
+          // Marca como pausado em memória
           pauseChat(userId, slot, phone);
-          
-          // Usar sessionManager para consistência com modo manual
+
+          // Marca como manual no SessionManager (modo atendente)
           sessionManager.setManualMode(userId, slot, phone, true);
-          
-          logger.success(`[setupMessageListener] ✅ Chat ${phone} pausado. Atendente assumiu.`);
+
+          logger.success(
+            `[setupMessageListener] ✅ Chat ${phone} pausado (modo manual ATIVADO). Atendente assumiu.`
+          );
           return;
         }
 
+        // 🤖 COMANDO #voltar → RETOMAR BOT PARA ESTE NÚMERO
         if (text === '#voltar') {
           logger.wpp(userId, slot, `✅ Comando #voltar recebido para ${phone}`);
+
+          // Remove pausa em memória
           resumeChat(userId, slot, phone);
-          
-          // Remover modo manual do sessionManager
+
+          // Desativa modo manual no SessionManager
           sessionManager.setManualMode(userId, slot, phone, false);
-          
-          logger.success(`[setupMessageListener] ✅ Chat ${phone} reativado. Bot voltou.`);
+
+          logger.success(
+            `[setupMessageListener] ✅ Chat ${phone} reativado (modo manual DESATIVADO). Bot voltou.`
+          );
           return;
         }
 
         // atendente digitando normal -> bot não responde (por design)
-        logger.info(`[setupMessageListener] Atendente humano digitando normalmente, bot não responderá`);
+        logger.info(
+          `[setupMessageListener] Atendente humano digitando normalmente, bot não responderá (sem comando).`
+        );
         return;
       }
 
