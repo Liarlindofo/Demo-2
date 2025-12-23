@@ -223,18 +223,18 @@ class SessionManager {
     
     // Normalizar número de telefone (remover sufixos do WhatsApp)
     let normalizedPhone = phoneNumber;
-    if (normalizedPhone.includes('@')) {
+    if (normalizedPhone && normalizedPhone.includes('@')) {
       normalizedPhone = normalizedPhone.split('@')[0];
     }
     
     const sessionManualMode = this.manualMode.get(key);
-    // Salvar tanto com número normalizado quanto original para garantir compatibilidade
-    sessionManualMode.set(normalizedPhone, enabled);
-    if (normalizedPhone !== phoneNumber) {
-      sessionManualMode.set(phoneNumber, enabled);
-    }
     
-    logger.wpp(userId, slot, `Modo manual ${enabled ? 'ativado' : 'desativado'} para ${normalizedPhone} (original: ${phoneNumber})`);
+    // Salvar APENAS com número normalizado (sem @c.us)
+    sessionManualMode.set(normalizedPhone, enabled);
+    
+    logger.wpp(userId, slot, `🔧 setManualMode: ${enabled ? 'ATIVADO' : 'DESATIVADO'} para ${normalizedPhone} (original: ${phoneNumber})`);
+    logger.info(`[SessionManager] Modo manual definido: chave="${key}", phone="${normalizedPhone}", enabled=${enabled}`);
+    logger.info(`[SessionManager] Total em modo manual para esta sessão: ${sessionManualMode.size}`);
   }
 
   /**
@@ -254,13 +254,13 @@ class SessionManager {
       normalizedPhone = normalizedPhone.split('@')[0];
     }
     
-    // Verificar tanto com número normalizado quanto original
-    const isManual = sessionManualMode.get(normalizedPhone) === true || 
-                     sessionManualMode.get(phoneNumber) === true;
+    // Verificar APENAS com número normalizado
+    const isManual = sessionManualMode.get(normalizedPhone) === true;
     
     // Log para debug
+    logger.info(`[SessionManager] isManualMode: chave="${key}", phone="${normalizedPhone}" (original: "${phoneNumber}") -> ${isManual ? 'SIM (MANUAL)' : 'NÃO (BOT)'}`);
     if (isManual) {
-      logger.wpp(userId, slot, `🔍 Modo manual encontrado para ${normalizedPhone} (original: ${phoneNumber})`);
+      logger.wpp(userId, slot, `🔍 Modo manual CONFIRMADO para ${normalizedPhone}`);
     }
     
     return isManual;

@@ -19,25 +19,47 @@ const execAsync = promisify(exec);
  */
 const pausedChats = new Set();
 
+/**
+ * Normaliza número de telefone removendo sufixos do WhatsApp
+ * Ex: "5511999999999@c.us" -> "5511999999999"
+ */
+function normalizePhone(phone) {
+  if (!phone) return '';
+  // Remove @c.us, @g.us, @s.whatsapp.net, etc
+  return phone.split('@')[0];
+}
+
 function getChatKey(userId, slot, phone) {
-  return `${userId}:${slot}:${phone}`;
+  const normalized = normalizePhone(phone);
+  const key = `${userId}:${slot}:${normalized}`;
+  return key;
 }
 
 export function pauseChat(userId, slot, phone) {
-  const key = getChatKey(userId, slot, phone);
+  const normalized = normalizePhone(phone);
+  const key = getChatKey(userId, slot, normalized);
   pausedChats.add(key);
-  logger.wpp(userId, slot, `🛑 pauseChat -> Bot pausado para ${phone}`);
+  logger.wpp(userId, slot, `🛑 pauseChat -> Bot pausado para ${normalized} (original: ${phone})`);
+  logger.info(`[pauseChat] Chave adicionada: "${key}"`);
+  logger.info(`[pauseChat] Total pausados: ${pausedChats.size} -> ${Array.from(pausedChats).join(', ')}`);
 }
 
 export function resumeChat(userId, slot, phone) {
-  const key = getChatKey(userId, slot, phone);
+  const normalized = normalizePhone(phone);
+  const key = getChatKey(userId, slot, normalized);
   pausedChats.delete(key);
-  logger.wpp(userId, slot, `✅ resumeChat -> Bot reativado para ${phone}`);
+  logger.wpp(userId, slot, `✅ resumeChat -> Bot reativado para ${normalized} (original: ${phone})`);
+  logger.info(`[resumeChat] Chave removida: "${key}"`);
+  logger.info(`[resumeChat] Total pausados: ${pausedChats.size}`);
 }
 
 export function isChatPaused(userId, slot, phone) {
-  const key = getChatKey(userId, slot, phone);
-  return pausedChats.has(key);
+  const normalized = normalizePhone(phone);
+  const key = getChatKey(userId, slot, normalized);
+  const isPaused = pausedChats.has(key);
+  logger.info(`[isChatPaused] Verificando "${key}" -> ${isPaused ? 'SIM (PAUSADO)' : 'NÃO (ATIVO)'}`);
+  logger.info(`[isChatPaused] Chaves pausadas: ${Array.from(pausedChats).join(', ')}`);
+  return isPaused;
 }
 
 /**
