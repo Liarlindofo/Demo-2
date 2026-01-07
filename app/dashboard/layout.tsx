@@ -47,7 +47,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className={isDarkMode ? 'min-h-screen dark' : 'min-h-screen'}>
         <div className="bg-black text-white min-h-screen">
           <header className="bg-[#141415]/95 backdrop-blur-sm border-b border-[#374151] sticky top-0 z-50">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="w-full px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between py-4">
                 {/* Menu Hamburger - Esquerda */}
                 <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
