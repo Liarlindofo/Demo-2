@@ -2,18 +2,21 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useUser } from '@stackframe/stack';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Settings, User, Moon, Sun, LogOut, MessageCircle, MessageSquare, Menu, X } from 'lucide-react';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Settings, User, Moon, Sun, LogOut, Menu, Link2, Calendar, MessageSquare } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import { AppProvider } from '@/contexts/app-context';
 import { useRouter } from 'next/navigation';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const pathname = usePathname();
   
   // Usar Stack Auth real - redireciona para login se não autenticado
   const user = useUser({ or: 'redirect' });
@@ -46,39 +49,70 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <header className="bg-[#141415]/95 backdrop-blur-sm border-b border-[#374151] sticky top-0 z-50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between py-4">
-                <div className="flex items-center gap-6">
-                  <Link href="/" className="hover:opacity-80 transition-opacity">
+                {/* Menu Hamburger - Esquerda */}
+                <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+                  <SheetTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 w-9 p-0 text-white hover:bg-[#374151]"
+                    >
+                      <Menu className="h-5 w-5" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="left" className="w-64 bg-[#141415] border-[#374151] text-white">
+                    <div className="flex flex-col gap-4 mt-8">
+                      <Link 
+                        href="/connections" 
+                        onClick={() => setIsSidebarOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                          pathname === '/connections' 
+                            ? 'bg-[#001F05] text-green-400' 
+                            : 'text-gray-300 hover:bg-[#374151] hover:text-white'
+                        }`}
+                      >
+                        <Link2 className="h-5 w-5" />
+                        <span className="font-medium">Conexões</span>
+                      </Link>
+                      
+                      <Link 
+                        href="/whatsapp-config" 
+                        onClick={() => setIsSidebarOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                          pathname === '/whatsapp-config' 
+                            ? 'bg-[#001F05] text-green-400' 
+                            : 'text-gray-300 hover:bg-[#374151] hover:text-white'
+                        }`}
+                      >
+                        <Calendar className="h-5 w-5" />
+                        <span className="font-medium">Agendamento de relatório</span>
+                      </Link>
+                      
+                      <Link 
+                        href="/whatsapp-tools" 
+                        onClick={() => setIsSidebarOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                          pathname === '/whatsapp-tools' 
+                            ? 'bg-[#001F05] text-green-400' 
+                            : 'text-gray-300 hover:bg-[#374151] hover:text-white'
+                        }`}
+                      >
+                        <MessageSquare className="h-5 w-5" />
+                        <span className="font-medium">WhatsApp Chat</span>
+                      </Link>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+                
+                {/* Logo - Centro */}
+                <div className="absolute left-1/2 transform -translate-x-1/2">
+                  <Link href="/dashboard" className="hover:opacity-80 transition-opacity">
                     <Logo />
                   </Link>
-                  <nav className="hidden md:flex items-center gap-2">
-                    <Link href="/connections">
-                      <Button variant="ghost" size="sm" className="h-9 px-4 text-green-500 hover:text-green-400 hover:bg-green-500/10">
-                        Conexões Saipos
-                      </Button>
-                    </Link>
-                    <Link href="/whatsapp-config">
-                      <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-green-500 hover:text-green-400 hover:bg-green-500/10" title="Configurar WhatsApp Business">
-                        <MessageCircle className="h-5 w-5" />
-                      </Button>
-                    </Link>
-                    <Link href="/whatsapp-tools">
-                      <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-blue-500 hover:text-blue-400 hover:bg-blue-500/10" title="Ferramentas WhatsApp">
-                        <MessageSquare className="h-5 w-5" />
-                      </Button>
-                    </Link>
-                  </nav>
-                  
-                  {/* Menu Mobile */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="md:hidden h-9 w-9 p-0 text-white hover:bg-[#374151]"
-                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                  >
-                    {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-                  </Button>
                 </div>
-                <div className="flex items-center gap-4">
+                
+                {/* Avatar - Direita */}
+                <div className="flex items-center gap-4 ml-auto">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-8 w-8 rounded-full">
@@ -113,30 +147,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </DropdownMenu>
                 </div>
               </div>
-              
-              {/* Menu Mobile Dropdown */}
-              {isMobileMenuOpen && (
-                <div className="md:hidden border-t border-[#374151] py-4 space-y-2">
-                  <Link href="/connections" onClick={() => setIsMobileMenuOpen(false)}>
-                    <Button variant="ghost" className="w-full justify-start text-green-500 hover:text-green-400 hover:bg-green-500/10">
-                      <MessageCircle className="mr-2 h-4 w-4" />
-                      Conexões Saipos
-                    </Button>
-                  </Link>
-                  <Link href="/whatsapp-config" onClick={() => setIsMobileMenuOpen(false)}>
-                    <Button variant="ghost" className="w-full justify-start text-green-500 hover:text-green-400 hover:bg-green-500/10">
-                      <MessageCircle className="mr-2 h-4 w-4" />
-                      Configurar WhatsApp
-                    </Button>
-                  </Link>
-                  <Link href="/whatsapp-tools" onClick={() => setIsMobileMenuOpen(false)}>
-                    <Button variant="ghost" className="w-full justify-start text-blue-500 hover:text-blue-400 hover:bg-blue-500/10">
-                      <MessageSquare className="mr-2 h-4 w-4" />
-                      Ferramentas WhatsApp
-                    </Button>
-                  </Link>
-                </div>
-              )}
             </div>
           </header>
           <main className="flex-1">{children}</main>
