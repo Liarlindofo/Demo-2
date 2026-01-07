@@ -166,16 +166,16 @@ export function StoreCarousel() {
 
   if (!isClient || isLoadingStores) {
     return (
-      <div className="w-full max-w-4xl mx-auto p-6">
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-white mb-2">Suas Lojas</h2>
+      <div className="w-full">
+        <div className="mb-6 text-center">
+          <h2 className="text-2xl font-bold text-white mb-2">Suas Lojas</h2>
           <p className="text-gray-400 text-sm">
             {isLoadingStores ? "Carregando lojas da Saipos..." : "Carregando..."}
           </p>
         </div>
-        <div className="flex gap-4 animate-pulse">
+        <div className="flex justify-center gap-6 animate-pulse">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="w-48 h-32 bg-[#141415] border border-[#374151] rounded-lg"></div>
+            <div key={i} className="w-48 h-40 bg-[#141415] border border-[#374151] rounded-lg"></div>
           ))}
         </div>
       </div>
@@ -183,9 +183,9 @@ export function StoreCarousel() {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-6">
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-white mb-2">Suas Lojas</h2>
+    <div className="w-full">
+      <div className="mb-6 text-center">
+        <h2 className="text-2xl font-bold text-white mb-2">Suas Lojas</h2>
         <p className="text-gray-400 text-sm">
           {selectedStore 
             ? `Loja selecionada: ${selectedStore.name}` 
@@ -342,12 +342,14 @@ export function StoreCarousel() {
         )
       ) : (
         // Estado vazio quando não há lojas conectadas
-        <div className="text-center py-12">
-          <div className="w-16 h-16 bg-[#374151] rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">🏪</span>
+        <div className="text-center py-16">
+          <div className="w-24 h-24 bg-gradient-to-br from-[#001F05] to-[#374151] rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+            <div className="w-20 h-20 bg-[#001F05] rounded-full flex items-center justify-center">
+              <span className="text-4xl">🏪</span>
+            </div>
           </div>
-          <h3 className="text-lg font-medium text-white mb-2">Nenhuma loja conectada</h3>
-          <p className="text-gray-400 text-sm mb-4">
+          <h3 className="text-xl font-semibold text-white mb-2">Nenhuma loja conectada</h3>
+          <p className="text-gray-400 text-sm mb-6 max-w-md mx-auto">
             Conecte uma API para visualizar suas lojas aqui
           </p>
         </div>

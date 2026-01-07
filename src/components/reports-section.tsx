@@ -527,22 +527,22 @@ export function ReportsSection() {
   const saiposApisConnected = connectedAPIs.filter(api => api.type === 'saipos' && api.status === 'connected' && api.apiKey);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-8">
       {/* Cabeçalho */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Relatórios</h1>
-          <p className="text-gray-400">
+          <h1 className="text-3xl font-bold text-white mb-2">Relatórios</h1>
+          <p className="text-gray-400 text-base">
             {selectedStore
               ? `Acompanhe o desempenho da ${selectedStore.name}`
               : "Acompanhe o desempenho do seu negócio"}
           </p>
-          <p className="text-gray-500 text-xs mt-1">
+          <p className="text-gray-500 text-xs mt-2">
             Última atualização: {new Date(dashboardData.lastUpdate).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-col sm:flex-row gap-3">
           {/* Seletores de Data */}
           <div className="flex gap-2">
             <div className="flex flex-col gap-1">
@@ -724,27 +724,32 @@ export function ReportsSection() {
 
       {/* Alertas e estados */}
       {!saiposApisConnected.length && (
-        <Alert variant="destructive">
-          <AlertTitle>Sem conexão com a Saipos</AlertTitle>
-          <AlertDescription>
+        <Alert variant="destructive" className="bg-red-500/10 border-red-500/50">
+          <AlertTitle className="text-red-400">Sem conexão com a Saipos</AlertTitle>
+          <AlertDescription className="text-red-300">
             Conecte sua loja Saipos para visualizar relatórios.
           </AlertDescription>
         </Alert>
       )}
 
       {errorMsg && saiposApisConnected.length > 0 && (
-        <Alert variant="destructive">
-          <AlertTitle>Erro</AlertTitle>
-          <AlertDescription>{errorMsg}</AlertDescription>
+        <Alert variant="destructive" className="bg-red-500/10 border-red-500/50">
+          <AlertTitle className="text-red-400">Erro</AlertTitle>
+          <AlertDescription className="text-red-300">{errorMsg}</AlertDescription>
         </Alert>
       )}
 
       {isLoading && (
-        <div className="text-gray-400 text-sm">Carregando...</div>
+        <div className="flex items-center justify-center py-8">
+          <div className="text-gray-400 text-sm flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            Carregando dados...
+          </div>
+        </div>
       )}
 
       {/* Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, index) => (
           <Card
             key={index}
