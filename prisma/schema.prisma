@@ -42,6 +42,7 @@ model User {
   stores       Store[]
   apis         UserAPI[]
   botSettings  BotSettings?
+  evaluations  Evaluation[]
 
   @@map("users")
 }
@@ -71,18 +72,23 @@ model UserAPI {
 }
 
 model Store {
-  id        String   @id @default(cuid())
-  name      String
-  address   String?
-  phone     String?
-  cnpj      String?
-  isActive  Boolean  @default(true)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String        @id @default(cuid())
+  name          String
+  address       String?
+  phone         String?
+  cnpj          String?
+  managerName   String?       @map("manager_name")
+  abbreviation  String?
+  displayOrder  Int?          @default(0) @map("display_order")
+  isActive      Boolean       @default(true)
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  evaluations   Evaluation[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   @@index([userId])
+  @@index([displayOrder])
   @@map("stores")
 }
 
@@ -205,4 +211,63 @@ model BotSettings {
   @@index([userId])
   @@index([isActive])
   @@map("bot_settings")
+}
+
+// Platefull.Check Models
+model Evaluation {
+  id                    String       @id @default(cuid())
+  userId                String
+  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storeId               String?
+  store                 Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  storeName             String
+  supervisorName        String       @map("supervisor_name")
+  evaluationDate        DateTime     @map("evaluation_date")
+  totalScore            Float        @map("total_score")
+  maxTotalScore         Float        @map("max_total_score")
+  status                String       @default("completed")
+  maintenanceList       String?      @db.Text @map("maintenance_list")
+  improvementSuggestions String?     @db.Text @map("improvement_suggestions")
+  topicScores           TopicScore[]
+  itemScores            ItemScore[]
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([storeId])
+  @@index([evaluationDate])
+  @@map("evaluations")
+}
+
+model TopicScore {
+  id            String       @id @default(cuid())
+  evaluationId  String       @map("evaluation_id")
+  evaluation    Evaluation   @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  topicName     String       @map("topic_name")
+  topicScore    Float        @map("topic_score")
+  maxScore      Float?       @map("max_score")
+  observations  String?      @db.Text
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  @@index([evaluationId])
+  @@map("topic_scores")
+}
+
+model ItemScore {
+  id            String       @id @default(cuid())
+  evaluationId  String       @map("evaluation_id")
+  evaluation    Evaluation   @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  topicName     String       @map("topic_name")
+  itemName      String       @map("item_name")
+  itemScore     Float        @map("item_score")
+  maxScore      Float        @map("max_score")
+  status        String       // 'DE ACORDO', 'PARCIAL', 'FORA DO PADRÃO'
+  observations  String?       @db.Text
+  photoUrl      String?      @map("photo_url")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  @@index([evaluationId])
+  @@map("item_scores")
 }
