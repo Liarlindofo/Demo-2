@@ -107,19 +107,19 @@ export async function POST(request: NextRequest) {
         topicScores: {
           create: topics.map((topic: any) => ({
             topicName: topic.topicName,
-            topicScore: topic.score,
-            maxScore: topic.maxScore,
+            topicScore: topic.score || 0,
+            maxScore: topic.maxScore || null,
             observations: topic.observations || null
           }))
         },
         itemScores: {
           create: topics.flatMap((topic: any) =>
-            topic.items.map((item: any) => ({
+            (topic.items || []).map((item: any) => ({
               topicName: topic.topicName,
-              itemName: item.itemName,
-              itemScore: item.score,
-              maxScore: item.maxScore,
-              status: item.status,
+              itemName: item.itemName || '',
+              itemScore: item.score || 0,
+              maxScore: item.maxScore || 0,
+              status: item.status || 'FORA DO PADRÃO',
               observations: item.observations || null,
               photoUrl: item.photoUrl || null
             }))
