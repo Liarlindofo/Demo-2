@@ -1,3 +1,8 @@
+import dotenv from 'dotenv';
+
+// Carregar variáveis de ambiente ANTES de importar outros módulos
+dotenv.config();
+
 import { startClient, stopClient } from "../src/wpp/index.js";
 import logger from "../src/utils/logger.js";
 

@@ -18,6 +18,12 @@ const MODEL = 'openai/gpt-4o-mini';
  */
 export async function sendToGPT(userMessage, conversationHistory = [], settings = {}) {
   try {
+    // Validação: Verificar se a API key está configurada
+    if (!config.openRouterKey) {
+      logger.error('OPENROUTER_API_KEY não configurada! Verifique o arquivo .env na raiz do projeto.');
+      throw new Error('API Key da OpenRouter não configurada. Configure OPENROUTER_API_KEY no arquivo .env');
+    }
+
     const {
       botName = 'Assistente',
       storeType = 'loja',

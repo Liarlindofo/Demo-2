@@ -1,0 +1,56 @@
+═══════════════════════════════════════════════════════════════════════
+  🔐 CONFIGURAÇÃO DO ARQUIVO .env
+═══════════════════════════════════════════════════════════════════════
+
+Crie um arquivo chamado ".env" na RAIZ do projeto (mesmo diretório do package.json)
+com o seguinte conteúdo:
+
+───────────────────────────────────────────────────────────────────────
+# OpenRouter (IA)
+OPENROUTER_API_KEY=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
+OPENROUTER_MODEL=openai/gpt-4o-mini
+
+# Server
+PORT=3001
+NODE_ENV=production
+
+# Database (ajuste conforme sua configuração)
+DATABASE_URL=postgresql://usuario:senha@localhost:5432/drin_platform
+
+# JWT Secret (gere uma chave segura)
+JWT_SECRET=change-me-in-production
+───────────────────────────────────────────────────────────────────────
+
+⚠️ IMPORTANTE:
+1. O arquivo deve se chamar exatamente ".env" (com o ponto no início)
+2. Não coloque espaços antes ou depois do sinal de =
+3. Não use aspas nas variáveis (a menos que o valor contenha espaços)
+
+═══════════════════════════════════════════════════════════════════════
+  🚀 NA VPS - COMANDOS PARA CRIAR O ARQUIVO
+═══════════════════════════════════════════════════════════════════════
+
+# 1. Navegue até o diretório do projeto na VPS
+cd /var/www/I
+
+# 2. Crie o arquivo .env
+nano .env
+
+# 3. Cole o conteúdo acima (Ctrl+Shift+V para colar no nano)
+
+# 4. Salve e saia:
+#    - Pressione Ctrl+O (salvar)
+#    - Pressione Enter (confirmar)
+#    - Pressione Ctrl+X (sair)
+
+# 5. Verifique se o arquivo foi criado:
+cat .env
+
+# 6. Reinicie os workers do PM2:
+pm2 restart all
+
+# 7. Verifique os logs:
+pm2 logs
+
+═══════════════════════════════════════════════════════════════════════
+
