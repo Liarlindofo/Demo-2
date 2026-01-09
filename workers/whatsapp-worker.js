@@ -1,7 +1,51 @@
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+import { existsSync } from 'fs';
 
-// Carregar variáveis de ambiente ANTES de importar outros módulos
-dotenv.config();
+// Obter diretório atual (compatível com ES modules)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Tentar carregar .env de múltiplos locais
+const envPaths = [
+  resolve(__dirname, '..', '.env'),     // Raiz do projeto (subindo um nível do workers/)
+  resolve(process.cwd(), '.env'),       // Diretório de trabalho atual
+  '/var/www/I/.env',                    // Caminho absoluto na VPS
+  '/var/www/Demo-2/.env',               // Caminho alternativo na VPS
+];
+
+let envLoaded = false;
+for (const envPath of envPaths) {
+  if (existsSync(envPath)) {
+    const result = dotenv.config({ path: envPath });
+    if (!result.error) {
+      console.log(`[worker] ✅ Arquivo .env carregado de: ${envPath}`);
+      envLoaded = true;
+      break;
+    }
+  }
+}
+
+// Se não encontrou em nenhum lugar, tentar carregar do diretório padrão
+if (!envLoaded) {
+  const result = dotenv.config();
+  if (result.error) {
+    console.warn(`[worker] ⚠️ Aviso: Não foi possível carregar arquivo .env`);
+    console.warn(`[worker] Tentou os seguintes caminhos:`, envPaths);
+  } else {
+    console.log(`[worker] ✅ Arquivo .env carregado do diretório padrão`);
+  }
+}
+
+// Debug: Verificar se a API key foi carregada
+const apiKey = process.env.OPENROUTER_API_KEY;
+if (apiKey) {
+  const maskedKey = apiKey.substring(0, 10) + '...' + apiKey.substring(apiKey.length - 4);
+  console.log(`[worker] ✅ OPENROUTER_API_KEY carregada: ${maskedKey}`);
+} else {
+  console.error(`[worker] ❌ ERRO: OPENROUTER_API_KEY NÃO encontrada!`);
+}
 
 import { startClient, stopClient } from "../src/wpp/index.js";
 import logger from "../src/utils/logger.js";

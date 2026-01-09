@@ -19,10 +19,20 @@ const MODEL = 'openai/gpt-4o-mini';
 export async function sendToGPT(userMessage, conversationHistory = [], settings = {}) {
   try {
     // Validação: Verificar se a API key está configurada
-    if (!config.openRouterKey) {
-      logger.error('OPENROUTER_API_KEY não configurada! Verifique o arquivo .env na raiz do projeto.');
-      throw new Error('API Key da OpenRouter não configurada. Configure OPENROUTER_API_KEY no arquivo .env');
+    const apiKey = (config.openRouterKey || '').trim();
+    
+    if (!apiKey || apiKey.length < 10) {
+      logger.error('OPENROUTER_API_KEY não configurada ou inválida! Verifique o arquivo .env na raiz do projeto.');
+      logger.error(`[DEBUG] process.env.OPENROUTER_API_KEY: ${process.env.OPENROUTER_API_KEY ? 'EXISTE' : 'NÃO EXISTE'}`);
+      logger.error(`[DEBUG] config.openRouterKey: ${config.openRouterKey ? 'EXISTE' : 'NÃO EXISTE'}`);
+      logger.error(`[DEBUG] process.cwd(): ${process.cwd()}`);
+      logger.error(`[DEBUG] Tamanho da API key: ${apiKey.length}`);
+      throw new Error('API Key da OpenRouter não configurada ou inválida. Configure OPENROUTER_API_KEY no arquivo .env');
     }
+
+    // Debug: Log da API key (mascarada) para verificar se está sendo usada
+    const maskedKey = apiKey.substring(0, 10) + '...' + apiKey.substring(apiKey.length - 4);
+    logger.ai(`[DEBUG] Usando API Key: ${maskedKey} (tamanho: ${apiKey.length})`);
 
     const {
       botName = 'Assistente',
@@ -57,7 +67,7 @@ export async function sendToGPT(userMessage, conversationHistory = [], settings 
       },
       {
         headers: {
-          'Authorization': `Bearer ${config.openRouterKey}`,
+          'Authorization': `Bearer ${apiKey}`,
           'HTTP-Referer': 'https://platefull.com.br',
           'X-Title': 'Platefull WhatsApp Bot',
           'Content-Type': 'application/json'
