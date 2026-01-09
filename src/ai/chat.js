@@ -3,14 +3,14 @@ import config from '../../config.js';
 import logger from '../utils/logger.js';
 
 /**
- * Integração com OpenRouter (GPT-4o)
+ * Integração com OpenRouter (GPT-4o mini)
  */
 
 const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
-const MODEL = 'openai/gpt-4o';
+const MODEL = 'openai/gpt-4o-mini';
 
 /**
- * Envia mensagem para o GPT-4o
+ * Envia mensagem para o GPT-4o mini
  * @param {string} userMessage - Mensagem do usuário
  * @param {Array} conversationHistory - Histórico de mensagens
  * @param {Object} settings - Configurações do bot
@@ -35,7 +35,7 @@ export async function sendToGPT(userMessage, conversationHistory = [], settings 
       { role: 'user', content: userMessage }
     ];
 
-    logger.ai('Enviando mensagem para GPT-4o', {
+    logger.ai('Enviando mensagem para GPT-4o mini', {
       model: MODEL,
       messagesCount: messages.length,
       userMessage: userMessage.substring(0, 100)
@@ -65,7 +65,7 @@ export async function sendToGPT(userMessage, conversationHistory = [], settings 
     // Limita número de linhas
     const limitedReply = limitLines(reply, lineLimit);
 
-    logger.ai('Resposta recebida do GPT-4o', {
+    logger.ai('Resposta recebida do GPT-4o mini', {
       originalLength: reply.length,
       finalLength: limitedReply.length,
       linesCount: limitedReply.split('\n').length

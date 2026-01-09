@@ -8,7 +8,7 @@ export const config = {
   databaseUrl: process.env.DATABASE_URL!,
   openrouterApiKey: process.env.OPENROUTER_API_KEY!,
   drinApiKey: process.env.DRIN_API_KEY!,
-  openrouterModel: process.env.OPENROUTER_MODEL || 'openai/chatgpt-4o-latest',
+  openrouterModel: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
 };
 
 // Validação
