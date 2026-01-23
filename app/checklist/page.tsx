@@ -69,7 +69,19 @@ export default function ChecklistPage() {
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#001F05] border-t-transparent"></div>
             </div>
           ) : (
-            <div className="space-y-4">
+            <>
+              {stores.length > 0 && (
+                <div className="flex justify-end mb-4">
+                  <Link
+                    href="/checklist/nova-loja"
+                    className="inline-block px-5 py-2.5 bg-[#001F05] text-white rounded-lg hover:bg-[#001F05]/80 transition-colors font-semibold"
+                  >
+                    Adicionar loja
+                  </Link>
+                </div>
+              )}
+
+              <div className="space-y-4">
               {stores.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-gray-400 mb-4">Nenhuma loja cadastrada</p>
@@ -101,7 +113,8 @@ export default function ChecklistPage() {
                   </Link>
                 ))
               )}
-            </div>
+              </div>
+            </>
           )}
         </div>
       </div>
