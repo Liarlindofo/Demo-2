@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Download, Calendar, User, TrendingUp, AlertCircle, CheckCircle, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Download, Calendar, User, TrendingUp, AlertCircle, CheckCircle, AlertTriangle, Printer } from "lucide-react";
 import { CHECKLIST_TOPICS } from "@/lib/checklist-data";
 import { useUser } from "@stackframe/stack";
 
@@ -43,6 +43,8 @@ export default function ReportPage() {
   
   const [evaluation, setEvaluation] = useState<EvaluationDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSavingPdf, setIsSavingPdf] = useState(false);
+  const reportRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (id && user) {
@@ -65,6 +67,42 @@ export default function ReportPage() {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleSavePdf = async () => {
+    if (!evaluation || !reportRef.current) return;
+
+    setIsSavingPdf(true);
+    try {
+      // Import dinâmico para não carregar no primeiro render e evitar SSR issues
+      const mod = await import("html2pdf.js");
+      const html2pdf = (mod as any).default ?? mod;
+
+      const safeStore = (evaluation.storeName || "relatorio")
+        .toString()
+        .trim()
+        .replace(/[\\/:*?"<>|]+/g, "-")
+        .replace(/\s+/g, " ");
+      const dateStr = new Date(evaluation.evaluationDate).toISOString().slice(0, 10);
+      const filename = `Relatorio - ${safeStore} - ${dateStr}.pdf`;
+
+      await html2pdf()
+        .set({
+          margin: 10,
+          filename,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: "#000000" },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+        })
+        .from(reportRef.current)
+        .save();
+    } catch (error) {
+      console.error("Erro ao salvar PDF:", error);
+      alert("Não foi possível gerar o PDF automaticamente. Tente usar o botão Imprimir e selecionar 'Salvar como PDF'.");
+    } finally {
+      setIsSavingPdf(false);
+    }
   };
 
   if (!user) return null;
@@ -118,16 +156,28 @@ export default function ReportPage() {
             <ArrowLeft className="w-5 h-5" />
             Voltar para Relatórios
           </Link>
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-2 bg-[#001F05] text-white px-6 py-3 rounded-xl font-semibold hover:bg-[#001F05]/80 transition-all"
-          >
-            <Download className="w-5 h-5" />
-            Imprimir / Salvar PDF
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handlePrint}
+              className="flex items-center gap-2 bg-[#0f0f10] border border-[#374151] text-gray-200 px-6 py-3 rounded-xl font-semibold hover:border-[#001F05] hover:text-white transition-all"
+              type="button"
+            >
+              <Printer className="w-5 h-5" />
+              Imprimir
+            </button>
+            <button
+              onClick={handleSavePdf}
+              disabled={isSavingPdf}
+              className="flex items-center gap-2 bg-[#001F05] text-white px-6 py-3 rounded-xl font-semibold hover:bg-[#001F05]/80 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+              type="button"
+            >
+              <Download className={`w-5 h-5 ${isSavingPdf ? "animate-pulse" : ""}`} />
+              {isSavingPdf ? "Gerando PDF..." : "Salvar PDF"}
+            </button>
+          </div>
         </div>
 
-        <div className="bg-[#141415] rounded-2xl shadow-xl overflow-hidden border border-[#374151]">
+        <div ref={reportRef} className="bg-[#141415] rounded-2xl shadow-xl overflow-hidden border border-[#374151]">
           {/* Header */}
           <div className="bg-gradient-to-r from-[#001F05] to-[#374151] text-white p-8">
             <h1 className="text-4xl font-bold mb-4">Relatório de Avaliação</h1>
