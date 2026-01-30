@@ -85,6 +85,11 @@ export default function EtiquetagemPage() {
         throw new Error(errorData.error || "Erro ao criar unidade");
       }
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || errorData.details || "Erro ao criar unidade");
+      }
+
       const novaUnidade = await response.json();
       setUnidades([...unidades, novaUnidade]);
       setSelectedUnidade(novaUnidade);
@@ -96,9 +101,11 @@ export default function EtiquetagemPage() {
         cidade: "",
         codigoInterno: "",
       });
+      setError("");
     } catch (error) {
       console.error("Erro ao criar unidade:", error);
-      setError(error instanceof Error ? error.message : "Erro ao criar unidade");
+      const errorMessage = error instanceof Error ? error.message : "Erro ao criar unidade";
+      setError(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -266,8 +273,20 @@ export default function EtiquetagemPage() {
           </DialogHeader>
 
           {error && (
-            <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded">
-              {error}
+            <div className="bg-red-500/20 border border-red-500 text-red-400 p-4 rounded-lg">
+              <p className="font-semibold mb-2">Erro ao criar unidade</p>
+              <p className="text-sm">{error}</p>
+              {error.includes('Tabelas do banco') && (
+                <div className="mt-3 p-3 bg-red-600/20 rounded border border-red-500/50">
+                  <p className="text-xs font-semibold mb-1">Solução:</p>
+                  <p className="text-xs">
+                    Execute no terminal: <code className="bg-black/30 px-2 py-1 rounded">npx prisma db push</code>
+                  </p>
+                  <p className="text-xs mt-2">
+                    Ou acesse: <code className="bg-black/30 px-2 py-1 rounded">/api/admin/sync-database?secret=YOUR_ADMIN_SECRET</code>
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

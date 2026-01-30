@@ -32,8 +32,18 @@ export async function GET() {
     return NextResponse.json(unidades);
   } catch (error) {
     console.error('Erro ao buscar unidades:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // Verificar se é erro de tabela não existente
+    if (errorMessage.includes('does not exist') || errorMessage.includes('relation') || errorMessage.includes('table')) {
+      return NextResponse.json(
+        { error: 'Tabelas do banco de dados não foram criadas. Execute: GET /api/admin/sync-database?secret=YOUR_ADMIN_SECRET' },
+        { status: 500 }
+      );
+    }
+    
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { error: errorMessage || 'Erro interno do servidor' },
       { status: 500 }
     );
   }
@@ -80,8 +90,33 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(unidade, { status: 201 });
   } catch (error) {
     console.error('Erro ao criar unidade:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : '';
+    console.error('Detalhes do erro:', errorMessage);
+    console.error('Stack:', errorStack);
+    
+    // Verificar se é erro de tabela não existente
+    if (
+      errorMessage.includes('does not exist') || 
+      errorMessage.includes('relation') || 
+      errorMessage.includes('table') ||
+      errorMessage.includes('etiquetagem_unidades') ||
+      errorMessage.includes('Unknown table')
+    ) {
+      return NextResponse.json(
+        { 
+          error: 'Tabelas do banco de dados não foram criadas. Execute: npx prisma db push ou acesse /api/admin/sync-database?secret=YOUR_ADMIN_SECRET',
+          details: errorMessage
+        },
+        { status: 500 }
+      );
+    }
+    
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { 
+        error: errorMessage || 'Erro interno do servidor',
+        details: errorStack ? errorStack.substring(0, 200) : undefined
+      },
       { status: 500 }
     );
   }
