@@ -43,6 +43,10 @@ model User {
   apis         UserAPI[]
   botSettings  BotSettings?
   evaluations  Evaluation[]
+  etiquetagemUnidades EtiquetagemUnidade[]
+  etiquetagemProdutos EtiquetagemProduto[]
+  etiquetagemNomes     EtiquetagemNomeResponsavel[]
+  etiquetagemEtiquetas EtiquetagemEtiqueta[]
 
   @@map("users")
 }
@@ -270,4 +274,130 @@ model ItemScore {
 
   @@index([evaluationId])
   @@map("item_scores")
+}
+
+// Platefull.Label - Etiquetagem Models
+model EtiquetagemUnidade {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nomeExibicao    String   @map("nome_exibicao")
+  cnpj            String
+  cnpjFormatado   String   @map("cnpj_formatado")
+  cidade          String
+  codigoInterno   String   @map("codigo_interno")
+  isAtivo         Int      @default(1) @map("is_ativo")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  etiquetas       EtiquetagemEtiqueta[]
+  nomes           EtiquetagemNomeResponsavel[]
+
+  @@index([userId])
+  @@index([isAtivo])
+  @@map("etiquetagem_unidades")
+}
+
+model EtiquetagemCategoria {
+  id                        String   @id @default(cuid())
+  nome                      String
+  temperaturaArmazenamento  String   @map("temperatura_armazenamento")
+  validadeDescongelado      Int?     @map("validade_descongelado")
+  validadeResfriado         Int?     @map("validade_resfriado")
+  validadePreparado         Int?     @map("validade_preparado")
+  validadePorcionado        Int?     @map("validade_porcionado")
+  validadeCongeladoMedio    Int?     @map("validade_congelado_medio")
+  validadeCongeladoProfundo Int?     @map("validade_congelado_profundo")
+  isAtivo                   Int      @default(1) @map("is_ativo")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+  produtos                  EtiquetagemProduto[]
+
+  @@index([isAtivo])
+  @@map("etiquetagem_categorias")
+}
+
+model EtiquetagemProcesso {
+  id                  String   @id @default(cuid())
+  nome                String
+  isRequerRefrigeracao Int      @default(0) @map("is_requer_refrigeracao")
+  isAtivo             Int      @default(1) @map("is_ativo")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  etiquetas           EtiquetagemEtiqueta[]
+
+  @@index([isAtivo])
+  @@map("etiquetagem_processos")
+}
+
+model EtiquetagemProduto {
+  id                      String   @id @default(cuid())
+  userId                  String
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nome                    String
+  categoriaId             String   @map("categoria_id")
+  categoria               EtiquetagemCategoria @relation(fields: [categoriaId], references: [id])
+  pesoPadrao              Float?   @map("peso_padrao")
+  unidadeMedida           String?  @map("unidade_medida")
+  marcaFornecedor         String?  @map("marca_fornecedor")
+  tipoArmazenamentoPadrao String?  @map("tipo_armazenamento_padrao")
+  isAtivo                 Int      @default(1) @map("is_ativo")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+  etiquetas               EtiquetagemEtiqueta[]
+
+  @@index([userId])
+  @@index([categoriaId])
+  @@index([isAtivo])
+  @@map("etiquetagem_produtos")
+}
+
+model EtiquetagemNomeResponsavel {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  unidadeId         String   @map("unidade_id")
+  unidade           EtiquetagemUnidade @relation(fields: [unidadeId], references: [id], onDelete: Cascade)
+  nomeCompleto      String   @map("nome_completo")
+  primeiraUtilizacao DateTime @map("primeira_utilizacao")
+  ultimaUtilizacao  DateTime @map("ultima_utilizacao")
+  totalUsos         Int      @default(0) @map("total_usos")
+  isAtivo           Int      @default(1) @map("is_ativo")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([unidadeId])
+  @@index([isAtivo])
+  @@map("etiquetagem_nomes_responsaveis")
+}
+
+model EtiquetagemEtiqueta {
+  id                      String   @id @default(cuid())
+  userId                  String
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  produtoId               String   @map("produto_id")
+  produto                 EtiquetagemProduto @relation(fields: [produtoId], references: [id])
+  unidadeId               String   @map("unidade_id")
+  unidade                 EtiquetagemUnidade @relation(fields: [unidadeId], references: [id])
+  processoId              String   @map("processo_id")
+  processo                EtiquetagemProcesso @relation(fields: [processoId], references: [id])
+  dataValidadeOriginal    DateTime? @map("data_validade_original")
+  dataHoraManipulacao     DateTime @map("data_hora_manipulacao")
+  dataHoraValidade        DateTime @map("data_hora_validade")
+  pesoQuantidade          Float    @map("peso_quantidade")
+  unidadeMedida           String   @map("unidade_medida")
+  responsavelNome         String   @map("responsavel_nome")
+  responsavelId           String?  @map("responsavel_id")
+  temperaturaArmazenamento String  @map("temperatura_armazenamento")
+  codigoEtiqueta           String  @map("codigo_etiqueta")
+  marcaFornecedor          String? @map("marca_fornecedor")
+  periodoDias              Int?    @map("periodo_dias")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([produtoId])
+  @@index([unidadeId])
+  @@index([createdAt])
+  @@map("etiquetagem_etiquetas")
 }
