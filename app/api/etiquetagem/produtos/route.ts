@@ -61,9 +61,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { nome, categoriaId, pesoPadrao, unidadeMedida, marcaFornecedor, tipoArmazenamentoPadrao } = body;
 
-    if (!nome || !categoriaId) {
+    // Validar todos os campos obrigatórios
+    if (!nome || !categoriaId || !pesoPadrao || !unidadeMedida || !marcaFornecedor || !tipoArmazenamentoPadrao) {
       return NextResponse.json(
-        { error: 'Campos obrigatórios: nome, categoriaId' },
+        { error: 'Todos os campos são obrigatórios: nome, categoriaId, pesoPadrao, unidadeMedida, marcaFornecedor, tipoArmazenamentoPadrao' },
+        { status: 400 }
+      );
+    }
+
+    if (isNaN(parseFloat(pesoPadrao)) || parseFloat(pesoPadrao) <= 0) {
+      return NextResponse.json(
+        { error: 'Peso padrão deve ser um número maior que zero' },
         { status: 400 }
       );
     }
@@ -73,10 +81,10 @@ export async function POST(request: NextRequest) {
         userId: dbUser.id,
         nome,
         categoriaId,
-        pesoPadrao: pesoPadrao || null,
-        unidadeMedida: unidadeMedida || null,
-        marcaFornecedor: marcaFornecedor || null,
-        tipoArmazenamentoPadrao: tipoArmazenamentoPadrao || null,
+        pesoPadrao: parseFloat(pesoPadrao),
+        unidadeMedida: unidadeMedida,
+        marcaFornecedor: marcaFornecedor,
+        tipoArmazenamentoPadrao: tipoArmazenamentoPadrao,
         isAtivo: 1,
       },
       include: {

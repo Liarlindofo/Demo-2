@@ -35,6 +35,21 @@ export default function ProdutosPage() {
     loadData();
   }, []);
 
+  // Carregar categorias ao montar o componente e popular se necessário
+  useEffect(() => {
+    if (categorias.length === 0 && !loading) {
+      // Tentar popular categorias automaticamente se não existirem
+      fetch('/api/etiquetagem/seed', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success || data.message?.includes('já foram populadas')) {
+            loadData();
+          }
+        })
+        .catch(err => console.error('Erro ao popular categorias:', err));
+    }
+  }, [categorias.length, loading]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -67,14 +82,14 @@ export default function ProdutosPage() {
     setSaving(true);
 
     try {
-      const dataToSend = {
-        nome: formData.nome,
-        categoriaId: formData.categoriaId,
-        pesoPadrao: formData.pesoPadrao ? parseFloat(formData.pesoPadrao) : undefined,
-        unidadeMedida: formData.unidadeMedida || undefined,
-        marcaFornecedor: formData.marcaFornecedor || undefined,
-        tipoArmazenamentoPadrao: formData.tipoArmazenamentoPadrao || undefined,
-      };
+    const dataToSend = {
+      nome: formData.nome,
+      categoriaId: formData.categoriaId,
+      pesoPadrao: parseFloat(formData.pesoPadrao),
+      unidadeMedida: formData.unidadeMedida,
+      marcaFornecedor: formData.marcaFornecedor,
+      tipoArmazenamentoPadrao: formData.tipoArmazenamentoPadrao,
+    };
 
       let response;
       if (editingProduct) {
@@ -297,25 +312,61 @@ export default function ProdutosPage() {
                 value={formData.categoriaId}
                 onChange={(e) => setFormData({ ...formData, categoriaId: e.target.value })}
                 className="w-full px-4 py-3 rounded-lg border border-[#374151] bg-[#0f0f10] text-white focus:outline-none focus:ring-2 focus:ring-[#001F05] mt-1"
+                disabled={categorias.length === 0}
               >
+                <option value="">
+                  {loading ? "Carregando..." : categorias.length === 0 ? "Nenhuma categoria disponível" : "Selecione uma categoria"}
+                </option>
                 {categorias.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.nome}
                   </option>
                 ))}
               </select>
+              {categorias.length === 0 && !loading && (
+                <div className="mt-2">
+                  <p className="text-xs text-yellow-400 mb-2">
+                    Nenhuma categoria cadastrada.
+                  </p>
+                  <button 
+                    type="button" 
+                    onClick={async () => {
+                      try {
+                        setLoading(true);
+                        const response = await fetch('/api/etiquetagem/seed', { method: 'POST' });
+                        const data = await response.json();
+                        if (response.ok || data.message?.includes('já foram populadas')) {
+                          await loadData();
+                          alert('Categorias criadas com sucesso!');
+                        } else {
+                          alert('Erro ao criar categorias: ' + (data.error || 'Erro desconhecido'));
+                        }
+                      } catch (error) {
+                        console.error('Erro ao criar categorias:', error);
+                        alert('Erro ao criar categorias');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    className="text-xs bg-[#001F05] hover:bg-[#001F05]/80 text-white px-3 py-1 rounded"
+                  >
+                    Criar Categorias Padrão
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="pesoPadrao" className="text-gray-300">
-                  Peso Padrão (opcional)
+                  Peso Padrão *
                 </Label>
                 <Input
                   id="pesoPadrao"
                   type="number"
                   step="0.01"
                   min="0.01"
+                  required
                   value={formData.pesoPadrao}
                   onChange={(e) => setFormData({ ...formData, pesoPadrao: e.target.value })}
                   className="bg-[#0f0f10] border-[#374151] text-white mt-1"
@@ -325,41 +376,49 @@ export default function ProdutosPage() {
 
               <div>
                 <Label htmlFor="unidadeMedida" className="text-gray-300">
-                  Unidade de Medida (opcional)
+                  Unidade de Medida *
                 </Label>
-                <Input
+                <select
                   id="unidadeMedida"
+                  required
                   value={formData.unidadeMedida}
                   onChange={(e) => setFormData({ ...formData, unidadeMedida: e.target.value })}
-                  className="bg-[#0f0f10] border-[#374151] text-white mt-1"
-                  placeholder="kg, g, un"
-                />
+                  className="w-full px-4 py-3 rounded-lg border border-[#374151] bg-[#0f0f10] text-white focus:outline-none focus:ring-2 focus:ring-[#001F05] mt-1"
+                >
+                  <option value="">Selecione</option>
+                  <option value="kg">kg</option>
+                  <option value="g">g</option>
+                  <option value="L">L</option>
+                  <option value="un">un</option>
+                </select>
               </div>
             </div>
 
             <div>
               <Label htmlFor="tipoArmazenamentoPadrao" className="text-gray-300">
-                Tipo de Armazenamento (opcional)
+                Tipo de Armazenamento *
               </Label>
               <select
                 id="tipoArmazenamentoPadrao"
+                required
                 value={formData.tipoArmazenamentoPadrao}
                 onChange={(e) => setFormData({ ...formData, tipoArmazenamentoPadrao: e.target.value })}
                 className="w-full px-4 py-3 rounded-lg border border-[#374151] bg-[#0f0f10] text-white focus:outline-none focus:ring-2 focus:ring-[#001F05] mt-1"
               >
-                <option value="">Não especificado</option>
-                <option value="resfriado">RESFRIADO</option>
-                <option value="congelado">CONGELADO</option>
-                <option value="ambiente">TEMPERATURA AMBIENTE</option>
+                <option value="">Selecione</option>
+                <option value="RESFRIADO">RESFRIADO</option>
+                <option value="CONGELADO">CONGELADO</option>
+                <option value="TEMPERATURA AMBIENTE">TEMPERATURA AMBIENTE</option>
               </select>
             </div>
 
             <div>
               <Label htmlFor="marcaFornecedor" className="text-gray-300">
-                Marca/Fornecedor (opcional)
+                Marca/Fornecedor *
               </Label>
               <Input
                 id="marcaFornecedor"
+                required
                 value={formData.marcaFornecedor}
                 onChange={(e) => setFormData({ ...formData, marcaFornecedor: e.target.value })}
                 className="bg-[#0f0f10] border-[#374151] text-white mt-1"
