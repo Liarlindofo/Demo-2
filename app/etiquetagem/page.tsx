@@ -2,22 +2,28 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Tag, History, Package, Plus } from "lucide-react";
+import { Tag, History, Package, Plus, X } from "lucide-react";
 import { useUser } from "@stackframe/stack";
-
-interface Unidade {
-  id: string;
-  nomeExibicao: string;
-  cnpj: string;
-  cnpjFormatado: string;
-  cidade: string;
-  codigoInterno: string;
-}
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import type { Unidade } from "@/types/etiquetagem";
 
 export default function EtiquetagemPage() {
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUnidade, setSelectedUnidade] = useState<Unidade | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState({
+    nomeExibicao: "",
+    cnpj: "",
+    cnpjFormatado: "",
+    cidade: "",
+    codigoInterno: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const user = useUser({ or: 'redirect' });
 
   useEffect(() => {
@@ -41,6 +47,60 @@ export default function EtiquetagemPage() {
       console.error("Erro ao carregar unidades:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const formatarCNPJ = (cnpj: string) => {
+    const cleaned = cnpj.replace(/\D/g, "");
+    if (cleaned.length <= 14) {
+      return cleaned.replace(
+        /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+        "$1.$2.$3/$4-$5"
+      );
+    }
+    return cnpj;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSaving(true);
+
+    try {
+      const cnpjFormatado = formatarCNPJ(formData.cnpj);
+      
+      const response = await fetch("/api/etiquetagem/unidades", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...formData,
+          cnpjFormatado,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Erro ao criar unidade");
+      }
+
+      const novaUnidade = await response.json();
+      setUnidades([...unidades, novaUnidade]);
+      setSelectedUnidade(novaUnidade);
+      setShowModal(false);
+      setFormData({
+        nomeExibicao: "",
+        cnpj: "",
+        cnpjFormatado: "",
+        cidade: "",
+        codigoInterno: "",
+      });
+    } catch (error) {
+      console.error("Erro ao criar unidade:", error);
+      setError(error instanceof Error ? error.message : "Erro ao criar unidade");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -77,10 +137,13 @@ export default function EtiquetagemPage() {
               <p className="text-gray-400 mb-6">
                 Cadastre uma unidade para começar a gerar etiquetas
               </p>
-              <button className="px-5 py-2.5 bg-[#001F05] text-white rounded-lg hover:bg-[#001F05]/80 transition-colors font-semibold">
+              <Button
+                onClick={() => setShowModal(true)}
+                className="px-5 py-2.5 bg-[#001F05] text-white rounded-lg hover:bg-[#001F05]/80 transition-colors font-semibold"
+              >
                 <Plus className="w-4 h-4 inline mr-2" />
                 Cadastrar Unidade
-              </button>
+              </Button>
             </div>
           ) : (
             <>
@@ -191,6 +254,127 @@ export default function EtiquetagemPage() {
           )}
         </div>
       </div>
+
+      {/* Modal Cadastrar Unidade */}
+      <Dialog open={showModal} onOpenChange={setShowModal}>
+        <DialogContent className="bg-[#141415] border-[#374151] text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Cadastrar Nova Unidade</DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Preencha os dados da unidade para começar a gerar etiquetas
+            </DialogDescription>
+          </DialogHeader>
+
+          {error && (
+            <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="nomeExibicao" className="text-gray-300">
+                Nome de Exibição *
+              </Label>
+              <Input
+                id="nomeExibicao"
+                value={formData.nomeExibicao}
+                onChange={(e) =>
+                  setFormData({ ...formData, nomeExibicao: e.target.value })
+                }
+                placeholder="Ex: Restaurante Central"
+                className="bg-[#0f0f10] border-[#374151] text-white mt-1"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="cnpj" className="text-gray-300">
+                CNPJ *
+              </Label>
+              <Input
+                id="cnpj"
+                value={formData.cnpj}
+                onChange={(e) => {
+                  const cnpj = e.target.value.replace(/\D/g, "");
+                  setFormData({
+                    ...formData,
+                    cnpj,
+                    cnpjFormatado: formatarCNPJ(cnpj),
+                  });
+                }}
+                placeholder="00.000.000/0000-00"
+                maxLength={18}
+                className="bg-[#0f0f10] border-[#374151] text-white mt-1"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="cidade" className="text-gray-300">
+                Cidade *
+              </Label>
+              <Input
+                id="cidade"
+                value={formData.cidade}
+                onChange={(e) =>
+                  setFormData({ ...formData, cidade: e.target.value })
+                }
+                placeholder="Ex: São Paulo"
+                className="bg-[#0f0f10] border-[#374151] text-white mt-1"
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="codigoInterno" className="text-gray-300">
+                Código Interno *
+              </Label>
+              <Input
+                id="codigoInterno"
+                value={formData.codigoInterno}
+                onChange={(e) =>
+                  setFormData({ ...formData, codigoInterno: e.target.value.toUpperCase() })
+                }
+                placeholder="Ex: SP01"
+                className="bg-[#0f0f10] border-[#374151] text-white mt-1"
+                required
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Código único usado para gerar códigos de etiqueta
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowModal(false);
+                  setError("");
+                  setFormData({
+                    nomeExibicao: "",
+                    cnpj: "",
+                    cnpjFormatado: "",
+                    cidade: "",
+                    codigoInterno: "",
+                  });
+                }}
+                className="flex-1 border-[#374151] text-gray-300 hover:bg-[#374151]"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={saving}
+                className="flex-1 bg-[#001F05] hover:bg-[#001F05]/80 text-white"
+              >
+                {saving ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
