@@ -6,9 +6,10 @@ import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 // PUT /api/etiquetagem/produtos/[id] - Atualizar produto
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
@@ -23,7 +24,7 @@ export async function PUT(
     });
 
     const produto = await prisma.etiquetagemProduto.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!produto || produto.userId !== dbUser.id) {
@@ -37,7 +38,7 @@ export async function PUT(
     const { nome, categoriaId, pesoPadrao, unidadeMedida, marcaFornecedor, tipoArmazenamentoPadrao } = body;
 
     const produtoAtualizado = await prisma.etiquetagemProduto.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         nome: nome || produto.nome,
         categoriaId: categoriaId || produto.categoriaId,
@@ -64,9 +65,10 @@ export async function PUT(
 // DELETE /api/etiquetagem/produtos/[id] - Inativar produto
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
@@ -81,7 +83,7 @@ export async function DELETE(
     });
 
     const produto = await prisma.etiquetagemProduto.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!produto || produto.userId !== dbUser.id) {
@@ -92,7 +94,7 @@ export async function DELETE(
     }
 
     await prisma.etiquetagemProduto.update({
-      where: { id: params.id },
+      where: { id },
       data: { isAtivo: 0 },
     });
 

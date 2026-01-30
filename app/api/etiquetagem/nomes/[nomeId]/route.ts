@@ -6,9 +6,10 @@ import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 // DELETE /api/etiquetagem/nomes/[nomeId] - Inativar nome responsável
 export async function DELETE(
   request: Request,
-  { params }: { params: { nomeId: string } }
+  { params }: { params: Promise<{ nomeId: string }> }
 ) {
   try {
+    const { nomeId } = await params;
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
@@ -23,7 +24,7 @@ export async function DELETE(
     });
 
     const nome = await prisma.etiquetagemNomeResponsavel.findUnique({
-      where: { id: params.nomeId },
+      where: { id: nomeId },
       include: { unidade: true },
     });
 
@@ -35,7 +36,7 @@ export async function DELETE(
     }
 
     await prisma.etiquetagemNomeResponsavel.update({
-      where: { id: params.nomeId },
+      where: { id: nomeId },
       data: { isAtivo: 0 },
     });
 

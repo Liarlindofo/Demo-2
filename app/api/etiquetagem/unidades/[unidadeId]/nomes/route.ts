@@ -6,9 +6,10 @@ import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 // GET /api/etiquetagem/unidades/[unidadeId]/nomes - Listar nomes recentes da unidade
 export async function GET(
   request: Request,
-  { params }: { params: { unidadeId: string } }
+  { params }: { params: Promise<{ unidadeId: string }> }
 ) {
   try {
+    const { unidadeId } = await params;
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
@@ -25,7 +26,7 @@ export async function GET(
     // Verificar se a unidade pertence ao usuário
     const unidade = await prisma.etiquetagemUnidade.findFirst({
       where: {
-        id: params.unidadeId,
+        id: unidadeId,
         userId: dbUser.id,
       },
     });
@@ -39,7 +40,7 @@ export async function GET(
 
     const nomes = await prisma.etiquetagemNomeResponsavel.findMany({
       where: {
-        unidadeId: params.unidadeId,
+        unidadeId: unidadeId,
         isAtivo: 1,
       },
       orderBy: {
