@@ -243,6 +243,7 @@ async function printViaWebBluetooth(data: EtiquetaData): Promise<boolean> {
     
     // Preparar dados
     const dataBytes = formatEtiquetaESC(data);
+    console.log(`Enviando ${dataBytes.length} bytes via Bluetooth`);
     
     // Enviar dados
     // Para BLE, enviar em chunks menores
@@ -251,63 +252,169 @@ async function printViaWebBluetooth(data: EtiquetaData): Promise<boolean> {
     for (let i = 0; i < dataBytes.length; i += chunkSize) {
       const chunk = dataBytes.slice(i, i + chunkSize);
       
-      if (writeCharacteristic.properties.writeWithoutResponse) {
-        await writeCharacteristic.writeValueWithoutResponse(chunk);
-      } else {
-        await writeCharacteristic.writeValue(chunk);
-      }
-      
-      // Pequeno delay entre chunks
-      if (i + chunkSize < dataBytes.length) {
-        await new Promise(resolve => setTimeout(resolve, 10));
+      try {
+        if (writeCharacteristic.properties.writeWithoutResponse) {
+          await writeCharacteristic.writeValueWithoutResponse(chunk);
+        } else if (writeCharacteristic.properties.write) {
+          await writeCharacteristic.writeValue(chunk);
+        } else {
+          throw new Error('Característica não suporta escrita');
+        }
+        
+        // Pequeno delay entre chunks
+        if (i + chunkSize < dataBytes.length) {
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+      } catch (chunkError: any) {
+        console.error(`Erro ao enviar chunk ${i}-${i + chunkSize}:`, chunkError);
+        throw new Error(`Erro ao enviar dados: ${chunkError.message}`);
       }
     }
 
+    console.log('Dados enviados com sucesso via Bluetooth');
+    
+    // Aguardar um pouco para garantir que os dados foram processados
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
     // Desconectar
-    device.gatt.disconnect();
+    if (device.gatt && device.gatt.connected) {
+      device.gatt.disconnect();
+    }
     
     return true;
   } catch (error: any) {
     console.error('Erro ao imprimir via Web Bluetooth:', error);
-    throw error;
+    
+    // Mensagens de erro mais amigáveis
+    if (error.name === 'NotFoundError') {
+      throw new Error('Impressora não encontrada. Verifique se está ligada e pareada.');
+    } else if (error.name === 'SecurityError') {
+      throw new Error('Permissão negada. Por favor, permita o acesso ao Bluetooth.');
+    } else if (error.message?.includes('cancel') || error.message?.includes('User cancelled')) {
+      throw new Error('Conexão cancelada pelo usuário.');
+    } else if (error.message?.includes('GATT')) {
+      throw new Error('Erro de conexão Bluetooth. Tente novamente ou use o app OpenLabel.');
+    } else {
+      throw new Error(`Erro ao conectar: ${error.message || 'Erro desconhecido'}`);
+    }
   }
 }
 
 // Web Serial API - PC/Notebook (USB)
 async function printViaWebSerial(data: EtiquetaData): Promise<boolean> {
+  let port: any = null;
+  let writer: any = null;
+  
   try {
     if (!('serial' in navigator)) {
-      throw new Error('Web Serial não suportado');
+      throw new Error('Web Serial não suportado. Use Chrome ou Edge.');
     }
 
     // Solicitar porta serial
-    const port = await (navigator as any).serial.requestPort();
+    // O usuário precisa selecionar a porta no diálogo
+    port = await (navigator as any).serial.requestPort();
+    
+    if (!port) {
+      throw new Error('Nenhuma porta selecionada');
+    }
     
     // Abrir porta com configuração para PT-260
-    await port.open({ 
-      baudRate: 9600,
-      dataBits: 8,
-      stopBits: 1,
-      parity: 'none',
-    });
+    // Tentar diferentes baud rates se necessário
+    const baudRates = [9600, 115200, 19200, 38400];
+    let opened = false;
+    let lastError: any = null;
+    
+    for (const baudRate of baudRates) {
+      try {
+        await port.open({ 
+          baudRate: baudRate,
+          dataBits: 8,
+          stopBits: 1,
+          parity: 'none',
+        });
+        opened = true;
+        console.log(`Porta aberta com sucesso em ${baudRate} baud`);
+        break;
+      } catch (e) {
+        lastError = e;
+        console.log(`Tentativa com ${baudRate} baud falhou:`, e);
+        // Se a porta já está aberta, tentar continuar
+        if (port.readable && port.writable) {
+          opened = true;
+          break;
+        }
+      }
+    }
+    
+    if (!opened && !port.readable) {
+      throw lastError || new Error('Não foi possível abrir a porta serial');
+    }
 
     // Preparar dados
     const dataBytes = formatEtiquetaESC(data);
+    console.log(`Enviando ${dataBytes.length} bytes para impressora`);
     
     // Obter writer
-    const writer = port.writable.getWriter();
+    if (!port.writable) {
+      throw new Error('Porta não está gravável');
+    }
     
-    // Enviar dados
-    await writer.write(dataBytes);
+    writer = port.writable.getWriter();
     
-    // Fechar writer e porta
+    if (!writer) {
+      throw new Error('Não foi possível obter writer');
+    }
+    
+    // Enviar dados em chunks para garantir que tudo seja enviado
+    const chunkSize = 64; // Tamanho seguro para USB
+    for (let i = 0; i < dataBytes.length; i += chunkSize) {
+      const chunk = dataBytes.slice(i, i + chunkSize);
+      await writer.write(chunk);
+      // Pequeno delay entre chunks
+      if (i + chunkSize < dataBytes.length) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+    }
+    
+    console.log('Dados enviados com sucesso');
+    
+    // Aguardar um pouco para garantir que os dados foram processados
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Fechar writer
     writer.releaseLock();
+    writer = null;
+    
+    // Fechar porta
     await port.close();
+    port = null;
     
     return true;
   } catch (error: any) {
     console.error('Erro ao imprimir via Web Serial:', error);
-    throw error;
+    
+    // Limpar recursos em caso de erro
+    try {
+      if (writer) {
+        writer.releaseLock();
+      }
+      if (port && port.readable) {
+        await port.close();
+      }
+    } catch (cleanupError) {
+      console.error('Erro ao limpar recursos:', cleanupError);
+    }
+    
+    // Mensagens de erro mais amigáveis
+    if (error.name === 'NotFoundError') {
+      throw new Error('Nenhuma porta serial encontrada. Verifique se a impressora está conectada via USB.');
+    } else if (error.name === 'SecurityError') {
+      throw new Error('Permissão negada. Por favor, permita o acesso à porta serial.');
+    } else if (error.message?.includes('cancel')) {
+      throw new Error('Seleção de porta cancelada pelo usuário.');
+    } else {
+      throw new Error(`Erro ao conectar: ${error.message || 'Erro desconhecido'}`);
+    }
   }
 }
 
@@ -410,25 +517,52 @@ export async function printEtiqueta(
     if (platform.isAndroid && platform.supportsWebBluetooth && (options.preferBluetooth !== false)) {
       try {
         updateStatus('Conectando via Bluetooth...');
-        await printViaWebBluetooth(data);
-        updateStatus('Impressão concluída via Bluetooth!');
-        return { success: true, method: 'Web Bluetooth' };
+        const result = await printViaWebBluetooth(data);
+        if (result) {
+          updateStatus('Impressão concluída via Bluetooth!');
+          return { success: true, method: 'Web Bluetooth' };
+        }
       } catch (error: any) {
-        updateStatus(`Bluetooth falhou: ${error.message}`);
-        // Continua para fallback
+        const errorMsg = error.message || 'Erro desconhecido';
+        updateStatus(`Bluetooth falhou: ${errorMsg}`);
+        console.error('Erro detalhado Bluetooth:', error);
+        
+        // Se o usuário cancelou, não tentar fallback automaticamente
+        if (errorMsg.includes('cancel') || errorMsg.includes('Cancel')) {
+          return { 
+            success: false, 
+            method: 'Web Bluetooth',
+            error: 'Conexão cancelada pelo usuário. Tente novamente ou use o app OpenLabel.'
+          };
+        }
+        // Continua para fallback apenas se não foi cancelamento
       }
     }
 
     // Estratégia 2: Desktop - Web Serial (USB)
     if (platform.isDesktop && platform.supportsWebSerial && (options.preferUSB !== false)) {
       try {
-        updateStatus('Conectando via USB...');
-        await printViaWebSerial(data);
-        updateStatus('Impressão concluída via USB!');
-        return { success: true, method: 'Web Serial (USB)' };
+        updateStatus('Aguardando seleção da porta USB...');
+        updateStatus('Por favor, selecione a porta COM da impressora no diálogo.');
+        const result = await printViaWebSerial(data);
+        if (result) {
+          updateStatus('Impressão concluída via USB!');
+          return { success: true, method: 'Web Serial (USB)' };
+        }
       } catch (error: any) {
-        updateStatus(`USB falhou: ${error.message}`);
-        // Continua para fallback
+        const errorMsg = error.message || 'Erro desconhecido';
+        updateStatus(`USB falhou: ${errorMsg}`);
+        console.error('Erro detalhado USB:', error);
+        
+        // Se o usuário cancelou, não tentar fallback automaticamente
+        if (errorMsg.includes('cancel') || errorMsg.includes('Cancel')) {
+          return { 
+            success: false, 
+            method: 'Web Serial (USB)',
+            error: 'Seleção de porta cancelada. Tente novamente e selecione a porta COM da impressora.'
+          };
+        }
+        // Continua para fallback apenas se não foi cancelamento
       }
     }
 

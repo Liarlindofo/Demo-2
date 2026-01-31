@@ -50,6 +50,7 @@ export default function GerarEtiquetaPage() {
   });
   const [printing, setPrinting] = useState(false);
   const [printStatus, setPrintStatus] = useState("");
+  const [printError, setPrintError] = useState("");
   const [printMethods, setPrintMethods] = useState<ReturnType<typeof getAvailablePrintMethods> | null>(null);
 
   useEffect(() => {
@@ -170,6 +171,7 @@ export default function GerarEtiquetaPage() {
 
     setPrinting(true);
     setPrintStatus("Preparando impressão...");
+    setPrintError("");
 
     try {
       // Preparar dados da etiqueta
@@ -195,34 +197,54 @@ export default function GerarEtiquetaPage() {
         }
 
         const result = await printEtiqueta(etiquetaData, {
-          onStatus: (status) => setPrintStatus(status),
+          onStatus: (status) => {
+            setPrintStatus(status);
+            // Limpar erro quando status muda
+            if (status.includes('concluída') || status.includes('Conectando')) {
+              setPrintError("");
+            }
+          },
         });
 
-        if (!result.success && result.error) {
-          // Se falhou e não é apenas um aviso, mostrar erro
-          if (result.method !== 'Download') {
-            alert(`Erro ao imprimir: ${result.error}`);
+        if (!result.success) {
+          // Se falhou completamente, mostrar erro e parar
+          setPrintError(result.error || 'Erro desconhecido ao imprimir');
+          setPrintStatus(`Erro: ${result.error || 'Erro desconhecido'}`);
+          
+          // Se foi cancelamento, não continuar com outras cópias
+          if (result.error?.includes('cancel') || result.error?.includes('Cancel')) {
             break;
+          }
+        } else if (result.method === 'Download') {
+          // Se caiu no fallback de download, avisar mas continuar
+          setPrintStatus("Arquivo baixado! Use um app de impressão para imprimir.");
+          setPrintError("Impressão direta não disponível. Arquivo baixado para impressão manual.");
+        } else {
+          // Sucesso!
+          setPrintError("");
+          if (i === copias - 1) {
+            setPrintStatus("Impressão concluída com sucesso!");
           }
         }
 
         // Pequeno delay entre cópias
-        if (i < copias - 1) {
+        if (i < copias - 1 && result.success) {
           await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
 
-      setPrintStatus("Impressão concluída!");
-      
-      // Limpar status após 2 segundos
+      // Limpar status após 5 segundos (mais tempo para ler)
       setTimeout(() => {
-        setPrintStatus("");
-      }, 2000);
+        if (!printError) {
+          setPrintStatus("");
+        }
+      }, 5000);
 
     } catch (error: any) {
       console.error("Erro ao imprimir:", error);
-      setPrintStatus(`Erro: ${error.message || 'Erro desconhecido'}`);
-      alert(`Erro ao imprimir: ${error.message || 'Erro desconhecido'}`);
+      const errorMsg = error.message || 'Erro desconhecido';
+      setPrintStatus(`Erro: ${errorMsg}`);
+      setPrintError(errorMsg);
     } finally {
       setPrinting(false);
     }
@@ -871,11 +893,27 @@ export default function GerarEtiquetaPage() {
             <div className="bg-[#141415] border border-[#374151] rounded-xl p-6">
               <div className="space-y-4">
                 {/* Status da impressão */}
-                {printStatus && (
-                  <div className="bg-[#0f0f10] border border-[#374151] rounded-lg p-3">
+                {(printStatus || printError) && (
+                  <div className={`bg-[#0f0f10] border rounded-lg p-3 ${
+                    printError 
+                      ? 'border-red-500/50 bg-red-500/10' 
+                      : 'border-[#374151]'
+                  }`}>
                     <div className="flex items-center gap-2">
-                      {printing && <Loader2 className="w-4 h-4 animate-spin text-green-500" />}
-                      <p className="text-sm text-gray-300">{printStatus}</p>
+                      {printing && !printError && <Loader2 className="w-4 h-4 animate-spin text-green-500" />}
+                      {printError && <span className="text-red-500">⚠️</span>}
+                      <div className="flex-1">
+                        <p className={`text-sm ${printError ? 'text-red-400' : 'text-gray-300'}`}>
+                          {printError || printStatus}
+                        </p>
+                        {printError && printMethods && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Dica: Certifique-se de que a impressora está ligada e conectada.
+                            {printMethods.platform === 'Desktop' && ' No PC, selecione a porta COM no diálogo.'}
+                            {printMethods.platform === 'Android' && ' No celular, selecione a impressora na lista.'}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
