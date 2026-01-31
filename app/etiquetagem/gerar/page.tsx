@@ -215,10 +215,19 @@ export default function GerarEtiquetaPage() {
           if (result.error?.includes('cancel') || result.error?.includes('Cancel')) {
             break;
           }
-        } else if (result.method === 'Download') {
+        } else if (result.method === 'Download' || result.method === 'Download (App)') {
           // Se caiu no fallback de download, avisar mas continuar
-          setPrintStatus("Arquivo baixado! Use um app de impressão para imprimir.");
-          setPrintError("Impressão direta não disponível. Arquivo baixado para impressão manual.");
+          if (result.method === 'Download (App)') {
+            setPrintStatus("Arquivo .bin baixado! Abra no app OpenLabel para imprimir.");
+            setPrintError("Arquivo baixado. Abra o arquivo .bin no app OpenLabel para imprimir.");
+          } else {
+            setPrintStatus("Arquivo baixado! Use um app de impressão para imprimir.");
+            setPrintError("Impressão direta não disponível. Arquivo baixado para impressão manual.");
+          }
+        } else if (result.method === 'Compartilhamento (App)') {
+          // Compartilhamento com app
+          setPrintStatus("Dados compartilhados! Abra o app OpenLabel para imprimir.");
+          setPrintError("Dados compartilhados. Abra o app OpenLabel para imprimir.");
         } else {
           // Sucesso!
           setPrintError("");
@@ -908,9 +917,15 @@ export default function GerarEtiquetaPage() {
                         </p>
                         {printError && printMethods && (
                           <p className="text-xs text-gray-500 mt-1">
-                            Dica: Certifique-se de que a impressora está ligada e conectada.
-                            {printMethods.platform === 'Desktop' && ' No PC, selecione a porta COM no diálogo.'}
-                            {printMethods.platform === 'Android' && ' No celular, selecione a impressora na lista.'}
+                            {printMethods.platform === 'Desktop' && (
+                              <>Dica: Certifique-se de que a impressora está conectada via USB. Quando o diálogo aparecer, selecione a porta COM e clique em "Conectar".</>
+                            )}
+                            {printMethods.platform === 'Android' && (
+                              <>Dica: Para impressão no celular, use o app OpenLabel. O arquivo baixado pode ser aberto no app para imprimir. Ou compartilhe os dados diretamente com o app quando solicitado.</>
+                            )}
+                            {printMethods.platform !== 'Desktop' && printMethods.platform !== 'Android' && (
+                              <>Certifique-se de que a impressora está ligada e conectada.</>
+                            )}
                           </p>
                         )}
                       </div>

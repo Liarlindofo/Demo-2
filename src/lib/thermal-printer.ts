@@ -421,8 +421,14 @@ async function printViaWebSerial(data: EtiquetaData): Promise<boolean> {
 // Compartilhamento com app nativo (Android)
 async function shareWithApp(data: EtiquetaData): Promise<boolean> {
   try {
-    if (!('share' in navigator)) {
-      throw new Error('Web Share API não suportado');
+    // Tentar primeiro com intent direto do Android (mais confiável)
+    if ((window as any).Android && typeof (window as any).Android.printLabel === 'function') {
+      try {
+        (window as any).Android.printLabel(JSON.stringify(data));
+        return true;
+      } catch (e) {
+        console.log('Intent Android não disponível, tentando Web Share API');
+      }
     }
 
     // Criar texto formatado para compartilhar
@@ -446,15 +452,39 @@ ${data.marcaFornecedor ? `Marca: ${data.marcaFornecedor}` : ''}
     // Converter dados para JSON para app processar
     const jsonData = JSON.stringify(data);
     
-    // Tentar compartilhar
-    await navigator.share({
-      title: `Etiqueta - ${data.produtoNome}`,
-      text: text,
-      // Alguns apps podem processar dados adicionais via URL
-      url: `openlabel://print?data=${encodeURIComponent(jsonData)}`,
-    });
+    // Tentar compartilhar via Web Share API
+    if ('share' in navigator) {
+      try {
+        await navigator.share({
+          title: `Etiqueta - ${data.produtoNome}`,
+          text: text,
+          // Tentar diferentes formatos de URL para diferentes apps
+          url: `openlabel://print?data=${encodeURIComponent(jsonData)}`,
+        });
+        return true;
+      } catch (shareError: any) {
+        // Se Web Share falhar, tentar criar arquivo para compartilhar
+        if (shareError.name !== 'AbortError') {
+          throw shareError;
+        }
+        return false;
+      }
+    }
 
-    return true;
+    // Fallback: criar arquivo e tentar compartilhar
+    const blob = new Blob([jsonData], { type: 'application/json' });
+    const file = new File([blob], 'etiqueta.json', { type: 'application/json' });
+    
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        title: `Etiqueta - ${data.produtoNome}`,
+        text: text,
+        files: [file],
+      });
+      return true;
+    }
+
+    throw new Error('Compartilhamento não disponível');
   } catch (error: any) {
     // Usuário cancelou ou erro
     if (error.name === 'AbortError') {
@@ -462,6 +492,12 @@ ${data.marcaFornecedor ? `Marca: ${data.marcaFornecedor}` : ''}
     }
     throw error;
   }
+}
+
+// Criar arquivo ESC/POS para compartilhar com app
+function createESCPOSFile(data: EtiquetaData): Blob {
+  const dataBytes = formatEtiquetaESC(data);
+  return new Blob([dataBytes], { type: 'application/octet-stream' });
 }
 
 // Download de arquivo para impressão manual
@@ -513,10 +549,12 @@ export async function printEtiqueta(
   };
 
   try {
-    // Estratégia 1: Android - Web Bluetooth
+    // Estratégia 1: Android - Tentar Web Bluetooth (pode não funcionar com PT-260)
+    // NOTA: PT-260 usa Bluetooth Classic (SPP), não BLE, então Web Bluetooth pode falhar
     if (platform.isAndroid && platform.supportsWebBluetooth && (options.preferBluetooth !== false)) {
       try {
-        updateStatus('Conectando via Bluetooth...');
+        updateStatus('Tentando conectar via Bluetooth...');
+        updateStatus('⚠️ Nota: Se falhar, será oferecido compartilhamento com app.');
         const result = await printViaWebBluetooth(data);
         if (result) {
           updateStatus('Impressão concluída via Bluetooth!');
@@ -524,18 +562,12 @@ export async function printEtiqueta(
         }
       } catch (error: any) {
         const errorMsg = error.message || 'Erro desconhecido';
-        updateStatus(`Bluetooth falhou: ${errorMsg}`);
         console.error('Erro detalhado Bluetooth:', error);
+        console.log('Web Bluetooth falhou (esperado para PT-260). Tentando compartilhamento com app...');
         
-        // Se o usuário cancelou, não tentar fallback automaticamente
-        if (errorMsg.includes('cancel') || errorMsg.includes('Cancel')) {
-          return { 
-            success: false, 
-            method: 'Web Bluetooth',
-            error: 'Conexão cancelada pelo usuário. Tente novamente ou use o app OpenLabel.'
-          };
-        }
-        // Continua para fallback apenas se não foi cancelamento
+        // Para PT-260, Web Bluetooth geralmente falha, então vamos direto para compartilhamento
+        updateStatus('Bluetooth direto não disponível. Usando app nativo...');
+        // Continua para compartilhamento
       }
     }
 
@@ -566,18 +598,61 @@ export async function printEtiqueta(
       }
     }
 
-    // Estratégia 3: Android - Compartilhamento com app
-    if (platform.isAndroid && 'share' in navigator) {
+    // Estratégia 3: Android - Compartilhamento com app (RECOMENDADO para PT-260)
+    // Esta é a melhor opção para PT-260 no Android
+    if (platform.isAndroid) {
       try {
-        updateStatus('Abrindo app de impressão...');
-        const shared = await shareWithApp(data);
-        if (shared) {
-          updateStatus('Dados compartilhados com app!');
-          return { success: true, method: 'Compartilhamento (App)' };
+        updateStatus('Preparando dados para app de impressão...');
+        
+        // Tentar compartilhamento primeiro
+        if ('share' in navigator) {
+          try {
+            updateStatus('Abrindo diálogo de compartilhamento...');
+            updateStatus('Selecione "OpenLabel" ou outro app de impressão');
+            const shared = await shareWithApp(data);
+            if (shared) {
+              updateStatus('✅ Dados enviados para app! Abra o app para imprimir.');
+              return { 
+                success: true, 
+                method: 'Compartilhamento (App)',
+                error: 'Dados compartilhados. Abra o app OpenLabel para imprimir.'
+              };
+            }
+          } catch (shareError: any) {
+            if (shareError.name === 'AbortError') {
+              return { 
+                success: false, 
+                method: 'Compartilhamento',
+                error: 'Compartilhamento cancelado. Tente novamente.'
+              };
+            }
+            console.log('Compartilhamento falhou, tentando download de arquivo ESC/POS:', shareError);
+          }
         }
+        
+        // Se compartilhamento não funcionou, criar arquivo ESC/POS para download
+        // O usuário pode abrir este arquivo no OpenLabel
+        updateStatus('Criando arquivo para impressão...');
+        const escposFile = createESCPOSFile(data);
+        const url = URL.createObjectURL(escposFile);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `etiqueta-${data.produtoNome.replace(/\s+/g, '-')}.bin`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        updateStatus('✅ Arquivo baixado! Abra no OpenLabel para imprimir.');
+        return { 
+          success: true, 
+          method: 'Download (App)',
+          error: 'Arquivo baixado. Abra o arquivo .bin no app OpenLabel para imprimir.'
+        };
+        
       } catch (error: any) {
-        updateStatus(`Compartilhamento falhou: ${error.message}`);
-        // Continua para fallback
+        updateStatus(`Erro: ${error.message}`);
+        // Continua para fallback de texto
       }
     }
 
