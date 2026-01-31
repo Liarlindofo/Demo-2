@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Search, User, Scale, Cog, Printer, Trash2, Calendar, ArrowLeft } from "lucide-react";
+import { Search, User, Scale, Cog, Printer, Trash2, Calendar, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Produto, NomeResponsavel, Unidade } from "@/types/etiquetagem";
 import { validarNomeCompleto } from "@/types/etiquetagem";
+import { printEtiqueta, type EtiquetaData, getAvailablePrintMethods } from "@/lib/thermal-printer";
 
 type Step = "produto" | "responsavel" | "peso" | "armazenamento" | "dias" | "preview";
 
@@ -47,6 +48,9 @@ export default function GerarEtiquetaPage() {
     nomeId: null,
     nomeCompleto: "",
   });
+  const [printing, setPrinting] = useState(false);
+  const [printStatus, setPrintStatus] = useState("");
+  const [printMethods, setPrintMethods] = useState<ReturnType<typeof getAvailablePrintMethods> | null>(null);
 
   useEffect(() => {
     if (!unidadeId) {
@@ -54,6 +58,11 @@ export default function GerarEtiquetaPage() {
       return;
     }
     loadData();
+    
+    // Detectar métodos de impressão disponíveis
+    if (typeof window !== 'undefined') {
+      setPrintMethods(getAvailablePrintMethods());
+    }
   }, [unidadeId]);
 
   const loadData = async () => {
@@ -156,7 +165,71 @@ export default function GerarEtiquetaPage() {
     return new Date().toLocaleDateString("pt-BR");
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    if (!produtoSelecionado || !unidade || !tipoArmazenamento || !periodoDias) return;
+
+    setPrinting(true);
+    setPrintStatus("Preparando impressão...");
+
+    try {
+      // Preparar dados da etiqueta
+      const etiquetaData: EtiquetaData = {
+        produtoNome: produtoSelecionado.nome,
+        tipoArmazenamento: tipoArmazenamento,
+        peso: peso,
+        unidadeMedida: unidadeMedida,
+        periodoDias: periodoDias,
+        dataManipulacao: getDataHoje(),
+        dataValidade: calcularDataValidade(),
+        responsavelNome: nomeResponsavel,
+        unidadeNome: unidade.nomeExibicao,
+        unidadeCNPJ: unidade.cnpjFormatado,
+        unidadeCidade: unidade.cidade,
+        marcaFornecedor: produtoSelecionado.marcaFornecedor || undefined,
+      };
+
+      // Imprimir múltiplas cópias
+      for (let i = 0; i < copias; i++) {
+        if (copias > 1) {
+          setPrintStatus(`Imprimindo cópia ${i + 1} de ${copias}...`);
+        }
+
+        const result = await printEtiqueta(etiquetaData, {
+          onStatus: (status) => setPrintStatus(status),
+        });
+
+        if (!result.success && result.error) {
+          // Se falhou e não é apenas um aviso, mostrar erro
+          if (result.method !== 'Download') {
+            alert(`Erro ao imprimir: ${result.error}`);
+            break;
+          }
+        }
+
+        // Pequeno delay entre cópias
+        if (i < copias - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+
+      setPrintStatus("Impressão concluída!");
+      
+      // Limpar status após 2 segundos
+      setTimeout(() => {
+        setPrintStatus("");
+      }, 2000);
+
+    } catch (error: any) {
+      console.error("Erro ao imprimir:", error);
+      setPrintStatus(`Erro: ${error.message || 'Erro desconhecido'}`);
+      alert(`Erro ao imprimir: ${error.message || 'Erro desconhecido'}`);
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  // Função de fallback para impressão tradicional (mantida como backup)
+  const handlePrintTraditional = () => {
     if (!produtoSelecionado || !unidade || !tipoArmazenamento || !periodoDias) return;
 
     const printWindow = window.open('', '_blank');
@@ -797,22 +870,72 @@ export default function GerarEtiquetaPage() {
 
             <div className="bg-[#141415] border border-[#374151] rounded-xl p-6">
               <div className="space-y-4">
+                {/* Status da impressão */}
+                {printStatus && (
+                  <div className="bg-[#0f0f10] border border-[#374151] rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      {printing && <Loader2 className="w-4 h-4 animate-spin text-green-500" />}
+                      <p className="text-sm text-gray-300">{printStatus}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Informações sobre métodos de impressão */}
+                {printMethods && (
+                  <div className="bg-[#0f0f10] border border-[#374151] rounded-lg p-3">
+                    <p className="text-xs text-gray-400 mb-2">Métodos disponíveis:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {printMethods.webBluetooth && (
+                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">
+                          Bluetooth
+                        </span>
+                      )}
+                      {printMethods.webSerial && (
+                        <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">
+                          USB
+                        </span>
+                      )}
+                      {printMethods.webShare && (
+                        <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">
+                          Compartilhar
+                        </span>
+                      )}
+                      <span className="text-xs bg-gray-500/20 text-gray-400 px-2 py-1 rounded">
+                        Download
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Plataforma: {printMethods.platform}
+                    </p>
+                  </div>
+                )}
+
                 <div className="flex gap-3">
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => setStep("dias")}
+                    disabled={printing}
                     className="flex-1 border-[#374151] text-gray-300 hover:bg-[#374151]"
                   >
                     Voltar
                   </Button>
                   <Button
                     onClick={handleSubmit}
-                    disabled={saving}
+                    disabled={saving || printing}
                     className="flex-1 bg-[#001F05] hover:bg-[#001F05]/80 text-white"
                   >
-                    <Printer className="w-5 h-5 mr-2" />
-                    {saving ? "Gerando..." : "Imprimir"}
+                    {printing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Imprimindo...
+                      </>
+                    ) : (
+                      <>
+                        <Printer className="w-5 h-5 mr-2" />
+                        {saving ? "Gerando..." : "Imprimir"}
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
