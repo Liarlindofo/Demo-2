@@ -506,7 +506,8 @@ ${data.marcaFornecedor ? `Marca: ${data.marcaFornecedor}` : ''}
 // Criar arquivo ESC/POS para compartilhar com app
 function createESCPOSFile(data: EtiquetaData): Blob {
   const dataBytes = formatEtiquetaESC(data);
-  return new Blob([dataBytes], { type: 'application/octet-stream' });
+  // Converter Uint8Array para ArrayBuffer para compatibilidade com Blob
+  return new Blob([dataBytes.buffer], { type: 'application/octet-stream' });
 }
 
 // Download de arquivo para impressão manual
