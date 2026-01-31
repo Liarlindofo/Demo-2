@@ -475,13 +475,22 @@ ${data.marcaFornecedor ? `Marca: ${data.marcaFornecedor}` : ''}
     const blob = new Blob([jsonData], { type: 'application/json' });
     const file = new File([blob], 'etiqueta.json', { type: 'application/json' });
     
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({
-        title: `Etiqueta - ${data.produtoNome}`,
-        text: text,
-        files: [file],
-      });
-      return true;
+    // Verificar se canShare existe e suporta arquivos
+    const nav = navigator as any;
+    if (nav.canShare && typeof nav.canShare === 'function') {
+      try {
+        if (nav.canShare({ files: [file] })) {
+          await nav.share({
+            title: `Etiqueta - ${data.produtoNome}`,
+            text: text,
+            files: [file],
+          });
+          return true;
+        }
+      } catch (e) {
+        // canShare pode lançar erro se não suportar arquivos
+        console.log('canShare não suporta arquivos:', e);
+      }
     }
 
     throw new Error('Compartilhamento não disponível');
