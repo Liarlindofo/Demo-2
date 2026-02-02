@@ -21,11 +21,16 @@ export const metadata: Metadata = {
   description: 'Um novo universo para o seu negocio comeca aqui',
   icons: {
     icon: [
-      { url: '/favicon.ico' },
-      { url: '/favicon.png', type: 'image/png' },
+      { url: '/favicon.ico', sizes: '48x48' },
+      { url: '/icon-192.png', type: 'image/png', sizes: '192x192' },
+      { url: '/icon-512.png', type: 'image/png', sizes: '512x512' },
     ],
-    apple: '/favicon.png',
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180' },
+    ],
+    shortcut: '/favicon.png',
   },
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({
@@ -37,6 +42,11 @@ export default function RootLayout({
   
   return (
     <html lang="pt-BR" className="dark">
+      <head>
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+      </head>
       <body className={bodyClasses}>
         <ErrorBoundary>
           <StackProvider app={stackServerApp}>
