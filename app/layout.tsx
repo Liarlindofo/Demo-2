@@ -17,8 +17,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Drin - Plataforma de Relatorios',
+  title: 'Platefull',
   description: 'Um novo universo para o seu negocio comeca aqui',
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({
