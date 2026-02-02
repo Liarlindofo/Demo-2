@@ -20,7 +20,11 @@ export const metadata: Metadata = {
   title: 'Platefull',
   description: 'Um novo universo para o seu negocio comeca aqui',
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/favicon.png', type: 'image/png' },
+    ],
+    apple: '/favicon.png',
   },
 };
 
