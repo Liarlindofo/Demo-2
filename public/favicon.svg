@@ -1,0 +1,28 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" fill="black"/>
+  <defs>
+    <radialGradient id="planetGlow" cx="50%" cy="50%">
+      <stop offset="0%" style="stop-color:#00ff88;stop-opacity:0.8" />
+      <stop offset="50%" style="stop-color:#00aa55;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#005522;stop-opacity:0" />
+    </radialGradient>
+    <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#88ffcc;stop-opacity:0.3" />
+      <stop offset="50%" style="stop-color:#ccffee;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#88ffcc;stop-opacity:0.3" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Glow effect -->
+  <circle cx="256" cy="256" r="180" fill="url(#planetGlow)" opacity="0.6"/>
+  
+  <!-- Main planet -->
+  <circle cx="256" cy="256" r="120" fill="#006633"/>
+  <circle cx="256" cy="256" r="120" fill="url(#planetGlow)" opacity="0.4"/>
+  
+  <!-- Ring -->
+  <ellipse cx="256" cy="256" rx="200" ry="40" fill="url(#ringGradient)" opacity="0.9" transform="rotate(-25 256 256)"/>
+  
+  <!-- Ring shine -->
+  <ellipse cx="256" cy="256" rx="200" ry="8" fill="#e0ffe0" opacity="0.7" transform="rotate(-25 256 256)"/>
+</svg>
