@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Produto, NomeResponsavel, Unidade } from "@/types/etiquetagem";
 import { validarNomeCompleto } from "@/types/etiquetagem";
-import { printEtiqueta, type EtiquetaData, getAvailablePrintMethods } from "@/lib/thermal-printer";
+import { printEtiqueta, type EtiquetaData, getAvailablePrintMethods, resetSavedPort } from "@/lib/thermal-printer";
 
 type Step = "produto" | "responsavel" | "peso" | "armazenamento" | "dias" | "preview";
 
@@ -848,10 +848,10 @@ export default function GerarEtiquetaPage() {
             </div>
 
             <div className="bg-[#141415] border border-[#374151] rounded-xl p-6">
-              <h3 className="text-lg font-bold text-white mb-4">Pré-visualização da Etiqueta (50x30mm)</h3>
+              <h3 className="text-lg font-bold text-white mb-4">Pré-visualização da Etiqueta (80x30mm)</h3>
               
               <div className="flex justify-center">
-                <div className="bg-white border-2 border-gray-400 shadow-lg" style={{ width: '400px', height: '240px' }}>
+                <div className="bg-white border-2 border-gray-400 shadow-lg" style={{ width: '640px', height: '240px' }}>
                   <div className="h-full flex flex-col text-black p-2 text-xs leading-tight">
                     <div className="text-center border-b border-gray-800 pb-1 mb-1">
                       <p className="font-bold text-sm leading-tight">{produtoSelecionado.nome.toUpperCase()}</p>
@@ -963,33 +963,51 @@ export default function GerarEtiquetaPage() {
                   </div>
                 )}
 
-                <div className="flex gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setStep("dias")}
-                    disabled={printing}
-                    className="flex-1 border-[#374151] text-gray-300 hover:bg-[#374151]"
-                  >
-                    Voltar
-                  </Button>
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={saving || printing}
-                    className="flex-1 bg-[#001F05] hover:bg-[#001F05]/80 text-white"
-                  >
-                    {printing ? (
-                      <>
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Imprimindo...
-                      </>
-                    ) : (
-                      <>
-                        <Printer className="w-5 h-5 mr-2" />
-                        {saving ? "Gerando..." : "Imprimir"}
-                      </>
-                    )}
-                  </Button>
+                <div className="space-y-2">
+                  <div className="flex gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setStep("dias")}
+                      disabled={printing}
+                      className="flex-1 border-[#374151] text-gray-300 hover:bg-[#374151]"
+                    >
+                      Voltar
+                    </Button>
+                    <Button
+                      onClick={handleSubmit}
+                      disabled={saving || printing}
+                      className="flex-1 bg-[#001F05] hover:bg-[#001F05]/80 text-white"
+                    >
+                      {printing ? (
+                        <>
+                          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                          Imprimindo...
+                        </>
+                      ) : (
+                        <>
+                          <Printer className="w-5 h-5 mr-2" />
+                          {saving ? "Gerando..." : "Imprimir"}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {printMethods?.webSerial && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        resetSavedPort();
+                        setPrintStatus("Impressora resetada. Na próxima impressão você poderá selecionar outra impressora.");
+                        setTimeout(() => setPrintStatus(""), 4000);
+                      }}
+                      disabled={printing}
+                      className="w-full text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50"
+                    >
+                      <Cog className="w-3 h-3 mr-1" />
+                      Trocar de impressora USB
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>

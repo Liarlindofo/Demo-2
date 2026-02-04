@@ -27,9 +27,10 @@ O sistema de impressão térmica multi-plataforma foi implementado com sucesso! 
 - ✅ **Download de Arquivo** - Sempre disponível como fallback
 
 ### **3. Formatação ESC/POS**
-- ✅ Comandos específicos para impressora PT-260
-- ✅ Formatação otimizada para etiquetas 50mm x 30mm
+- ✅ Comandos ESC/POS para impressoras térmicas (i9, PT-260, etc)
+- ✅ Formatação otimizada para etiquetas 80mm x 30mm
 - ✅ Suporte a múltiplas cópias
+- ✅ Impressão direta sem diálogo (após primeira configuração)
 
 ## 📱 Como Usar
 
@@ -53,7 +54,23 @@ O sistema de impressão térmica multi-plataforma foi implementado com sucesso! 
 
 ### **No PC/Notebook (Chrome/Edge)**
 
-1. **Via USB:**
+1. **Via USB (IMPRESSÃO DIRETA):**
+   - **Primeira vez:**
+     - Conecte a impressora térmica USB (i9, PT-260, etc)
+     - Clique em "Imprimir"
+     - Uma janela pedirá para selecionar a porta COM
+     - Selecione a porta da impressora e clique em "Conectar"
+     - A impressão começará automaticamente
+     - ✅ **A impressora ficará salva!**
+   
+   - **Próximas impressões:**
+     - ✅ **Apenas clique em "Imprimir" - sem diálogo!**
+     - O sistema conectará automaticamente à impressora salva
+     - A impressão começará imediatamente
+   
+   - **Para trocar de impressora:**
+     - Clique no botão "Trocar de impressora USB"
+     - Na próxima impressão, selecione a nova impressora
    - Conecte a impressora PT-260 via cabo USB
    - Clique em "Imprimir"
    - Uma janela aparecerá pedindo para selecionar a porta USB

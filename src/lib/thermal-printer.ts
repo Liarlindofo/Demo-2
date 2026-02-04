@@ -104,15 +104,15 @@ class ESCPOSCommands {
   static SET_LINE_SPACING = (n: number) => `\x1B\x33${String.fromCharCode(n)}`;
 }
 
-// Formatar dados da etiqueta em comandos ESC/POS
+// Formatar dados da etiqueta em comandos ESC/POS (otimizado para 80mm x 30mm)
 function formatEtiquetaESC(data: EtiquetaData): Uint8Array {
   let commands = '';
   
   // Inicializar
   commands += ESCPOSCommands.INIT;
-  commands += ESCPOSCommands.SET_LINE_SPACING(24);
+  commands += ESCPOSCommands.SET_LINE_SPACING(20); // Espaçamento menor para etiqueta pequena
   
-  // Cabeçalho - Nome do produto (centralizado, negrito, maior)
+  // Cabeçalho - Nome do produto (centralizado, negrito, fonte dupla)
   commands += ESCPOSCommands.ALIGN_CENTER;
   commands += ESCPOSCommands.FONT_DOUBLE;
   commands += ESCPOSCommands.BOLD_ON;
@@ -120,42 +120,38 @@ function formatEtiquetaESC(data: EtiquetaData): Uint8Array {
   commands += ESCPOSCommands.BOLD_OFF;
   commands += ESCPOSCommands.FONT_NORMAL;
   
-  // Tipo de armazenamento
+  // Tipo de armazenamento (centralizado)
+  commands += ESCPOSCommands.BOLD_ON;
   commands += data.tipoArmazenamento + ESCPOSCommands.LINE_FEED;
-  commands += ESCPOSCommands.LINE_FEED;
+  commands += ESCPOSCommands.BOLD_OFF;
   
-  // Informações principais (alinhado à esquerda)
+  // Linha divisória
+  commands += '--------------------------------' + ESCPOSCommands.LINE_FEED;
+  
+  // Informações principais (alinhado à esquerda, compacto)
   commands += ESCPOSCommands.ALIGN_LEFT;
-  commands += `Peso/Qtd: ${data.peso} ${data.unidadeMedida}` + ESCPOSCommands.LINE_FEED;
-  commands += `Validade: ${data.periodoDias} dias` + ESCPOSCommands.LINE_FEED;
-  commands += ESCPOSCommands.LINE_FEED;
-  
-  // Datas
+  commands += `Peso/Qtd: ${data.peso} ${data.unidadeMedida}     Val: ${data.periodoDias} dias` + ESCPOSCommands.LINE_FEED;
   commands += `Manipulado: ${data.dataManipulacao}` + ESCPOSCommands.LINE_FEED;
   commands += `Vence em: ${data.dataValidade}` + ESCPOSCommands.LINE_FEED;
-  commands += ESCPOSCommands.LINE_FEED;
   
-  // Responsável (centralizado)
+  // Linha divisória
+  commands += '--------------------------------' + ESCPOSCommands.LINE_FEED;
+  
+  // Responsável (centralizado, compacto)
   commands += ESCPOSCommands.ALIGN_CENTER;
-  commands += ESCPOSCommands.BOLD_ON;
-  commands += 'Responsável:' + ESCPOSCommands.LINE_FEED;
-  commands += data.responsavelNome + ESCPOSCommands.LINE_FEED;
-  commands += ESCPOSCommands.BOLD_OFF;
-  commands += ESCPOSCommands.LINE_FEED;
+  commands += `Resp: ${data.responsavelNome}` + ESCPOSCommands.LINE_FEED;
   
-  // Unidade (centralizado)
+  // Unidade (centralizado, compacto)
   commands += ESCPOSCommands.BOLD_ON;
   commands += data.unidadeNome + ESCPOSCommands.LINE_FEED;
   commands += ESCPOSCommands.BOLD_OFF;
-  commands += `CNPJ: ${data.unidadeCNPJ}` + ESCPOSCommands.LINE_FEED;
-  commands += data.unidadeCidade + ESCPOSCommands.LINE_FEED;
+  commands += `${data.unidadeCNPJ} - ${data.unidadeCidade}` + ESCPOSCommands.LINE_FEED;
   
   if (data.marcaFornecedor) {
     commands += `Marca: ${data.marcaFornecedor}` + ESCPOSCommands.LINE_FEED;
   }
   
   // Espaçamento final
-  commands += ESCPOSCommands.LINE_FEED;
   commands += ESCPOSCommands.LINE_FEED;
   
   // Cortar papel
@@ -300,8 +296,17 @@ async function printViaWebBluetooth(data: EtiquetaData): Promise<boolean> {
   }
 }
 
+// Armazenar porta serial selecionada
+let savedPort: any = null;
+
+// Resetar porta salva (útil para trocar de impressora)
+export function resetSavedPort(): void {
+  savedPort = null;
+  console.log('Porta USB salva foi resetada');
+}
+
 // Web Serial API - PC/Notebook (USB)
-async function printViaWebSerial(data: EtiquetaData): Promise<boolean> {
+async function printViaWebSerial(data: EtiquetaData, forceNewPort: boolean = false): Promise<boolean> {
   let port: any = null;
   let writer: any = null;
   
@@ -310,12 +315,33 @@ async function printViaWebSerial(data: EtiquetaData): Promise<boolean> {
       throw new Error('Web Serial não suportado. Use Chrome ou Edge.');
     }
 
-    // Solicitar porta serial
-    // O usuário precisa selecionar a porta no diálogo
-    port = await (navigator as any).serial.requestPort();
-    
-    if (!port) {
-      throw new Error('Nenhuma porta selecionada');
+    // Tentar usar porta salva primeiro (impressão direta sem diálogo!)
+    if (!forceNewPort && savedPort) {
+      console.log('Usando porta USB salva - impressão direta!');
+      port = savedPort;
+    } else {
+      // Tentar obter portas já autorizadas
+      const ports = await (navigator as any).serial.getPorts();
+      
+      if (!forceNewPort && ports && ports.length > 0) {
+        // Usar a primeira porta autorizada (impressão direta!)
+        console.log(`Encontrada ${ports.length} porta(s) autorizada(s) - usando automaticamente`);
+        port = ports[0];
+        savedPort = port;
+      } else {
+        // Solicitar porta serial apenas se não houver porta salva
+        // O usuário precisa selecionar a porta no diálogo (apenas na primeira vez)
+        console.log('Solicitando seleção de porta USB (primeira vez)');
+        port = await (navigator as any).serial.requestPort();
+        
+        if (!port) {
+          throw new Error('Nenhuma porta selecionada');
+        }
+        
+        // Salvar porta para próximas impressões
+        savedPort = port;
+        console.log('Porta USB salva para impressões futuras!');
+      }
     }
     
     // Abrir porta com configuração para PT-260
@@ -546,6 +572,7 @@ export async function printEtiqueta(
   options: {
     preferBluetooth?: boolean;
     preferUSB?: boolean;
+    forceNewPort?: boolean;
     onStatus?: (status: string) => void;
   } = {}
 ): Promise<{ success: boolean; method: string; error?: string }> {
@@ -584,11 +611,15 @@ export async function printEtiqueta(
     // Estratégia 2: Desktop - Web Serial (USB)
     if (platform.isDesktop && platform.supportsWebSerial && (options.preferUSB !== false)) {
       try {
-        updateStatus('Aguardando seleção da porta USB...');
-        updateStatus('Por favor, selecione a porta COM da impressora no diálogo.');
-        const result = await printViaWebSerial(data);
+        if (options.forceNewPort) {
+          updateStatus('Aguardando seleção da porta USB...');
+          updateStatus('Por favor, selecione a porta COM da impressora no diálogo.');
+        } else {
+          updateStatus('Conectando à impressora USB...');
+        }
+        const result = await printViaWebSerial(data, options.forceNewPort);
         if (result) {
-          updateStatus('Impressão concluída via USB!');
+          updateStatus('✅ Impressão concluída via USB!');
           return { success: true, method: 'Web Serial (USB)' };
         }
       } catch (error: any) {
