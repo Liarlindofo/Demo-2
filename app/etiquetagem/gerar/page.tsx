@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Produto, NomeResponsavel, Unidade } from "@/types/etiquetagem";
 import { validarNomeCompleto } from "@/types/etiquetagem";
-import { printEtiqueta, type EtiquetaData, getAvailablePrintMethods, resetSavedPort, testPrinter } from "@/lib/thermal-printer";
+import { printEtiqueta, type EtiquetaData, getAvailablePrintMethods, resetSavedPort, testPrinter, testPrinterBasic, testPrinterESCPOS } from "@/lib/thermal-printer";
 
 type Step = "produto" | "responsavel" | "peso" | "armazenamento" | "dias" | "preview";
 
@@ -1007,38 +1007,92 @@ export default function GerarEtiquetaPage() {
                     </Button>
                   </div>
                   {printMethods?.webSerial && (
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={async () => {
-                          setPrinting(true);
-                          setPrintStatus("Enviando página de teste...");
-                          const result = await testPrinter((status) => setPrintStatus(status));
-                          if (!result.success) {
-                            setPrintError(result.error || "Erro ao testar");
-                          }
-                          setPrinting(false);
-                        }}
-                        disabled={printing}
-                        className="flex-1 text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50"
-                      >
-                        <Printer className="w-3 h-3 mr-1" />
-                        Testar Impressora
-                      </Button>
+                    <div className="space-y-2">
+                      <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mb-2">
+                        <div className="text-xs text-blue-300 font-medium mb-1">🧪 Diagnóstico ELGIN i9</div>
+                        <div className="text-xs text-gray-400">
+                          Execute os testes NA ORDEM para descobrir o problema:
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={async () => {
+                            setPrinting(true);
+                            setPrintError("");
+                            setPrintStatus("Iniciando teste básico...");
+                            const result = await testPrinterBasic((status) => setPrintStatus(status));
+                            if (!result.success) {
+                              setPrintError(result.error || "Erro ao testar");
+                            }
+                            setPrinting(false);
+                          }}
+                          disabled={printing}
+                          className="text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50 h-auto py-2"
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-lg">1️⃣</span>
+                            <span>Texto Puro</span>
+                          </div>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={async () => {
+                            setPrinting(true);
+                            setPrintError("");
+                            setPrintStatus("Iniciando teste ESC/POS...");
+                            const result = await testPrinterESCPOS((status) => setPrintStatus(status));
+                            if (!result.success) {
+                              setPrintError(result.error || "Erro ao testar");
+                            }
+                            setPrinting(false);
+                          }}
+                          disabled={printing}
+                          className="text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50 h-auto py-2"
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-lg">2️⃣</span>
+                            <span>ESC/POS</span>
+                          </div>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={async () => {
+                            setPrinting(true);
+                            setPrintError("");
+                            setPrintStatus("Iniciando teste completo...");
+                            const result = await testPrinter((status) => setPrintStatus(status));
+                            if (!result.success) {
+                              setPrintError(result.error || "Erro ao testar");
+                            }
+                            setPrinting(false);
+                          }}
+                          disabled={printing}
+                          className="text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50 h-auto py-2"
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-lg">3️⃣</span>
+                            <span>Completo</span>
+                          </div>
+                        </Button>
+                      </div>
                       <Button
                         type="button"
                         variant="ghost"
                         onClick={() => {
                           resetSavedPort();
                           setPrintStatus("Impressora resetada. Na próxima impressão você poderá selecionar outra impressora.");
+                          setPrintError("");
                           setTimeout(() => setPrintStatus(""), 4000);
                         }}
                         disabled={printing}
-                        className="flex-1 text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50"
+                        className="w-full text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50"
                       >
                         <Cog className="w-3 h-3 mr-1" />
-                        Trocar Impressora
+                        Trocar Impressora USB
                       </Button>
                     </div>
                   )}

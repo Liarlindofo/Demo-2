@@ -794,7 +794,161 @@ export function getAvailablePrintMethods(): {
   };
 }
 
-// Testar impressora com uma impressão de teste
+// Teste BÁSICO - apenas texto puro (teste nível 1)
+export async function testPrinterBasic(
+  onStatus?: (status: string) => void
+): Promise<{ success: boolean; error?: string }> {
+  const platform = detectPlatform();
+  
+  if (!platform.supportsWebSerial) {
+    return {
+      success: false,
+      error: 'Web Serial não suportado. Use Chrome ou Edge no PC.'
+    };
+  }
+  
+  const updateStatus = (msg: string) => {
+    if (onStatus) onStatus(msg);
+    console.log(`[Teste Básico] ${msg}`);
+  };
+  
+  let port: any = savedPort;
+  let writer: any = null;
+  
+  try {
+    updateStatus('🧪 TESTE NÍVEL 1: Texto puro (sem comandos)');
+    
+    if (!port) {
+      const ports = await (navigator as any).serial.getPorts();
+      if (ports && ports.length > 0) {
+        port = ports[0];
+        savedPort = port;
+      } else {
+        return { success: false, error: 'Nenhuma porta configurada. Configure primeiro.' };
+      }
+    }
+    
+    // Garantir que porta está aberta
+    if (!port.readable || !port.writable) {
+      await port.open({ 
+        baudRate: 9600,
+        dataBits: 8,
+        stopBits: 1,
+        parity: 'none',
+        flowControl: 'none',
+      });
+    }
+    
+    writer = port.writable.getWriter();
+    
+    // TESTE MAIS SIMPLES: apenas texto ASCII puro + quebras de linha
+    const testText = '\n\n\n=== TESTE ELGIN i9 ===\n\nSe voce esta lendo isso\na impressora funciona!\n\n\n\n\n';
+    const encoder = new TextEncoder();
+    const data = encoder.encode(testText);
+    
+    updateStatus(`📤 Enviando ${data.length} bytes de texto puro...`);
+    await writer.write(data);
+    
+    updateStatus('⏳ Aguardando 2 segundos...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    writer.releaseLock();
+    
+    updateStatus('✅ Texto enviado! A impressora imprimiu algo?');
+    updateStatus('📋 Se SIM: problema está nos comandos ESC/POS');
+    updateStatus('📋 Se NÃO: problema está na comunicação USB');
+    
+    return { success: true };
+  } catch (error: any) {
+    if (writer) writer.releaseLock();
+    updateStatus(`❌ Erro: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+// Teste com comandos ESC/POS básicos (teste nível 2)
+export async function testPrinterESCPOS(
+  onStatus?: (status: string) => void
+): Promise<{ success: boolean; error?: string }> {
+  const platform = detectPlatform();
+  
+  if (!platform.supportsWebSerial) {
+    return { success: false, error: 'Web Serial não suportado.' };
+  }
+  
+  const updateStatus = (msg: string) => {
+    if (onStatus) onStatus(msg);
+    console.log(`[Teste ESC/POS] ${msg}`);
+  };
+  
+  let port: any = savedPort;
+  let writer: any = null;
+  
+  try {
+    updateStatus('🧪 TESTE NÍVEL 2: Comandos ESC/POS básicos');
+    
+    if (!port) {
+      const ports = await (navigator as any).serial.getPorts();
+      if (ports && ports.length > 0) {
+        port = ports[0];
+        savedPort = port;
+      } else {
+        return { success: false, error: 'Nenhuma porta configurada.' };
+      }
+    }
+    
+    if (!port.readable || !port.writable) {
+      await port.open({ 
+        baudRate: 9600,
+        dataBits: 8,
+        stopBits: 1,
+        parity: 'none',
+        flowControl: 'none',
+      });
+    }
+    
+    writer = port.writable.getWriter();
+    
+    // Comandos ESC/POS MÍNIMOS
+    let commands = '';
+    commands += '\x1B\x40';        // ESC @ - Inicializar
+    commands += '\x1B\x61\x01';    // ESC a 1 - Centralizar
+    commands += '\n\n';
+    commands += '=== TESTE ESC/POS ===\n';
+    commands += '\x1B\x45\x01';    // ESC E 1 - Negrito ON
+    commands += 'ELGIN i9\n';
+    commands += '\x1B\x45\x00';    // ESC E 0 - Negrito OFF
+    commands += '\n';
+    commands += 'Se voce esta lendo\n';
+    commands += 'isto em negrito,\n';
+    commands += 'os comandos ESC/POS\n';
+    commands += 'estao funcionando!\n';
+    commands += '\n\n\n\n\n';
+    
+    const encoder = new TextEncoder();
+    const data = encoder.encode(commands);
+    
+    updateStatus(`📤 Enviando ${data.length} bytes com ESC/POS...`);
+    await writer.write(data);
+    
+    updateStatus('⏳ Aguardando 2 segundos...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    writer.releaseLock();
+    
+    updateStatus('✅ Comandos enviados! Imprimiu com negrito?');
+    updateStatus('📋 Se SIM: ESC/POS funciona!');
+    updateStatus('📋 Se NÃO: pode precisar comandos Elgin específicos');
+    
+    return { success: true };
+  } catch (error: any) {
+    if (writer) writer.releaseLock();
+    updateStatus(`❌ Erro: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+// Teste completo com etiqueta (teste nível 3)
 export async function testPrinter(
   onStatus?: (status: string) => void
 ): Promise<{ success: boolean; error?: string }> {
@@ -813,7 +967,7 @@ export async function testPrinter(
   };
   
   try {
-    updateStatus('Enviando página de teste...');
+    updateStatus('🧪 TESTE NÍVEL 3: Etiqueta completa');
     
     // Criar dados de teste simples
     const testData: EtiquetaData = {
