@@ -259,6 +259,200 @@ export default function GerarEtiquetaPage() {
     }
   };
 
+  // Impressão via driver do Windows (RECOMENDADO para Elgin i9!)
+  const handlePrintViaDriver = () => {
+    if (!produtoSelecionado || !unidade || !tipoArmazenamento || !periodoDias) return;
+
+    // Criar janela temporária com a etiqueta
+    const printContent = document.getElementById('etiqueta-preview');
+    if (!printContent) return;
+
+    // Clonar o conteúdo
+    const clone = printContent.cloneNode(true) as HTMLElement;
+    
+    // Criar janela de impressão
+    const printWindow = window.open('', '', 'width=800,height=600');
+    if (!printWindow) {
+      alert('Por favor, permita pop-ups para imprimir');
+      return;
+    }
+
+    // Escrever HTML com CSS otimizado para impressora térmica
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Etiqueta - ${produtoSelecionado.nome}</title>
+        <style>
+          /* Reset */
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+
+          /* Configuração da página para impressora térmica 80mm */
+          @page {
+            size: 80mm auto;  /* Largura 80mm, altura automática */
+            margin: 0;
+          }
+
+          @media print {
+            body {
+              width: 80mm;
+              margin: 0;
+              padding: 5mm;
+              font-family: Arial, sans-serif;
+              font-size: 10pt;
+              line-height: 1.2;
+            }
+
+            /* Esconder tudo exceto a etiqueta */
+            body > *:not(.etiqueta-print) {
+              display: none !important;
+            }
+          }
+
+          /* Estilo da etiqueta */
+          body {
+            width: 80mm;
+            margin: 0 auto;
+            padding: 5mm;
+            font-family: Arial, sans-serif;
+            background: white;
+          }
+
+          .etiqueta-print {
+            width: 100%;
+            padding: 3mm;
+            background: white;
+            color: black;
+          }
+
+          .header {
+            text-align: center;
+            margin-bottom: 3mm;
+            border-bottom: 2px solid black;
+            padding-bottom: 2mm;
+          }
+
+          .header h1 {
+            font-size: 14pt;
+            font-weight: bold;
+            margin-bottom: 1mm;
+            text-transform: uppercase;
+          }
+
+          .header .tipo {
+            font-size: 11pt;
+            font-weight: bold;
+          }
+
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 2mm 0;
+            font-size: 10pt;
+          }
+
+          .info-label {
+            font-weight: normal;
+          }
+
+          .info-value {
+            font-weight: bold;
+          }
+
+          .divider {
+            border-top: 1px solid black;
+            margin: 2mm 0;
+          }
+
+          .footer {
+            text-align: center;
+            margin-top: 3mm;
+            padding-top: 2mm;
+            border-top: 2px solid black;
+            font-size: 9pt;
+          }
+
+          .footer .responsavel {
+            margin: 1mm 0;
+          }
+
+          .footer .unidade {
+            font-weight: bold;
+            margin: 1mm 0;
+          }
+
+          .footer .detalhes {
+            font-size: 8pt;
+            margin: 0.5mm 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="etiqueta-print">
+          <!-- Cabeçalho -->
+          <div class="header">
+            <h1>${produtoSelecionado.nome}</h1>
+            <div class="tipo">${tipoArmazenamento}</div>
+          </div>
+
+          <!-- Informações principais -->
+          <div class="info-row">
+            <span class="info-label">Peso/Qtd:</span>
+            <span class="info-value">${peso} ${unidadeMedida}</span>
+          </div>
+
+          <div class="info-row">
+            <span class="info-label">Validade:</span>
+            <span class="info-value">${periodoDias} dias</span>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="info-row">
+            <span class="info-label">Manipulado:</span>
+            <span class="info-value">${getDataHoje()}</span>
+          </div>
+
+          <div class="info-row">
+            <span class="info-label">Vence em:</span>
+            <span class="info-value">${calcularDataValidade()}</span>
+          </div>
+
+          <!-- Rodapé -->
+          <div class="footer">
+            <div class="responsavel">
+              Responsável: <strong>${nomeResponsavel}</strong>
+            </div>
+            <div class="unidade">${unidade.nomeExibicao}</div>
+            <div class="detalhes">CNPJ: ${unidade.cnpjFormatado}</div>
+            <div class="detalhes">${unidade.cidade}</div>
+            ${produtoSelecionado.marcaFornecedor ? `<div class="detalhes">Marca: ${produtoSelecionado.marcaFornecedor}</div>` : ''}
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+
+    // Aguardar carregar e imprimir
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+        // Fechar após impressão
+        setTimeout(() => {
+          printWindow.close();
+        }, 500);
+      }, 250);
+    };
+  };
+
   // Função de fallback para impressão tradicional (mantida como backup)
   const handlePrintTraditional = () => {
     if (!produtoSelecionado || !unidade || !tipoArmazenamento || !periodoDias) return;
@@ -851,7 +1045,7 @@ export default function GerarEtiquetaPage() {
               <h3 className="text-lg font-bold text-white mb-4">Pré-visualização da Etiqueta (80x30mm)</h3>
               
               <div className="flex justify-center">
-                <div className="bg-white border-2 border-gray-400 shadow-lg" style={{ width: '640px', height: '240px' }}>
+                <div id="etiqueta-preview" className="bg-white border-2 border-gray-400 shadow-lg" style={{ width: '640px', height: '240px' }}>
                   <div className="h-full flex flex-col text-black p-2 text-xs leading-tight">
                     <div className="text-center border-b border-gray-800 pb-1 mb-1">
                       <p className="font-bold text-sm leading-tight">{produtoSelecionado.nome.toUpperCase()}</p>
@@ -978,6 +1172,34 @@ export default function GerarEtiquetaPage() {
                 )}
 
                 <div className="space-y-2">
+                  {/* Botão RECOMENDADO - Via Driver do Windows */}
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+                    <div className="text-xs text-green-300 font-medium mb-2">✅ RECOMENDADO - Via Driver do Windows</div>
+                    <Button
+                      onClick={() => {
+                        // Imprimir múltiplas cópias
+                        for (let i = 0; i < copias; i++) {
+                          handlePrintViaDriver();
+                          // Pequeno delay entre cópias se houver mais de uma
+                          if (i < copias - 1) {
+                            setTimeout(() => {}, 500);
+                          }
+                        }
+                      }}
+                      disabled={printing}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      <Printer className="w-5 h-5 mr-2" />
+                      Imprimir via Driver (Ctrl+P)
+                    </Button>
+                    <p className="text-xs text-gray-400 mt-2">
+                      ✓ Usa o driver oficial da Elgin i9<br/>
+                      ✓ Funciona se a impressora funciona no Windows<br/>
+                      ✓ Mais confiável e compatível
+                    </p>
+                  </div>
+
+                  {/* Botões secundários */}
                   <div className="flex gap-3">
                     <Button
                       type="button"
@@ -992,6 +1214,7 @@ export default function GerarEtiquetaPage() {
                       onClick={handleSubmit}
                       disabled={saving || printing}
                       className="flex-1 bg-[#001F05] hover:bg-[#001F05]/80 text-white"
+                      title="Impressão direta USB (experimental)"
                     >
                       {printing ? (
                         <>
@@ -1001,7 +1224,7 @@ export default function GerarEtiquetaPage() {
                       ) : (
                         <>
                           <Printer className="w-5 h-5 mr-2" />
-                          {saving ? "Gerando..." : "Imprimir"}
+                          USB Direta
                         </>
                       )}
                     </Button>
