@@ -71,93 +71,131 @@ export function detectPlatform(): {
   };
 }
 
-// Comandos ESC/POS para PT-260
+// Comandos ESC/POS para impressoras térmicas (i9, PT-260, etc)
 class ESCPOSCommands {
   // Inicializar impressora
-  static INIT = '\x1B\x40';
+  static INIT = '\x1B\x40'; // ESC @
   
   // Alinhamento
-  static ALIGN_LEFT = '\x1B\x61\x00';
-  static ALIGN_CENTER = '\x1B\x61\x01';
-  static ALIGN_RIGHT = '\x1B\x61\x02';
+  static ALIGN_LEFT = '\x1B\x61\x00';   // ESC a 0
+  static ALIGN_CENTER = '\x1B\x61\x01'; // ESC a 1
+  static ALIGN_RIGHT = '\x1B\x61\x02';  // ESC a 2
   
   // Tamanho de fonte
-  static FONT_NORMAL = '\x1D\x21\x00';
-  static FONT_DOUBLE_WIDTH = '\x1D\x21\x10';
-  static FONT_DOUBLE_HEIGHT = '\x1D\x21\x01';
-  static FONT_DOUBLE = '\x1D\x21\x11';
+  static FONT_NORMAL = '\x1D\x21\x00';        // GS ! 0
+  static FONT_DOUBLE_WIDTH = '\x1D\x21\x10';  // GS ! 16
+  static FONT_DOUBLE_HEIGHT = '\x1D\x21\x01'; // GS ! 1
+  static FONT_DOUBLE = '\x1D\x21\x11';        // GS ! 17
   
   // Estilo
-  static BOLD_ON = '\x1B\x45\x01';
-  static BOLD_OFF = '\x1B\x45\x00';
+  static BOLD_ON = '\x1B\x45\x01';   // ESC E 1
+  static BOLD_OFF = '\x1B\x45\x00';  // ESC E 0
   static UNDERLINE_ON = '\x1B\x2D\x01';
   static UNDERLINE_OFF = '\x1B\x2D\x00';
   
   // Linha
-  static LINE_FEED = '\x0A';
+  static LINE_FEED = '\x0A';  // LF
+  static CARRIAGE_RETURN = '\x0D'; // CR
   static FEED_LINES = (n: number) => `\x1B\x64${String.fromCharCode(n)}`;
   
   // Cortar papel
-  static CUT = '\x1D\x56\x00';
+  static CUT_FULL = '\x1D\x56\x00';     // GS V 0 - corte total
+  static CUT_PARTIAL = '\x1D\x56\x01';  // GS V 1 - corte parcial
+  static CUT = '\x1D\x56\x41\x00';      // GS V A 0 - corte com alimentação
   
   // Espaçamento
   static SET_LINE_SPACING = (n: number) => `\x1B\x33${String.fromCharCode(n)}`;
+  static SET_DEFAULT_LINE_SPACING = '\x1B\x32'; // ESC 2
 }
 
 // Formatar dados da etiqueta em comandos ESC/POS (otimizado para 80mm x 30mm)
 function formatEtiquetaESC(data: EtiquetaData): Uint8Array {
   let commands = '';
   
-  // Inicializar
+  // Inicializar impressora (IMPORTANTE!)
   commands += ESCPOSCommands.INIT;
-  commands += ESCPOSCommands.SET_LINE_SPACING(20); // Espaçamento menor para etiqueta pequena
   
-  // Cabeçalho - Nome do produto (centralizado, negrito, fonte dupla)
+  // Aguardar um pouco após inicialização
+  // (Simulado com comando, delay real é no envio)
+  
+  // Configurar espaçamento de linha
+  commands += ESCPOSCommands.SET_LINE_SPACING(30); // 30/180 polegadas
+  
+  // === CABEÇALHO ===
+  // Nome do produto (centralizado, negrito, fonte dupla)
   commands += ESCPOSCommands.ALIGN_CENTER;
   commands += ESCPOSCommands.FONT_DOUBLE;
   commands += ESCPOSCommands.BOLD_ON;
-  commands += data.produtoNome.toUpperCase() + ESCPOSCommands.LINE_FEED;
+  commands += data.produtoNome.toUpperCase();
+  commands += ESCPOSCommands.LINE_FEED;
   commands += ESCPOSCommands.BOLD_OFF;
   commands += ESCPOSCommands.FONT_NORMAL;
   
-  // Tipo de armazenamento (centralizado)
+  // Tipo de armazenamento (centralizado, negrito)
   commands += ESCPOSCommands.BOLD_ON;
-  commands += data.tipoArmazenamento + ESCPOSCommands.LINE_FEED;
+  commands += data.tipoArmazenamento;
+  commands += ESCPOSCommands.LINE_FEED;
   commands += ESCPOSCommands.BOLD_OFF;
   
   // Linha divisória
-  commands += '--------------------------------' + ESCPOSCommands.LINE_FEED;
-  
-  // Informações principais (alinhado à esquerda, compacto)
-  commands += ESCPOSCommands.ALIGN_LEFT;
-  commands += `Peso/Qtd: ${data.peso} ${data.unidadeMedida}     Val: ${data.periodoDias} dias` + ESCPOSCommands.LINE_FEED;
-  commands += `Manipulado: ${data.dataManipulacao}` + ESCPOSCommands.LINE_FEED;
-  commands += `Vence em: ${data.dataValidade}` + ESCPOSCommands.LINE_FEED;
-  
-  // Linha divisória
-  commands += '--------------------------------' + ESCPOSCommands.LINE_FEED;
-  
-  // Responsável (centralizado, compacto)
-  commands += ESCPOSCommands.ALIGN_CENTER;
-  commands += `Resp: ${data.responsavelNome}` + ESCPOSCommands.LINE_FEED;
-  
-  // Unidade (centralizado, compacto)
-  commands += ESCPOSCommands.BOLD_ON;
-  commands += data.unidadeNome + ESCPOSCommands.LINE_FEED;
-  commands += ESCPOSCommands.BOLD_OFF;
-  commands += `${data.unidadeCNPJ} - ${data.unidadeCidade}` + ESCPOSCommands.LINE_FEED;
-  
-  if (data.marcaFornecedor) {
-    commands += `Marca: ${data.marcaFornecedor}` + ESCPOSCommands.LINE_FEED;
-  }
-  
-  // Espaçamento final
+  commands += '--------------------------------';
   commands += ESCPOSCommands.LINE_FEED;
   
-  // Cortar papel
+  // === INFORMAÇÕES PRINCIPAIS ===
+  // Alinhado à esquerda
+  commands += ESCPOSCommands.ALIGN_LEFT;
+  
+  // Peso e validade na mesma linha
+  commands += `Peso/Qtd: ${data.peso} ${data.unidadeMedida}`;
+  commands += `     Val: ${data.periodoDias} dias`;
+  commands += ESCPOSCommands.LINE_FEED;
+  
+  // Data de manipulação
+  commands += `Manipulado: ${data.dataManipulacao}`;
+  commands += ESCPOSCommands.LINE_FEED;
+  
+  // Data de vencimento
+  commands += `Vence em: ${data.dataValidade}`;
+  commands += ESCPOSCommands.LINE_FEED;
+  
+  // Linha divisória
+  commands += '--------------------------------';
+  commands += ESCPOSCommands.LINE_FEED;
+  
+  // === RESPONSÁVEL E UNIDADE ===
+  // Centralizado
+  commands += ESCPOSCommands.ALIGN_CENTER;
+  
+  // Responsável
+  commands += `Resp: ${data.responsavelNome}`;
+  commands += ESCPOSCommands.LINE_FEED;
+  
+  // Unidade (negrito)
+  commands += ESCPOSCommands.BOLD_ON;
+  commands += data.unidadeNome;
+  commands += ESCPOSCommands.LINE_FEED;
+  commands += ESCPOSCommands.BOLD_OFF;
+  
+  // CNPJ e Cidade
+  commands += `${data.unidadeCNPJ} - ${data.unidadeCidade}`;
+  commands += ESCPOSCommands.LINE_FEED;
+  
+  // Marca (se houver)
+  if (data.marcaFornecedor) {
+    commands += `Marca: ${data.marcaFornecedor}`;
+    commands += ESCPOSCommands.LINE_FEED;
+  }
+  
+  // === FINALIZAÇÃO ===
+  // Alimentar papel
+  commands += ESCPOSCommands.LINE_FEED;
+  commands += ESCPOSCommands.LINE_FEED;
+  commands += ESCPOSCommands.LINE_FEED;
+  
+  // Cortar papel (usar corte com alimentação)
   commands += ESCPOSCommands.CUT;
   
-  // Converter para bytes
+  // Converter para bytes UTF-8
   const encoder = new TextEncoder();
   return encoder.encode(commands);
 }
@@ -344,9 +382,9 @@ async function printViaWebSerial(data: EtiquetaData, forceNewPort: boolean = fal
       }
     }
     
-    // Abrir porta com configuração para PT-260
-    // Tentar diferentes baud rates se necessário
-    const baudRates = [9600, 115200, 19200, 38400];
+    // Abrir porta com configuração para impressoras térmicas
+    // Impressora i9 geralmente usa 9600 baud
+    const baudRates = [9600, 115200, 19200, 38400, 57600];
     let opened = false;
     let lastError: any = null;
     
@@ -357,9 +395,10 @@ async function printViaWebSerial(data: EtiquetaData, forceNewPort: boolean = fal
           dataBits: 8,
           stopBits: 1,
           parity: 'none',
+          flowControl: 'none', // Importante: sem controle de fluxo
         });
         opened = true;
-        console.log(`Porta aberta com sucesso em ${baudRate} baud`);
+        console.log(`✅ Porta aberta em ${baudRate} baud`);
         break;
       } catch (e) {
         lastError = e;
@@ -367,6 +406,7 @@ async function printViaWebSerial(data: EtiquetaData, forceNewPort: boolean = fal
         // Se a porta já está aberta, tentar continuar
         if (port.readable && port.writable) {
           opened = true;
+          console.log('Porta já estava aberta, reutilizando');
           break;
         }
       }
@@ -378,7 +418,7 @@ async function printViaWebSerial(data: EtiquetaData, forceNewPort: boolean = fal
 
     // Preparar dados
     const dataBytes = formatEtiquetaESC(data);
-    console.log(`Enviando ${dataBytes.length} bytes para impressora`);
+    console.log(`📄 Enviando ${dataBytes.length} bytes para impressora`);
     
     // Obter writer
     if (!port.writable) {
@@ -391,29 +431,38 @@ async function printViaWebSerial(data: EtiquetaData, forceNewPort: boolean = fal
       throw new Error('Não foi possível obter writer');
     }
     
-    // Enviar dados em chunks para garantir que tudo seja enviado
-    const chunkSize = 64; // Tamanho seguro para USB
+    // Enviar dados em chunks menores para garantir recebimento
+    const chunkSize = 32; // Menor para maior confiabilidade
+    let bytesSent = 0;
+    
     for (let i = 0; i < dataBytes.length; i += chunkSize) {
       const chunk = dataBytes.slice(i, i + chunkSize);
       await writer.write(chunk);
-      // Pequeno delay entre chunks
-      if (i + chunkSize < dataBytes.length) {
-        await new Promise(resolve => setTimeout(resolve, 10));
-      }
+      bytesSent += chunk.length;
+      console.log(`📤 Enviado: ${bytesSent}/${dataBytes.length} bytes (${Math.round(bytesSent/dataBytes.length*100)}%)`);
+      
+      // Delay maior entre chunks para dar tempo da impressora processar
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
     
-    console.log('Dados enviados com sucesso');
+    console.log('✅ Todos os dados enviados');
     
-    // Aguardar um pouco para garantir que os dados foram processados
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // IMPORTANTE: Aguardar mais tempo para a impressora processar
+    // Impressoras térmicas podem levar tempo para processar os comandos
+    console.log('⏳ Aguardando impressora processar...');
+    await new Promise(resolve => setTimeout(resolve, 1000)); // 1 segundo
     
     // Fechar writer
+    console.log('🔓 Liberando writer');
     writer.releaseLock();
     writer = null;
     
-    // Fechar porta
-    await port.close();
-    port = null;
+    // NÃO fechar a porta imediatamente - manter aberta para próximas impressões
+    // Isso também ajuda a garantir que os dados foram enviados
+    console.log('✅ Impressão enviada - porta mantida aberta para próximas impressões');
+    
+    // Não fazer port.close() - deixar a porta aberta
+    // port = null não é necessário pois vamos reutilizar savedPort
     
     return true;
   } catch (error: any) {
@@ -422,11 +471,13 @@ async function printViaWebSerial(data: EtiquetaData, forceNewPort: boolean = fal
     // Limpar recursos em caso de erro
     try {
       if (writer) {
+        console.log('🧹 Liberando writer após erro');
         writer.releaseLock();
       }
-      if (port && port.readable) {
-        await port.close();
-      }
+      // NÃO fechar a porta em caso de erro - pode ser reutilizada
+      // if (port && port.readable) {
+      //   await port.close();
+      // }
     } catch (cleanupError) {
       console.error('Erro ao limpar recursos:', cleanupError);
     }
@@ -625,7 +676,8 @@ export async function printEtiqueta(
       } catch (error: any) {
         const errorMsg = error.message || 'Erro desconhecido';
         updateStatus(`USB falhou: ${errorMsg}`);
-        console.error('Erro detalhado USB:', error);
+        console.error('❌ Erro detalhado USB:', error);
+        console.error('Stack:', error.stack);
         
         // Se o usuário cancelou, não tentar fallback automaticamente
         if (errorMsg.includes('cancel') || errorMsg.includes('Cancel')) {
@@ -635,7 +687,13 @@ export async function printEtiqueta(
             error: 'Seleção de porta cancelada. Tente novamente e selecione a porta COM da impressora.'
           };
         }
-        // Continua para fallback apenas se não foi cancelamento
+        
+        // Se deu erro na impressão, retornar erro específico
+        return {
+          success: false,
+          method: 'Web Serial (USB)',
+          error: `Erro na comunicação USB: ${errorMsg}. Verifique se a impressora está ligada e conectada.`
+        };
       }
     }
 
@@ -734,4 +792,58 @@ export function getAvailablePrintMethods(): {
     download: true, // Sempre disponível
     platform: platform.isAndroid ? 'Android' : platform.isIOS ? 'iOS' : 'Desktop',
   };
+}
+
+// Testar impressora com uma impressão de teste
+export async function testPrinter(
+  onStatus?: (status: string) => void
+): Promise<{ success: boolean; error?: string }> {
+  const platform = detectPlatform();
+  
+  if (!platform.supportsWebSerial) {
+    return {
+      success: false,
+      error: 'Web Serial não suportado. Use Chrome ou Edge no PC.'
+    };
+  }
+  
+  const updateStatus = (msg: string) => {
+    if (onStatus) onStatus(msg);
+    console.log(`[Teste] ${msg}`);
+  };
+  
+  try {
+    updateStatus('Enviando página de teste...');
+    
+    // Criar dados de teste simples
+    const testData: EtiquetaData = {
+      produtoNome: 'TESTE DE IMPRESSAO',
+      tipoArmazenamento: 'TESTE',
+      peso: '1',
+      unidadeMedida: 'kg',
+      periodoDias: 1,
+      dataManipulacao: new Date().toLocaleDateString('pt-BR'),
+      dataValidade: new Date().toLocaleDateString('pt-BR'),
+      responsavelNome: 'Sistema',
+      unidadeNome: 'Teste de Impressora',
+      unidadeCNPJ: '00.000.000/0000-00',
+      unidadeCidade: 'Teste',
+    };
+    
+    // Tentar imprimir
+    const result = await printViaWebSerial(testData, false);
+    
+    if (result) {
+      updateStatus('✅ Teste concluído! Verifique a impressora.');
+      return { success: true };
+    } else {
+      return { success: false, error: 'Falha ao enviar dados de teste' };
+    }
+  } catch (error: any) {
+    updateStatus(`Erro: ${error.message}`);
+    return { 
+      success: false, 
+      error: error.message || 'Erro ao testar impressora'
+    };
+  }
 }

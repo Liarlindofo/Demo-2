@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Produto, NomeResponsavel, Unidade } from "@/types/etiquetagem";
 import { validarNomeCompleto } from "@/types/etiquetagem";
-import { printEtiqueta, type EtiquetaData, getAvailablePrintMethods, resetSavedPort } from "@/lib/thermal-printer";
+import { printEtiqueta, type EtiquetaData, getAvailablePrintMethods, resetSavedPort, testPrinter } from "@/lib/thermal-printer";
 
 type Step = "produto" | "responsavel" | "peso" | "armazenamento" | "dias" | "preview";
 
@@ -916,9 +916,18 @@ export default function GerarEtiquetaPage() {
                           {printError || printStatus}
                         </p>
                         {printError && printMethods && (
-                          <p className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-gray-500 mt-2 space-y-1">
                             {printMethods.platform === 'Desktop' && (
-                              <>Dica: Certifique-se de que a impressora está conectada via USB. Quando o diálogo aparecer, selecione a porta COM e clique em "Conectar".</>
+                              <>
+                                <p className="font-medium text-yellow-400">💡 Não imprimiu? Verifique:</p>
+                                <ul className="list-disc list-inside space-y-0.5 ml-2">
+                                  <li>Impressora está ligada e com papel</li>
+                                  <li>Cabo USB bem conectado</li>
+                                  <li>Tampa fechada corretamente</li>
+                                  <li>Clique em "Testar Impressora" abaixo</li>
+                                  <li>Veja os logs no console (F12)</li>
+                                </ul>
+                              </>
                             )}
                             {printMethods.platform === 'Android' && (
                               <>Dica: Para impressão no celular, use o app OpenLabel. O arquivo baixado pode ser aberto no app para imprimir. Ou compartilhe os dados diretamente com o app quando solicitado.</>
@@ -926,7 +935,7 @@ export default function GerarEtiquetaPage() {
                             {printMethods.platform !== 'Desktop' && printMethods.platform !== 'Android' && (
                               <>Certifique-se de que a impressora está ligada e conectada.</>
                             )}
-                          </p>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -945,7 +954,7 @@ export default function GerarEtiquetaPage() {
                       )}
                       {printMethods.webSerial && (
                         <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">
-                          USB
+                          ✅ USB (Impressão Direta)
                         </span>
                       )}
                       {printMethods.webShare && (
@@ -960,6 +969,11 @@ export default function GerarEtiquetaPage() {
                     <p className="text-xs text-gray-500 mt-2">
                       Plataforma: {printMethods.platform}
                     </p>
+                    {printMethods.webSerial && (
+                      <p className="text-xs text-green-400 mt-2">
+                        💡 Após configurar uma vez, as próximas impressões serão diretas!
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -993,20 +1007,40 @@ export default function GerarEtiquetaPage() {
                     </Button>
                   </div>
                   {printMethods?.webSerial && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => {
-                        resetSavedPort();
-                        setPrintStatus("Impressora resetada. Na próxima impressão você poderá selecionar outra impressora.");
-                        setTimeout(() => setPrintStatus(""), 4000);
-                      }}
-                      disabled={printing}
-                      className="w-full text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50"
-                    >
-                      <Cog className="w-3 h-3 mr-1" />
-                      Trocar de impressora USB
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={async () => {
+                          setPrinting(true);
+                          setPrintStatus("Enviando página de teste...");
+                          const result = await testPrinter((status) => setPrintStatus(status));
+                          if (!result.success) {
+                            setPrintError(result.error || "Erro ao testar");
+                          }
+                          setPrinting(false);
+                        }}
+                        disabled={printing}
+                        className="flex-1 text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50"
+                      >
+                        <Printer className="w-3 h-3 mr-1" />
+                        Testar Impressora
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          resetSavedPort();
+                          setPrintStatus("Impressora resetada. Na próxima impressão você poderá selecionar outra impressora.");
+                          setTimeout(() => setPrintStatus(""), 4000);
+                        }}
+                        disabled={printing}
+                        className="flex-1 text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50"
+                      >
+                        <Cog className="w-3 h-3 mr-1" />
+                        Trocar Impressora
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
