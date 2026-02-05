@@ -326,17 +326,18 @@ export default function GerarEtiquetaPage() {
         <meta charset="UTF-8">
         <title>Etiqueta - ${produtoSelecionado.nome} (${copias} ${copias === 1 ? 'cópia' : 'cópias'})</title>
         <style>
-          /* Reset */
+          /* Reset completo */
           * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            page-break-inside: avoid !important;
           }
 
-          /* Configuração da página - ALTURA AUTOMÁTICA */
+          /* Página para impressora térmica */
           @page {
             size: 80mm auto;
-            margin: 3mm;
+            margin: 2mm;
           }
 
           body {
@@ -346,34 +347,31 @@ export default function GerarEtiquetaPage() {
             font-family: Arial, sans-serif;
           }
 
-          /* Cada etiqueta - NÃO pode quebrar no meio */
+          /* CADA ETIQUETA = 1 PÁGINA COMPLETA */
           .etiqueta-page {
             width: 100%;
-            padding: 3mm;
+            padding: 4mm;
             background: white;
             color: black;
-            /* IMPORTANTE: evitar quebra dentro da etiqueta */
+            position: relative;
+          }
+
+          /* FORÇA quebra APENAS entre etiquetas, nunca dentro */
+          .etiqueta-page {
+            page-break-after: always;
+          }
+
+          .etiqueta-page:last-child {
+            page-break-after: auto;
+          }
+
+          /* EVITA quebras em TODOS os elementos internos */
+          .header, .info-row, .divider, .footer,
+          .header *, .footer *, .info-row * {
             page-break-inside: avoid !important;
+            page-break-before: avoid !important;
+            page-break-after: avoid !important;
             break-inside: avoid !important;
-            display: block;
-          }
-
-          /* Força quebra APÓS cada etiqueta (exceto a última) */
-          .etiqueta-page:not(:last-child) {
-            page-break-after: always !important;
-            break-after: always !important;
-          }
-
-          @media print {
-            .etiqueta-page {
-              page-break-inside: avoid !important;
-              break-inside: avoid !important;
-            }
-            
-            .etiqueta-page:not(:last-child) {
-              page-break-after: always !important;
-              break-after: always !important;
-            }
           }
 
           .header {
