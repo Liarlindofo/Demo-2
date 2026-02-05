@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Plus, Search, Package, Edit2, Trash2, ArrowLeft } from "lucide-react";
+import { Plus, Search, Package, Edit2, Trash2, ArrowLeft, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,10 @@ export default function ProdutosPage() {
     tipoArmazenamentoPadrao: "",
   });
   const [error, setError] = useState("");
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importedProducts, setImportedProducts] = useState<any[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadData();
@@ -168,6 +172,85 @@ export default function ProdutosPage() {
     setError("");
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setImporting(true);
+      setError("");
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/etiquetagem/importar-produtos', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao importar');
+      }
+
+      const data = await response.json();
+      setImportedProducts(data.produtos);
+      setShowImportModal(true);
+    } catch (error) {
+      console.error('Erro ao importar:', error);
+      alert(error instanceof Error ? error.message : 'Erro ao importar arquivo');
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleSaveImportedProducts = async () => {
+    try {
+      setSaving(true);
+      let sucessos = 0;
+      let erros = 0;
+
+      for (const produto of importedProducts) {
+        if (produto.status !== 'sucesso') continue;
+
+        try {
+          const response = await fetch('/api/etiquetagem/produtos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              nome: produto.nome,
+              categoriaId: produto.categoriaId || null,
+              pesoPadrao: produto.peso || 1.0,
+              unidadeMedida: produto.unidade || 'kg',
+              tipoArmazenamentoPadrao: produto.armazenamento || null,
+            }),
+          });
+
+          if (response.ok) {
+            sucessos++;
+          } else {
+            erros++;
+          }
+        } catch (error) {
+          erros++;
+        }
+      }
+
+      setShowImportModal(false);
+      setImportedProducts([]);
+      await loadData();
+      alert(`Importação concluída!\n${sucessos} produtos salvos\n${erros} erros`);
+    } catch (error) {
+      console.error('Erro ao salvar produtos:', error);
+      alert('Erro ao salvar produtos');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const produtosFiltrados = produtos.filter(p =>
     p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.categoria?.nome.toLowerCase().includes(searchTerm.toLowerCase())
@@ -187,13 +270,30 @@ export default function ProdutosPage() {
 
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">Produtos</h1>
-          <Button
-            onClick={() => setShowModal(true)}
-            className="bg-[#001F05] hover:bg-[#001F05]/80 text-white"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            Novo
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              variant="outline"
+              className="border-[#001F05] text-[#001F05] hover:bg-[#001F05] hover:text-white"
+            >
+              <Upload className="w-5 h-5 mr-2" />
+              Importar
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+            <Button
+              onClick={() => setShowModal(true)}
+              className="bg-[#001F05] hover:bg-[#001F05]/80 text-white"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Novo
+            </Button>
+          </div>
         </div>
 
         <div className="relative mb-6">
@@ -418,6 +518,98 @@ export default function ProdutosPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Preview de Importação */}
+      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+        <DialogContent className="bg-[#141415] border-[#374151] text-white max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">Preview da Importação</DialogTitle>
+          </DialogHeader>
+
+          {importing ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#001F05] border-t-transparent mb-4"></div>
+              <p className="text-gray-400">Classificando produtos com IA...</p>
+            </div>
+          ) : (
+            <>
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-4">
+                <p className="text-sm text-blue-300">
+                  <strong>{importedProducts.length} produtos</strong> encontrados na planilha.
+                  Revise as informações antes de salvar.
+                </p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-[#374151]">
+                      <th className="text-left p-2 text-gray-400 text-sm">Produto</th>
+                      <th className="text-left p-2 text-gray-400 text-sm">Categoria</th>
+                      <th className="text-left p-2 text-gray-400 text-sm">Peso</th>
+                      <th className="text-left p-2 text-gray-400 text-sm">Unidade</th>
+                      <th className="text-left p-2 text-gray-400 text-sm">Armazenamento</th>
+                      <th className="text-left p-2 text-gray-400 text-sm">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importedProducts.map((produto, index) => (
+                      <tr key={index} className="border-b border-[#374151]/50">
+                        <td className="p-2 text-white font-medium">{produto.nome}</td>
+                        <td className="p-2">
+                          {produto.categoriaId ? (
+                            <span className="text-green-400 text-sm">✓ {produto.categoriaSugerida}</span>
+                          ) : (
+                            <span className="text-yellow-400 text-sm">⚠ {produto.categoriaSugerida || 'Sem categoria'}</span>
+                          )}
+                        </td>
+                        <td className="p-2 text-gray-300 text-sm">{produto.peso || '-'}</td>
+                        <td className="p-2 text-gray-300 text-sm">{produto.unidade || '-'}</td>
+                        <td className="p-2 text-gray-300 text-sm">{produto.armazenamento || '-'}</td>
+                        <td className="p-2">
+                          {produto.status === 'sucesso' ? (
+                            <span className="text-green-400 text-xs">✓ OK</span>
+                          ) : (
+                            <span className="text-red-400 text-xs">✗ Erro</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mt-4">
+                <p className="text-xs text-yellow-300">
+                  <strong>💡 Dica:</strong> Produtos com categoria marcada em amarelo (⚠) serão salvos sem categoria.
+                  Você pode editá-los depois.
+                </p>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setImportedProducts([]);
+                  }}
+                  className="flex-1 border-[#374151] text-gray-300 hover:bg-[#374151]"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleSaveImportedProducts}
+                  disabled={saving || importedProducts.length === 0}
+                  className="flex-1 bg-[#001F05] hover:bg-[#001F05]/80 text-white"
+                >
+                  {saving ? "Salvando..." : `Salvar ${importedProducts.filter(p => p.status === 'sucesso').length} Produtos`}
+                </Button>
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
