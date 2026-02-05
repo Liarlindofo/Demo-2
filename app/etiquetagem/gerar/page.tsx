@@ -263,18 +263,59 @@ export default function GerarEtiquetaPage() {
   const handlePrintViaDriver = () => {
     if (!produtoSelecionado || !unidade || !tipoArmazenamento || !periodoDias) return;
 
-    // Criar janela temporária com a etiqueta
-    const printContent = document.getElementById('etiqueta-preview');
-    if (!printContent) return;
-
-    // Clonar o conteúdo
-    const clone = printContent.cloneNode(true) as HTMLElement;
-    
     // Criar janela de impressão
     const printWindow = window.open('', '', 'width=800,height=600');
     if (!printWindow) {
       alert('Por favor, permita pop-ups para imprimir');
       return;
+    }
+
+    // Gerar HTML para cada cópia (importante para quebra de página/corte)
+    let etiquetasHTML = '';
+    for (let i = 0; i < copias; i++) {
+      etiquetasHTML += `
+        <div class="etiqueta-print" style="${i < copias - 1 ? 'page-break-after: always;' : ''}">
+          <!-- Cabeçalho -->
+          <div class="header">
+            <h1>${produtoSelecionado.nome}</h1>
+            <div class="tipo">${tipoArmazenamento}</div>
+          </div>
+
+          <!-- Informações principais -->
+          <div class="info-row">
+            <span class="info-label">Peso/Qtd:</span>
+            <span class="info-value">${peso} ${unidadeMedida}</span>
+          </div>
+
+          <div class="info-row">
+            <span class="info-label">Validade:</span>
+            <span class="info-value">${periodoDias} dias</span>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="info-row">
+            <span class="info-label">Manipulado:</span>
+            <span class="info-value">${getDataHoje()}</span>
+          </div>
+
+          <div class="info-row">
+            <span class="info-label">Vence em:</span>
+            <span class="info-value">${calcularDataValidade()}</span>
+          </div>
+
+          <!-- Rodapé -->
+          <div class="footer">
+            <div class="responsavel">
+              Responsável: <strong>${nomeResponsavel}</strong>
+            </div>
+            <div class="unidade">${unidade.nomeExibicao}</div>
+            <div class="detalhes">CNPJ: ${unidade.cnpjFormatado}</div>
+            <div class="detalhes">${unidade.cidade}</div>
+            ${produtoSelecionado.marcaFornecedor ? `<div class="detalhes">Marca: ${produtoSelecionado.marcaFornecedor}</div>` : ''}
+          </div>
+        </div>
+      `;
     }
 
     // Escrever HTML com CSS otimizado para impressora térmica
@@ -283,7 +324,7 @@ export default function GerarEtiquetaPage() {
       <html>
       <head>
         <meta charset="UTF-8">
-        <title>Etiqueta - ${produtoSelecionado.nome}</title>
+        <title>Etiqueta - ${produtoSelecionado.nome} (${copias} ${copias === 1 ? 'cópia' : 'cópias'})</title>
         <style>
           /* Reset */
           * {
@@ -302,15 +343,15 @@ export default function GerarEtiquetaPage() {
             body {
               width: 80mm;
               margin: 0;
-              padding: 5mm;
+              padding: 0;
               font-family: Arial, sans-serif;
               font-size: 10pt;
               line-height: 1.2;
             }
 
-            /* Esconder tudo exceto a etiqueta */
-            body > *:not(.etiqueta-print) {
-              display: none !important;
+            /* Forçar quebra de página entre etiquetas */
+            .etiqueta-print {
+              page-break-inside: avoid;
             }
           }
 
@@ -318,16 +359,17 @@ export default function GerarEtiquetaPage() {
           body {
             width: 80mm;
             margin: 0 auto;
-            padding: 5mm;
+            padding: 0;
             font-family: Arial, sans-serif;
             background: white;
           }
 
           .etiqueta-print {
             width: 100%;
-            padding: 3mm;
+            padding: 5mm;
             background: white;
             color: black;
+            page-break-inside: avoid;
           }
 
           .header {
@@ -393,47 +435,7 @@ export default function GerarEtiquetaPage() {
         </style>
       </head>
       <body>
-        <div class="etiqueta-print">
-          <!-- Cabeçalho -->
-          <div class="header">
-            <h1>${produtoSelecionado.nome}</h1>
-            <div class="tipo">${tipoArmazenamento}</div>
-          </div>
-
-          <!-- Informações principais -->
-          <div class="info-row">
-            <span class="info-label">Peso/Qtd:</span>
-            <span class="info-value">${peso} ${unidadeMedida}</span>
-          </div>
-
-          <div class="info-row">
-            <span class="info-label">Validade:</span>
-            <span class="info-value">${periodoDias} dias</span>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="info-row">
-            <span class="info-label">Manipulado:</span>
-            <span class="info-value">${getDataHoje()}</span>
-          </div>
-
-          <div class="info-row">
-            <span class="info-label">Vence em:</span>
-            <span class="info-value">${calcularDataValidade()}</span>
-          </div>
-
-          <!-- Rodapé -->
-          <div class="footer">
-            <div class="responsavel">
-              Responsável: <strong>${nomeResponsavel}</strong>
-            </div>
-            <div class="unidade">${unidade.nomeExibicao}</div>
-            <div class="detalhes">CNPJ: ${unidade.cnpjFormatado}</div>
-            <div class="detalhes">${unidade.cidade}</div>
-            ${produtoSelecionado.marcaFornecedor ? `<div class="detalhes">Marca: ${produtoSelecionado.marcaFornecedor}</div>` : ''}
-          </div>
-        </div>
+        ${etiquetasHTML}
       </body>
       </html>
     `);
@@ -1176,26 +1178,17 @@ export default function GerarEtiquetaPage() {
                   <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
                     <div className="text-xs text-green-300 font-medium mb-2">✅ RECOMENDADO - Via Driver do Windows</div>
                     <Button
-                      onClick={() => {
-                        // Imprimir múltiplas cópias
-                        for (let i = 0; i < copias; i++) {
-                          handlePrintViaDriver();
-                          // Pequeno delay entre cópias se houver mais de uma
-                          if (i < copias - 1) {
-                            setTimeout(() => {}, 500);
-                          }
-                        }
-                      }}
+                      onClick={handlePrintViaDriver}
                       disabled={printing}
                       className="w-full bg-green-600 hover:bg-green-700 text-white"
                     >
                       <Printer className="w-5 h-5 mr-2" />
-                      Imprimir via Driver (Ctrl+P)
+                      Imprimir {copias > 1 ? `${copias} Etiquetas` : 'Etiqueta'}
                     </Button>
                     <p className="text-xs text-gray-400 mt-2">
+                      ✓ Gera {copias} {copias === 1 ? 'etiqueta' : 'etiquetas'} com corte entre cada uma<br/>
                       ✓ Usa o driver oficial da Elgin i9<br/>
-                      ✓ Funciona se a impressora funciona no Windows<br/>
-                      ✓ Mais confiável e compatível
+                      ✓ Não precisa configurar cópias no Ctrl+P
                     </p>
                   </div>
 
