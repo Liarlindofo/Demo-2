@@ -103,7 +103,9 @@ Responda APENAS com o nome da categoria. Sem explicações.`
     }
 
     const data = await response.json();
+    console.log('🤖 Resposta da IA (categoria):', JSON.stringify(data, null, 2));
     const categoriaSugerida = data.choices[0]?.message?.content?.trim() || '';
+    console.log('📂 Categoria sugerida:', categoriaSugerida);
 
     // Sugerir também peso e armazenamento
     const sugestaoCompleta = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -158,13 +160,17 @@ Responda APENAS em formato JSON:
       }
     }
 
-    return NextResponse.json({
+    const resultado = {
       categoria: categoriaSugerida,
       peso: sugestoes.peso,
       unidade: sugestoes.unidade,
       armazenamento: sugestoes.armazenamento,
       confianca: 0.95
-    });
+    };
+    
+    console.log('✅ Resultado final:', resultado);
+    
+    return NextResponse.json(resultado);
 
   } catch (error) {
     console.error('Erro ao classificar produto:', error);

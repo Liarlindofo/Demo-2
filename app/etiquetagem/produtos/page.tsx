@@ -194,6 +194,8 @@ export default function ProdutosPage() {
       }
 
       const data = await response.json();
+      console.log('📥 Dados recebidos da importação:', data);
+      console.log('📦 Produtos importados:', data.produtos);
       setImportedProducts(data.produtos);
       setShowImportModal(true);
     } catch (error) {

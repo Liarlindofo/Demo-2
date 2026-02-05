@@ -119,6 +119,9 @@ export async function POST(request: NextRequest) {
 
         if (classificacao.ok) {
           const resultado = await classificacao.json();
+          console.log(`📦 Produto: ${produto.nome}`);
+          console.log(`🔍 Classificação recebida:`, resultado);
+          
           produto.categoriaSugerida = resultado.categoria;
           produto.peso = resultado.peso;
           produto.unidade = resultado.unidade;
@@ -148,10 +151,16 @@ export async function POST(request: NextRequest) {
 
           if (categoriaEncontrada) {
             produto.categoriaId = categoriaEncontrada.id;
+            console.log(`✅ Categoria encontrada: ${categoriaEncontrada.nome} (ID: ${categoriaEncontrada.id})`);
+          } else {
+            console.log(`⚠️ Categoria NÃO encontrada para: "${resultado.categoria}"`);
+            console.log(`📋 Categorias disponíveis:`, categorias.map(c => c.nome));
           }
 
           produto.status = 'sucesso';
         } else {
+          const erro = await classificacao.text();
+          console.error(`❌ Erro ao classificar ${produto.nome}:`, classificacao.status, erro);
           produto.status = 'erro';
           produto.erro = 'Erro ao classificar';
         }

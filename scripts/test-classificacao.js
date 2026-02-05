@@ -1,21 +1,21 @@
-// Script de teste para verificar se a classificação está funcionando
-// Execute: node scripts/test-classificacao.js
+// Script de teste para classificação de produtos
+// Para testar: node scripts/test-classificacao.js
 
 const produtos = [
   'Queijo Mussarela',
   'Presunto',
+  'Frango Congelado',
+  'Tomate',
+  'Leite',
   'Cheddar',
   'Cream Cheese',
-  'Leite Condensado',
-  'Margarina',
-  'Frango Desossado',
-  'Tilápia',
-  'Alface',
-  'Tomate'
+  'Salmão',
+  'Picanha',
+  'Alface'
 ];
 
 async function testarClassificacao() {
-  console.log('🧪 Testando Classificação com IA...\n');
+  console.log('🧪 Iniciando teste de classificação...\n');
 
   for (const produto of produtos) {
     try {
@@ -28,23 +28,21 @@ async function testarClassificacao() {
       });
 
       if (response.ok) {
-        const resultado = await response.json();
-        console.log(`✅ ${produto}`);
-        console.log(`   → Categoria: ${resultado.categoria}`);
-        console.log(`   → Peso: ${resultado.peso} ${resultado.unidade}`);
-        console.log(`   → Armazenamento: ${resultado.armazenamento}\n`);
+        const data = await response.json();
+        console.log(`✅ ${produto.padEnd(20)} → ${data.categoria} (${data.peso}${data.unidade})`);
       } else {
-        console.log(`❌ ${produto} - Erro na classificação\n`);
+        const error = await response.text();
+        console.log(`❌ ${produto.padEnd(20)} → ERRO: ${response.status}`);
+        if (error.includes('API Key não configurada')) {
+          console.log('\n⚠️  ERRO: OpenRouter API Key não está configurada!');
+          console.log('📋 Veja o arquivo CONFIGURAR-OPENROUTER.md para instruções\n');
+          break;
+        }
       }
     } catch (error) {
-      console.log(`❌ ${produto} - Erro: ${error.message}\n`);
+      console.log(`❌ ${produto.padEnd(20)} → ERRO: ${error.message}`);
     }
-
-    // Aguardar um pouco entre requisições
-    await new Promise(resolve => setTimeout(resolve, 1000));
   }
-
-  console.log('✅ Teste concluído!');
 }
 
 testarClassificacao();
