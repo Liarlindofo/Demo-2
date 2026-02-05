@@ -333,52 +333,46 @@ export default function GerarEtiquetaPage() {
             box-sizing: border-box;
           }
 
-          /* Configuração da página para impressora térmica 80mm */
-          /* ALTURA AUTOMÁTICA - deixa o conteúdo definir */
+          /* Configuração da página - ALTURA AUTOMÁTICA */
           @page {
             size: 80mm auto;
-            margin: 0;
+            margin: 3mm;
           }
 
-          /* Estilo geral */
           body {
             width: 80mm;
             margin: 0;
             padding: 0;
             font-family: Arial, sans-serif;
-            background: white;
           }
 
-          /* Cada etiqueta em sua própria página */
+          /* Cada etiqueta - NÃO pode quebrar no meio */
           .etiqueta-page {
             width: 100%;
-            min-height: auto;
-            padding: 5mm;
+            padding: 3mm;
             background: white;
             color: black;
-            page-break-after: always;
-            page-break-inside: avoid;
+            /* IMPORTANTE: evitar quebra dentro da etiqueta */
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            display: block;
           }
 
-          /* Última etiqueta não precisa de quebra */
-          .etiqueta-page:last-child {
-            page-break-after: auto;
+          /* Força quebra APÓS cada etiqueta (exceto a última) */
+          .etiqueta-page:not(:last-child) {
+            page-break-after: always !important;
+            break-after: always !important;
           }
 
           @media print {
-            body {
-              width: 80mm;
-              margin: 0;
-              padding: 0;
-            }
-
             .etiqueta-page {
-              page-break-after: always;
-              page-break-inside: avoid;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
             }
-
-            .etiqueta-page:last-child {
-              page-break-after: auto;
+            
+            .etiqueta-page:not(:last-child) {
+              page-break-after: always !important;
+              break-after: always !important;
             }
           }
 
