@@ -270,53 +270,50 @@ export default function GerarEtiquetaPage() {
       return;
     }
 
-    // Gerar HTML para cada cópia (importante para quebra de página/corte)
+    // Gerar HTML para cada cópia (cada uma em sua própria página)
     let etiquetasHTML = '';
     for (let i = 0; i < copias; i++) {
       etiquetasHTML += `
-        <div class="etiqueta-container">
-          <div class="etiqueta-print">
-            <!-- Cabeçalho -->
-            <div class="header">
-              <h1>${produtoSelecionado.nome}</h1>
-              <div class="tipo">${tipoArmazenamento}</div>
-            </div>
-
-            <!-- Informações principais -->
-            <div class="info-row">
-              <span class="info-label">Peso/Qtd:</span>
-              <span class="info-value">${peso} ${unidadeMedida}</span>
-            </div>
-
-            <div class="info-row">
-              <span class="info-label">Validade:</span>
-              <span class="info-value">${periodoDias} dias</span>
-            </div>
-
-            <div class="divider"></div>
-
-            <div class="info-row">
-              <span class="info-label">Manipulado:</span>
-              <span class="info-value">${getDataHoje()}</span>
-            </div>
-
-            <div class="info-row">
-              <span class="info-label">Vence em:</span>
-              <span class="info-value">${calcularDataValidade()}</span>
-            </div>
-
-            <!-- Rodapé -->
-            <div class="footer">
-              <div class="responsavel">
-                Responsável: <strong>${nomeResponsavel}</strong>
-              </div>
-              <div class="unidade">${unidade.nomeExibicao}</div>
-              <div class="detalhes">CNPJ: ${unidade.cnpjFormatado}</div>
-              <div class="detalhes">${unidade.cidade}</div>
-              ${produtoSelecionado.marcaFornecedor ? `<div class="detalhes">Marca: ${produtoSelecionado.marcaFornecedor}</div>` : ''}
-            </div>
+        <div class="etiqueta-page">
+          <!-- Cabeçalho -->
+          <div class="header">
+            <h1>${produtoSelecionado.nome}</h1>
+            <div class="tipo">${tipoArmazenamento}</div>
           </div>
-          ${i < copias - 1 ? '<div class="corte-separador"></div>' : ''}
+
+          <!-- Informações principais -->
+          <div class="info-row">
+            <span class="info-label">Peso/Qtd:</span>
+            <span class="info-value">${peso} ${unidadeMedida}</span>
+          </div>
+
+          <div class="info-row">
+            <span class="info-label">Validade:</span>
+            <span class="info-value">${periodoDias} dias</span>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="info-row">
+            <span class="info-label">Manipulado:</span>
+            <span class="info-value">${getDataHoje()}</span>
+          </div>
+
+          <div class="info-row">
+            <span class="info-label">Vence em:</span>
+            <span class="info-value">${calcularDataValidade()}</span>
+          </div>
+
+          <!-- Rodapé -->
+          <div class="footer">
+            <div class="responsavel">
+              Responsável: <strong>${nomeResponsavel}</strong>
+            </div>
+            <div class="unidade">${unidade.nomeExibicao}</div>
+            <div class="detalhes">CNPJ: ${unidade.cnpjFormatado}</div>
+            <div class="detalhes">${unidade.cidade}</div>
+            ${produtoSelecionado.marcaFornecedor ? `<div class="detalhes">Marca: ${produtoSelecionado.marcaFornecedor}</div>` : ''}
+          </div>
         </div>
       `;
     }
@@ -337,9 +334,35 @@ export default function GerarEtiquetaPage() {
           }
 
           /* Configuração da página para impressora térmica 80mm */
+          /* ALTURA AUTOMÁTICA - deixa o conteúdo definir */
           @page {
-            size: 80mm auto;  /* Largura 80mm, altura automática */
+            size: 80mm auto;
             margin: 0;
+          }
+
+          /* Estilo geral */
+          body {
+            width: 80mm;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background: white;
+          }
+
+          /* Cada etiqueta em sua própria página */
+          .etiqueta-page {
+            width: 100%;
+            min-height: auto;
+            padding: 5mm;
+            background: white;
+            color: black;
+            page-break-after: always;
+            page-break-inside: avoid;
+          }
+
+          /* Última etiqueta não precisa de quebra */
+          .etiqueta-page:last-child {
+            page-break-after: auto;
           }
 
           @media print {
@@ -347,69 +370,15 @@ export default function GerarEtiquetaPage() {
               width: 80mm;
               margin: 0;
               padding: 0;
-              font-family: Arial, sans-serif;
-              font-size: 10pt;
-              line-height: 1.2;
             }
 
-            /* Container de cada etiqueta com separador para corte */
-            .etiqueta-container {
+            .etiqueta-page {
+              page-break-after: always;
               page-break-inside: avoid;
-              page-break-after: always;
             }
 
-            /* Separador para forçar corte da guilhotina */
-            .corte-separador {
-              height: 15mm;  /* Espaço para a guilhotina cortar */
-              page-break-after: always;
-              background: white;
-            }
-
-            /* Remover quebra após a última etiqueta */
-            .etiqueta-container:last-child {
+            .etiqueta-page:last-child {
               page-break-after: auto;
-            }
-
-            .etiqueta-container:last-child .corte-separador {
-              display: none;
-            }
-          }
-
-          /* Estilo da etiqueta */
-          body {
-            width: 80mm;
-            margin: 0 auto;
-            padding: 0;
-            font-family: Arial, sans-serif;
-            background: white;
-          }
-
-          .etiqueta-container {
-            width: 100%;
-            page-break-inside: avoid;
-            page-break-after: always;
-          }
-
-          .etiqueta-print {
-            width: 100%;
-            padding: 5mm;
-            background: white;
-            color: black;
-          }
-
-          /* Separador visível na tela, espaço em branco na impressão */
-          .corte-separador {
-            height: 15mm;
-            background: white;
-            border-top: 2px dashed #ccc;
-            margin: 0;
-            padding: 0;
-          }
-
-          @media print {
-            .corte-separador {
-              border: none;
-              background: white;
             }
           }
 
