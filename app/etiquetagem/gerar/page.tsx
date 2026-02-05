@@ -274,46 +274,49 @@ export default function GerarEtiquetaPage() {
     let etiquetasHTML = '';
     for (let i = 0; i < copias; i++) {
       etiquetasHTML += `
-        <div class="etiqueta-print" style="${i < copias - 1 ? 'page-break-after: always;' : ''}">
-          <!-- Cabeçalho -->
-          <div class="header">
-            <h1>${produtoSelecionado.nome}</h1>
-            <div class="tipo">${tipoArmazenamento}</div>
-          </div>
-
-          <!-- Informações principais -->
-          <div class="info-row">
-            <span class="info-label">Peso/Qtd:</span>
-            <span class="info-value">${peso} ${unidadeMedida}</span>
-          </div>
-
-          <div class="info-row">
-            <span class="info-label">Validade:</span>
-            <span class="info-value">${periodoDias} dias</span>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="info-row">
-            <span class="info-label">Manipulado:</span>
-            <span class="info-value">${getDataHoje()}</span>
-          </div>
-
-          <div class="info-row">
-            <span class="info-label">Vence em:</span>
-            <span class="info-value">${calcularDataValidade()}</span>
-          </div>
-
-          <!-- Rodapé -->
-          <div class="footer">
-            <div class="responsavel">
-              Responsável: <strong>${nomeResponsavel}</strong>
+        <div class="etiqueta-container">
+          <div class="etiqueta-print">
+            <!-- Cabeçalho -->
+            <div class="header">
+              <h1>${produtoSelecionado.nome}</h1>
+              <div class="tipo">${tipoArmazenamento}</div>
             </div>
-            <div class="unidade">${unidade.nomeExibicao}</div>
-            <div class="detalhes">CNPJ: ${unidade.cnpjFormatado}</div>
-            <div class="detalhes">${unidade.cidade}</div>
-            ${produtoSelecionado.marcaFornecedor ? `<div class="detalhes">Marca: ${produtoSelecionado.marcaFornecedor}</div>` : ''}
+
+            <!-- Informações principais -->
+            <div class="info-row">
+              <span class="info-label">Peso/Qtd:</span>
+              <span class="info-value">${peso} ${unidadeMedida}</span>
+            </div>
+
+            <div class="info-row">
+              <span class="info-label">Validade:</span>
+              <span class="info-value">${periodoDias} dias</span>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="info-row">
+              <span class="info-label">Manipulado:</span>
+              <span class="info-value">${getDataHoje()}</span>
+            </div>
+
+            <div class="info-row">
+              <span class="info-label">Vence em:</span>
+              <span class="info-value">${calcularDataValidade()}</span>
+            </div>
+
+            <!-- Rodapé -->
+            <div class="footer">
+              <div class="responsavel">
+                Responsável: <strong>${nomeResponsavel}</strong>
+              </div>
+              <div class="unidade">${unidade.nomeExibicao}</div>
+              <div class="detalhes">CNPJ: ${unidade.cnpjFormatado}</div>
+              <div class="detalhes">${unidade.cidade}</div>
+              ${produtoSelecionado.marcaFornecedor ? `<div class="detalhes">Marca: ${produtoSelecionado.marcaFornecedor}</div>` : ''}
+            </div>
           </div>
+          ${i < copias - 1 ? '<div class="corte-separador"></div>' : ''}
         </div>
       `;
     }
@@ -349,9 +352,26 @@ export default function GerarEtiquetaPage() {
               line-height: 1.2;
             }
 
-            /* Forçar quebra de página entre etiquetas */
-            .etiqueta-print {
+            /* Container de cada etiqueta com separador para corte */
+            .etiqueta-container {
               page-break-inside: avoid;
+              page-break-after: always;
+            }
+
+            /* Separador para forçar corte da guilhotina */
+            .corte-separador {
+              height: 15mm;  /* Espaço para a guilhotina cortar */
+              page-break-after: always;
+              background: white;
+            }
+
+            /* Remover quebra após a última etiqueta */
+            .etiqueta-container:last-child {
+              page-break-after: auto;
+            }
+
+            .etiqueta-container:last-child .corte-separador {
+              display: none;
             }
           }
 
@@ -364,12 +384,33 @@ export default function GerarEtiquetaPage() {
             background: white;
           }
 
+          .etiqueta-container {
+            width: 100%;
+            page-break-inside: avoid;
+            page-break-after: always;
+          }
+
           .etiqueta-print {
             width: 100%;
             padding: 5mm;
             background: white;
             color: black;
-            page-break-inside: avoid;
+          }
+
+          /* Separador visível na tela, espaço em branco na impressão */
+          .corte-separador {
+            height: 15mm;
+            background: white;
+            border-top: 2px dashed #ccc;
+            margin: 0;
+            padding: 0;
+          }
+
+          @media print {
+            .corte-separador {
+              border: none;
+              background: white;
+            }
           }
 
           .header {
