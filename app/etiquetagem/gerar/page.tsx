@@ -69,7 +69,7 @@ export default function GerarEtiquetaPage() {
 
   // Abrir pop-up de instruções automaticamente ao chegar na visualização
   useEffect(() => {
-    if (step === "visualizar") {
+    if (step === "preview") {
       setShowPrintInstructions(true);
     }
   }, [step]);
