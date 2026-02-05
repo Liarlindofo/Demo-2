@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste de Importação - Drin Platform</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .container {
+            background: #2a2a2a;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #4CAF50;
+            margin-top: 0;
+        }
+        .input-group {
+            margin: 20px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        input[type="file"] {
+            padding: 10px;
+            background: #3a3a3a;
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            color: #fff;
+            width: 100%;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .status.success {
+            background: #2d5a2d;
+            border: 1px solid #4CAF50;
+            display: block;
+        }
+        .status.error {
+            background: #5a2d2d;
+            border: 1px solid #f44336;
+            display: block;
+        }
+        .status.info {
+            background: #2d4a5a;
+            border: 1px solid #2196F3;
+            display: block;
+        }
+        .log {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .log-item {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #4CAF50;
+            padding-left: 10px;
+        }
+        .log-item.error {
+            border-left-color: #f44336;
+        }
+        .produtos-list {
+            margin-top: 20px;
+        }
+        .produto-item {
+            background: #3a3a3a;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #4CAF50;
+        }
+        .produto-item.sem-categoria {
+            border-left-color: #ff9800;
+        }
+        .produto-nome {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+        .produto-info {
+            font-size: 14px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Teste de Importação de Produtos</h1>
+        
+        <div class="input-group">
+            <label for="fileInput">Selecione um arquivo Excel (.xlsx):</label>
+            <input type="file" id="fileInput" accept=".xlsx,.xls">
+        </div>
+
+        <button id="testBtn" onclick="testarImportacao()">🚀 Testar Importação</button>
+        <button id="testApiBtn" onclick="testarAPI()">🔑 Testar API Key</button>
+
+        <div id="status" class="status"></div>
+
+        <div id="log" class="log" style="display:none;">
+            <h3>📋 Logs:</h3>
+            <div id="logContent"></div>
+        </div>
+
+        <div id="produtos" class="produtos-list"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000';
+        
+        function addLog(message, isError = false) {
+            const log = document.getElementById('log');
+            const logContent = document.getElementById('logContent');
+            log.style.display = 'block';
+            
+            const logItem = document.createElement('div');
+            logItem.className = 'log-item' + (isError ? ' error' : '');
+            logItem.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+            logContent.appendChild(logItem);
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.className = `status ${type}`;
+            status.textContent = message;
+        }
+
+        async function testarAPI() {
+            addLog('🔑 Testando conexão com API...');
+            showStatus('Testando API Key...', 'info');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/etiquetagem/classificar-produto`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ nomeProduto: 'Queijo Mussarela' })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    addLog(`✅ API funcionando! Categoria: ${data.categoria}`);
+                    showStatus(`✅ API Key configurada corretamente! Teste: Queijo Mussarela → ${data.categoria}`, 'success');
+                } else {
+                    const error = await response.text();
+                    addLog(`❌ Erro na API: ${response.status}`, true);
+                    showStatus(`❌ Erro ao conectar com API: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                addLog(`❌ Erro: ${error.message}`, true);
+                showStatus(`❌ Erro: ${error.message}. Certifique-se que o servidor está rodando em ${API_URL}`, 'error');
+            }
+        }
+
+        async function testarImportacao() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                showStatus('⚠️ Selecione um arquivo primeiro!', 'error');
+                return;
+            }
+
+            addLog(`📁 Arquivo selecionado: ${file.name}`);
+            showStatus('📤 Enviando arquivo para processamento...', 'info');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                document.getElementById('testBtn').disabled = true;
+                
+                const response = await fetch(`${API_URL}/api/etiquetagem/importar-produtos`, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                document.getElementById('testBtn').disabled = false;
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    addLog(`❌ Erro: ${errorData.error}`, true);
+                    showStatus(`❌ Erro: ${errorData.error}`, 'error');
+                    return;
+                }
+
+                const data = await response.json();
+                addLog(`✅ Importação concluída!`);
+                addLog(`📊 Total: ${data.total} produtos`);
+                addLog(`✅ Sucesso: ${data.sucesso}`);
+                addLog(`❌ Erros: ${data.erro}`);
+
+                showStatus(`✅ Importação concluída! ${data.sucesso}/${data.total} produtos processados com sucesso`, 'success');
+
+                // Mostrar produtos
+                const produtosDiv = document.getElementById('produtos');
+                produtosDiv.innerHTML = '<h3>📦 Produtos Importados:</h3>';
+
+                data.produtos.forEach(produto => {
+                    const produtoDiv = document.createElement('div');
+                    produtoDiv.className = `produto-item ${produto.categoriaId ? '' : 'sem-categoria'}`;
+                    
+                    produtoDiv.innerHTML = `
+                        <div class="produto-nome">${produto.nome}</div>
+                        <div class="produto-info">
+                            ${produto.categoriaId ? '✅' : '⚠️'} Categoria: ${produto.categoriaSugerida || 'Sem categoria'}<br>
+                            📏 Peso: ${produto.peso || '-'} ${produto.unidade || ''}<br>
+                            🌡️ Armazenamento: ${produto.armazenamento || '-'}<br>
+                            📌 Status: ${produto.status}<br>
+                            ${produto.categoriaId ? `🆔 ID Categoria: ${produto.categoriaId}` : '⚠️ Categoria não mapeada'}
+                        </div>
+                    `;
+                    produtosDiv.appendChild(produtoDiv);
+                });
+
+            } catch (error) {
+                document.getElementById('testBtn').disabled = false;
+                addLog(`❌ Erro: ${error.message}`, true);
+                showStatus(`❌ Erro: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

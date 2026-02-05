@@ -53,6 +53,14 @@ export async function POST(request: NextRequest) {
       where: { isAtivo: 1 }
     });
 
+    console.log(`📋 Categorias disponíveis no banco (${categorias.length}):`, 
+      categorias.map(c => `"${c.nome}" (ID: ${c.id})`).join(', '));
+
+    if (categorias.length === 0) {
+      console.error('⚠️ AVISO: Nenhuma categoria encontrada no banco!');
+      console.log('💡 Execute: POST /api/etiquetagem/seed para popular categorias');
+    }
+
     const produtosParaImportar: ProdutoImportado[] = [];
 
     // Processar cada linha
@@ -101,73 +109,170 @@ export async function POST(request: NextRequest) {
     }
 
     // Classificar produtos com IA
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      console.error('❌ OPENROUTER_API_KEY não configurada!');
+      return NextResponse.json(
+        { error: 'API Key não configurada. Configure OPENROUTER_API_KEY no .env' },
+        { status: 500 }
+      );
+    }
+
+    console.log('🔑 API Key encontrada:', apiKey.substring(0, 20) + '...');
+    console.log(`📦 Processando ${produtosParaImportar.length} produtos...`);
+
     for (const produto of produtosParaImportar) {
       try {
         produto.status = 'processando';
+        console.log(`\n🔄 Processando: ${produto.nome}`);
 
-        const classificacao = await fetch(
-          `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/etiquetagem/classificar-produto`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Cookie': request.headers.get('cookie') || ''
-            },
-            body: JSON.stringify({ nomeProduto: produto.nome })
-          }
-        );
+        // Classificar categoria diretamente
+        const categoriaResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+            'X-Title': 'Platefull - Etiquetagem',
+          },
+          body: JSON.stringify({
+            model: 'openai/gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: `Você é um especialista em classificação de alimentos. Classifique o produto em UMA destas categorias EXATAS:
+- Carnes e Aves
+- Peixes e Frutos do Mar
+- Laticínios
+- Vegetais
+- Frutas
+- Grãos e Cereais
+- Massas
+- Congelados
+- Processados
+- Bebidas
+- Temperos e Condimentos
+- Panificação
 
-        if (classificacao.ok) {
-          const resultado = await classificacao.json();
-          console.log(`📦 Produto: ${produto.nome}`);
-          console.log(`🔍 Classificação recebida:`, resultado);
-          
-          produto.categoriaSugerida = resultado.categoria;
-          produto.peso = resultado.peso;
-          produto.unidade = resultado.unidade;
-          produto.armazenamento = resultado.armazenamento;
+Regras importantes:
+1. Queijos, leites, iogurtes → "Laticínios"
+2. Carnes, frango → "Carnes e Aves"
+3. Peixes → "Peixes e Frutos do Mar"
+4. Verduras, legumes → "Vegetais"
 
-          // Tentar encontrar categoria correspondente (busca mais flexível)
-          const categoriaLower = resultado.categoria.toLowerCase().trim();
-          const categoriaEncontrada = categorias.find(c => {
-            const catNomeLower = c.nome.toLowerCase().trim();
-            
-            // Correspondência exata
-            if (catNomeLower === categoriaLower) return true;
-            
-            // Correspondência parcial (um contém o outro)
-            if (catNomeLower.includes(categoriaLower) || categoriaLower.includes(catNomeLower)) return true;
-            
-            // Mapeamentos específicos
-            if (categoriaLower.includes('latic') && catNomeLower.includes('latic')) return true;
-            if (categoriaLower.includes('carne') && catNomeLower.includes('carne')) return true;
-            if (categoriaLower.includes('ave') && catNomeLower.includes('ave')) return true;
-            if (categoriaLower.includes('peixe') && catNomeLower.includes('peixe')) return true;
-            if (categoriaLower.includes('vegeta') && catNomeLower.includes('vegeta')) return true;
-            if (categoriaLower.includes('fruta') && catNomeLower.includes('fruta')) return true;
-            
-            return false;
-          });
+Responda APENAS com o nome EXATO da categoria. Nada mais.`
+              },
+              {
+                role: 'user',
+                content: `Classifique: ${produto.nome}`
+              }
+            ],
+            temperature: 0.1,
+            max_tokens: 30,
+          }),
+        });
 
-          if (categoriaEncontrada) {
-            produto.categoriaId = categoriaEncontrada.id;
-            console.log(`✅ Categoria encontrada: ${categoriaEncontrada.nome} (ID: ${categoriaEncontrada.id})`);
-          } else {
-            console.log(`⚠️ Categoria NÃO encontrada para: "${resultado.categoria}"`);
-            console.log(`📋 Categorias disponíveis:`, categorias.map(c => c.nome));
-          }
-
-          produto.status = 'sucesso';
-        } else {
-          const erro = await classificacao.text();
-          console.error(`❌ Erro ao classificar ${produto.nome}:`, classificacao.status, erro);
+        if (!categoriaResponse.ok) {
+          const errorText = await categoriaResponse.text();
+          console.error(`❌ Erro API OpenRouter:`, categoriaResponse.status, errorText);
           produto.status = 'erro';
-          produto.erro = 'Erro ao classificar';
+          produto.erro = `Erro API: ${categoriaResponse.status}`;
+          continue;
         }
+
+        const categoriaData = await categoriaResponse.json();
+        const categoriaSugerida = categoriaData.choices[0]?.message?.content?.trim() || '';
+        console.log(`📂 Categoria sugerida: "${categoriaSugerida}"`);
+
+        produto.categoriaSugerida = categoriaSugerida;
+
+        // Sugerir peso e outros dados
+        const detalhesResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+            'X-Title': 'Platefull - Etiquetagem',
+          },
+          body: JSON.stringify({
+            model: 'openai/gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: `Analise o produto e sugira peso padrão, unidade e armazenamento.
+Responda APENAS em formato JSON válido:
+{"peso": 1.0, "unidade": "kg", "armazenamento": "CONGELADO"}
+
+Unidades válidas: kg, g, L, ml, un
+Armazenamento válido: RESFRIADO, CONGELADO, TEMPERATURA AMBIENTE`
+              },
+              {
+                role: 'user',
+                content: `Produto: ${produto.nome}`
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 100,
+          }),
+        });
+
+        if (detalhesResponse.ok) {
+          const detalhesData = await detalhesResponse.json();
+          const detalhesTexto = detalhesData.choices[0]?.message?.content?.trim() || '{}';
+          
+          try {
+            const jsonMatch = detalhesTexto.match(/\{[^}]+\}/);
+            if (jsonMatch) {
+              const detalhes = JSON.parse(jsonMatch[0]);
+              produto.peso = detalhes.peso || 1.0;
+              produto.unidade = detalhes.unidade || 'kg';
+              produto.armazenamento = detalhes.armazenamento || '';
+            }
+          } catch (e) {
+            console.error('⚠️ Erro ao parsear detalhes:', e);
+            produto.peso = 1.0;
+            produto.unidade = 'kg';
+          }
+        }
+
+        // Tentar encontrar categoria correspondente (busca mais flexível)
+        const categoriaLower = categoriaSugerida.toLowerCase().trim();
+        const categoriaEncontrada = categorias.find(c => {
+          const catNomeLower = c.nome.toLowerCase().trim();
+          
+          // Correspondência exata
+          if (catNomeLower === categoriaLower) return true;
+          
+          // Correspondência parcial (um contém o outro)
+          if (catNomeLower.includes(categoriaLower) || categoriaLower.includes(catNomeLower)) return true;
+          
+          // Mapeamentos específicos
+          if (categoriaLower.includes('latic') && catNomeLower.includes('latic')) return true;
+          if (categoriaLower.includes('carne') && catNomeLower.includes('carne')) return true;
+          if (categoriaLower.includes('ave') && catNomeLower.includes('ave')) return true;
+          if (categoriaLower.includes('peixe') && catNomeLower.includes('peixe')) return true;
+          if (categoriaLower.includes('vegeta') && catNomeLower.includes('vegeta')) return true;
+          if (categoriaLower.includes('fruta') && catNomeLower.includes('fruta')) return true;
+          
+          return false;
+        });
+
+        if (categoriaEncontrada) {
+          produto.categoriaId = categoriaEncontrada.id;
+          console.log(`✅ Categoria encontrada: ${categoriaEncontrada.nome} (ID: ${categoriaEncontrada.id})`);
+        } else {
+          console.log(`⚠️ Categoria NÃO encontrada para: "${categoriaSugerida}"`);
+          console.log(`📋 Categorias disponíveis:`, categorias.map(c => c.nome));
+        }
+
+        produto.status = 'sucesso';
+        console.log(`✅ ${produto.nome} processado com sucesso!`);
+
       } catch (error) {
-        console.error(`Erro ao processar ${produto.nome}:`, error);
+        console.error(`❌ Erro ao processar ${produto.nome}:`, error);
         produto.status = 'erro';
-        produto.erro = 'Erro ao processar';
+        produto.erro = error instanceof Error ? error.message : 'Erro ao processar';
       }
     }
 
