@@ -270,51 +270,96 @@ export default function GerarEtiquetaPage() {
       return;
     }
 
-    // Gerar HTML para cada cópia (cada uma em sua própria página)
+    // Gerar HTML para cada cópia usando TABLE (não quebra no meio)
     let etiquetasHTML = '';
     for (let i = 0; i < copias; i++) {
       etiquetasHTML += `
-        <div class="etiqueta-page">
-          <!-- Cabeçalho -->
-          <div class="header">
-            <h1>${produtoSelecionado.nome}</h1>
-            <div class="tipo">${tipoArmazenamento}</div>
-          </div>
-
-          <!-- Informações principais -->
-          <div class="info-row">
-            <span class="info-label">Peso/Qtd:</span>
-            <span class="info-value">${peso} ${unidadeMedida}</span>
-          </div>
-
-          <div class="info-row">
-            <span class="info-label">Validade:</span>
-            <span class="info-value">${periodoDias} dias</span>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="info-row">
-            <span class="info-label">Manipulado:</span>
-            <span class="info-value">${getDataHoje()}</span>
-          </div>
-
-          <div class="info-row">
-            <span class="info-label">Vence em:</span>
-            <span class="info-value">${calcularDataValidade()}</span>
-          </div>
-
-          <!-- Rodapé -->
-          <div class="footer">
-            <div class="responsavel">
-              Responsável: <strong>${nomeResponsavel}</strong>
-            </div>
-            <div class="unidade">${unidade.nomeExibicao}</div>
-            <div class="detalhes">CNPJ: ${unidade.cnpjFormatado}</div>
-            <div class="detalhes">${unidade.cidade}</div>
-            ${produtoSelecionado.marcaFornecedor ? `<div class="detalhes">Marca: ${produtoSelecionado.marcaFornecedor}</div>` : ''}
-          </div>
-        </div>
+        <table class="etiqueta-page" cellspacing="0" cellpadding="0">
+          <tbody>
+            <!-- Cabeçalho -->
+            <tr>
+              <td colspan="2" class="header">
+                <div style="text-align: center; font-size: 14pt; font-weight: bold; text-transform: uppercase; margin-bottom: 2mm;">
+                  ${produtoSelecionado.nome}
+                </div>
+                <div style="text-align: center; font-size: 11pt; font-weight: bold; padding-bottom: 2mm; border-bottom: 2px solid black;">
+                  ${tipoArmazenamento}
+                </div>
+              </td>
+            </tr>
+            
+            <!-- Peso/Qtd -->
+            <tr>
+              <td class="info-label">Peso/Qtd:</td>
+              <td class="info-value">${peso} ${unidadeMedida}</td>
+            </tr>
+            
+            <!-- Validade -->
+            <tr>
+              <td class="info-label">Validade:</td>
+              <td class="info-value">${periodoDias} dias</td>
+            </tr>
+            
+            <!-- Divisor -->
+            <tr>
+              <td colspan="2" style="border-top: 1px solid black; height: 2mm;"></td>
+            </tr>
+            
+            <!-- Manipulado -->
+            <tr>
+              <td class="info-label">Manipulado:</td>
+              <td class="info-value">${getDataHoje()}</td>
+            </tr>
+            
+            <!-- Vence em -->
+            <tr>
+              <td class="info-label">Vence em:</td>
+              <td class="info-value">${calcularDataValidade()}</td>
+            </tr>
+            
+            <!-- Divisor -->
+            <tr>
+              <td colspan="2" style="border-top: 2px solid black; height: 3mm;"></td>
+            </tr>
+            
+            <!-- Responsável -->
+            <tr>
+              <td colspan="2" style="text-align: center; padding: 1mm 0;">
+                Responsável: <strong>${nomeResponsavel}</strong>
+              </td>
+            </tr>
+            
+            <!-- Unidade -->
+            <tr>
+              <td colspan="2" style="text-align: center; font-weight: bold; font-size: 9pt;">
+                ${unidade.nomeExibicao}
+              </td>
+            </tr>
+            
+            <!-- CNPJ -->
+            <tr>
+              <td colspan="2" style="text-align: center; font-size: 8pt;">
+                CNPJ: ${unidade.cnpjFormatado}
+              </td>
+            </tr>
+            
+            <!-- Cidade -->
+            <tr>
+              <td colspan="2" style="text-align: center; font-size: 8pt;">
+                ${unidade.cidade}
+              </td>
+            </tr>
+            
+            ${produtoSelecionado.marcaFornecedor ? `
+            <tr>
+              <td colspan="2" style="text-align: center; font-size: 8pt;">
+                Marca: ${produtoSelecionado.marcaFornecedor}
+              </td>
+            </tr>
+            ` : ''}
+          </tbody>
+        </table>
+        ${i < copias - 1 ? '<div style="page-break-after: always;"></div>' : ''}
       `;
     }
 
@@ -326,18 +371,17 @@ export default function GerarEtiquetaPage() {
         <meta charset="UTF-8">
         <title>Etiqueta - ${produtoSelecionado.nome} (${copias} ${copias === 1 ? 'cópia' : 'cópias'})</title>
         <style>
-          /* Reset completo */
+          /* Reset */
           * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            page-break-inside: avoid !important;
           }
 
           /* Página para impressora térmica */
           @page {
             size: 80mm auto;
-            margin: 2mm;
+            margin: 3mm;
           }
 
           body {
@@ -347,31 +391,50 @@ export default function GerarEtiquetaPage() {
             font-family: Arial, sans-serif;
           }
 
-          /* CADA ETIQUETA = 1 PÁGINA COMPLETA */
-          .etiqueta-page {
+          /* TABLE = BLOCO ÚNICO que não quebra */
+          table.etiqueta-page {
             width: 100%;
-            padding: 4mm;
+            border-collapse: collapse;
             background: white;
             color: black;
-            position: relative;
-          }
-
-          /* FORÇA quebra APENAS entre etiquetas, nunca dentro */
-          .etiqueta-page {
-            page-break-after: always;
-          }
-
-          .etiqueta-page:last-child {
-            page-break-after: auto;
-          }
-
-          /* EVITA quebras em TODOS os elementos internos */
-          .header, .info-row, .divider, .footer,
-          .header *, .footer *, .info-row * {
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            margin: 0;
+            padding: 3mm;
+            /* FORÇA: table não pode quebrar no meio */
             page-break-inside: avoid !important;
-            page-break-before: avoid !important;
-            page-break-after: avoid !important;
             break-inside: avoid !important;
+          }
+
+          table.etiqueta-page td {
+            padding: 1mm 2mm;
+            vertical-align: middle;
+          }
+
+          .info-label {
+            font-weight: normal;
+            font-size: 10pt;
+            width: 40%;
+          }
+
+          .info-value {
+            font-weight: bold;
+            font-size: 10pt;
+            text-align: right;
+            width: 60%;
+          }
+
+          @media print {
+            body {
+              width: 80mm;
+              margin: 0;
+              padding: 0;
+            }
+
+            table.etiqueta-page {
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
           }
 
           .header {
