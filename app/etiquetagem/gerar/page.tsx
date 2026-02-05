@@ -52,6 +52,7 @@ export default function GerarEtiquetaPage() {
   const [printStatus, setPrintStatus] = useState("");
   const [printError, setPrintError] = useState("");
   const [printMethods, setPrintMethods] = useState<ReturnType<typeof getAvailablePrintMethods> | null>(null);
+  const [showPrintInstructions, setShowPrintInstructions] = useState(false);
 
   useEffect(() => {
     if (!unidadeId) {
@@ -1156,7 +1157,7 @@ export default function GerarEtiquetaPage() {
                 </div>
               </div>
               <p className="text-xs text-gray-400 text-center mt-3">
-                Dimensões reais: 50mm x 30mm (formato para impressora térmica)
+                Dimensões: 80x30mm. Não se esqueça de revidar a impressão manual.
               </p>
             </div>
 
@@ -1176,207 +1177,40 @@ export default function GerarEtiquetaPage() {
                         <p className={`text-sm ${printError ? 'text-red-400' : 'text-gray-300'}`}>
                           {printError || printStatus}
                         </p>
-                        {printError && printMethods && (
-                          <div className="text-xs text-gray-500 mt-2 space-y-1">
-                            {printMethods.platform === 'Desktop' && (
-                              <>
-                                <p className="font-medium text-yellow-400">💡 Não imprimiu? Verifique:</p>
-                                <ul className="list-disc list-inside space-y-0.5 ml-2">
-                                  <li>Impressora está ligada e com papel</li>
-                                  <li>Cabo USB bem conectado</li>
-                                  <li>Tampa fechada corretamente</li>
-                                  <li>Clique em "Testar Impressora" abaixo</li>
-                                  <li>Veja os logs no console (F12)</li>
-                                </ul>
-                              </>
-                            )}
-                            {printMethods.platform === 'Android' && (
-                              <>Dica: Para impressão no celular, use o app OpenLabel. O arquivo baixado pode ser aberto no app para imprimir. Ou compartilhe os dados diretamente com o app quando solicitado.</>
-                            )}
-                            {printMethods.platform !== 'Desktop' && printMethods.platform !== 'Android' && (
-                              <>Certifique-se de que a impressora está ligada e conectada.</>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* Informações sobre métodos de impressão */}
-                {printMethods && (
-                  <div className="bg-[#0f0f10] border border-[#374151] rounded-lg p-3">
-                    <p className="text-xs text-gray-400 mb-2">Métodos disponíveis:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {printMethods.webBluetooth && (
-                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">
-                          Bluetooth
-                        </span>
-                      )}
-                      {printMethods.webSerial && (
-                        <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">
-                          ✅ USB (Impressão Direta)
-                        </span>
-                      )}
-                      {printMethods.webShare && (
-                        <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">
-                          Compartilhar
-                        </span>
-                      )}
-                      <span className="text-xs bg-gray-500/20 text-gray-400 px-2 py-1 rounded">
-                        Download
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Plataforma: {printMethods.platform}
-                    </p>
-                    {printMethods.webSerial && (
-                      <p className="text-xs text-green-400 mt-2">
-                        💡 Após configurar uma vez, as próximas impressões serão diretas!
-                      </p>
-                    )}
-                  </div>
-                )}
+                <div className="space-y-3">
+                  {/* Botão Principal de Impressão */}
+                  <Button
+                    onClick={handlePrintViaDriver}
+                    disabled={printing}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white py-6 text-lg"
+                  >
+                    <Printer className="w-6 h-6 mr-2" />
+                    Imprimir Etiqueta
+                  </Button>
 
-                <div className="space-y-2">
-                  {/* Botão RECOMENDADO - Via Driver do Windows */}
-                  <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
-                    <div className="text-xs text-green-300 font-medium mb-2">✅ RECOMENDADO - Via Driver do Windows</div>
-                    <Button
-                      onClick={handlePrintViaDriver}
-                      disabled={printing}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white"
-                    >
-                      <Printer className="w-5 h-5 mr-2" />
-                      Imprimir {copias > 1 ? `${copias} Etiquetas` : 'Etiqueta'}
-                    </Button>
-                    <p className="text-xs text-gray-400 mt-2">
-                      ✓ Gera {copias} {copias === 1 ? 'etiqueta' : 'etiquetas'} com corte entre cada uma<br/>
-                      ✓ Usa o driver oficial da Elgin i9<br/>
-                      ✓ Não precisa configurar cópias no Ctrl+P
-                    </p>
-                  </div>
+                  {/* Link para instruções */}
+                  <button
+                    onClick={() => setShowPrintInstructions(true)}
+                    className="w-full text-sm text-blue-400 hover:text-blue-300 underline"
+                  >
+                    📋 Ver instruções de impressão
+                  </button>
 
-                  {/* Botões secundários */}
-                  <div className="flex gap-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setStep("dias")}
-                      disabled={printing}
-                      className="flex-1 border-[#374151] text-gray-300 hover:bg-[#374151]"
-                    >
-                      Voltar
-                    </Button>
-                    <Button
-                      onClick={handleSubmit}
-                      disabled={saving || printing}
-                      className="flex-1 bg-[#001F05] hover:bg-[#001F05]/80 text-white"
-                      title="Impressão direta USB (experimental)"
-                    >
-                      {printing ? (
-                        <>
-                          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                          Imprimindo...
-                        </>
-                      ) : (
-                        <>
-                          <Printer className="w-5 h-5 mr-2" />
-                          USB Direta
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  {printMethods?.webSerial && (
-                    <div className="space-y-2">
-                      <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mb-2">
-                        <div className="text-xs text-blue-300 font-medium mb-1">🧪 Diagnóstico ELGIN i9</div>
-                        <div className="text-xs text-gray-400">
-                          Execute os testes NA ORDEM para descobrir o problema:
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={async () => {
-                            setPrinting(true);
-                            setPrintError("");
-                            setPrintStatus("Iniciando teste básico...");
-                            const result = await testPrinterBasic((status) => setPrintStatus(status));
-                            if (!result.success) {
-                              setPrintError(result.error || "Erro ao testar");
-                            }
-                            setPrinting(false);
-                          }}
-                          disabled={printing}
-                          className="text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50 h-auto py-2"
-                        >
-                          <div className="flex flex-col items-center gap-1">
-                            <span className="text-lg">1️⃣</span>
-                            <span>Texto Puro</span>
-                          </div>
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={async () => {
-                            setPrinting(true);
-                            setPrintError("");
-                            setPrintStatus("Iniciando teste ESC/POS...");
-                            const result = await testPrinterESCPOS((status) => setPrintStatus(status));
-                            if (!result.success) {
-                              setPrintError(result.error || "Erro ao testar");
-                            }
-                            setPrinting(false);
-                          }}
-                          disabled={printing}
-                          className="text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50 h-auto py-2"
-                        >
-                          <div className="flex flex-col items-center gap-1">
-                            <span className="text-lg">2️⃣</span>
-                            <span>ESC/POS</span>
-                          </div>
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={async () => {
-                            setPrinting(true);
-                            setPrintError("");
-                            setPrintStatus("Iniciando teste completo...");
-                            const result = await testPrinter((status) => setPrintStatus(status));
-                            if (!result.success) {
-                              setPrintError(result.error || "Erro ao testar");
-                            }
-                            setPrinting(false);
-                          }}
-                          disabled={printing}
-                          className="text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50 h-auto py-2"
-                        >
-                          <div className="flex flex-col items-center gap-1">
-                            <span className="text-lg">3️⃣</span>
-                            <span>Completo</span>
-                          </div>
-                        </Button>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => {
-                          resetSavedPort();
-                          setPrintStatus("Impressora resetada. Na próxima impressão você poderá selecionar outra impressora.");
-                          setPrintError("");
-                          setTimeout(() => setPrintStatus(""), 4000);
-                        }}
-                        disabled={printing}
-                        className="w-full text-xs text-gray-400 hover:text-gray-300 hover:bg-[#374151]/50"
-                      >
-                        <Cog className="w-3 h-3 mr-1" />
-                        Trocar Impressora USB
-                      </Button>
-                    </div>
-                  )}
+                  {/* Botão Voltar */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setStep("dias")}
+                    disabled={printing}
+                    className="w-full border-[#374151] text-gray-300 hover:bg-[#374151]"
+                  >
+                    Voltar
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1405,6 +1239,68 @@ export default function GerarEtiquetaPage() {
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white"
               >
                 Remover
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog de Instruções para Impressão */}
+        <Dialog open={showPrintInstructions} onOpenChange={setShowPrintInstructions}>
+          <DialogContent className="bg-[#141415] border-[#374151] text-white max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-2xl">📋 Instruções para a Impressão</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-6 py-4">
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-6">
+                <h3 className="text-lg font-bold text-blue-300 mb-4">
+                  🖨️ No painel de impressão:
+                </h3>
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                      1
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-white mb-1">Páginas por folha</p>
+                      <p className="text-sm text-gray-300">Selecionar: <span className="font-bold text-green-400">2</span></p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                      2
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-white mb-1">Escala</p>
+                      <p className="text-sm text-gray-300">Deixar em: <span className="font-bold text-green-400">Personalizado</span></p>
+                      <p className="text-sm text-gray-300">Colocar: <span className="font-bold text-green-400">150%</span></p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
+                <p className="text-sm text-yellow-300">
+                  💡 <strong>Dica:</strong> Essas configurações garantem que a etiqueta seja impressa no tamanho correto (80x30mm).
+                </p>
+              </div>
+
+              <div className="bg-[#0f0f10] border border-[#374151] rounded-xl p-4">
+                <p className="text-xs text-gray-400">
+                  <strong>Resumo:</strong><br/>
+                  • Ao clicar em "Imprimir Etiqueta", a janela de impressão abrirá<br/>
+                  • Configure as opções conforme indicado acima<br/>
+                  • Clique em "Imprimir" para finalizar
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                onClick={() => setShowPrintInstructions(false)}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                OK, Entendi
               </Button>
             </div>
           </DialogContent>
