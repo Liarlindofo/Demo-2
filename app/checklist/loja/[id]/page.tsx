@@ -55,19 +55,20 @@ export default function StoreDetailPage() {
     if (!store) return;
 
     const today = new Date();
+    const sixMonthsInDays = 180;
     const threeMonthsInDays = 90;
     let hasAlert = false;
 
-    const checkDate = (dateString: string | null) => {
+    const checkDate = (dateString: string | null, requiredDays: number) => {
       if (!dateString) return false;
       const maintenanceDate = new Date(dateString);
       const daysSince = Math.floor((today.getTime() - maintenanceDate.getTime()) / (1000 * 60 * 60 * 24));
-      return daysSince >= threeMonthsInDays;
+      return daysSince >= requiredDays;
     };
 
-    if (checkDate(store.lastOvenMaintenance) || 
-        checkDate(store.lastRefrigeratorMaintenance) || 
-        checkDate(store.lastPestControl)) {
+    if (checkDate(store.lastOvenMaintenance, sixMonthsInDays) || 
+        checkDate(store.lastRefrigeratorMaintenance, sixMonthsInDays) || 
+        checkDate(store.lastPestControl, threeMonthsInDays)) {
       hasAlert = true;
     }
 
@@ -78,26 +79,28 @@ export default function StoreDetailPage() {
     if (!store) return [];
 
     const today = new Date();
+    const sixMonthsInDays = 180;
     const threeMonthsInDays = 90;
-    const alerts: Array<{ type: string; daysSince: number; overdue: number }> = [];
+    const alerts: Array<{ type: string; daysSince: number; overdue: number; period: string }> = [];
 
-    const checkAndAdd = (dateString: string | null, label: string) => {
+    const checkAndAdd = (dateString: string | null, label: string, requiredDays: number, periodLabel: string) => {
       if (!dateString) return;
       const maintenanceDate = new Date(dateString);
       const daysSince = Math.floor((today.getTime() - maintenanceDate.getTime()) / (1000 * 60 * 60 * 24));
       
-      if (daysSince >= threeMonthsInDays) {
+      if (daysSince >= requiredDays) {
         alerts.push({
           type: label,
           daysSince,
-          overdue: daysSince - threeMonthsInDays
+          overdue: daysSince - requiredDays,
+          period: periodLabel
         });
       }
     };
 
-    checkAndAdd(store.lastOvenMaintenance, 'Forno');
-    checkAndAdd(store.lastRefrigeratorMaintenance, 'Geladeiras');
-    checkAndAdd(store.lastPestControl, 'Dedetização');
+    checkAndAdd(store.lastOvenMaintenance, 'Manutenção do Forno', sixMonthsInDays, '6 meses');
+    checkAndAdd(store.lastRefrigeratorMaintenance, 'Manutenção das Geladeiras', sixMonthsInDays, '6 meses');
+    checkAndAdd(store.lastPestControl, 'Dedetização', threeMonthsInDays, '3 meses');
 
     return alerts;
   };
@@ -186,7 +189,7 @@ export default function StoreDetailPage() {
                   ⚠️ ATENÇÃO - MANUTENÇÕES PENDENTES
                 </h2>
                 <p className="text-gray-400">
-                  As seguintes manutenções estão vencidas (mais de 3 meses):
+                  As seguintes manutenções estão vencidas:
                 </p>
               </div>
             </div>
@@ -200,18 +203,27 @@ export default function StoreDetailPage() {
                       <div>
                         <p className="text-white font-semibold">{alert.type}</p>
                         <p className="text-sm text-gray-400">
-                          Última manutenção há {alert.daysSince} dias
+                          Última há {alert.daysSince} dias • Período obrigatório: {alert.period}
                         </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-red-400 font-bold">
-                        Venceu há {alert.overdue} dias
+                      <p className="text-red-400 font-bold text-lg">
+                        Atrasada há {alert.overdue} dias
                       </p>
                     </div>
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mb-6">
+              <p className="text-sm text-blue-300">
+                <strong>📋 Períodos Obrigatórios:</strong><br/>
+                • Dedetização: a cada 3 meses (90 dias)<br/>
+                • Manutenção do Forno: a cada 6 meses (180 dias)<br/>
+                • Manutenção das Geladeiras: a cada 6 meses (180 dias)
+              </p>
             </div>
 
             <div className="flex gap-3">
