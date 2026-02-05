@@ -67,6 +67,13 @@ export default function GerarEtiquetaPage() {
     }
   }, [unidadeId]);
 
+  // Abrir pop-up de instruções automaticamente ao chegar na visualização
+  useEffect(() => {
+    if (step === "visualizar") {
+      setShowPrintInstructions(true);
+    }
+  }, [step]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -1193,24 +1200,13 @@ export default function GerarEtiquetaPage() {
                     Imprimir Etiqueta
                   </Button>
 
-                  {/* Link para instruções */}
+                  {/* Link discreto para reabrir instruções */}
                   <button
                     onClick={() => setShowPrintInstructions(true)}
-                    className="w-full text-sm text-blue-400 hover:text-blue-300 underline"
+                    className="w-full text-xs text-gray-500 hover:text-blue-400 underline"
                   >
-                    📋 Ver instruções de impressão
+                    Ver instruções novamente
                   </button>
-
-                  {/* Botão Voltar */}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setStep("dias")}
-                    disabled={printing}
-                    className="w-full border-[#374151] text-gray-300 hover:bg-[#374151]"
-                  >
-                    Voltar
-                  </Button>
                 </div>
               </div>
             </div>
