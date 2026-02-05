@@ -24,6 +24,9 @@ export default function NewEvaluationPage() {
   const [storeName, setStoreName] = useState('');
   const [supervisorName, setSupervisorName] = useState('');
   const [evaluationDate, setEvaluationDate] = useState(new Date().toISOString().split('T')[0]);
+  const [lastOvenMaintenance, setLastOvenMaintenance] = useState('');
+  const [lastRefrigeratorMaintenance, setLastRefrigeratorMaintenance] = useState('');
+  const [lastPestControl, setLastPestControl] = useState('');
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
   const [evaluations, setEvaluations] = useState<Map<string, Map<string, { status: EvaluationStatus; observations: string; photoUrl?: string }>>>(new Map());
   const [topicObservations, setTopicObservations] = useState<Map<string, string>>(new Map());
@@ -215,6 +218,9 @@ export default function NewEvaluationPage() {
       maxTotalScore,
       maintenanceList,
       improvementSuggestions,
+      lastOvenMaintenance: lastOvenMaintenance || undefined,
+      lastRefrigeratorMaintenance: lastRefrigeratorMaintenance || undefined,
+      lastPestControl: lastPestControl || undefined,
     };
 
     try {
@@ -320,6 +326,48 @@ export default function NewEvaluationPage() {
                   onChange={(e) => setEvaluationDate(e.target.value)}
                   className="w-full px-4 py-3 bg-[#0f0f10] border border-[#374151] rounded-xl text-white focus:ring-2 focus:ring-[#001F05] focus:border-transparent outline-none"
                 />
+              </div>
+
+              <div className="border-t border-[#374151] pt-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Manutenções e Dedetização</h3>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">
+                      Última Manutenção no Forno
+                    </label>
+                    <input
+                      type="date"
+                      value={lastOvenMaintenance}
+                      onChange={(e) => setLastOvenMaintenance(e.target.value)}
+                      className="w-full px-4 py-3 bg-[#0f0f10] border border-[#374151] rounded-xl text-white focus:ring-2 focus:ring-[#001F05] focus:border-transparent outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">
+                      Última Manutenção nas Geladeiras
+                    </label>
+                    <input
+                      type="date"
+                      value={lastRefrigeratorMaintenance}
+                      onChange={(e) => setLastRefrigeratorMaintenance(e.target.value)}
+                      className="w-full px-4 py-3 bg-[#0f0f10] border border-[#374151] rounded-xl text-white focus:ring-2 focus:ring-[#001F05] focus:border-transparent outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">
+                      Última Dedetização
+                    </label>
+                    <input
+                      type="date"
+                      value={lastPestControl}
+                      onChange={(e) => setLastPestControl(e.target.value)}
+                      className="w-full px-4 py-3 bg-[#0f0f10] border border-[#374151] rounded-xl text-white focus:ring-2 focus:ring-[#001F05] focus:border-transparent outline-none"
+                    />
+                  </div>
+                </div>
               </div>
 
               <button

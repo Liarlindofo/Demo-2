@@ -66,7 +66,10 @@ export async function POST(request: NextRequest) {
       totalScore,
       maxTotalScore,
       maintenanceList,
-      improvementSuggestions
+      improvementSuggestions,
+      lastOvenMaintenance,
+      lastRefrigeratorMaintenance,
+      lastPestControl
     } = body;
 
     // Validações
@@ -89,6 +92,26 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    }
+
+    // Atualizar datas de manutenção na loja, se fornecidas
+    if (storeId && (lastOvenMaintenance || lastRefrigeratorMaintenance || lastPestControl)) {
+      const updateData: any = {};
+      
+      if (lastOvenMaintenance) {
+        updateData.lastOvenMaintenance = new Date(lastOvenMaintenance);
+      }
+      if (lastRefrigeratorMaintenance) {
+        updateData.lastRefrigeratorMaintenance = new Date(lastRefrigeratorMaintenance);
+      }
+      if (lastPestControl) {
+        updateData.lastPestControl = new Date(lastPestControl);
+      }
+
+      await prisma.store.update({
+        where: { id: storeId },
+        data: updateData
+      });
     }
 
     // Criar avaliação

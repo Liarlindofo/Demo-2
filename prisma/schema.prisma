@@ -76,20 +76,23 @@ model UserAPI {
 }
 
 model Store {
-  id            String        @id @default(cuid())
-  name          String
-  address       String?
-  phone         String?
-  cnpj          String?
-  managerName   String?       @map("manager_name")
-  abbreviation  String?
-  displayOrder  Int?          @default(0) @map("display_order")
-  isActive      Boolean       @default(true)
-  userId        String
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  evaluations   Evaluation[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id                        String        @id @default(cuid())
+  name                      String
+  address                   String?
+  phone                     String?
+  cnpj                      String?
+  managerName               String?       @map("manager_name")
+  abbreviation              String?
+  displayOrder              Int?          @default(0) @map("display_order")
+  isActive                  Boolean       @default(true)
+  lastOvenMaintenance       DateTime?     @map("last_oven_maintenance")
+  lastRefrigeratorMaintenance DateTime?   @map("last_refrigerator_maintenance")
+  lastPestControl           DateTime?     @map("last_pest_control")
+  userId                    String
+  user                      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  evaluations               Evaluation[]
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
 
   @@index([userId])
   @@index([displayOrder])

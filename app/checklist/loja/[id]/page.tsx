@@ -13,6 +13,9 @@ interface StoreData {
   managerName: string | null;
   phone: string | null;
   abbreviation: string | null;
+  lastOvenMaintenance: string | null;
+  lastRefrigeratorMaintenance: string | null;
+  lastPestControl: string | null;
   createdAt: string;
 }
 
@@ -34,12 +37,70 @@ export default function StoreDetailPage() {
   const [evaluations, setEvaluations] = useState<EvaluationData[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [showMaintenanceAlert, setShowMaintenanceAlert] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchStoreDetails();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (store) {
+      checkMaintenanceAlerts();
+    }
+  }, [store]);
+
+  const checkMaintenanceAlerts = () => {
+    if (!store) return;
+
+    const today = new Date();
+    const threeMonthsInDays = 90;
+    let hasAlert = false;
+
+    const checkDate = (dateString: string | null) => {
+      if (!dateString) return false;
+      const maintenanceDate = new Date(dateString);
+      const daysSince = Math.floor((today.getTime() - maintenanceDate.getTime()) / (1000 * 60 * 60 * 24));
+      return daysSince >= threeMonthsInDays;
+    };
+
+    if (checkDate(store.lastOvenMaintenance) || 
+        checkDate(store.lastRefrigeratorMaintenance) || 
+        checkDate(store.lastPestControl)) {
+      hasAlert = true;
+    }
+
+    setShowMaintenanceAlert(hasAlert);
+  };
+
+  const getMaintenanceAlerts = () => {
+    if (!store) return [];
+
+    const today = new Date();
+    const threeMonthsInDays = 90;
+    const alerts: Array<{ type: string; daysSince: number; overdue: number }> = [];
+
+    const checkAndAdd = (dateString: string | null, label: string) => {
+      if (!dateString) return;
+      const maintenanceDate = new Date(dateString);
+      const daysSince = Math.floor((today.getTime() - maintenanceDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysSince >= threeMonthsInDays) {
+        alerts.push({
+          type: label,
+          daysSince,
+          overdue: daysSince - threeMonthsInDays
+        });
+      }
+    };
+
+    checkAndAdd(store.lastOvenMaintenance, 'Forno');
+    checkAndAdd(store.lastRefrigeratorMaintenance, 'Geladeiras');
+    checkAndAdd(store.lastPestControl, 'Dedetização');
+
+    return alerts;
+  };
 
   const fetchStoreDetails = async () => {
     try {
@@ -106,9 +167,71 @@ export default function StoreDetailPage() {
   }
 
   const latestScore = evaluations.length > 0 ? evaluations[0].totalScore : null;
+  const maintenanceAlerts = getMaintenanceAlerts();
 
   return (
     <div className="min-h-screen bg-black text-white">
+      {/* Modal de Alerta de Manutenções */}
+      {showMaintenanceAlert && maintenanceAlerts.length > 0 && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#141415] border-2 border-red-500 rounded-2xl p-8 max-w-2xl w-full shadow-2xl">
+            <div className="flex items-start gap-4 mb-6">
+              <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h2 className="text-2xl font-bold text-white mb-2">
+                  ⚠️ ATENÇÃO - MANUTENÇÕES PENDENTES
+                </h2>
+                <p className="text-gray-400">
+                  As seguintes manutenções estão vencidas (mais de 3 meses):
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 mb-8">
+              {maintenanceAlerts.map((alert, index) => (
+                <div key={index} className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-red-500 text-2xl">❌</span>
+                      <div>
+                        <p className="text-white font-semibold">{alert.type}</p>
+                        <p className="text-sm text-gray-400">
+                          Última manutenção há {alert.daysSince} dias
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-red-400 font-bold">
+                        Venceu há {alert.overdue} dias
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => router.push(`/checklist/nova-avaliacao?storeId=${store.id}`)}
+                className="flex-1 bg-[#001F05] text-white py-4 rounded-xl font-semibold hover:bg-[#001F05]/80 transition-all"
+              >
+                Iniciar Nova Avaliação
+              </button>
+              <button
+                onClick={() => setShowMaintenanceAlert(false)}
+                className="flex-1 bg-[#374151] text-white py-4 rounded-xl font-semibold hover:bg-[#374151]/80 transition-all"
+              >
+                Fechar Alerta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="container mx-auto px-4 py-8">
         <Link href="/checklist" className="text-green-400 hover:text-green-300 mb-4 inline-block">
           ← Voltar
