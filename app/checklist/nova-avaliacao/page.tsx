@@ -28,7 +28,7 @@ export default function NewEvaluationPage() {
   const [lastRefrigeratorMaintenance, setLastRefrigeratorMaintenance] = useState('');
   const [lastPestControl, setLastPestControl] = useState('');
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
-  const [evaluations, setEvaluations] = useState<Map<string, Map<string, { status: EvaluationStatus; observations: string; photoUrl?: string }>>>(new Map());
+  const [evaluations, setEvaluations] = useState<Map<string, Map<string, { status: EvaluationStatus; observations: string; photoUrls?: string[] }>>>(new Map());
   const [topicObservations, setTopicObservations] = useState<Map<string, string>>(new Map());
   const [maintenanceList, setMaintenanceList] = useState('');
   const [improvementSuggestions, setImprovementSuggestions] = useState('');
@@ -71,46 +71,54 @@ export default function NewEvaluationPage() {
     setExpandedTopics(newExpanded);
   };
 
-  const setItemEvaluation = (topicId: string, itemId: string, status: EvaluationStatus, observations: string, photoUrl?: string) => {
+  const setItemEvaluation = (topicId: string, itemId: string, status: EvaluationStatus, observations: string, photoUrls?: string[]) => {
     const topicEvals = evaluations.get(topicId) || new Map();
     const currentEval = topicEvals.get(itemId);
     topicEvals.set(itemId, { 
       status, 
       observations, 
-      photoUrl: photoUrl !== undefined ? photoUrl : currentEval?.photoUrl 
+      photoUrls: photoUrls !== undefined ? photoUrls : currentEval?.photoUrls 
     });
     const newEvaluations = new Map(evaluations);
     newEvaluations.set(topicId, topicEvals);
     setEvaluations(newEvaluations);
   };
 
-  const handlePhotoUpload = async (topicId: string, itemId: string, file: File) => {
+  const handlePhotoUpload = async (topicId: string, itemId: string, files: FileList) => {
     try {
-      // Por enquanto, vamos converter para base64 e armazenar no banco
-      // Depois podemos implementar upload para storage
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        const topicEvals = evaluations.get(topicId);
-        const currentEval = topicEvals?.get(itemId);
-        
-        if (currentEval) {
-          setItemEvaluation(topicId, itemId, currentEval.status, currentEval.observations, base64String);
-        }
-      };
-      reader.readAsDataURL(file);
+      const topicEvals = evaluations.get(topicId);
+      const currentEval = topicEvals?.get(itemId);
+      const currentPhotos = currentEval?.photoUrls || [];
+
+      // Processar todos os arquivos selecionados
+      const filePromises = Array.from(files).map(file => {
+        return new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      });
+
+      const newPhotos = await Promise.all(filePromises);
+      const updatedPhotos = [...currentPhotos, ...newPhotos];
+
+      if (currentEval) {
+        setItemEvaluation(topicId, itemId, currentEval.status, currentEval.observations, updatedPhotos);
+      }
     } catch (error) {
       console.error('Error uploading photo:', error);
       alert('Erro ao fazer upload da foto. Tente novamente.');
     }
   };
 
-  const handlePhotoDelete = (topicId: string, itemId: string) => {
+  const handlePhotoDelete = (topicId: string, itemId: string, photoIndex: number) => {
     const topicEvals = evaluations.get(topicId);
     const currentEval = topicEvals?.get(itemId);
     
-    if (currentEval) {
-      setItemEvaluation(topicId, itemId, currentEval.status, currentEval.observations, undefined);
+    if (currentEval && currentEval.photoUrls) {
+      const updatedPhotos = currentEval.photoUrls.filter((_, index) => index !== photoIndex);
+      setItemEvaluation(topicId, itemId, currentEval.status, currentEval.observations, updatedPhotos);
     }
   };
 
@@ -149,7 +157,7 @@ export default function NewEvaluationPage() {
           maxScore,
           status: evaluation?.status || 'FORA DO PADRÃO',
           observations: evaluation?.observations || '',
-          photoUrl: evaluation?.photoUrl,
+          photoUrls: evaluation?.photoUrls || [],
         });
 
         topicScore += score;
@@ -473,47 +481,103 @@ export default function NewEvaluationPage() {
                             />
                             
                             {showPhotoSection && (
-                              <div className="mt-3">
-                                {evaluation?.photoUrl ? (
-                                  <div className="relative inline-block">
-                                    <img 
-                                      src={evaluation.photoUrl} 
-                                      alt="Foto do item"
-                                      className="w-full max-w-md rounded-lg border border-[#374151]"
-                                    />
-                                    <button
-                                      onClick={() => handlePhotoDelete(topic.id, item.id)}
-                                      className="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full hover:bg-red-700 transition-colors"
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </button>
+                              <div className="mt-3 space-y-3">
+                                {/* Galeria de Fotos */}
+                                {evaluation?.photoUrls && evaluation.photoUrls.length > 0 && (
+                                  <div className="grid grid-cols-2 gap-3">
+                                    {evaluation.photoUrls.map((photoUrl, index) => (
+                                      <div key={index} className="relative group">
+                                        <img 
+                                          src={photoUrl} 
+                                          alt={`Foto ${index + 1}`}
+                                          className="w-full h-40 object-cover rounded-lg border border-[#374151]"
+                                        />
+                                        <button
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handlePhotoDelete(topic.id, item.id, index);
+                                          }}
+                                          type="button"
+                                          className="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full hover:bg-red-700 transition-colors opacity-90 hover:opacity-100"
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </button>
+                                        <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                                          Foto {index + 1}
+                                        </div>
+                                      </div>
+                                    ))}
                                   </div>
-                                ) : (
-                                  <div>
-                                    <input
-                                      ref={(el) => {
-                                        if (el) fileInputRefs.current.set(uploadKey, el);
-                                      }}
-                                      type="file"
-                                      accept="image/*"
-                                      capture="environment"
-                                      onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                          handlePhotoUpload(topic.id, item.id, file);
-                                        }
-                                      }}
-                                      className="hidden"
-                                    />
-                                    <button
-                                      onClick={() => fileInputRefs.current.get(uploadKey)?.click()}
-                                      type="button"
-                                      className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                                    >
-                                      <Camera className="w-4 h-4" />
-                                      Adicionar Foto
-                                    </button>
-                                  </div>
+                                )}
+
+                                {/* Botões de Upload */}
+                                <div className="flex gap-2">
+                                  {/* Input para Câmera */}
+                                  <input
+                                    ref={(el) => {
+                                      if (el) fileInputRefs.current.set(`${uploadKey}-camera`, el);
+                                    }}
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    onChange={(e) => {
+                                      if (e.target.files && e.target.files.length > 0) {
+                                        handlePhotoUpload(topic.id, item.id, e.target.files);
+                                        e.target.value = ''; // Reset para permitir adicionar a mesma foto novamente
+                                      }
+                                    }}
+                                    className="hidden"
+                                  />
+                                  
+                                  {/* Input para Galeria (múltiplas fotos) */}
+                                  <input
+                                    ref={(el) => {
+                                      if (el) fileInputRefs.current.set(`${uploadKey}-gallery`, el);
+                                    }}
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={(e) => {
+                                      if (e.target.files && e.target.files.length > 0) {
+                                        handlePhotoUpload(topic.id, item.id, e.target.files);
+                                        e.target.value = ''; // Reset para permitir adicionar a mesma foto novamente
+                                      }
+                                    }}
+                                    className="hidden"
+                                  />
+
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      fileInputRefs.current.get(`${uploadKey}-camera`)?.click();
+                                    }}
+                                    type="button"
+                                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex-1"
+                                  >
+                                    <Camera className="w-4 h-4" />
+                                    Tirar Foto
+                                  </button>
+
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      fileInputRefs.current.get(`${uploadKey}-gallery`)?.click();
+                                    }}
+                                    type="button"
+                                    className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex-1"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    Da Galeria
+                                  </button>
+                                </div>
+
+                                {evaluation?.photoUrls && evaluation.photoUrls.length > 0 && (
+                                  <p className="text-xs text-gray-400">
+                                    {evaluation.photoUrls.length} foto(s) adicionada(s)
+                                  </p>
                                 )}
                               </div>
                             )}

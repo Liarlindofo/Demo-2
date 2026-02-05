@@ -31,7 +31,7 @@ interface EvaluationDetail {
     maxScore: number;
     status: string;
     observations: string | null;
-    photoUrl: string | null;
+    photoUrls: any;
   }>;
 }
 
@@ -295,13 +295,26 @@ export default function ReportPage() {
                               <strong>Obs:</strong> {item.observations}
                             </p>
                           )}
-                          {item.photoUrl && (
+                          {item.photoUrls && Array.isArray(item.photoUrls) && item.photoUrls.length > 0 && (
                             <div className="mt-3 pl-7">
-                              <img 
-                                src={item.photoUrl} 
-                                alt={`Foto de ${item.itemName}`}
-                                className="max-w-md rounded-lg border border-[#374151] shadow-sm"
-                              />
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                {item.photoUrls.map((photoUrl: string, photoIndex: number) => (
+                                  <div key={photoIndex} className="relative group">
+                                    <img 
+                                      src={photoUrl} 
+                                      alt={`Foto ${photoIndex + 1} de ${item.itemName}`}
+                                      className="w-full h-40 object-cover rounded-lg border border-[#374151] shadow-sm cursor-pointer hover:opacity-90 transition-opacity"
+                                      onClick={() => window.open(photoUrl, '_blank')}
+                                    />
+                                    <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                                      Foto {photoIndex + 1}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <p className="text-xs text-gray-400 mt-2">
+                                {item.photoUrls.length} foto(s) - Clique para ampliar
+                              </p>
                             </div>
                           )}
                         </div>

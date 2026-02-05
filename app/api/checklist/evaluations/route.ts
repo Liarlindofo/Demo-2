@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
               maxScore: item.maxScore || 0,
               status: item.status || 'FORA DO PADRÃO',
               observations: item.observations || null,
-              photoUrl: item.photoUrl || null
+              photoUrls: item.photoUrls || []
             }))
           )
         }
