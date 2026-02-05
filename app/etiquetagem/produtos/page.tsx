@@ -26,7 +26,6 @@ export default function ProdutosPage() {
     categoriaId: "",
     pesoPadrao: "",
     unidadeMedida: "",
-    marcaFornecedor: "",
     tipoArmazenamentoPadrao: "",
   });
   const [error, setError] = useState("");
@@ -84,11 +83,10 @@ export default function ProdutosPage() {
     try {
     const dataToSend = {
       nome: formData.nome,
-      categoriaId: formData.categoriaId,
+      categoriaId: formData.categoriaId || undefined,
       pesoPadrao: parseFloat(formData.pesoPadrao),
       unidadeMedida: formData.unidadeMedida,
-      marcaFornecedor: formData.marcaFornecedor,
-      tipoArmazenamentoPadrao: formData.tipoArmazenamentoPadrao,
+      tipoArmazenamentoPadrao: formData.tipoArmazenamentoPadrao || undefined,
     };
 
       let response;
@@ -118,7 +116,6 @@ export default function ProdutosPage() {
         categoriaId: categorias[0]?.id || "",
         pesoPadrao: "",
         unidadeMedida: "",
-        marcaFornecedor: "",
         tipoArmazenamentoPadrao: "",
       });
       await loadData();
@@ -137,7 +134,6 @@ export default function ProdutosPage() {
       categoriaId: produto.categoriaId,
       pesoPadrao: produto.pesoPadrao?.toString() || "",
       unidadeMedida: produto.unidadeMedida || "",
-      marcaFornecedor: produto.marcaFornecedor || "",
       tipoArmazenamentoPadrao: produto.tipoArmazenamentoPadrao || "",
     });
     setShowModal(true);
@@ -167,7 +163,6 @@ export default function ProdutosPage() {
       categoriaId: categorias[0]?.id || "",
       pesoPadrao: "",
       unidadeMedida: "",
-      marcaFornecedor: "",
       tipoArmazenamentoPadrao: "",
     });
     setError("");
@@ -228,12 +223,7 @@ export default function ProdutosPage() {
                     <h3 className="font-semibold text-white text-lg mb-1">
                       {produto.nome}
                     </h3>
-                    <p className="text-sm text-gray-400 mb-2">{produto.categoria?.nome}</p>
-                    {produto.marcaFornecedor && (
-                      <span className="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-lg text-xs font-medium">
-                        {produto.marcaFornecedor}
-                      </span>
-                    )}
+                    <p className="text-sm text-gray-400">{produto.categoria?.nome}</p>
                   </div>
                   <div className="flex gap-2 ml-4">
                     <button
@@ -304,18 +294,17 @@ export default function ProdutosPage() {
 
             <div>
               <Label htmlFor="categoriaId" className="text-gray-300">
-                Categoria *
+                Categoria
               </Label>
               <select
                 id="categoriaId"
-                required
                 value={formData.categoriaId}
                 onChange={(e) => setFormData({ ...formData, categoriaId: e.target.value })}
                 className="w-full px-4 py-3 rounded-lg border border-[#374151] bg-[#0f0f10] text-white focus:outline-none focus:ring-2 focus:ring-[#001F05] mt-1"
                 disabled={categorias.length === 0}
               >
                 <option value="">
-                  {loading ? "Carregando..." : categorias.length === 0 ? "Nenhuma categoria disponível" : "Selecione uma categoria"}
+                  {loading ? "Carregando..." : categorias.length === 0 ? "Nenhuma categoria disponível" : "Selecione uma categoria (opcional)"}
                 </option>
                 {categorias.map((cat) => (
                   <option key={cat.id} value={cat.id}>
@@ -396,34 +385,19 @@ export default function ProdutosPage() {
 
             <div>
               <Label htmlFor="tipoArmazenamentoPadrao" className="text-gray-300">
-                Tipo de Armazenamento *
+                Tipo de Armazenamento
               </Label>
               <select
                 id="tipoArmazenamentoPadrao"
-                required
                 value={formData.tipoArmazenamentoPadrao}
                 onChange={(e) => setFormData({ ...formData, tipoArmazenamentoPadrao: e.target.value })}
                 className="w-full px-4 py-3 rounded-lg border border-[#374151] bg-[#0f0f10] text-white focus:outline-none focus:ring-2 focus:ring-[#001F05] mt-1"
               >
-                <option value="">Selecione</option>
+                <option value="">Selecione (opcional)</option>
                 <option value="RESFRIADO">RESFRIADO</option>
                 <option value="CONGELADO">CONGELADO</option>
                 <option value="TEMPERATURA AMBIENTE">TEMPERATURA AMBIENTE</option>
               </select>
-            </div>
-
-            <div>
-              <Label htmlFor="marcaFornecedor" className="text-gray-300">
-                Marca/Fornecedor *
-              </Label>
-              <Input
-                id="marcaFornecedor"
-                required
-                value={formData.marcaFornecedor}
-                onChange={(e) => setFormData({ ...formData, marcaFornecedor: e.target.value })}
-                className="bg-[#0f0f10] border-[#374151] text-white mt-1"
-                placeholder="Ex: Seara"
-              />
             </div>
 
             <div className="flex gap-3 pt-4">

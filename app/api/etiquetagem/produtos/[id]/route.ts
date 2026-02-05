@@ -35,17 +35,17 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { nome, categoriaId, pesoPadrao, unidadeMedida, marcaFornecedor, tipoArmazenamentoPadrao } = body;
+    const { nome, categoriaId, pesoPadrao, unidadeMedida, tipoArmazenamentoPadrao } = body;
 
     const produtoAtualizado = await prisma.etiquetagemProduto.update({
       where: { id },
       data: {
         nome: nome || produto.nome,
-        categoriaId: categoriaId || produto.categoriaId,
+        categoriaId: categoriaId !== undefined ? (categoriaId || null) : produto.categoriaId,
         pesoPadrao: pesoPadrao !== undefined ? pesoPadrao : produto.pesoPadrao,
         unidadeMedida: unidadeMedida !== undefined ? unidadeMedida : produto.unidadeMedida,
-        marcaFornecedor: marcaFornecedor !== undefined ? marcaFornecedor : produto.marcaFornecedor,
-        tipoArmazenamentoPadrao: tipoArmazenamentoPadrao !== undefined ? tipoArmazenamentoPadrao : produto.tipoArmazenamentoPadrao,
+        marcaFornecedor: null,
+        tipoArmazenamentoPadrao: tipoArmazenamentoPadrao !== undefined ? (tipoArmazenamentoPadrao || null) : produto.tipoArmazenamentoPadrao,
       },
       include: {
         categoria: true,

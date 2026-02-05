@@ -59,12 +59,12 @@ export async function POST(request: NextRequest) {
     });
 
     const body = await request.json();
-    const { nome, categoriaId, pesoPadrao, unidadeMedida, marcaFornecedor, tipoArmazenamentoPadrao } = body;
+    const { nome, categoriaId, pesoPadrao, unidadeMedida, tipoArmazenamentoPadrao } = body;
 
-    // Validar todos os campos obrigatórios
-    if (!nome || !categoriaId || !pesoPadrao || !unidadeMedida || !marcaFornecedor || !tipoArmazenamentoPadrao) {
+    // Validar apenas campos obrigatórios
+    if (!nome || !pesoPadrao || !unidadeMedida) {
       return NextResponse.json(
-        { error: 'Todos os campos são obrigatórios: nome, categoriaId, pesoPadrao, unidadeMedida, marcaFornecedor, tipoArmazenamentoPadrao' },
+        { error: 'Campos obrigatórios: nome, pesoPadrao, unidadeMedida' },
         { status: 400 }
       );
     }
@@ -80,11 +80,11 @@ export async function POST(request: NextRequest) {
       data: {
         userId: dbUser.id,
         nome,
-        categoriaId,
+        categoriaId: categoriaId || null,
         pesoPadrao: parseFloat(pesoPadrao),
         unidadeMedida: unidadeMedida,
-        marcaFornecedor: marcaFornecedor,
-        tipoArmazenamentoPadrao: tipoArmazenamentoPadrao,
+        marcaFornecedor: null,
+        tipoArmazenamentoPadrao: tipoArmazenamentoPadrao || null,
         isAtivo: 1,
       },
       include: {
