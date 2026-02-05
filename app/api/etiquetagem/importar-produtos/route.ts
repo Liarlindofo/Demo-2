@@ -71,8 +71,24 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      const nomeProcessado = nomeProduto.toString().trim();
+
+      // Filtrar linhas inválidas, vazias ou cabeçalhos
+      if (
+        !nomeProcessado ||
+        nomeProcessado.length < 2 ||
+        nomeProcessado.toLowerCase().includes('tabela') ||
+        nomeProcessado.toLowerCase().includes('validade') ||
+        nomeProcessado.toLowerCase().includes('produto') ||
+        nomeProcessado === '-' ||
+        nomeProcessado === 'n/a' ||
+        /^[\s\-_]+$/.test(nomeProcessado) // Apenas espaços, hífens ou underscores
+      ) {
+        continue;
+      }
+
       produtosParaImportar.push({
-        nome: nomeProduto.toString().trim(),
+        nome: nomeProcessado,
         status: 'pendente'
       });
     }
@@ -108,11 +124,27 @@ export async function POST(request: NextRequest) {
           produto.unidade = resultado.unidade;
           produto.armazenamento = resultado.armazenamento;
 
-          // Tentar encontrar categoria correspondente
-          const categoriaEncontrada = categorias.find(
-            c => c.nome.toLowerCase().includes(resultado.categoria.toLowerCase()) ||
-                 resultado.categoria.toLowerCase().includes(c.nome.toLowerCase())
-          );
+          // Tentar encontrar categoria correspondente (busca mais flexível)
+          const categoriaLower = resultado.categoria.toLowerCase().trim();
+          const categoriaEncontrada = categorias.find(c => {
+            const catNomeLower = c.nome.toLowerCase().trim();
+            
+            // Correspondência exata
+            if (catNomeLower === categoriaLower) return true;
+            
+            // Correspondência parcial (um contém o outro)
+            if (catNomeLower.includes(categoriaLower) || categoriaLower.includes(catNomeLower)) return true;
+            
+            // Mapeamentos específicos
+            if (categoriaLower.includes('latic') && catNomeLower.includes('latic')) return true;
+            if (categoriaLower.includes('carne') && catNomeLower.includes('carne')) return true;
+            if (categoriaLower.includes('ave') && catNomeLower.includes('ave')) return true;
+            if (categoriaLower.includes('peixe') && catNomeLower.includes('peixe')) return true;
+            if (categoriaLower.includes('vegeta') && catNomeLower.includes('vegeta')) return true;
+            if (categoriaLower.includes('fruta') && catNomeLower.includes('fruta')) return true;
+            
+            return false;
+          });
 
           if (categoriaEncontrada) {
             produto.categoriaId = categoriaEncontrada.id;

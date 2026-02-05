@@ -214,6 +214,7 @@ export default function ProdutosPage() {
       let erros = 0;
 
       for (const produto of importedProducts) {
+        // Salvar todos os produtos com status 'sucesso', mesmo sem categoria
         if (produto.status !== 'sucesso') continue;
 
         try {
@@ -222,19 +223,22 @@ export default function ProdutosPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               nome: produto.nome,
-              categoriaId: produto.categoriaId || null,
+              categoriaId: produto.categoriaId || undefined,
               pesoPadrao: produto.peso || 1.0,
               unidadeMedida: produto.unidade || 'kg',
-              tipoArmazenamentoPadrao: produto.armazenamento || null,
+              tipoArmazenamentoPadrao: produto.armazenamento || undefined,
             }),
           });
 
           if (response.ok) {
             sucessos++;
           } else {
+            const errorData = await response.json();
+            console.error(`Erro ao salvar ${produto.nome}:`, errorData);
             erros++;
           }
         } catch (error) {
+          console.error(`Erro ao salvar ${produto.nome}:`, error);
           erros++;
         }
       }
@@ -242,7 +246,12 @@ export default function ProdutosPage() {
       setShowImportModal(false);
       setImportedProducts([]);
       await loadData();
-      alert(`Importação concluída!\n${sucessos} produtos salvos\n${erros} erros`);
+      
+      if (erros === 0) {
+        alert(`✅ Importação concluída com sucesso!\n${sucessos} produtos salvos`);
+      } else {
+        alert(`Importação concluída\n✅ ${sucessos} produtos salvos\n❌ ${erros} erros`);
+      }
     } catch (error) {
       console.error('Erro ao salvar produtos:', error);
       alert('Erro ao salvar produtos');

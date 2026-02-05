@@ -55,21 +55,41 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `Você é um especialista em classificação de alimentos. Sua tarefa é classificar produtos alimentícios em categorias.
+            content: `Você é um especialista em classificação de alimentos e laticínios. Sua tarefa é classificar produtos alimentícios nas categorias EXATAS abaixo.
 
-Categorias disponíveis:
-${CATEGORIAS_CONHECIDAS.join(', ')}
+Categorias disponíveis (responda EXATAMENTE um destes nomes):
+- Carnes e Aves
+- Peixes e Frutos do Mar
+- Laticínios
+- Vegetais
+- Frutas
+- Grãos e Cereais
+- Massas
+- Congelados
+- Processados
+- Bebidas
+- Temperos e Condimentos
+- Panificação
 
-Responda APENAS com o nome da categoria mais apropriada. Não adicione explicações ou texto extra.
-Se o produto não se encaixar perfeitamente em nenhuma categoria, escolha a mais próxima.`
+Regras:
+1. SEMPRE responda com UMA categoria da lista acima
+2. Use o nome EXATO da categoria (com acentos e capitalização correta)
+3. Queijos = "Laticínios"
+4. Leites = "Laticínios"
+5. Iogurtes = "Laticínios"
+6. Carnes (bovina, suína, frango) = "Carnes e Aves"
+7. Peixes = "Peixes e Frutos do Mar"
+8. Verduras = "Vegetais"
+
+Responda APENAS com o nome da categoria. Sem explicações.`
           },
           {
             role: 'user',
-            content: `Classifique este produto: ${nomeProduto}`
+            content: `Classifique: ${nomeProduto}`
           }
         ],
-        temperature: 0.3,
-        max_tokens: 50,
+        temperature: 0.1,
+        max_tokens: 30,
       }),
     });
 
