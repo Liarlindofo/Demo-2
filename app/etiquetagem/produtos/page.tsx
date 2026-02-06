@@ -172,24 +172,46 @@ export default function ProdutosPage() {
     setError("");
   };
 
+  const handleImportClick = () => {
+    console.log('🖱️ Botão Importar clicado');
+    console.log('📎 fileInputRef:', fileInputRef.current);
+    if (fileInputRef.current) {
+      console.log('✅ Acionando input de arquivo...');
+      fileInputRef.current.click();
+    } else {
+      console.error('❌ fileInputRef não encontrado!');
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('📁 handleFileUpload chamado');
     const file = e.target.files?.[0];
-    if (!file) return;
+    console.log('📄 Arquivo selecionado:', file?.name, file?.size);
+    
+    if (!file) {
+      console.log('⚠️ Nenhum arquivo selecionado');
+      return;
+    }
 
     try {
       setImporting(true);
       setError("");
+      console.log('🚀 Iniciando upload...');
 
       const formData = new FormData();
       formData.append('file', file);
 
+      console.log('📤 Enviando para API...');
       const response = await fetch('/api/etiquetagem/importar-produtos', {
         method: 'POST',
         body: formData,
       });
 
+      console.log('📨 Resposta recebida:', response.status, response.ok);
+
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('❌ Erro da API:', errorData);
         throw new Error(errorData.error || 'Erro ao importar');
       }
 
@@ -198,8 +220,9 @@ export default function ProdutosPage() {
       console.log('📦 Produtos importados:', data.produtos);
       setImportedProducts(data.produtos);
       setShowImportModal(true);
+      console.log('✅ Modal de preview deve abrir agora');
     } catch (error) {
-      console.error('Erro ao importar:', error);
+      console.error('❌ Erro ao importar:', error);
       alert(error instanceof Error ? error.message : 'Erro ao importar arquivo');
     } finally {
       setImporting(false);
@@ -283,12 +306,13 @@ export default function ProdutosPage() {
           <h1 className="text-3xl font-bold">Produtos</h1>
           <div className="flex gap-3">
             <Button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={handleImportClick}
               variant="outline"
-              className="border-[#001F05] text-[#001F05] hover:bg-[#001F05] hover:text-white"
+              disabled={importing}
+              className="border-[#001F05] text-[#001F05] hover:bg-[#001F05] hover:text-white disabled:opacity-50"
             >
               <Upload className="w-5 h-5 mr-2" />
-              Importar
+              {importing ? 'Importando...' : 'Importar'}
             </Button>
             <input
               ref={fileInputRef}
