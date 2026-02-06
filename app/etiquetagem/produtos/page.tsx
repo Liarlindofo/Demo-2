@@ -32,6 +32,7 @@ export default function ProdutosPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importedProducts, setImportedProducts] = useState<any[]>([]);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -196,6 +197,7 @@ export default function ProdutosPage() {
     try {
       setImporting(true);
       setError("");
+      setImportProgress({ current: 0, total: 0 });
       console.log('🚀 Iniciando upload...');
 
       const formData = new FormData();
@@ -218,14 +220,17 @@ export default function ProdutosPage() {
       const data = await response.json();
       console.log('📥 Dados recebidos da importação:', data);
       console.log('📦 Produtos importados:', data.produtos);
+      
+      setImportProgress({ current: data.produtos.length, total: data.produtos.length });
       setImportedProducts(data.produtos);
+      setImporting(false);
       setShowImportModal(true);
       console.log('✅ Modal de preview deve abrir agora');
     } catch (error) {
       console.error('❌ Erro ao importar:', error);
+      setImporting(false);
       alert(error instanceof Error ? error.message : 'Erro ao importar arquivo');
     } finally {
-      setImporting(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -307,12 +312,20 @@ export default function ProdutosPage() {
           <div className="flex gap-3">
             <Button
               onClick={handleImportClick}
-              variant="outline"
               disabled={importing}
-              className="border-[#001F05] text-[#001F05] hover:bg-[#001F05] hover:text-white disabled:opacity-50"
+              className="bg-[#001F05] hover:bg-[#001F05]/80 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Upload className="w-5 h-5 mr-2" />
-              {importing ? 'Importando...' : 'Importar'}
+              {importing ? (
+                <>
+                  <div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                  Classificando produtos...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-5 h-5 mr-2" />
+                  Importar
+                </>
+              )}
             </Button>
             <input
               ref={fileInputRef}
@@ -647,6 +660,49 @@ export default function ProdutosPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Overlay de Loading durante Importação */}
+      {importing && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-[#141415] border border-[#374151] rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              {/* Spinner Animado */}
+              <div className="relative w-20 h-20 mb-6">
+                <div className="absolute inset-0 border-4 border-[#001F05]/20 rounded-full"></div>
+                <div className="absolute inset-0 border-4 border-[#001F05] border-t-transparent rounded-full animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Upload className="w-8 h-8 text-[#001F05]" />
+                </div>
+              </div>
+
+              {/* Mensagem Principal */}
+              <h3 className="text-xl font-bold text-white mb-2">
+                Processando Importação
+              </h3>
+              
+              {/* Descrição */}
+              <p className="text-gray-400 mb-6">
+                Estamos classificando seus produtos com Inteligência Artificial.
+                <br />
+                <span className="text-sm">Isso pode levar alguns segundos...</span>
+              </p>
+
+              {/* Animação de Pontos */}
+              <div className="flex gap-2">
+                <div className="w-2 h-2 bg-[#001F05] rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 bg-[#001F05] rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-2 h-2 bg-[#001F05] rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+
+              {/* Informações Técnicas (opcional) */}
+              <div className="mt-6 text-xs text-gray-500 space-y-1">
+                <p>🤖 IA: OpenAI GPT-4o-mini</p>
+                <p>📊 Classificando categorias, pesos e armazenamento</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
