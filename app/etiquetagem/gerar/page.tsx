@@ -561,8 +561,8 @@ export default function GerarEtiquetaPage() {
             background: white;
             border: 2px solid #374151;
             width: 400px;
-            height: 240px;
-            padding: 8px;
+            height: 200px;
+            padding: 4px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
           }
@@ -570,50 +570,54 @@ export default function GerarEtiquetaPage() {
             height: 100%;
             display: flex;
             flex-direction: column;
-            font-size: 11px;
-            line-height: 1.1;
+            font-size: 10px;
+            line-height: 1;
             color: black;
           }
           .section {
             border-bottom: 1px solid #1f2937;
-            padding-bottom: 2px;
-            margin-bottom: 2px;
+            padding-bottom: 1px;
+            margin-bottom: 1px;
           }
           .section-header {
             text-align: center;
           }
           .section-header .produto-nome {
             font-weight: bold;
-            font-size: 13px;
-            line-height: 1.05;
+            font-size: 12px;
+            line-height: 1;
           }
           .section-header .armazenamento {
-            font-size: 10px;
+            font-size: 9px;
+            line-height: 1;
           }
           .info-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-top: 1px;
+            margin-top: 0;
           }
           .info-label {
             font-weight: 500;
-            font-size: 10px;
+            font-size: 9px;
           }
           .info-value {
             font-weight: bold;
-            font-size: 10px;
+            font-size: 9px;
           }
           .responsavel-section {
             text-align: center;
+            padding-bottom: 0;
           }
           .responsavel-label {
             font-weight: 500;
-            font-size: 9px;
+            font-size: 8px;
+            line-height: 1;
           }
           .responsavel-nome {
             font-weight: bold;
-            font-size: 10px;
+            font-size: 9px;
+            line-height: 1;
           }
           .empresa-section {
             flex: 1;
@@ -621,13 +625,16 @@ export default function GerarEtiquetaPage() {
             flex-direction: column;
             justify-content: center;
             text-align: center;
+            line-height: 1;
           }
           .empresa-nome {
             font-weight: bold;
-            font-size: 10px;
+            font-size: 9px;
+            line-height: 1;
           }
           .empresa-info {
-            font-size: 9px;
+            font-size: 8px;
+            line-height: 1;
           }
           @media print {
             @page {
@@ -646,13 +653,42 @@ export default function GerarEtiquetaPage() {
               width: 50mm;
               height: 30mm;
               margin: 0;
-              padding: 2mm;
+              padding: 1mm;
               border: none;
               box-shadow: none;
               page-break-inside: avoid;
             }
             .etiqueta-content {
-              font-size: 8px;
+              font-size: 7px;
+              line-height: 1;
+            }
+            .section {
+              padding-bottom: 0.5mm;
+              margin-bottom: 0.5mm;
+            }
+            .section-header .produto-nome {
+              font-size: 9px;
+              line-height: 1;
+            }
+            .section-header .armazenamento {
+              font-size: 7px;
+              line-height: 1;
+            }
+            .info-label,
+            .info-value {
+              font-size: 7px;
+            }
+            .responsavel-label {
+              font-size: 6px;
+            }
+            .responsavel-nome {
+              font-size: 7px;
+            }
+            .empresa-nome {
+              font-size: 7px;
+            }
+            .empresa-info {
+              font-size: 6px;
               line-height: 1.1;
             }
           }

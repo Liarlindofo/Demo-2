@@ -118,8 +118,8 @@ function formatEtiquetaESC(data: EtiquetaData): Uint8Array {
   // Aguardar um pouco após inicialização
   // (Simulado com comando, delay real é no envio)
   
-  // Configurar espaçamento de linha
-  commands += ESCPOSCommands.SET_LINE_SPACING(30); // 30/180 polegadas
+  // Configurar espaçamento de linha (mais compacto)
+  commands += ESCPOSCommands.SET_LINE_SPACING(20); // 20/180 polegadas (antes era 30)
   
   // === CABEÇALHO ===
   // Nome do produto (centralizado, negrito, fonte dupla)
@@ -131,64 +131,61 @@ function formatEtiquetaESC(data: EtiquetaData): Uint8Array {
   commands += ESCPOSCommands.BOLD_OFF;
   commands += ESCPOSCommands.FONT_NORMAL;
   
-  // Tipo de armazenamento (centralizado, negrito)
+  // Tipo de armazenamento (centralizado, negrito) - SEM quebra de linha extra
   commands += ESCPOSCommands.BOLD_ON;
   commands += data.tipoArmazenamento;
-  commands += ESCPOSCommands.LINE_FEED;
   commands += ESCPOSCommands.BOLD_OFF;
+  commands += ESCPOSCommands.LINE_FEED;
   
-  // Linha divisória
-  commands += '--------------------------------';
+  // Linha divisória (mais curta)
+  commands += '----------------------------';
   commands += ESCPOSCommands.LINE_FEED;
   
   // === INFORMAÇÕES PRINCIPAIS ===
   // Alinhado à esquerda
   commands += ESCPOSCommands.ALIGN_LEFT;
   
-  // Peso e validade na mesma linha
+  // Peso e validade na mesma linha (mais compacto)
   commands += `Peso/Qtd: ${data.peso} ${data.unidadeMedida}`;
-  commands += `     Val: ${data.periodoDias} dias`;
+  commands += `  Val: ${data.periodoDias}d`; // "d" em vez de "dias"
   commands += ESCPOSCommands.LINE_FEED;
   
-  // Data de manipulação
-  commands += `Manipulado: ${data.dataManipulacao}`;
+  // Datas (uma linha cada, sem espaço extra)
+  commands += `Manip: ${data.dataManipulacao}`;
+  commands += ESCPOSCommands.LINE_FEED;
+  commands += `Vence: ${data.dataValidade}`;
   commands += ESCPOSCommands.LINE_FEED;
   
-  // Data de vencimento
-  commands += `Vence em: ${data.dataValidade}`;
-  commands += ESCPOSCommands.LINE_FEED;
-  
-  // Linha divisória
-  commands += '--------------------------------';
+  // Linha divisória (mais curta)
+  commands += '----------------------------';
   commands += ESCPOSCommands.LINE_FEED;
   
   // === RESPONSÁVEL E UNIDADE ===
   // Centralizado
   commands += ESCPOSCommands.ALIGN_CENTER;
   
-  // Responsável
+  // Responsável (abreviado)
   commands += `Resp: ${data.responsavelNome}`;
   commands += ESCPOSCommands.LINE_FEED;
   
-  // Unidade (negrito)
+  // Unidade (negrito, sem linha extra)
   commands += ESCPOSCommands.BOLD_ON;
   commands += data.unidadeNome;
-  commands += ESCPOSCommands.LINE_FEED;
   commands += ESCPOSCommands.BOLD_OFF;
-  
-  // CNPJ e Cidade
-  commands += `${data.unidadeCNPJ} - ${data.unidadeCidade}`;
   commands += ESCPOSCommands.LINE_FEED;
   
-  // Marca (se houver)
+  // CNPJ e Cidade (uma linha)
+  commands += `${data.unidadeCNPJ}-${data.unidadeCidade}`;
+  commands += ESCPOSCommands.LINE_FEED;
+  
+  // Marca (se houver) - sem linha extra
   if (data.marcaFornecedor) {
     commands += `Marca: ${data.marcaFornecedor}`;
     commands += ESCPOSCommands.LINE_FEED;
   }
   
   // === FINALIZAÇÃO ===
-  // Alimentar papel
-  commands += ESCPOSCommands.LINE_FEED;
+  // Alimentar papel (reduzido de 3 para 2 linhas)
   commands += ESCPOSCommands.LINE_FEED;
   commands += ESCPOSCommands.LINE_FEED;
   
