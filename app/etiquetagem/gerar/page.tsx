@@ -547,6 +547,7 @@ export default function GerarEtiquetaPage() {
         <title>Etiqueta - ${produtoSelecionado.nome}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
+          html { margin: 0; padding: 0; }
           body {
             font-family: Arial, sans-serif;
             background: #f3f4f6;
@@ -556,6 +557,7 @@ export default function GerarEtiquetaPage() {
             align-items: center;
             justify-content: center;
             min-height: 100vh;
+            margin: 0;
           }
           .etiqueta-container {
             background: white;
@@ -639,28 +641,44 @@ export default function GerarEtiquetaPage() {
           @media print {
             @page {
               size: 50mm 30mm;
-              margin: 0 !important;
+              margin: 0mm !important;
+              padding: 0mm !important;
             }
             * {
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
               margin: 0 !important;
               padding: 0 !important;
+              box-sizing: border-box !important;
             }
-            html, body {
+            html {
               margin: 0 !important;
               padding: 0 !important;
               height: 30mm !important;
+              width: 50mm !important;
+            }
+            body {
+              margin: 0 !important;
+              padding: 0 !important;
+              height: 30mm !important;
+              width: 50mm !important;
+              background: white !important;
+              display: block !important;
+              position: relative !important;
             }
             .etiqueta-container {
               width: 50mm !important;
               height: 30mm !important;
               margin: 0 !important;
-              padding: 0.5mm !important;
+              padding: 0.5mm 1mm !important;
               border: none !important;
               box-shadow: none !important;
               page-break-inside: avoid;
               display: block !important;
+              position: absolute !important;
+              top: 0 !important;
+              left: 0 !important;
+              background: white !important;
             }
             .etiqueta-content {
               font-size: 7px;
