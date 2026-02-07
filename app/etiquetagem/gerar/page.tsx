@@ -670,6 +670,7 @@ export default function GerarEtiquetaPage() {
               width: 50mm !important;
               height: 30mm !important;
               margin: 0 !important;
+              margin-top: -15mm !important;
               padding: 0.5mm 1mm !important;
               border: none !important;
               box-shadow: none !important;
