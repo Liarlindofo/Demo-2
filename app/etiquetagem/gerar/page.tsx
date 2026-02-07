@@ -639,40 +639,58 @@ export default function GerarEtiquetaPage() {
           @media print {
             @page {
               size: 50mm 30mm;
-              margin: 0;
+              margin: 0 !important;
             }
             * {
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
+              margin: 0 !important;
+              padding: 0 !important;
             }
-            body {
-              margin: 0;
-              padding: 0;
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              height: 30mm !important;
             }
             .etiqueta-container {
-              width: 50mm;
-              height: 30mm;
-              margin: 0;
-              padding: 1mm;
-              border: none;
-              box-shadow: none;
+              width: 50mm !important;
+              height: 30mm !important;
+              margin: 0 !important;
+              padding: 0.5mm !important;
+              border: none !important;
+              box-shadow: none !important;
               page-break-inside: avoid;
+              display: block !important;
             }
             .etiqueta-content {
               font-size: 7px;
               line-height: 1;
+              padding-top: 0 !important;
+              margin-top: 0 !important;
             }
             .section {
-              padding-bottom: 0.5mm;
-              margin-bottom: 0.5mm;
+              padding-bottom: 0.3mm;
+              margin-bottom: 0.3mm;
+            }
+            .section:first-child {
+              padding-top: 0 !important;
+              margin-top: 0 !important;
             }
             .section-header .produto-nome {
               font-size: 9px;
               line-height: 1;
+              margin: 0 !important;
+              padding: 0 !important;
             }
             .section-header .armazenamento {
               font-size: 7px;
               line-height: 1;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            p {
+              margin: 0 !important;
+              padding: 0 !important;
             }
             .info-label,
             .info-value {
