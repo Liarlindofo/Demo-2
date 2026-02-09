@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Plus, Search, Package, Edit2, Trash2, ArrowLeft, Upload } from "lucide-react";
+import { Plus, Search, Package, Edit2, Trash2, ArrowLeft, Upload, Filter, TrendingUp, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +19,7 @@ export default function ProdutosPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Produto | null>(null);
   const [formData, setFormData] = useState({
@@ -290,14 +291,28 @@ export default function ProdutosPage() {
     }
   };
 
-  const produtosFiltrados = produtos.filter(p =>
-    p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.categoria?.nome.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const produtosFiltrados = produtos.filter(p => {
+    const matchSearch = p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.categoria?.nome.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchCategory = selectedCategory === "all" || 
+      (selectedCategory === "sem-categoria" && !p.categoriaId) ||
+      p.categoriaId === selectedCategory;
+    
+    return matchSearch && matchCategory;
+  });
+
+  // Estatísticas
+  const stats = {
+    total: produtos.length,
+    comCategoria: produtos.filter(p => p.categoriaId).length,
+    semCategoria: produtos.filter(p => !p.categoriaId).length,
+    categorias: categorias.length,
+  };
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
         <Button
           onClick={() => router.push("/etiquetagem")}
           variant="ghost"
@@ -307,86 +322,217 @@ export default function ProdutosPage() {
           Voltar
         </Button>
 
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold">Produtos</h1>
-          <div className="flex gap-3">
-            <Button
-              onClick={handleImportClick}
-              disabled={importing}
-              className="bg-[#001F05] hover:bg-[#001F05]/80 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {importing ? (
-                <>
-                  <div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
-                  Classificando produtos...
-                </>
-              ) : (
-                <>
-                  <Upload className="w-5 h-5 mr-2" />
-                  Importar
-                </>
-              )}
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls"
-              className="hidden"
-              onChange={handleFileUpload}
-            />
-            <Button
-              onClick={() => setShowModal(true)}
-              className="bg-[#001F05] hover:bg-[#001F05]/80 text-white"
-            >
-              <Plus className="w-5 h-5 mr-2" />
-              Novo
-            </Button>
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-4xl font-bold mb-2">Gestão de Produtos</h1>
+              <p className="text-gray-400">Gerencie seus produtos de forma simples e organizada</p>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                onClick={handleImportClick}
+                disabled={importing}
+                variant="outline"
+                className="border-[#374151] text-gray-300 hover:bg-[#374151] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {importing ? (
+                  <>
+                    <div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                    Classificando...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5 mr-2" />
+                    Importar Excel
+                  </>
+                )}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+              <Button
+                onClick={() => setShowModal(true)}
+                className="bg-[#001F05] hover:bg-[#001F05]/80 text-white"
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                Novo Produto
+              </Button>
+            </div>
           </div>
+
+          {/* Estatísticas */}
+          {!loading && produtos.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-[#141415] border border-[#374151] rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Total de Produtos</p>
+                    <p className="text-2xl font-bold text-white">{stats.total}</p>
+                  </div>
+                  <Package className="w-10 h-10 text-blue-400 opacity-50" />
+                </div>
+              </div>
+
+              <div className="bg-[#141415] border border-[#374151] rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Com Categoria</p>
+                    <p className="text-2xl font-bold text-green-400">{stats.comCategoria}</p>
+                  </div>
+                  <Layers className="w-10 h-10 text-green-400 opacity-50" />
+                </div>
+              </div>
+
+              <div className="bg-[#141415] border border-[#374151] rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Sem Categoria</p>
+                    <p className="text-2xl font-bold text-yellow-400">{stats.semCategoria}</p>
+                  </div>
+                  <Package className="w-10 h-10 text-yellow-400 opacity-50" />
+                </div>
+              </div>
+
+              <div className="bg-[#141415] border border-[#374151] rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Categorias</p>
+                    <p className="text-2xl font-bold text-purple-400">{stats.categorias}</p>
+                  </div>
+                  <TrendingUp className="w-10 h-10 text-purple-400 opacity-50" />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="relative mb-6">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <Input
-            type="text"
-            placeholder="Buscar produtos..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-[#141415] border-[#374151] text-white"
-          />
+        {/* Filtros */}
+        <div className="bg-[#141415] border border-[#374151] rounded-xl p-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Buscar produtos..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 bg-[#0f0f10] border-[#374151] text-white"
+              />
+            </div>
+
+            <div className="relative">
+              <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 rounded-lg border border-[#374151] bg-[#0f0f10] text-white focus:outline-none focus:ring-2 focus:ring-[#001F05]"
+              >
+                <option value="all">Todas as categorias</option>
+                <option value="sem-categoria">Sem categoria</option>
+                {categorias.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {(searchTerm || selectedCategory !== "all") && (
+            <div className="mt-3 flex items-center justify-between">
+              <p className="text-sm text-gray-400">
+                {produtosFiltrados.length} produto(s) encontrado(s)
+              </p>
+              <button
+                onClick={() => {
+                  setSearchTerm("");
+                  setSelectedCategory("all");
+                }}
+                className="text-sm text-blue-400 hover:text-blue-300"
+              >
+                Limpar filtros
+              </button>
+            </div>
+          )}
         </div>
 
+        {/* Lista de Produtos */}
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#001F05] border-t-transparent"></div>
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-[#001F05] border-t-transparent mb-4"></div>
+            <p className="text-gray-400">Carregando produtos...</p>
           </div>
         ) : produtosFiltrados.length > 0 ? (
-          <div className="grid gap-3">
+          <div className="grid gap-4">
             {produtosFiltrados.map((produto) => (
               <div
                 key={produto.id}
-                className="bg-[#141415] border border-[#374151] rounded-xl p-4"
+                className="bg-[#141415] border border-[#374151] rounded-xl p-5 hover:border-[#001F05] transition-all"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-white text-lg mb-1">
-                      {produto.nome}
-                    </h3>
-                    <p className="text-sm text-gray-400">{produto.categoria?.nome}</p>
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="font-semibold text-white text-xl">
+                        {produto.nome}
+                      </h3>
+                      {produto.categoriaId ? (
+                        <span className="px-3 py-1 bg-green-500/20 text-green-400 text-xs font-medium rounded-full border border-green-500/30">
+                          {produto.categoria?.nome}
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-medium rounded-full border border-yellow-500/30">
+                          Sem categoria
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-4 text-sm text-gray-400">
+                      {produto.pesoPadrao && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-500">Peso:</span>
+                          <span className="text-white font-medium">
+                            {produto.pesoPadrao} {produto.unidadeMedida}
+                          </span>
+                        </div>
+                      )}
+                      {produto.tipoArmazenamentoPadrao && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-500">Armazenamento:</span>
+                          <span className="text-white font-medium">
+                            {produto.tipoArmazenamentoPadrao}
+                          </span>
+                        </div>
+                      )}
+                      {produto.marcaFornecedor && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-500">Marca:</span>
+                          <span className="text-white font-medium">
+                            {produto.marcaFornecedor}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  
                   <div className="flex gap-2 ml-4">
                     <button
                       onClick={() => handleEdit(produto)}
-                      className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors"
+                      className="p-3 hover:bg-blue-500/20 rounded-lg transition-colors group"
                       title="Editar produto"
                     >
-                      <Edit2 className="w-5 h-5 text-blue-400" />
+                      <Edit2 className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />
                     </button>
                     <button
                       onClick={() => handleDelete(produto)}
-                      className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                      className="p-3 hover:bg-red-500/20 rounded-lg transition-colors group"
                       title="Excluir produto"
                     >
-                      <Trash2 className="w-5 h-5 text-red-400" />
+                      <Trash2 className="w-5 h-5 text-red-400 group-hover:scale-110 transition-transform" />
                     </button>
                   </div>
                 </div>
@@ -394,18 +540,39 @@ export default function ProdutosPage() {
             ))}
           </div>
         ) : (
-          <div className="bg-[#141415] border border-[#374151] rounded-xl p-12 text-center">
-            <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-400 mb-4">
-              {searchTerm ? "Nenhum produto encontrado" : "Nenhum produto cadastrado"}
-            </p>
-            <Button
-              onClick={() => setShowModal(true)}
-              className="bg-[#001F05] hover:bg-[#001F05]/80 text-white"
-            >
-              <Plus className="w-5 h-5 mr-2" />
-              Cadastrar Primeiro Produto
-            </Button>
+          <div className="bg-[#141415] border border-[#374151] rounded-xl p-16 text-center">
+            <div className="max-w-md mx-auto">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-[#001F05]/20 rounded-full mb-6">
+                <Package className="w-10 h-10 text-[#001F05]" />
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                {searchTerm || selectedCategory !== "all" 
+                  ? "Nenhum produto encontrado" 
+                  : "Nenhum produto cadastrado"}
+              </h3>
+              <p className="text-gray-400 mb-6">
+                {searchTerm || selectedCategory !== "all"
+                  ? "Tente ajustar os filtros de busca"
+                  : "Comece cadastrando seu primeiro produto ou importe uma planilha"}
+              </p>
+              <div className="flex gap-3 justify-center">
+                <Button
+                  onClick={() => setShowModal(true)}
+                  className="bg-[#001F05] hover:bg-[#001F05]/80 text-white"
+                >
+                  <Plus className="w-5 h-5 mr-2" />
+                  Cadastrar Produto
+                </Button>
+                <Button
+                  onClick={handleImportClick}
+                  variant="outline"
+                  className="border-[#374151] text-gray-300 hover:bg-[#374151]"
+                >
+                  <Upload className="w-5 h-5 mr-2" />
+                  Importar Excel
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </div>
