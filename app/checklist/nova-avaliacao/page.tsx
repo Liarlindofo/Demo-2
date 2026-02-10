@@ -55,88 +55,140 @@ export default function NewEvaluationPage() {
 
   const checkForBackup = () => {
     try {
+      console.log('🔍 Verificando backup...');
       const backup = localStorage.getItem('checklist_backup');
-      if (backup) {
-        const { evaluation, timestamp } = JSON.parse(backup);
-        const backupDate = new Date(timestamp);
-        const now = new Date();
-        const hoursDiff = (now.getTime() - backupDate.getTime()) / (1000 * 60 * 60);
+      
+      if (!backup) {
+        console.log('❌ Nenhum backup encontrado');
+        return;
+      }
+
+      console.log('📦 Backup encontrado! Tamanho:', backup.length);
+      const { evaluation, timestamp } = JSON.parse(backup);
+      const backupDate = new Date(timestamp);
+      const now = new Date();
+      const hoursDiff = (now.getTime() - backupDate.getTime()) / (1000 * 60 * 60);
+      
+      console.log('⏰ Idade do backup:', hoursDiff.toFixed(2), 'horas');
+      console.log('📊 Dados do backup:', evaluation);
+      
+      // Se o backup tem menos de 24 horas
+      if (hoursDiff < 24) {
+        const confirmar = confirm(
+          '💾 Encontramos um checklist não salvo!\n\n' +
+          `📅 Salvo em: ${backupDate.toLocaleString('pt-BR')}\n` +
+          `🏪 Loja: ${evaluation.storeName}\n` +
+          `👤 Supervisor: ${evaluation.supervisorName}\n\n` +
+          'Deseja recuperar este checklist?'
+        );
         
-        // Se o backup tem menos de 24 horas
-        if (hoursDiff < 24) {
-          const confirmar = confirm(
-            '💾 Encontramos um checklist não salvo!\n\n' +
-            `📅 Salvo em: ${backupDate.toLocaleString('pt-BR')}\n` +
-            `🏪 Loja: ${evaluation.storeName}\n` +
-            `👤 Supervisor: ${evaluation.supervisorName}\n\n` +
-            'Deseja recuperar este checklist?'
-          );
+        if (confirmar) {
+          console.log('✅ Usuário confirmou recuperação');
           
-          if (confirmar) {
-            // Restaurar dados básicos
-            setSelectedStoreId(evaluation.storeId || null);
-            setStoreName(evaluation.storeName);
-            setSupervisorName(evaluation.supervisorName);
-            setEvaluationDate(evaluation.evaluationDate);
-            setLastOvenMaintenance(evaluation.lastOvenMaintenance || '');
-            setLastRefrigeratorMaintenance(evaluation.lastRefrigeratorMaintenance || '');
-            setLastPestControl(evaluation.lastPestControl || '');
-            setMaintenanceList(evaluation.maintenanceList || '');
-            setImprovementSuggestions(evaluation.improvementSuggestions || '');
+          // Restaurar dados básicos PRIMEIRO
+          console.log('📝 Restaurando dados básicos...');
+          setSelectedStoreId(evaluation.storeId || null);
+          setStoreName(evaluation.storeName);
+          setSupervisorName(evaluation.supervisorName);
+          setEvaluationDate(evaluation.evaluationDate);
+          setLastOvenMaintenance(evaluation.lastOvenMaintenance || '');
+          setLastRefrigeratorMaintenance(evaluation.lastRefrigeratorMaintenance || '');
+          setLastPestControl(evaluation.lastPestControl || '');
+          setMaintenanceList(evaluation.maintenanceList || '');
+          setImprovementSuggestions(evaluation.improvementSuggestions || '');
+          
+          // 🔧 Restaurar avaliações com timeout para garantir que os states foram atualizados
+          setTimeout(() => {
+            console.log('🔄 Restaurando avaliações...');
+            console.log('📋 Topics no backup:', evaluation.topics?.length || 0);
             
-            // 🔧 CORRIGIDO: Restaurar avaliações usando IDs corretos
             const restoredEvaluations = new Map();
             const restoredTopicObservations = new Map();
+            let itemsRestaurados = 0;
             
-            evaluation.topics.forEach((topic: any) => {
-              // Encontrar o tópico pelo nome
-              const topicDefinition = CHECKLIST_TOPICS.find(t => t.name === topic.topicName);
-              
-              if (topicDefinition) {
-                const topicEvals = new Map();
+            if (evaluation.topics && Array.isArray(evaluation.topics)) {
+              evaluation.topics.forEach((topic: any) => {
+                console.log('📂 Processando tópico:', topic.topicName);
                 
-                topic.items.forEach((item: any) => {
-                  // Encontrar o item pelo nome
-                  const itemDefinition = topicDefinition.items.find(i => i.name === item.itemName);
+                // Encontrar o tópico pelo nome
+                const topicDefinition = CHECKLIST_TOPICS.find(t => t.name === topic.topicName);
+                
+                if (topicDefinition) {
+                  console.log('✅ Tópico encontrado:', topicDefinition.id);
+                  const topicEvals = new Map();
                   
-                  if (itemDefinition) {
-                    topicEvals.set(itemDefinition.id, {
-                      status: item.status,
-                      observations: item.observations,
-                      photoUrls: item.photoUrls || [],
+                  if (topic.items && Array.isArray(topic.items)) {
+                    topic.items.forEach((item: any) => {
+                      // Pular itens sem status ou com status padrão
+                      if (!item.status || item.status === 'FORA DO PADRÃO') {
+                        return;
+                      }
+                      
+                      // Encontrar o item pelo nome
+                      const itemDefinition = topicDefinition.items.find(i => i.name === item.itemName);
+                      
+                      if (itemDefinition) {
+                        console.log('  ✅ Item restaurado:', item.itemName, '→', item.status);
+                        topicEvals.set(itemDefinition.id, {
+                          status: item.status,
+                          observations: item.observations || '',
+                          photoUrls: item.photoUrls || [],
+                        });
+                        itemsRestaurados++;
+                      } else {
+                        console.warn('  ⚠️ Item não encontrado:', item.itemName);
+                      }
                     });
                   }
-                });
-                
-                restoredEvaluations.set(topicDefinition.id, topicEvals);
-                
-                // Restaurar observações do tópico
-                if (topic.observations) {
-                  restoredTopicObservations.set(topicDefinition.id, topic.observations);
+                  
+                  if (topicEvals.size > 0) {
+                    restoredEvaluations.set(topicDefinition.id, topicEvals);
+                  }
+                  
+                  // Restaurar observações do tópico
+                  if (topic.observations) {
+                    restoredTopicObservations.set(topicDefinition.id, topic.observations);
+                    console.log('  📝 Observação do tópico restaurada');
+                  }
+                } else {
+                  console.warn('❌ Tópico não encontrado:', topic.topicName);
                 }
-              }
-            });
+              });
+            }
+            
+            console.log('📊 Total de itens restaurados:', itemsRestaurados);
+            console.log('📊 Total de tópicos com dados:', restoredEvaluations.size);
             
             setEvaluations(restoredEvaluations);
             setTopicObservations(restoredTopicObservations);
             
-            // Ir direto para o checklist se já havia começado
-            if (restoredEvaluations.size > 0) {
+            // Ir direto para o checklist se já havia itens marcados
+            if (itemsRestaurados > 0) {
+              console.log('🚀 Indo para etapa do checklist...');
               setCurrentStep('checklist');
+              
+              setTimeout(() => {
+                alert(`✅ Checklist recuperado!\n\n${itemsRestaurados} item(ns) restaurado(s).\n\nVocê pode continuar de onde parou.`);
+              }, 500);
+            } else {
+              console.log('⚠️ Nenhum item para restaurar, ficando na tela inicial');
+              alert('ℹ️ Backup encontrado, mas não havia itens marcados.\n\nVocê pode continuar o checklist normalmente.');
             }
-            
-            alert('✅ Checklist recuperado com sucesso!\n\nVocê pode continuar de onde parou.');
-          } else {
-            // Remover backup se não quiser recuperar
-            localStorage.removeItem('checklist_backup');
-          }
+          }, 100); // 100ms para garantir que os states foram atualizados
+          
         } else {
-          // Backup muito antigo, remover
+          console.log('❌ Usuário cancelou recuperação');
+          // Remover backup se não quiser recuperar
           localStorage.removeItem('checklist_backup');
         }
+      } else {
+        console.log('⏰ Backup muito antigo, removendo...');
+        // Backup muito antigo, remover
+        localStorage.removeItem('checklist_backup');
       }
     } catch (e) {
-      console.error('Erro ao verificar backup:', e);
+      console.error('❌ Erro ao verificar backup:', e);
+      alert('❌ Erro ao recuperar backup:\n\n' + (e instanceof Error ? e.message : 'Erro desconhecido'));
       // Se houver erro no parse, limpar backup corrompido
       localStorage.removeItem('checklist_backup');
     }
@@ -508,6 +560,23 @@ export default function NewEvaluationPage() {
 
           <div className="bg-[#141415] rounded-2xl shadow-xl p-8 border border-[#374151]">
             <h1 className="text-3xl font-bold text-white mb-6">Nova Avaliação</h1>
+            
+            {/* 🧪 Botão de Debug (remover depois) */}
+            <button
+              onClick={() => {
+                const backup = localStorage.getItem('checklist_backup');
+                if (backup) {
+                  const data = JSON.parse(backup);
+                  alert(`📦 Backup encontrado!\n\nLoja: ${data.evaluation.storeName}\nSalvo: ${new Date(data.timestamp).toLocaleString('pt-BR')}\n\nItens: ${JSON.stringify(data.evaluation.topics?.[0]?.items?.[0] || 'Nenhum')}`);
+                  console.log('📦 Backup completo:', data);
+                } else {
+                  alert('❌ Nenhum backup encontrado no localStorage');
+                }
+              }}
+              className="w-full mb-4 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+            >
+              🧪 Debug: Ver Backup Salvo
+            </button>
             
             <div className="space-y-6">
               {stores.length > 0 && (
