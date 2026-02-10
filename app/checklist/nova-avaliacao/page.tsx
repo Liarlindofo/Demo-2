@@ -301,6 +301,8 @@ export default function NewEvaluationPage() {
   };
 
   const setItemEvaluation = (topicId: string, itemId: string, status: EvaluationStatus, observations: string, photoUrls?: string[]) => {
+    console.log('🔵 setItemEvaluation chamado:', { topicId, itemId, status, observations: observations ? 'sim' : 'não', fotos: photoUrls?.length || 0 });
+    
     const topicEvals = evaluations.get(topicId) || new Map();
     const currentEval = topicEvals.get(itemId);
     topicEvals.set(itemId, { 
@@ -311,6 +313,8 @@ export default function NewEvaluationPage() {
     const newEvaluations = new Map(evaluations);
     newEvaluations.set(topicId, topicEvals);
     setEvaluations(newEvaluations);
+    
+    console.log('✅ Item salvo no Map:', { topicId, itemId, status });
 
     // 💾 Salvar imediatamente após marcar um item (debounce de 2 segundos)
     if (currentStep === 'checklist') {
@@ -339,7 +343,7 @@ export default function NewEvaluationPage() {
             timestamp: new Date().toISOString(),
           }));
           
-          console.log('💾 Backup salvo após alteração');
+          console.log('💾 Backup salvo após alteração, status:', status);
         } catch (e) {
           console.error('Erro ao salvar backup:', e);
         }
@@ -395,6 +399,8 @@ export default function NewEvaluationPage() {
     const topicsData: any[] = [];
     let totalScore = 0;
     let maxTotalScore = 0;
+    
+    console.log('📊 Calculando score, evaluations.size:', evaluations.size);
 
     CHECKLIST_TOPICS.forEach(topic => {
       const items: any[] = [];
@@ -411,6 +417,15 @@ export default function NewEvaluationPage() {
             score = maxScore;
           } else if (evaluation.status === 'PARCIAL') {
             score = maxScore / 2;
+          }
+          
+          // 🔍 Log apenas para itens "FORA DO PADRÃO" com dados
+          if (evaluation.status === 'FORA DO PADRÃO' && (evaluation.observations || evaluation.photoUrls?.length)) {
+            console.log('🔴 Item FORA DO PADRÃO com dados:', {
+              item: item.name,
+              comentario: evaluation.observations?.substring(0, 30),
+              fotos: evaluation.photoUrls?.length || 0
+            });
           }
         }
 
