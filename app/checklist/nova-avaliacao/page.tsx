@@ -105,13 +105,20 @@ export default function NewEvaluationPage() {
             const restoredEvaluations = new Map();
             const restoredTopicObservations = new Map();
             let itemsRestaurados = 0;
+            let fotosRestauradas = 0;
+            let comentariosRestaurados = 0;
             
             if (evaluation.topics && Array.isArray(evaluation.topics)) {
               evaluation.topics.forEach((topic: any) => {
                 console.log('📂 Processando tópico:', topic.topicName);
                 
-                // Encontrar o tópico pelo nome
-                const topicDefinition = CHECKLIST_TOPICS.find(t => t.name === topic.topicName);
+                // 🆕 USAR O ID DO TÓPICO SE DISPONÍVEL, senão buscar pelo nome
+                let topicDefinition;
+                if (topic.topicId) {
+                  topicDefinition = CHECKLIST_TOPICS.find(t => t.id === topic.topicId);
+                } else {
+                  topicDefinition = CHECKLIST_TOPICS.find(t => t.name === topic.topicName);
+                }
                 
                 if (topicDefinition) {
                   console.log('✅ Tópico encontrado:', topicDefinition.id);
@@ -119,24 +126,37 @@ export default function NewEvaluationPage() {
                   
                   if (topic.items && Array.isArray(topic.items)) {
                     topic.items.forEach((item: any) => {
-                      // Pular itens sem status ou com status padrão
-                      if (!item.status || item.status === 'FORA DO PADRÃO') {
-                        return;
+                      // 🆕 RESTAURAR TODOS OS ITENS, incluindo "FORA DO PADRÃO"
+                      
+                      // 🆕 USAR O ID DO ITEM SE DISPONÍVEL, senão buscar pelo nome
+                      let itemDefinition;
+                      if (item.itemId) {
+                        itemDefinition = topicDefinition.items.find(i => i.id === item.itemId);
+                      } else {
+                        itemDefinition = topicDefinition.items.find(i => i.name === item.itemName);
                       }
                       
-                      // Encontrar o item pelo nome
-                      const itemDefinition = topicDefinition.items.find(i => i.name === item.itemName);
-                      
                       if (itemDefinition) {
-                        console.log('  ✅ Item restaurado:', item.itemName, '→', item.status);
+                        const hasPhotos = item.photoUrls && item.photoUrls.length > 0;
+                        const hasObservations = item.observations && item.observations.trim() !== '';
+                        
+                        console.log(`  ✅ Item restaurado: ${item.itemName}`, {
+                          status: item.status,
+                          fotos: hasPhotos ? item.photoUrls.length : 0,
+                          comentario: hasObservations ? 'sim' : 'não'
+                        });
+                        
                         topicEvals.set(itemDefinition.id, {
                           status: item.status,
                           observations: item.observations || '',
                           photoUrls: item.photoUrls || [],
                         });
+                        
                         itemsRestaurados++;
+                        if (hasPhotos) fotosRestauradas += item.photoUrls.length;
+                        if (hasObservations) comentariosRestaurados++;
                       } else {
-                        console.warn('  ⚠️ Item não encontrado:', item.itemName);
+                        console.warn('  ⚠️ Item não encontrado:', item.itemName, item.itemId);
                       }
                     });
                   }
@@ -151,13 +171,17 @@ export default function NewEvaluationPage() {
                     console.log('  📝 Observação do tópico restaurada');
                   }
                 } else {
-                  console.warn('❌ Tópico não encontrado:', topic.topicName);
+                  console.warn('❌ Tópico não encontrado:', topic.topicName, topic.topicId);
                 }
               });
             }
             
-            console.log('📊 Total de itens restaurados:', itemsRestaurados);
-            console.log('📊 Total de tópicos com dados:', restoredEvaluations.size);
+            console.log('📊 Resumo da recuperação:', {
+              itens: itemsRestaurados,
+              fotos: fotosRestauradas,
+              comentarios: comentariosRestaurados,
+              topicos: restoredEvaluations.size
+            });
             
             setEvaluations(restoredEvaluations);
             setTopicObservations(restoredTopicObservations);
@@ -168,7 +192,13 @@ export default function NewEvaluationPage() {
               setCurrentStep('checklist');
               
               setTimeout(() => {
-                alert(`✅ Checklist recuperado!\n\n${itemsRestaurados} item(ns) restaurado(s).\n\nVocê pode continuar de onde parou.`);
+                let mensagem = `✅ Checklist recuperado!\n\n`;
+                mensagem += `📋 ${itemsRestaurados} item(ns) restaurado(s)\n`;
+                if (comentariosRestaurados > 0) mensagem += `💬 ${comentariosRestaurados} comentário(s) restaurado(s)\n`;
+                if (fotosRestauradas > 0) mensagem += `📸 ${fotosRestauradas} foto(s) restaurada(s)\n`;
+                mensagem += `\nVocê pode continuar de onde parou.`;
+                
+                alert(mensagem);
               }, 500);
             } else {
               console.log('⚠️ Nenhum item para restaurar, ficando na tela inicial');
@@ -385,6 +415,7 @@ export default function NewEvaluationPage() {
         }
 
         items.push({
+          itemId: item.id, // 🆕 Adicionar ID do item para facilitar recuperação
           itemName: item.name,
           score,
           maxScore,
@@ -398,6 +429,7 @@ export default function NewEvaluationPage() {
       });
 
       topicsData.push({
+        topicId: topic.id, // 🆕 Adicionar ID do tópico para facilitar recuperação
         topicName: topic.name,
         score: topicScore,
         maxScore: topicMaxScore,
