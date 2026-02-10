@@ -415,7 +415,7 @@ export default function NewEvaluationPage() {
         }
 
         items.push({
-          itemId: item.id, // 🆕 Adicionar ID do item para facilitar recuperação
+          itemId: item.id,
           itemName: item.name,
           score,
           maxScore,
@@ -599,8 +599,41 @@ export default function NewEvaluationPage() {
                 const backup = localStorage.getItem('checklist_backup');
                 if (backup) {
                   const data = JSON.parse(backup);
-                  alert(`📦 Backup encontrado!\n\nLoja: ${data.evaluation.storeName}\nSalvo: ${new Date(data.timestamp).toLocaleString('pt-BR')}\n\nItens: ${JSON.stringify(data.evaluation.topics?.[0]?.items?.[0] || 'Nenhum')}`);
+                  
+                  // 🔍 Encontrar itens "FORA DO PADRÃO" com dados
+                  const itemsForaComDados: any[] = [];
+                  data.evaluation.topics?.forEach((topic: any) => {
+                    topic.items?.forEach((item: any) => {
+                      if (item.status === 'FORA DO PADRÃO' && (
+                        (item.observations && item.observations.trim() !== '') ||
+                        (item.photoUrls && item.photoUrls.length > 0)
+                      )) {
+                        itemsForaComDados.push({
+                          topico: topic.topicName,
+                          item: item.itemName,
+                          comentario: item.observations?.substring(0, 30) || '',
+                          fotos: item.photoUrls?.length || 0
+                        });
+                      }
+                    });
+                  });
+                  
                   console.log('📦 Backup completo:', data);
+                  console.log('🔴 Itens FORA DO PADRÃO com dados:', itemsForaComDados);
+                  
+                  let mensagem = `📦 Backup encontrado!\n\n`;
+                  mensagem += `Loja: ${data.evaluation.storeName}\n`;
+                  mensagem += `Salvo: ${new Date(data.timestamp).toLocaleString('pt-BR')}\n\n`;
+                  mensagem += `🔴 Itens "FORA DO PADRÃO" com dados: ${itemsForaComDados.length}\n\n`;
+                  
+                  if (itemsForaComDados.length > 0) {
+                    mensagem += `Exemplos:\n`;
+                    itemsForaComDados.slice(0, 3).forEach((i: any) => {
+                      mensagem += `- ${i.item}\n  Comentário: ${i.comentario || '(vazio)'}\n  Fotos: ${i.fotos}\n`;
+                    });
+                  }
+                  
+                  alert(mensagem);
                 } else {
                   alert('❌ Nenhum backup encontrado no localStorage');
                 }
