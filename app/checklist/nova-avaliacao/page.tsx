@@ -73,7 +73,7 @@ export default function NewEvaluationPage() {
           );
           
           if (confirmar) {
-            // Restaurar dados
+            // Restaurar dados básicos
             setSelectedStoreId(evaluation.storeId || null);
             setStoreName(evaluation.storeName);
             setSupervisorName(evaluation.supervisorName);
@@ -84,20 +84,46 @@ export default function NewEvaluationPage() {
             setMaintenanceList(evaluation.maintenanceList || '');
             setImprovementSuggestions(evaluation.improvementSuggestions || '');
             
-            // Restaurar avaliações
+            // 🔧 CORRIGIDO: Restaurar avaliações usando IDs corretos
             const restoredEvaluations = new Map();
+            const restoredTopicObservations = new Map();
+            
             evaluation.topics.forEach((topic: any) => {
-              const topicEvals = new Map();
-              topic.items.forEach((item: any) => {
-                topicEvals.set(item.itemName, {
-                  status: item.status,
-                  observations: item.observations,
-                  photoUrls: item.photoUrls || [],
+              // Encontrar o tópico pelo nome
+              const topicDefinition = CHECKLIST_TOPICS.find(t => t.name === topic.topicName);
+              
+              if (topicDefinition) {
+                const topicEvals = new Map();
+                
+                topic.items.forEach((item: any) => {
+                  // Encontrar o item pelo nome
+                  const itemDefinition = topicDefinition.items.find(i => i.name === item.itemName);
+                  
+                  if (itemDefinition) {
+                    topicEvals.set(itemDefinition.id, {
+                      status: item.status,
+                      observations: item.observations,
+                      photoUrls: item.photoUrls || [],
+                    });
+                  }
                 });
-              });
-              restoredEvaluations.set(topic.topicName, topicEvals);
+                
+                restoredEvaluations.set(topicDefinition.id, topicEvals);
+                
+                // Restaurar observações do tópico
+                if (topic.observations) {
+                  restoredTopicObservations.set(topicDefinition.id, topic.observations);
+                }
+              }
             });
+            
             setEvaluations(restoredEvaluations);
+            setTopicObservations(restoredTopicObservations);
+            
+            // Ir direto para o checklist se já havia começado
+            if (restoredEvaluations.size > 0) {
+              setCurrentStep('checklist');
+            }
             
             alert('✅ Checklist recuperado com sucesso!\n\nVocê pode continuar de onde parou.');
           } else {
@@ -129,7 +155,8 @@ export default function NewEvaluationPage() {
   useEffect(() => {
     if (currentStep !== 'checklist') return;
 
-    const autoSaveInterval = setInterval(() => {
+    // 🆕 SALVAR IMEDIATAMENTE ao entrar no checklist
+    const saveNow = () => {
       try {
         const { topicsData, totalScore, maxTotalScore } = calculateScore();
         const percentageScore = maxTotalScore > 0 ? (totalScore / maxTotalScore) * 100 : 0;
@@ -159,7 +186,13 @@ export default function NewEvaluationPage() {
       } catch (e) {
         console.error('❌ Erro no auto-save:', e);
       }
-    }, 5 * 60 * 1000); // 5 minutos
+    };
+
+    // Salvar IMEDIATAMENTE ao entrar no checklist
+    saveNow();
+    console.log('💾 Primeiro auto-save realizado');
+
+    const autoSaveInterval = setInterval(saveNow, 5 * 60 * 1000); // 5 minutos
 
     return () => clearInterval(autoSaveInterval);
   }, [currentStep, evaluations, topicObservations, maintenanceList, improvementSuggestions]);
@@ -196,6 +229,40 @@ export default function NewEvaluationPage() {
     const newEvaluations = new Map(evaluations);
     newEvaluations.set(topicId, topicEvals);
     setEvaluations(newEvaluations);
+
+    // 💾 Salvar imediatamente após marcar um item (debounce de 2 segundos)
+    if (currentStep === 'checklist') {
+      setTimeout(() => {
+        try {
+          const { topicsData, totalScore, maxTotalScore } = calculateScore();
+          const percentageScore = maxTotalScore > 0 ? (totalScore / maxTotalScore) * 100 : 0;
+
+          const evaluation = {
+            storeId: selectedStoreId || undefined,
+            storeName,
+            supervisorName,
+            evaluationDate,
+            topics: topicsData,
+            totalScore: percentageScore,
+            maxTotalScore,
+            maintenanceList,
+            improvementSuggestions,
+            lastOvenMaintenance: lastOvenMaintenance || undefined,
+            lastRefrigeratorMaintenance: lastRefrigeratorMaintenance || undefined,
+            lastPestControl: lastPestControl || undefined,
+          };
+
+          localStorage.setItem('checklist_backup', JSON.stringify({
+            evaluation,
+            timestamp: new Date().toISOString(),
+          }));
+          
+          console.log('💾 Backup salvo após alteração');
+        } catch (e) {
+          console.error('Erro ao salvar backup:', e);
+        }
+      }, 2000); // 2 segundos de debounce
+    }
   };
 
   const handlePhotoUpload = async (topicId: string, itemId: string, files: FileList) => {
