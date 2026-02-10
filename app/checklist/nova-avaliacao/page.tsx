@@ -6,6 +6,7 @@ import Link from "next/link";
 import { CHECKLIST_TOPICS, type EvaluationStatus } from "@/lib/checklist-data";
 import { ArrowLeft, Save, ChevronDown, ChevronUp, Camera, X } from "lucide-react";
 import { useUser } from "@stackframe/stack";
+import { startTokenRefresh, stopTokenRefresh } from "@/lib/refresh-token";
 
 interface StoreData {
   id: string;
@@ -33,13 +34,87 @@ export default function NewEvaluationPage() {
   const [maintenanceList, setMaintenanceList] = useState('');
   const [improvementSuggestions, setImprovementSuggestions] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
   useEffect(() => {
     if (user) {
       fetchStores();
+      checkForBackup();
+      
+      // 🔄 Iniciar refresh automático do token a cada 60 minutos
+      startTokenRefresh(60);
+      console.log('🔄 Token refresh ativado para sessões longas (checklist)');
+
+      // Limpar ao desmontar componente
+      return () => {
+        stopTokenRefresh();
+      };
     }
   }, [user]);
+
+  const checkForBackup = () => {
+    try {
+      const backup = localStorage.getItem('checklist_backup');
+      if (backup) {
+        const { evaluation, timestamp } = JSON.parse(backup);
+        const backupDate = new Date(timestamp);
+        const now = new Date();
+        const hoursDiff = (now.getTime() - backupDate.getTime()) / (1000 * 60 * 60);
+        
+        // Se o backup tem menos de 24 horas
+        if (hoursDiff < 24) {
+          const confirmar = confirm(
+            '💾 Encontramos um checklist não salvo!\n\n' +
+            `📅 Salvo em: ${backupDate.toLocaleString('pt-BR')}\n` +
+            `🏪 Loja: ${evaluation.storeName}\n` +
+            `👤 Supervisor: ${evaluation.supervisorName}\n\n` +
+            'Deseja recuperar este checklist?'
+          );
+          
+          if (confirmar) {
+            // Restaurar dados
+            setSelectedStoreId(evaluation.storeId || null);
+            setStoreName(evaluation.storeName);
+            setSupervisorName(evaluation.supervisorName);
+            setEvaluationDate(evaluation.evaluationDate);
+            setLastOvenMaintenance(evaluation.lastOvenMaintenance || '');
+            setLastRefrigeratorMaintenance(evaluation.lastRefrigeratorMaintenance || '');
+            setLastPestControl(evaluation.lastPestControl || '');
+            setMaintenanceList(evaluation.maintenanceList || '');
+            setImprovementSuggestions(evaluation.improvementSuggestions || '');
+            
+            // Restaurar avaliações
+            const restoredEvaluations = new Map();
+            evaluation.topics.forEach((topic: any) => {
+              const topicEvals = new Map();
+              topic.items.forEach((item: any) => {
+                topicEvals.set(item.itemName, {
+                  status: item.status,
+                  observations: item.observations,
+                  photoUrls: item.photoUrls || [],
+                });
+              });
+              restoredEvaluations.set(topic.topicName, topicEvals);
+            });
+            setEvaluations(restoredEvaluations);
+            
+            alert('✅ Checklist recuperado com sucesso!\n\nVocê pode continuar de onde parou.');
+          } else {
+            // Remover backup se não quiser recuperar
+            localStorage.removeItem('checklist_backup');
+          }
+        } else {
+          // Backup muito antigo, remover
+          localStorage.removeItem('checklist_backup');
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao verificar backup:', e);
+      // Se houver erro no parse, limpar backup corrompido
+      localStorage.removeItem('checklist_backup');
+    }
+  };
 
   useEffect(() => {
     if (selectedStoreId && stores.length > 0) {
@@ -49,6 +124,45 @@ export default function NewEvaluationPage() {
       }
     }
   }, [selectedStoreId, stores]);
+
+  // 💾 Auto-save a cada 5 minutos durante o checklist
+  useEffect(() => {
+    if (currentStep !== 'checklist') return;
+
+    const autoSaveInterval = setInterval(() => {
+      try {
+        const { topicsData, totalScore, maxTotalScore } = calculateScore();
+        const percentageScore = maxTotalScore > 0 ? (totalScore / maxTotalScore) * 100 : 0;
+
+        const evaluation = {
+          storeId: selectedStoreId || undefined,
+          storeName,
+          supervisorName,
+          evaluationDate,
+          topics: topicsData,
+          totalScore: percentageScore,
+          maxTotalScore,
+          maintenanceList,
+          improvementSuggestions,
+          lastOvenMaintenance: lastOvenMaintenance || undefined,
+          lastRefrigeratorMaintenance: lastRefrigeratorMaintenance || undefined,
+          lastPestControl: lastPestControl || undefined,
+        };
+
+        localStorage.setItem('checklist_backup', JSON.stringify({
+          evaluation,
+          timestamp: new Date().toISOString(),
+        }));
+
+        setLastAutoSave(new Date());
+        console.log('✅ Auto-save realizado:', new Date().toLocaleTimeString());
+      } catch (e) {
+        console.error('❌ Erro no auto-save:', e);
+      }
+    }, 5 * 60 * 1000); // 5 minutos
+
+    return () => clearInterval(autoSaveInterval);
+  }, [currentStep, evaluations, topicObservations, maintenanceList, improvementSuggestions]);
 
   const fetchStores = async () => {
     try {
@@ -231,6 +345,16 @@ export default function NewEvaluationPage() {
       lastPestControl: lastPestControl || undefined,
     };
 
+    // 💾 Salvar backup no LocalStorage antes de tentar enviar
+    try {
+      localStorage.setItem('checklist_backup', JSON.stringify({
+        evaluation,
+        timestamp: new Date().toISOString(),
+      }));
+    } catch (e) {
+      console.warn('Não foi possível salvar backup local:', e);
+    }
+
     try {
       const response = await fetch('/api/checklist/evaluations', {
         method: 'POST',
@@ -238,16 +362,64 @@ export default function NewEvaluationPage() {
         body: JSON.stringify(evaluation),
       });
 
+      // 🔍 Verificar se a resposta é HTML (sessão expirada)
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        throw new Error('SESSAO_EXPIRADA');
+      }
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Erro ao salvar avaliação');
+        // Tentar ler como JSON, mas com fallback
+        let errorMessage = 'Erro ao salvar avaliação';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || errorMessage;
+        } catch (jsonError) {
+          // Se não conseguir fazer parse do JSON, usar texto
+          const textError = await response.text();
+          if (textError.includes('<!DOCTYPE') || textError.includes('<html')) {
+            throw new Error('SESSAO_EXPIRADA');
+          }
+          errorMessage = textError || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
+      
+      // ✅ Sucesso! Limpar backup
+      try {
+        localStorage.removeItem('checklist_backup');
+      } catch (e) {
+        console.warn('Não foi possível remover backup:', e);
+      }
+
       router.push(`/checklist/relatorio/${result.evaluationId}`);
     } catch (error) {
       console.error('Error saving evaluation:', error);
-      alert(error instanceof Error ? error.message : 'Erro ao salvar avaliação. Tente novamente.');
+      
+      // 🚨 Tratamento especial para sessão expirada
+      if (error instanceof Error && error.message === 'SESSAO_EXPIRADA') {
+        const confirmar = confirm(
+          '⏰ Sua sessão expirou após muito tempo sem atividade.\n\n' +
+          '✅ Seus dados foram salvos localmente!\n\n' +
+          'Clique OK para fazer login novamente e recuperar seu checklist.\n\n' +
+          '⚠️ Não feche esta página ou perderá os dados!'
+        );
+        
+        if (confirmar) {
+          // Redirecionar para login mantendo a URL atual
+          window.location.href = `/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+        }
+      } else {
+        // Outros erros
+        alert(
+          '❌ Erro ao salvar avaliação.\n\n' +
+          (error instanceof Error ? error.message : 'Erro desconhecido') + '\n\n' +
+          '💾 Seus dados foram salvos localmente como backup.\n' +
+          'Tente novamente ou recarregue a página.'
+        );
+      }
     } finally {
       setIsSaving(false);
     }
@@ -404,6 +576,12 @@ export default function NewEvaluationPage() {
               <div>
                 <h2 className="text-2xl font-bold text-white">{storeName}</h2>
                 <p className="text-gray-400">Supervisor: {supervisorName}</p>
+                {lastAutoSave && (
+                  <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
+                    <span>💾</span>
+                    <span>Salvo automaticamente às {lastAutoSave.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </p>
+                )}
               </div>
               <div className="text-right">
                 <div className="text-3xl font-bold text-green-400">
