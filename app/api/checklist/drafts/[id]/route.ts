@@ -5,7 +5,7 @@ import { stackServerApp } from '@/stack';
 // 🎯 GET - Recuperar rascunho específico
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await stackServerApp.getUser({ or: 'return-null' });
@@ -13,9 +13,11 @@ export async function GET(
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    const { id } = await params;
+
     const draft = await prisma.checklistDraft.findFirst({
       where: {
-        id: params.id,
+        id,
         userId: user.id,
       },
     });
@@ -43,7 +45,7 @@ export async function GET(
 // 🎯 DELETE - Deletar rascunho específico
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await stackServerApp.getUser({ or: 'return-null' });
@@ -51,10 +53,12 @@ export async function DELETE(
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    const { id } = await params;
+
     // Verificar se o rascunho pertence ao usuário antes de deletar
     const draft = await prisma.checklistDraft.findFirst({
       where: {
-        id: params.id,
+        id,
         userId: user.id,
       },
     });
@@ -64,10 +68,10 @@ export async function DELETE(
     }
 
     await prisma.checklistDraft.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
-    console.log(`🗑️ Rascunho deletado: ${params.id}`);
+    console.log(`🗑️ Rascunho deletado: ${id}`);
 
     return NextResponse.json({ success: true });
   } catch (error) {
