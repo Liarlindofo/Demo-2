@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 
+// ⚙️ Configuração - Aumentar limite de body para 50MB
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+};
+
+// Limite máximo do body (50MB em bytes)
+export const maxDuration = 60; // 60 segundos de timeout
+export const dynamic = 'force-dynamic';
+
 // 🎯 POST - Salvar/Atualizar rascunho do checklist
 export async function POST(request: NextRequest) {
   try {
@@ -117,8 +130,22 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('❌ Erro ao salvar rascunho:', error);
+    
+    // Log detalhado para debug
+    if (error instanceof Error) {
+      console.error('Erro detalhado:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      });
+    }
+    
     return NextResponse.json(
-      { error: 'Erro ao salvar rascunho', details: error instanceof Error ? error.message : 'Erro desconhecido' },
+      { 
+        error: 'Erro ao salvar rascunho', 
+        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        errorType: error instanceof Error ? error.name : 'Unknown'
+      },
       { status: 500 }
     );
   }
