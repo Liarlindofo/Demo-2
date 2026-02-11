@@ -43,6 +43,7 @@ model User {
   apis         UserAPI[]
   botSettings  BotSettings?
   evaluations  Evaluation[]
+  checklistDrafts ChecklistDraft[]
   etiquetagemUnidades EtiquetagemUnidade[]
   etiquetagemProdutos EtiquetagemProduto[]
   etiquetagemNomes     EtiquetagemNomeResponsavel[]
@@ -277,6 +278,38 @@ model ItemScore {
 
   @@index([evaluationId])
   @@map("item_scores")
+}
+
+// Platefull.Check - Checklist Drafts (Auto-save)
+model ChecklistDraft {
+  id                          String   @id @default(cuid())
+  userId                      String
+  user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Dados básicos do checklist
+  storeId                     String?  @map("store_id")
+  storeName                   String   @map("store_name")
+  supervisorName              String   @map("supervisor_name")
+  evaluationDate              String   @map("evaluation_date")
+  
+  // Dados do checklist completo (JSON)
+  checklistData               Json     @map("checklist_data")
+  
+  // Metadados para estatísticas
+  totalItems                  Int      @default(0) @map("total_items")
+  totalPhotos                 Int      @default(0) @map("total_photos")
+  totalComments               Int      @default(0) @map("total_comments")
+  
+  // Controle de versão e limpeza
+  lastSaved                   DateTime @default(now()) @map("last_saved")
+  createdAt                   DateTime @default(now()) @map("created_at")
+  expiresAt                   DateTime @map("expires_at")
+  
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([lastSaved])
+  @@unique([userId, storeId], name: "user_store_draft")
+  @@map("checklist_drafts")
 }
 
 // Platefull.Label - Etiquetagem Models

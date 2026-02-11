@@ -35,12 +35,14 @@ export default function NewEvaluationPage() {
   const [improvementSuggestions, setImprovementSuggestions] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [savingStatus, setSavingStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
   useEffect(() => {
     if (user) {
       fetchStores();
-      checkForBackup();
+      checkForDraft();
       
       // 🔄 Iniciar refresh automático do token a cada 60 minutos
       startTokenRefresh(60);
@@ -53,173 +55,204 @@ export default function NewEvaluationPage() {
     }
   }, [user]);
 
-  const checkForBackup = () => {
+  const checkForDraft = async () => {
     try {
-      console.log('🔍 Verificando backup...');
-      const backup = localStorage.getItem('checklist_backup');
+      console.log('🔍 Verificando rascunhos no servidor...');
       
-      if (!backup) {
-        console.log('❌ Nenhum backup encontrado');
+      const response = await fetch('/api/checklist/drafts');
+      
+      if (!response.ok) {
+        console.warn('⚠️ Erro ao buscar rascunhos, tentando localStorage...');
+        checkForBackupLocalStorage();
         return;
       }
-
-      console.log('📦 Backup encontrado! Tamanho:', backup.length);
-      const { evaluation, timestamp } = JSON.parse(backup);
-      const backupDate = new Date(timestamp);
-      const now = new Date();
-      const hoursDiff = (now.getTime() - backupDate.getTime()) / (1000 * 60 * 60);
       
-      console.log('⏰ Idade do backup:', hoursDiff.toFixed(2), 'horas');
-      console.log('📊 Dados do backup:', evaluation);
+      const drafts = await response.json();
       
-      // Se o backup tem menos de 24 horas
-      if (hoursDiff < 24) {
-        const confirmar = confirm(
-          '💾 Encontramos um checklist não salvo!\n\n' +
-          `📅 Salvo em: ${backupDate.toLocaleString('pt-BR')}\n` +
-          `🏪 Loja: ${evaluation.storeName}\n` +
-          `👤 Supervisor: ${evaluation.supervisorName}\n\n` +
-          'Deseja recuperar este checklist?'
-        );
+      if (!drafts || drafts.length === 0) {
+        console.log('❌ Nenhum rascunho encontrado no servidor');
+        // Tentar localStorage como fallback
+        checkForBackupLocalStorage();
+        return;
+      }
+      
+      // Pegar o rascunho mais recente
+      const draft = drafts[0];
+      
+      console.log('📦 Rascunho encontrado!', {
+        id: draft.id,
+        itens: draft.totalItems,
+        fotos: draft.totalPhotos,
+        comentarios: draft.totalComments,
+        lastSaved: draft.lastSaved
+      });
+      
+      const confirmar = confirm(
+        '💾 Encontramos um checklist não finalizado!\n\n' +
+        `🏪 Loja: ${draft.storeName}\n` +
+        `👤 Supervisor: ${draft.supervisorName}\n` +
+        `📋 ${draft.totalItems} itens marcados\n` +
+        `📸 ${draft.totalPhotos} fotos\n` +
+        `💬 ${draft.totalComments} comentários\n` +
+        `⏰ Última atualização: ${new Date(draft.lastSaved).toLocaleString('pt-BR')}\n\n` +
+        'Deseja recuperar?'
+      );
+      
+      if (confirmar) {
+        console.log('✅ Usuário confirmou recuperação');
         
-        if (confirmar) {
-          console.log('✅ Usuário confirmou recuperação');
+        // Buscar dados completos do rascunho
+        const detailResponse = await fetch(`/api/checklist/drafts/${draft.id}`);
+        
+        if (!detailResponse.ok) {
+          throw new Error('Erro ao carregar rascunho completo');
+        }
+        
+        const fullDraft = await detailResponse.json();
+        const evaluation = fullDraft.checklistData;
+        
+        // Restaurar dados
+        setCurrentDraftId(draft.id);
+        restoreFromDraft(evaluation);
+      } else {
+        console.log('❌ Usuário cancelou recuperação');
+        // Perguntar se quer deletar o rascunho
+        const deletar = confirm('Deseja remover este rascunho?');
+        if (deletar) {
+          await fetch(`/api/checklist/drafts/${draft.id}`, { method: 'DELETE' });
+          console.log('🗑️ Rascunho removido');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erro ao verificar rascunhos:', error);
+      // Fallback para localStorage
+      checkForBackupLocalStorage();
+    }
+  };
+
+  const restoreFromDraft = (evaluation: any) => {
+    console.log('📝 Restaurando dados do rascunho...');
+    
+    // Restaurar dados básicos
+    setSelectedStoreId(evaluation.storeId || null);
+    setStoreName(evaluation.storeName);
+    setSupervisorName(evaluation.supervisorName);
+    setEvaluationDate(evaluation.evaluationDate);
+    setLastOvenMaintenance(evaluation.lastOvenMaintenance || '');
+    setLastRefrigeratorMaintenance(evaluation.lastRefrigeratorMaintenance || '');
+    setLastPestControl(evaluation.lastPestControl || '');
+    setMaintenanceList(evaluation.maintenanceList || '');
+    setImprovementSuggestions(evaluation.improvementSuggestions || '');
+    
+    // Restaurar avaliações
+    setTimeout(() => {
+      const restoredEvaluations = new Map();
+      const restoredTopicObservations = new Map();
+      let itemsRestaurados = 0;
+      let fotosRestauradas = 0;
+      let comentariosRestaurados = 0;
+      
+      if (evaluation.topics && Array.isArray(evaluation.topics)) {
+        evaluation.topics.forEach((topic: any) => {
+          let topicDefinition = CHECKLIST_TOPICS.find(t => t.id === topic.topicId || t.name === topic.topicName);
           
-          // Restaurar dados básicos PRIMEIRO
-          console.log('📝 Restaurando dados básicos...');
-          setSelectedStoreId(evaluation.storeId || null);
-          setStoreName(evaluation.storeName);
-          setSupervisorName(evaluation.supervisorName);
-          setEvaluationDate(evaluation.evaluationDate);
-          setLastOvenMaintenance(evaluation.lastOvenMaintenance || '');
-          setLastRefrigeratorMaintenance(evaluation.lastRefrigeratorMaintenance || '');
-          setLastPestControl(evaluation.lastPestControl || '');
-          setMaintenanceList(evaluation.maintenanceList || '');
-          setImprovementSuggestions(evaluation.improvementSuggestions || '');
-          
-          // 🔧 Restaurar avaliações com timeout para garantir que os states foram atualizados
-          setTimeout(() => {
-            console.log('🔄 Restaurando avaliações...');
-            console.log('📋 Topics no backup:', evaluation.topics?.length || 0);
+          if (topicDefinition) {
+            const topicEvals = new Map();
             
-            const restoredEvaluations = new Map();
-            const restoredTopicObservations = new Map();
-            let itemsRestaurados = 0;
-            let fotosRestauradas = 0;
-            let comentariosRestaurados = 0;
-            
-            if (evaluation.topics && Array.isArray(evaluation.topics)) {
-              evaluation.topics.forEach((topic: any) => {
-                console.log('📂 Processando tópico:', topic.topicName);
-                
-                // 🆕 USAR O ID DO TÓPICO SE DISPONÍVEL, senão buscar pelo nome
-                let topicDefinition;
-                if (topic.topicId) {
-                  topicDefinition = CHECKLIST_TOPICS.find(t => t.id === topic.topicId);
-                } else {
-                  topicDefinition = CHECKLIST_TOPICS.find(t => t.name === topic.topicName);
+            if (topic.items && Array.isArray(topic.items)) {
+              topic.items.forEach((item: any) => {
+                // Só restaurar itens que foram realmente avaliados
+                if (item.status === 'FORA DO PADRÃO' && !item.observations && (!item.photoUrls || item.photoUrls.length === 0)) {
+                  return; // Pular itens não avaliados
                 }
                 
-                if (topicDefinition) {
-                  console.log('✅ Tópico encontrado:', topicDefinition.id);
-                  const topicEvals = new Map();
+                let itemDefinition = topicDefinition!.items.find(i => i.id === item.itemId || i.name === item.itemName);
+                
+                if (itemDefinition) {
+                  const hasPhotos = item.photoUrls && item.photoUrls.length > 0;
+                  const hasObservations = item.observations && item.observations.trim() !== '';
                   
-                  if (topic.items && Array.isArray(topic.items)) {
-                    topic.items.forEach((item: any) => {
-                      // 🆕 RESTAURAR TODOS OS ITENS, incluindo "FORA DO PADRÃO"
-                      
-                      // 🆕 USAR O ID DO ITEM SE DISPONÍVEL, senão buscar pelo nome
-                      let itemDefinition;
-                      if (item.itemId) {
-                        itemDefinition = topicDefinition.items.find(i => i.id === item.itemId);
-                      } else {
-                        itemDefinition = topicDefinition.items.find(i => i.name === item.itemName);
-                      }
-                      
-                      if (itemDefinition) {
-                        const hasPhotos = item.photoUrls && item.photoUrls.length > 0;
-                        const hasObservations = item.observations && item.observations.trim() !== '';
-                        
-                        console.log(`  ✅ Item restaurado: ${item.itemName}`, {
-                          status: item.status,
-                          fotos: hasPhotos ? item.photoUrls.length : 0,
-                          comentario: hasObservations ? 'sim' : 'não'
-                        });
-                        
-                        topicEvals.set(itemDefinition.id, {
-                          status: item.status,
-                          observations: item.observations || '',
-                          photoUrls: item.photoUrls || [],
-                        });
-                        
-                        itemsRestaurados++;
-                        if (hasPhotos) fotosRestauradas += item.photoUrls.length;
-                        if (hasObservations) comentariosRestaurados++;
-                      } else {
-                        console.warn('  ⚠️ Item não encontrado:', item.itemName, item.itemId);
-                      }
-                    });
-                  }
+                  topicEvals.set(itemDefinition.id, {
+                    status: item.status,
+                    observations: item.observations || '',
+                    photoUrls: item.photoUrls || [],
+                  });
                   
-                  if (topicEvals.size > 0) {
-                    restoredEvaluations.set(topicDefinition.id, topicEvals);
-                  }
-                  
-                  // Restaurar observações do tópico
-                  if (topic.observations) {
-                    restoredTopicObservations.set(topicDefinition.id, topic.observations);
-                    console.log('  📝 Observação do tópico restaurada');
-                  }
-                } else {
-                  console.warn('❌ Tópico não encontrado:', topic.topicName, topic.topicId);
+                  itemsRestaurados++;
+                  if (hasPhotos) fotosRestauradas += item.photoUrls.length;
+                  if (hasObservations) comentariosRestaurados++;
                 }
               });
             }
             
-            console.log('📊 Resumo da recuperação:', {
-              itens: itemsRestaurados,
-              fotos: fotosRestauradas,
-              comentarios: comentariosRestaurados,
-              topicos: restoredEvaluations.size
-            });
-            
-            setEvaluations(restoredEvaluations);
-            setTopicObservations(restoredTopicObservations);
-            
-            // Ir direto para o checklist se já havia itens marcados
-            if (itemsRestaurados > 0) {
-              console.log('🚀 Indo para etapa do checklist...');
-              setCurrentStep('checklist');
-              
-              setTimeout(() => {
-                let mensagem = `✅ Checklist recuperado!\n\n`;
-                mensagem += `📋 ${itemsRestaurados} item(ns) restaurado(s)\n`;
-                if (comentariosRestaurados > 0) mensagem += `💬 ${comentariosRestaurados} comentário(s) restaurado(s)\n`;
-                if (fotosRestauradas > 0) mensagem += `📸 ${fotosRestauradas} foto(s) restaurada(s)\n`;
-                mensagem += `\nVocê pode continuar de onde parou.`;
-                
-                alert(mensagem);
-              }, 500);
-            } else {
-              console.log('⚠️ Nenhum item para restaurar, ficando na tela inicial');
-              alert('ℹ️ Backup encontrado, mas não havia itens marcados.\n\nVocê pode continuar o checklist normalmente.');
+            if (topicEvals.size > 0) {
+              restoredEvaluations.set(topicDefinition.id, topicEvals);
             }
-          }, 100); // 100ms para garantir que os states foram atualizados
+            
+            if (topic.observations) {
+              restoredTopicObservations.set(topicDefinition.id, topic.observations);
+            }
+          }
+        });
+      }
+      
+      console.log('📊 Resumo da recuperação:', {
+        itens: itemsRestaurados,
+        fotos: fotosRestauradas,
+        comentarios: comentariosRestaurados
+      });
+      
+      setEvaluations(restoredEvaluations);
+      setTopicObservations(restoredTopicObservations);
+      
+      if (itemsRestaurados > 0) {
+        setCurrentStep('checklist');
+        
+        setTimeout(() => {
+          let mensagem = `✅ Checklist recuperado!\n\n`;
+          mensagem += `📋 ${itemsRestaurados} item(ns) restaurado(s)\n`;
+          if (comentariosRestaurados > 0) mensagem += `💬 ${comentariosRestaurados} comentário(s)\n`;
+          if (fotosRestauradas > 0) mensagem += `📸 ${fotosRestauradas} foto(s)\n`;
+          mensagem += `\nVocê pode continuar de onde parou.`;
           
-        } else {
-          console.log('❌ Usuário cancelou recuperação');
-          // Remover backup se não quiser recuperar
+          alert(mensagem);
+        }, 500);
+      }
+    }, 100);
+  };
+
+  const checkForBackupLocalStorage = () => {
+    try {
+      console.log('🔍 Verificando backup no localStorage...');
+      const backup = localStorage.getItem('checklist_backup');
+      
+      if (!backup) {
+        console.log('❌ Nenhum backup local encontrado');
+        return;
+      }
+
+      const { evaluation, timestamp } = JSON.parse(backup);
+      const backupDate = new Date(timestamp);
+      const hoursDiff = (new Date().getTime() - backupDate.getTime()) / (1000 * 60 * 60);
+      
+      if (hoursDiff < 24) {
+        const confirmar = confirm(
+          '💾 Encontramos um backup local!\n\n' +
+          `📅 Salvo em: ${backupDate.toLocaleString('pt-BR')}\n` +
+          `🏪 Loja: ${evaluation.storeName}\n` +
+          `👤 Supervisor: ${evaluation.supervisorName}\n\n` +
+          'Deseja recuperar?'
+        );
+        
+        if (confirmar) {
+          restoreFromDraft(evaluation);
           localStorage.removeItem('checklist_backup');
         }
       } else {
-        console.log('⏰ Backup muito antigo, removendo...');
-        // Backup muito antigo, remover
         localStorage.removeItem('checklist_backup');
       }
     } catch (e) {
-      console.error('❌ Erro ao verificar backup:', e);
-      alert('❌ Erro ao recuperar backup:\n\n' + (e instanceof Error ? e.message : 'Erro desconhecido'));
-      // Se houver erro no parse, limpar backup corrompido
+      console.error('❌ Erro ao verificar backup local:', e);
       localStorage.removeItem('checklist_backup');
     }
   };
@@ -233,13 +266,14 @@ export default function NewEvaluationPage() {
     }
   }, [selectedStoreId, stores]);
 
-  // 💾 Auto-save a cada 5 minutos durante o checklist
+  // 💾 Auto-save a cada 5 minutos durante o checklist (API + localStorage fallback)
   useEffect(() => {
     if (currentStep !== 'checklist') return;
 
-    // 🆕 SALVAR IMEDIATAMENTE ao entrar no checklist
-    const saveNow = () => {
+    const saveNow = async () => {
       try {
+        setSavingStatus('saving');
+        
         const { topicsData, totalScore, maxTotalScore } = calculateScore();
         const percentageScore = maxTotalScore > 0 ? (totalScore / maxTotalScore) * 100 : 0;
 
@@ -258,15 +292,63 @@ export default function NewEvaluationPage() {
           lastPestControl: lastPestControl || undefined,
         };
 
-        localStorage.setItem('checklist_backup', JSON.stringify({
-          evaluation,
-          timestamp: new Date().toISOString(),
-        }));
+        // 🎯 Tentar salvar no servidor (prioridade)
+        try {
+          const response = await fetch('/api/checklist/drafts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ evaluation }),
+          });
 
-        setLastAutoSave(new Date());
-        console.log('✅ Auto-save realizado:', new Date().toLocaleTimeString());
+          if (response.ok) {
+            const { draftId, lastSaved, totalItems, totalPhotos, totalComments } = await response.json();
+            setCurrentDraftId(draftId);
+            setLastAutoSave(new Date(lastSaved));
+            setSavingStatus('saved');
+            
+            console.log('✅ Rascunho salvo no servidor:', {
+              draftId,
+              itens: totalItems,
+              fotos: totalPhotos,
+              comentarios: totalComments
+            });
+
+            // Salvar também no localStorage como backup offline
+            try {
+              localStorage.setItem('checklist_backup', JSON.stringify({
+                evaluation,
+                draftId,
+                timestamp: new Date().toISOString()
+              }));
+            } catch (localError) {
+              console.warn('⚠️ Não foi possível salvar no localStorage (mas está no servidor)');
+            }
+
+            // Limpar status após 3 segundos
+            setTimeout(() => setSavingStatus('idle'), 3000);
+          } else {
+            throw new Error('Erro ao salvar no servidor');
+          }
+        } catch (apiError) {
+          console.warn('⚠️ Sem conexão, salvando apenas localmente:', apiError);
+          setSavingStatus('error');
+          
+          // Fallback: salvar no localStorage
+          localStorage.setItem('checklist_backup', JSON.stringify({
+            evaluation,
+            timestamp: new Date().toISOString()
+          }));
+          
+          setLastAutoSave(new Date());
+          console.log('💾 Backup salvo localmente (offline)');
+
+          // Limpar status após 5 segundos
+          setTimeout(() => setSavingStatus('idle'), 5000);
+        }
       } catch (e) {
         console.error('❌ Erro no auto-save:', e);
+        setSavingStatus('error');
+        setTimeout(() => setSavingStatus('idle'), 5000);
       }
     };
 
@@ -316,10 +398,12 @@ export default function NewEvaluationPage() {
     
     console.log('✅ Item salvo no Map:', { topicId, itemId, status });
 
-    // 💾 Salvar imediatamente após marcar um item (debounce de 2 segundos)
+    // 💾 Salvar imediatamente após marcar um item (debounce de 500ms - mais rápido!)
     if (currentStep === 'checklist') {
-      setTimeout(() => {
+      setTimeout(async () => {
         try {
+          setSavingStatus('saving');
+          
           const { topicsData, totalScore, maxTotalScore } = calculateScore();
           const percentageScore = maxTotalScore > 0 ? (totalScore / maxTotalScore) * 100 : 0;
 
@@ -338,16 +422,52 @@ export default function NewEvaluationPage() {
             lastPestControl: lastPestControl || undefined,
           };
 
-          localStorage.setItem('checklist_backup', JSON.stringify({
-            evaluation,
-            timestamp: new Date().toISOString(),
-          }));
-          
-          console.log('💾 Backup salvo após alteração, status:', status);
+          // Tentar salvar no servidor
+          try {
+            const response = await fetch('/api/checklist/drafts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ evaluation }),
+            });
+
+            if (response.ok) {
+              const { draftId, lastSaved } = await response.json();
+              setCurrentDraftId(draftId);
+              setLastAutoSave(new Date(lastSaved));
+              setSavingStatus('saved');
+              console.log('💾 Rascunho salvo após alteração');
+              
+              // Backup local
+              try {
+                localStorage.setItem('checklist_backup', JSON.stringify({
+                  evaluation,
+                  draftId,
+                  timestamp: new Date().toISOString()
+                }));
+              } catch (localError) {
+                // Ignorar erro de localStorage (já salvou no servidor)
+              }
+
+              setTimeout(() => setSavingStatus('idle'), 2000);
+            } else {
+              throw new Error('Erro ao salvar');
+            }
+          } catch (apiError) {
+            // Fallback: localStorage
+            localStorage.setItem('checklist_backup', JSON.stringify({
+              evaluation,
+              timestamp: new Date().toISOString()
+            }));
+            setLastAutoSave(new Date());
+            setSavingStatus('idle');
+            console.log('💾 Backup local salvo (offline)');
+          }
         } catch (e) {
-          console.error('Erro ao salvar backup:', e);
+          console.error('Erro ao salvar:', e);
+          setSavingStatus('error');
+          setTimeout(() => setSavingStatus('idle'), 3000);
         }
-      }, 2000); // 2 segundos de debounce
+      }, 500); // 500ms de debounce (mais rápido que antes)
     }
   };
 
@@ -357,8 +477,23 @@ export default function NewEvaluationPage() {
       const currentEval = topicEvals?.get(itemId);
       const currentPhotos = currentEval?.photoUrls || [];
 
-      // Processar todos os arquivos selecionados
-      const filePromises = Array.from(files).map(file => {
+      // Limitar a 10 fotos por item
+      if (currentPhotos.length >= 10) {
+        alert('⚠️ Limite máximo de 10 fotos por item atingido.\n\nRemova uma foto existente para adicionar uma nova.');
+        return;
+      }
+
+      const remainingSlots = 10 - currentPhotos.length;
+      const filesToProcess = Array.from(files).slice(0, remainingSlots);
+
+      if (filesToProcess.length < files.length) {
+        alert(`ℹ️ Apenas ${filesToProcess.length} foto(s) serão adicionadas.\n\nLimite de 10 fotos por item.`);
+      }
+
+      // Processar todas as fotos (SEM COMPRESSÃO - salva qualidade original)
+      console.log(`📸 Processando ${filesToProcess.length} foto(s)...`);
+      
+      const filePromises = filesToProcess.map(file => {
         return new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
@@ -370,12 +505,14 @@ export default function NewEvaluationPage() {
       const newPhotos = await Promise.all(filePromises);
       const updatedPhotos = [...currentPhotos, ...newPhotos];
 
+      console.log(`✅ ${newPhotos.length} foto(s) adicionada(s) com qualidade original`);
+
       if (currentEval) {
         setItemEvaluation(topicId, itemId, currentEval.status, currentEval.observations, updatedPhotos);
       }
     } catch (error) {
       console.error('Error uploading photo:', error);
-      alert('Erro ao fazer upload da foto. Tente novamente.');
+      alert('❌ Erro ao fazer upload da foto.\n\nTente novamente ou tire uma nova foto.');
     }
   };
 
@@ -429,15 +566,19 @@ export default function NewEvaluationPage() {
           }
         }
 
-        items.push({
-          itemId: item.id,
-          itemName: item.name,
-          score,
-          maxScore,
-          status: evaluation?.status || 'FORA DO PADRÃO',
-          observations: evaluation?.observations || '',
-          photoUrls: evaluation?.photoUrls || [],
-        });
+        // ✅ Só incluir itens que foram realmente avaliados
+        // (ou seja, tem status definido OU tem comentário/foto)
+        if (evaluation || (item.id && evaluations.get(topic.id)?.has(item.id))) {
+          items.push({
+            itemId: item.id,
+            itemName: item.name,
+            score,
+            maxScore,
+            status: evaluation?.status || 'FORA DO PADRÃO',
+            observations: evaluation?.observations || '',
+            photoUrls: evaluation?.photoUrls || [],
+          });
+        }
 
         topicScore += score;
         topicMaxScore += maxScore;
@@ -553,11 +694,19 @@ export default function NewEvaluationPage() {
 
       const result = await response.json();
       
-      // ✅ Sucesso! Limpar backup
+      // ✅ Sucesso! Limpar backup e deletar rascunho
       try {
         localStorage.removeItem('checklist_backup');
+        
+        // Deletar rascunho do servidor
+        if (currentDraftId) {
+          await fetch(`/api/checklist/drafts/${currentDraftId}`, {
+            method: 'DELETE',
+          });
+          console.log('🗑️ Rascunho deletado do servidor');
+        }
       } catch (e) {
-        console.warn('Não foi possível remover backup:', e);
+        console.warn('Não foi possível limpar backup/rascunho:', e);
       }
 
       router.push(`/checklist/relatorio/${result.evaluationId}`);
@@ -792,12 +941,34 @@ export default function NewEvaluationPage() {
               <div>
                 <h2 className="text-2xl font-bold text-white">{storeName}</h2>
                 <p className="text-gray-400">Supervisor: {supervisorName}</p>
-                {lastAutoSave && (
-                  <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
-                    <span>💾</span>
-                    <span>Salvo automaticamente às {lastAutoSave.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                  </p>
-                )}
+                
+                {/* Indicador de status de salvamento */}
+                <div className="mt-2 flex items-center gap-2">
+                  {savingStatus === 'saving' && (
+                    <p className="text-xs text-blue-400 flex items-center gap-1 animate-pulse">
+                      <span className="inline-block w-2 h-2 bg-blue-400 rounded-full animate-ping"></span>
+                      <span>Salvando...</span>
+                    </p>
+                  )}
+                  {savingStatus === 'saved' && lastAutoSave && (
+                    <p className="text-xs text-green-400 flex items-center gap-1">
+                      <span>✅</span>
+                      <span>Salvo às {lastAutoSave.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </p>
+                  )}
+                  {savingStatus === 'error' && (
+                    <p className="text-xs text-red-400 flex items-center gap-1">
+                      <span>⚠️</span>
+                      <span>Erro ao salvar (usando backup local)</span>
+                    </p>
+                  )}
+                  {savingStatus === 'idle' && lastAutoSave && (
+                    <p className="text-xs text-gray-400 flex items-center gap-1">
+                      <span>💾</span>
+                      <span>Último salvamento: {lastAutoSave.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </p>
+                  )}
+                </div>
               </div>
               <div className="text-right">
                 <div className="text-3xl font-bold text-green-400">
