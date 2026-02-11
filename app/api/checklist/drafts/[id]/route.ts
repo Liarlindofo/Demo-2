@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getUser } from '@stackframe/stack';
+import { stackServerApp } from '@/stack';
 
 // 🎯 GET - Recuperar rascunho específico
 export async function GET(
@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await getUser();
+    const user = await stackServerApp.getUser({ or: 'return-null' });
     if (!user) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
@@ -46,7 +46,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await getUser();
+    const user = await stackServerApp.getUser({ or: 'return-null' });
     if (!user) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }

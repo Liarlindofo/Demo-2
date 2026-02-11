@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getUser } from '@stackframe/stack';
+import { stackServerApp } from '@/stack';
 
 // 🎯 POST - Salvar/Atualizar rascunho do checklist
 export async function POST(request: NextRequest) {
   try {
-    const user = await getUser();
+    const user = await stackServerApp.getUser({ or: 'return-null' });
     if (!user) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
 // 🎯 GET - Buscar rascunhos do usuário
 export async function GET(request: NextRequest) {
   try {
-    const user = await getUser();
+    const user = await stackServerApp.getUser({ or: 'return-null' });
     if (!user) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
