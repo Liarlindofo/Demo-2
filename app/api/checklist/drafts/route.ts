@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 2);
 
-    // Buscar draft existente (mesmo usuário + mesma loja/temp)
+    // Buscar draft mais recente do usuário (para mesma loja ou temp)
     const storeKey = evaluation.storeId || 'temp';
     
     const existingDraft = await prisma.checklistDraft.findFirst({
@@ -62,6 +62,9 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         storeId: storeKey,
       },
+      orderBy: {
+        lastSaved: 'desc'
+      }
     });
 
     let draft;

@@ -308,7 +308,7 @@ model ChecklistDraft {
   @@index([userId])
   @@index([expiresAt])
   @@index([lastSaved])
-  @@unique([userId, storeId], name: "user_store_draft")
+  @@index([userId, storeId])
   @@map("checklist_drafts")
 }
 
