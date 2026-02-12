@@ -30,6 +30,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Dados inválidos' }, { status: 400 });
     }
 
+    // Validar e garantir campos obrigatórios do schema (não podem ser vazios)
+    const validatedStoreName = (evaluation.storeName && typeof evaluation.storeName === 'string' && evaluation.storeName.trim() !== '') 
+      ? evaluation.storeName.trim() 
+      : 'Sem loja selecionada';
+    
+    const validatedSupervisorName = (evaluation.supervisorName && typeof evaluation.supervisorName === 'string' && evaluation.supervisorName.trim() !== '') 
+      ? evaluation.supervisorName.trim() 
+      : 'Não informado';
+    
+    const validatedEvaluationDate = (evaluation.evaluationDate && typeof evaluation.evaluationDate === 'string' && evaluation.evaluationDate.trim() !== '') 
+      ? evaluation.evaluationDate.trim() 
+      : new Date().toISOString().split('T')[0];
+    
+    // Atualizar evaluation com valores validados
+    evaluation.storeName = validatedStoreName;
+    evaluation.supervisorName = validatedSupervisorName;
+    evaluation.evaluationDate = validatedEvaluationDate;
+
+    // Garantir que storeId seja null ou string válida (não 'temp')
+    const storeId = evaluation.storeId && evaluation.storeId !== 'temp' ? evaluation.storeId : null;
+
+    // Validar que checklistData seja um objeto válido
+    if (!evaluation || typeof evaluation !== 'object') {
+      return NextResponse.json({ error: 'Dados do checklist inválidos' }, { status: 400 });
+    }
+
     // Calcular estatísticas do rascunho
     let totalItems = 0;
     let totalPhotos = 0;
@@ -67,14 +93,18 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 2);
 
-    // Buscar draft mais recente do usuário (para mesma loja ou temp)
-    const storeKey = evaluation.storeId || 'temp';
-    
+    // Buscar draft mais recente do usuário (para mesma loja ou null)
+    // Se storeId for null, busca drafts sem loja (storeId IS NULL)
     const existingDraft = await prisma.checklistDraft.findFirst({
-      where: {
-        userId: user.id,
-        storeId: storeKey,
-      },
+      where: storeId 
+        ? {
+            userId: user.id,
+            storeId: storeId,
+          }
+        : {
+            userId: user.id,
+            storeId: null,
+          },
       orderBy: {
         lastSaved: 'desc'
       }
@@ -82,20 +112,26 @@ export async function POST(request: NextRequest) {
 
     let draft;
 
+    // Preparar dados para salvar
+    const draftData = {
+      storeId: storeId,
+      storeName: validatedStoreName,
+      supervisorName: validatedSupervisorName,
+      evaluationDate: validatedEvaluationDate,
+      checklistData: evaluation as any, // Prisma Json type
+      totalItems,
+      totalPhotos,
+      totalComments,
+      expiresAt,
+    };
+
     if (existingDraft) {
       // Atualizar draft existente
       draft = await prisma.checklistDraft.update({
         where: { id: existingDraft.id },
         data: {
-          storeName: evaluation.storeName,
-          supervisorName: evaluation.supervisorName,
-          evaluationDate: evaluation.evaluationDate,
-          checklistData: evaluation,
-          totalItems,
-          totalPhotos,
-          totalComments,
+          ...draftData,
           lastSaved: new Date(),
-          expiresAt,
         },
       });
       
@@ -105,15 +141,7 @@ export async function POST(request: NextRequest) {
       draft = await prisma.checklistDraft.create({
         data: {
           userId: user.id,
-          storeId: storeKey,
-          storeName: evaluation.storeName,
-          supervisorName: evaluation.supervisorName,
-          evaluationDate: evaluation.evaluationDate,
-          checklistData: evaluation,
-          totalItems,
-          totalPhotos,
-          totalComments,
-          expiresAt,
+          ...draftData,
         },
       });
       
@@ -132,19 +160,34 @@ export async function POST(request: NextRequest) {
     console.error('❌ Erro ao salvar rascunho:', error);
     
     // Log detalhado para debug
+    let errorDetails = 'Erro desconhecido';
+    let errorType = 'Unknown';
+    
     if (error instanceof Error) {
+      errorType = error.name;
+      errorDetails = error.message;
+      
+      // Log completo do erro
       console.error('Erro detalhado:', {
         message: error.message,
         stack: error.stack,
         name: error.name,
       });
+      
+      // Se for erro do Prisma, logar mais detalhes
+      if ('code' in error) {
+        console.error('Código do erro Prisma:', (error as any).code);
+        console.error('Meta do erro:', (error as any).meta);
+      }
     }
     
     return NextResponse.json(
       { 
         error: 'Erro ao salvar rascunho', 
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
-        errorType: error instanceof Error ? error.name : 'Unknown'
+        details: errorDetails,
+        errorType: errorType,
+        // Incluir código do Prisma se disponível
+        ...(error && typeof error === 'object' && 'code' in error ? { prismaCode: (error as any).code } : {})
       },
       { status: 500 }
     );
