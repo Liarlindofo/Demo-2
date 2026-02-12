@@ -16,7 +16,7 @@ export const config = {
 export const maxDuration = 60; // 60 segundos de timeout
 export const dynamic = 'force-dynamic';
 
-// 🎯 POST - Salvar/Atualizar rascunho do checklist
+// 🎯 POST - Salvar/Atualizar rascunho do checklist (completo)
 export async function POST(request: NextRequest) {
   try {
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
@@ -24,7 +24,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    // Sincronizar StackUser com User do banco
     const dbUser = await syncStackAuthUser({
       id: stackUser.id,
       primaryEmail: stackUser.primaryEmail || undefined,
@@ -212,7 +211,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    // Sincronizar StackUser com User do banco
     const dbUser = await syncStackAuthUser({
       id: stackUser.id,
       primaryEmail: stackUser.primaryEmail || undefined,
@@ -275,6 +273,153 @@ export async function DELETE(request: NextRequest) {
     console.error('❌ Erro ao limpar rascunhos expirados:', error);
     return NextResponse.json(
       { error: 'Erro ao limpar rascunhos', details: error instanceof Error ? error.message : 'Erro desconhecido' },
+      { status: 500 }
+    );
+  }
+}
+
+// 🎯 PATCH - Atualização incremental do draft (apenas mudanças)
+export async function PATCH(request: NextRequest) {
+  try {
+    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
+    if (!stackUser) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    const dbUser = await syncStackAuthUser({
+      id: stackUser.id,
+      primaryEmail: stackUser.primaryEmail || undefined,
+      displayName: stackUser.displayName || undefined,
+      profileImageUrl: stackUser.profileImageUrl || undefined,
+      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
+    });
+
+    const data = await request.json();
+    const { draftId, changes } = data;
+
+    if (!draftId) {
+      return NextResponse.json({ error: 'draftId é obrigatório' }, { status: 400 });
+    }
+
+    if (!changes) {
+      return NextResponse.json({ error: 'changes é obrigatório' }, { status: 400 });
+    }
+
+    // Buscar draft existente
+    const existingDraft = await prisma.checklistDraft.findFirst({
+      where: {
+        id: draftId,
+        userId: dbUser.id,
+      },
+    });
+
+    if (!existingDraft) {
+      return NextResponse.json({ error: 'Rascunho não encontrado' }, { status: 404 });
+    }
+
+    // Fazer merge das mudanças com o draft existente
+    const currentData = existingDraft.checklistData as any;
+    const mergedData = { ...currentData };
+
+    // Aplicar mudanças incrementais
+    if (changes.itemUpdate) {
+      // Atualizar item específico
+      const { topicId, itemId, status, observations, photoUrls } = changes.itemUpdate;
+      
+      if (!mergedData.topics) {
+        mergedData.topics = [];
+      }
+
+      let topic = mergedData.topics.find((t: any) => t.topicId === topicId || t.topicName === topicId);
+      if (!topic) {
+        topic = { topicId, items: [] };
+        mergedData.topics.push(topic);
+      }
+
+      let item = topic.items?.find((i: any) => i.itemId === itemId);
+      if (!item) {
+        item = { itemId, itemName: '' };
+        if (!topic.items) topic.items = [];
+        topic.items.push(item);
+      }
+
+      if (status !== undefined) item.status = status;
+      if (observations !== undefined) item.observations = observations;
+      if (photoUrls !== undefined) item.photoUrls = photoUrls;
+    }
+
+    if (changes.topicObservation) {
+      // Atualizar observação de tópico
+      const { topicId, observations } = changes.topicObservation;
+      
+      if (!mergedData.topics) {
+        mergedData.topics = [];
+      }
+
+      let topic = mergedData.topics.find((t: any) => t.topicId === topicId || t.topicName === topicId);
+      if (!topic) {
+        topic = { topicId, items: [] };
+        mergedData.topics.push(topic);
+      }
+
+      topic.observations = observations;
+    }
+
+    // Recalcular estatísticas
+    let totalItems = 0;
+    let totalPhotos = 0;
+    let totalComments = 0;
+
+    if (mergedData.topics && Array.isArray(mergedData.topics)) {
+      mergedData.topics.forEach((topic: any) => {
+        if (topic.items && Array.isArray(topic.items)) {
+          topic.items.forEach((item: any) => {
+            if (item.status && item.status !== 'FORA DO PADRÃO' || item.observations || item.photoUrls?.length) {
+              totalItems++;
+            }
+            if (item.photoUrls && Array.isArray(item.photoUrls)) {
+              totalPhotos += item.photoUrls.length;
+            }
+            if (item.observations && item.observations.trim() !== '') {
+              totalComments++;
+            }
+          });
+        }
+        if (topic.observations && topic.observations.trim() !== '') {
+          totalComments++;
+        }
+      });
+    }
+
+    // Atualizar draft
+    const updatedDraft = await prisma.checklistDraft.update({
+      where: { id: draftId },
+      data: {
+        checklistData: mergedData as any,
+        totalItems,
+        totalPhotos,
+        totalComments,
+        lastSaved: new Date(),
+      },
+    });
+
+    console.log('✅ Draft atualizado incrementalmente:', draftId, { totalItems, totalPhotos, totalComments });
+
+    return NextResponse.json({
+      success: true,
+      draftId: updatedDraft.id,
+      lastSaved: updatedDraft.lastSaved,
+      totalItems,
+      totalPhotos,
+      totalComments,
+    });
+  } catch (error) {
+    console.error('❌ Erro ao atualizar draft incrementalmente:', error);
+    return NextResponse.json(
+      { 
+        error: 'Erro ao atualizar rascunho', 
+        details: error instanceof Error ? error.message : 'Erro desconhecido' 
+      },
       { status: 500 }
     );
   }

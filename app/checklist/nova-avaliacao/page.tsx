@@ -355,12 +355,50 @@ export default function NewEvaluationPage() {
     
     console.log('✅ Item salvo no Map:', { topicId, itemId, status });
 
-    // 💾 Salvar imediatamente após marcar um item (debounce de 500ms - mais rápido!)
+    // 💾 Salvar imediatamente após marcar um item (incremental se tiver draftId)
     if (currentStep === 'checklist') {
       setTimeout(async () => {
         try {
           setSavingStatus('saving');
           
+          // Se já tem draftId, usar PATCH incremental (apenas mudanças)
+          if (currentDraftId) {
+            try {
+              const response = await fetch('/api/checklist/drafts', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  draftId: currentDraftId,
+                  changes: {
+                    itemUpdate: {
+                      topicId,
+                      itemId,
+                      status,
+                      observations,
+                      photoUrls,
+                    },
+                  },
+                }),
+              });
+
+              if (response.ok) {
+                const { lastSaved } = await response.json();
+                setLastAutoSave(new Date(lastSaved));
+                setSavingStatus('saved');
+                console.log('💾 Item atualizado incrementalmente');
+                setTimeout(() => setSavingStatus('idle'), 2000);
+                return; // Sucesso, sair
+              } else {
+                // Se PATCH falhar, tentar POST completo
+                console.warn('⚠️ PATCH falhou, tentando POST completo...');
+              }
+            } catch (patchError) {
+              // Se PATCH falhar, tentar POST completo
+              console.warn('⚠️ Erro no PATCH, tentando POST completo...', patchError);
+            }
+          }
+
+          // POST completo (fallback ou primeiro save)
           const { topicsData, totalScore, maxTotalScore } = calculateScore();
           const percentageScore = maxTotalScore > 0 ? (totalScore / maxTotalScore) * 100 : 0;
 
@@ -379,29 +417,22 @@ export default function NewEvaluationPage() {
             lastPestControl: lastPestControl || undefined,
           };
 
-          // Tentar salvar no servidor
-          try {
-            const response = await fetch('/api/checklist/drafts', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ evaluation }),
-            });
+          const response = await fetch('/api/checklist/drafts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ evaluation }),
+          });
 
-            if (response.ok) {
-              const { draftId, lastSaved } = await response.json();
-              setCurrentDraftId(draftId);
-              setLastAutoSave(new Date(lastSaved));
-              setSavingStatus('saved');
-              console.log('💾 Rascunho salvo após alteração');
-
-              setTimeout(() => setSavingStatus('idle'), 2000);
-            } else {
-              const errorText = await response.text();
-              console.error('❌ Erro ao salvar:', response.status, errorText);
-              throw new Error(`HTTP ${response.status}`);
-            }
-          } catch (apiError) {
-            console.error('❌ Erro no auto-save debounced:', apiError);
+          if (response.ok) {
+            const { draftId, lastSaved } = await response.json();
+            setCurrentDraftId(draftId);
+            setLastAutoSave(new Date(lastSaved));
+            setSavingStatus('saved');
+            console.log('💾 Rascunho salvo (POST completo)');
+            setTimeout(() => setSavingStatus('idle'), 2000);
+          } else {
+            const errorText = await response.text();
+            console.error('❌ Erro ao salvar:', response.status, errorText);
             setSavingStatus('error');
             setTimeout(() => setSavingStatus('idle'), 3000);
           }
@@ -410,7 +441,7 @@ export default function NewEvaluationPage() {
           setSavingStatus('error');
           setTimeout(() => setSavingStatus('idle'), 3000);
         }
-      }, 500); // 500ms de debounce (mais rápido que antes)
+      }, 500); // 500ms de debounce
     }
   };
 
@@ -450,8 +481,51 @@ export default function NewEvaluationPage() {
 
       console.log(`✅ ${newPhotos.length} foto(s) adicionada(s) com qualidade original`);
 
+      // Atualizar estado local
       if (currentEval) {
         setItemEvaluation(topicId, itemId, currentEval.status, currentEval.observations, updatedPhotos);
+      }
+
+      // 💾 Salvar imediatamente cada foto (PATCH incremental se tiver draftId)
+      if (currentDraftId) {
+        try {
+          setSavingStatus('saving');
+          
+          const response = await fetch('/api/checklist/drafts', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              draftId: currentDraftId,
+              changes: {
+                itemUpdate: {
+                  topicId,
+                  itemId,
+                  photoUrls: updatedPhotos, // Apenas as fotos deste item
+                },
+              },
+            }),
+          });
+
+          if (response.ok) {
+            const { lastSaved } = await response.json();
+            setLastAutoSave(new Date(lastSaved));
+            setSavingStatus('saved');
+            console.log('💾 Foto(s) salva(s) incrementalmente');
+            setTimeout(() => setSavingStatus('idle'), 2000);
+          } else {
+            // Se PATCH falhar, o auto-save vai tentar POST completo depois
+            console.warn('⚠️ Erro ao salvar foto incrementalmente, será salvo no próximo auto-save');
+            setSavingStatus('idle');
+          }
+        } catch (error) {
+          console.warn('⚠️ Erro ao salvar foto incrementalmente:', error);
+          setSavingStatus('idle');
+          // O auto-save vai tentar salvar depois
+        }
+      } else {
+        // Se não tem draftId, criar um primeiro (POST completo)
+        // Isso vai acontecer no próximo auto-save
+        console.log('💡 Draft ainda não criado, será criado no próximo auto-save');
       }
     } catch (error) {
       console.error('Error uploading photo:', error);
