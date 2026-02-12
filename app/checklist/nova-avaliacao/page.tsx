@@ -290,22 +290,36 @@ export default function NewEvaluationPage() {
         alert(`ℹ️ Apenas ${filesToProcess.length} foto(s) serão adicionadas.\n\nLimite de 10 fotos por item.`);
       }
 
-      // Processar todas as fotos (SEM COMPRESSÃO - salva qualidade original)
-      console.log(`📸 Processando ${filesToProcess.length} foto(s)...`);
+      // Upload direto para Supabase Storage (SEM COMPRESSÃO - qualidade original)
+      console.log(`📸 Fazendo upload de ${filesToProcess.length} foto(s) para Supabase Storage...`);
       
-      const filePromises = filesToProcess.map(file => {
-        return new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
+      const uploadPromises = filesToProcess.map(async (file) => {
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const response = await fetch('/api/checklist/upload-photo', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Erro ao fazer upload');
+          }
+
+          const { url } = await response.json();
+          return url;
+        } catch (error) {
+          console.error('Erro ao fazer upload da foto:', error);
+          throw error;
+        }
       });
 
-      const newPhotos = await Promise.all(filePromises);
-      const updatedPhotos = [...currentPhotos, ...newPhotos];
+      const uploadedUrls = await Promise.all(uploadPromises);
+      const updatedPhotos = [...currentPhotos, ...uploadedUrls];
 
-      console.log(`✅ ${newPhotos.length} foto(s) adicionada(s) com qualidade original`);
+      console.log(`✅ ${uploadedUrls.length} foto(s) enviada(s) com sucesso para Supabase Storage`);
 
       // Atualizar estado local
       if (currentEval) {
