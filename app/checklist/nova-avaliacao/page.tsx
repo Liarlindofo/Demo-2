@@ -62,17 +62,22 @@ export default function NewEvaluationPage() {
       const response = await fetch('/api/checklist/drafts');
       
       if (!response.ok) {
-        console.warn('⚠️ Erro ao buscar rascunhos, tentando localStorage...');
-        checkForBackupLocalStorage();
+        const errorText = await response.text();
+        console.error('❌ Erro ao buscar rascunhos:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        });
+        
+        // Mostrar erro para debug
+        alert(`Erro ${response.status}: ${errorText.substring(0, 200)}`);
         return;
       }
       
       const drafts = await response.json();
       
       if (!drafts || drafts.length === 0) {
-        console.log('❌ Nenhum rascunho encontrado no servidor');
-        // Tentar localStorage como fallback
-        checkForBackupLocalStorage();
+        console.log('✅ Nenhum rascunho encontrado (banco está limpo)');
         return;
       }
       
@@ -125,8 +130,7 @@ export default function NewEvaluationPage() {
       }
     } catch (error) {
       console.error('❌ Erro ao verificar rascunhos:', error);
-      // Fallback para localStorage
-      checkForBackupLocalStorage();
+      alert(`Erro ao conectar com servidor: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     }
   };
 
@@ -221,42 +225,6 @@ export default function NewEvaluationPage() {
     }, 100);
   };
 
-  const checkForBackupLocalStorage = () => {
-    try {
-      console.log('🔍 Verificando backup no localStorage...');
-      const backup = localStorage.getItem('checklist_backup');
-      
-      if (!backup) {
-        console.log('❌ Nenhum backup local encontrado');
-        return;
-      }
-
-      const { evaluation, timestamp } = JSON.parse(backup);
-      const backupDate = new Date(timestamp);
-      const hoursDiff = (new Date().getTime() - backupDate.getTime()) / (1000 * 60 * 60);
-      
-      if (hoursDiff < 24) {
-        const confirmar = confirm(
-          '💾 Encontramos um backup local!\n\n' +
-          `📅 Salvo em: ${backupDate.toLocaleString('pt-BR')}\n` +
-          `🏪 Loja: ${evaluation.storeName}\n` +
-          `👤 Supervisor: ${evaluation.supervisorName}\n\n` +
-          'Deseja recuperar?'
-        );
-        
-        if (confirmar) {
-          restoreFromDraft(evaluation);
-          localStorage.removeItem('checklist_backup');
-        }
-      } else {
-        localStorage.removeItem('checklist_backup');
-      }
-    } catch (e) {
-      console.error('❌ Erro ao verificar backup local:', e);
-      localStorage.removeItem('checklist_backup');
-    }
-  };
-
   useEffect(() => {
     if (selectedStoreId && stores.length > 0) {
       const store = stores.find(s => s.id === selectedStoreId);
@@ -266,7 +234,7 @@ export default function NewEvaluationPage() {
     }
   }, [selectedStoreId, stores]);
 
-  // 💾 Auto-save a cada 5 minutos durante o checklist (API + localStorage fallback)
+  // 💾 Auto-save a cada 5 minutos durante o checklist (apenas API/Database)
   useEffect(() => {
     if (currentStep !== 'checklist') return;
 
@@ -313,34 +281,23 @@ export default function NewEvaluationPage() {
               comentarios: totalComments
             });
 
-            // Salvar também no localStorage como backup offline
-            try {
-              localStorage.setItem('checklist_backup', JSON.stringify({
-                evaluation,
-                draftId,
-                timestamp: new Date().toISOString()
-              }));
-            } catch (localError) {
-              console.warn('⚠️ Não foi possível salvar no localStorage (mas está no servidor)');
-            }
-
             // Limpar status após 3 segundos
             setTimeout(() => setSavingStatus('idle'), 3000);
           } else {
-            throw new Error('Erro ao salvar no servidor');
+            const errorText = await response.text();
+            console.error('❌ Erro ao salvar:', {
+              status: response.status,
+              error: errorText
+            });
+            
+            throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
           }
         } catch (apiError) {
-          console.warn('⚠️ Sem conexão, salvando apenas localmente:', apiError);
+          console.error('❌ Erro no auto-save:', apiError);
           setSavingStatus('error');
           
-          // Fallback: salvar no localStorage
-          localStorage.setItem('checklist_backup', JSON.stringify({
-            evaluation,
-            timestamp: new Date().toISOString()
-          }));
-          
-          setLastAutoSave(new Date());
-          console.log('💾 Backup salvo localmente (offline)');
+          // Mostrar erro para o usuário
+          alert(`Erro ao salvar: ${apiError instanceof Error ? apiError.message : 'Erro desconhecido'}\n\nVerifique sua conexão e recarregue a página.`);
 
           // Limpar status após 5 segundos
           setTimeout(() => setSavingStatus('idle'), 5000);
@@ -436,31 +393,17 @@ export default function NewEvaluationPage() {
               setLastAutoSave(new Date(lastSaved));
               setSavingStatus('saved');
               console.log('💾 Rascunho salvo após alteração');
-              
-              // Backup local
-              try {
-                localStorage.setItem('checklist_backup', JSON.stringify({
-                  evaluation,
-                  draftId,
-                  timestamp: new Date().toISOString()
-                }));
-              } catch (localError) {
-                // Ignorar erro de localStorage (já salvou no servidor)
-              }
 
               setTimeout(() => setSavingStatus('idle'), 2000);
             } else {
-              throw new Error('Erro ao salvar');
+              const errorText = await response.text();
+              console.error('❌ Erro ao salvar:', response.status, errorText);
+              throw new Error(`HTTP ${response.status}`);
             }
           } catch (apiError) {
-            // Fallback: localStorage
-            localStorage.setItem('checklist_backup', JSON.stringify({
-              evaluation,
-              timestamp: new Date().toISOString()
-            }));
-            setLastAutoSave(new Date());
-            setSavingStatus('idle');
-            console.log('💾 Backup local salvo (offline)');
+            console.error('❌ Erro no auto-save debounced:', apiError);
+            setSavingStatus('error');
+            setTimeout(() => setSavingStatus('idle'), 3000);
           }
         } catch (e) {
           console.error('Erro ao salvar:', e);
@@ -652,16 +595,6 @@ export default function NewEvaluationPage() {
       lastPestControl: lastPestControl || undefined,
     };
 
-    // 💾 Salvar backup no LocalStorage antes de tentar enviar
-    try {
-      localStorage.setItem('checklist_backup', JSON.stringify({
-        evaluation,
-        timestamp: new Date().toISOString(),
-      }));
-    } catch (e) {
-      console.warn('Não foi possível salvar backup local:', e);
-    }
-
     try {
       const response = await fetch('/api/checklist/evaluations', {
         method: 'POST',
@@ -694,11 +627,8 @@ export default function NewEvaluationPage() {
 
       const result = await response.json();
       
-      // ✅ Sucesso! Limpar backup e deletar rascunho
+      // ✅ Sucesso! Deletar rascunho do servidor
       try {
-        localStorage.removeItem('checklist_backup');
-        
-        // Deletar rascunho do servidor
         if (currentDraftId) {
           await fetch(`/api/checklist/drafts/${currentDraftId}`, {
             method: 'DELETE',
@@ -706,7 +636,7 @@ export default function NewEvaluationPage() {
           console.log('🗑️ Rascunho deletado do servidor');
         }
       } catch (e) {
-        console.warn('Não foi possível limpar backup/rascunho:', e);
+        console.warn('Não foi possível deletar rascunho:', e);
       }
 
       router.push(`/checklist/relatorio/${result.evaluationId}`);
@@ -715,24 +645,20 @@ export default function NewEvaluationPage() {
       
       // 🚨 Tratamento especial para sessão expirada
       if (error instanceof Error && error.message === 'SESSAO_EXPIRADA') {
-        const confirmar = confirm(
+        alert(
           '⏰ Sua sessão expirou após muito tempo sem atividade.\n\n' +
-          '✅ Seus dados foram salvos localmente!\n\n' +
-          'Clique OK para fazer login novamente e recuperar seu checklist.\n\n' +
-          '⚠️ Não feche esta página ou perderá os dados!'
+          'Clique OK para fazer login novamente.\n\n' +
+          '⚠️ Você perderá o progresso atual!'
         );
         
-        if (confirmar) {
-          // Redirecionar para login mantendo a URL atual
-          window.location.href = `/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`;
-        }
+        // Redirecionar para login
+        window.location.href = `/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`;
       } else {
         // Outros erros
         alert(
           '❌ Erro ao salvar avaliação.\n\n' +
           (error instanceof Error ? error.message : 'Erro desconhecido') + '\n\n' +
-          '💾 Seus dados foram salvos localmente como backup.\n' +
-          'Tente novamente ou recarregue a página.'
+          'Verifique sua conexão e tente novamente.'
         );
       }
     } finally {
@@ -756,56 +682,6 @@ export default function NewEvaluationPage() {
 
           <div className="bg-[#141415] rounded-2xl shadow-xl p-8 border border-[#374151]">
             <h1 className="text-3xl font-bold text-white mb-6">Nova Avaliação</h1>
-            
-            {/* 🧪 Botão de Debug (remover depois) */}
-            <button
-              onClick={() => {
-                const backup = localStorage.getItem('checklist_backup');
-                if (backup) {
-                  const data = JSON.parse(backup);
-                  
-                  // 🔍 Encontrar itens "FORA DO PADRÃO" com dados
-                  const itemsForaComDados: any[] = [];
-                  data.evaluation.topics?.forEach((topic: any) => {
-                    topic.items?.forEach((item: any) => {
-                      if (item.status === 'FORA DO PADRÃO' && (
-                        (item.observations && item.observations.trim() !== '') ||
-                        (item.photoUrls && item.photoUrls.length > 0)
-                      )) {
-                        itemsForaComDados.push({
-                          topico: topic.topicName,
-                          item: item.itemName,
-                          comentario: item.observations?.substring(0, 30) || '',
-                          fotos: item.photoUrls?.length || 0
-                        });
-                      }
-                    });
-                  });
-                  
-                  console.log('📦 Backup completo:', data);
-                  console.log('🔴 Itens FORA DO PADRÃO com dados:', itemsForaComDados);
-                  
-                  let mensagem = `📦 Backup encontrado!\n\n`;
-                  mensagem += `Loja: ${data.evaluation.storeName}\n`;
-                  mensagem += `Salvo: ${new Date(data.timestamp).toLocaleString('pt-BR')}\n\n`;
-                  mensagem += `🔴 Itens "FORA DO PADRÃO" com dados: ${itemsForaComDados.length}\n\n`;
-                  
-                  if (itemsForaComDados.length > 0) {
-                    mensagem += `Exemplos:\n`;
-                    itemsForaComDados.slice(0, 3).forEach((i: any) => {
-                      mensagem += `- ${i.item}\n  Comentário: ${i.comentario || '(vazio)'}\n  Fotos: ${i.fotos}\n`;
-                    });
-                  }
-                  
-                  alert(mensagem);
-                } else {
-                  alert('❌ Nenhum backup encontrado no localStorage');
-                }
-              }}
-              className="w-full mb-4 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-            >
-              🧪 Debug: Ver Backup Salvo
-            </button>
             
             <div className="space-y-6">
               {stores.length > 0 && (
