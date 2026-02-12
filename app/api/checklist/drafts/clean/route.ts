@@ -1,25 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
+import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 
 // 🧹 ENDPOINT TEMPORÁRIO - Limpar todos os rascunhos do usuário
 // Útil para resolver problemas de constraint ou dados corrompidos
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await stackServerApp.getUser({ or: 'return-null' });
-    if (!user) {
+    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
+    if (!stackUser) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
+
+    // Sincronizar StackUser com User do banco
+    const dbUser = await syncStackAuthUser({
+      id: stackUser.id,
+      primaryEmail: stackUser.primaryEmail || undefined,
+      displayName: stackUser.displayName || undefined,
+      profileImageUrl: stackUser.profileImageUrl || undefined,
+      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
+    });
 
     // Deletar TODOS os rascunhos do usuário
     const result = await prisma.checklistDraft.deleteMany({
       where: {
-        userId: user.id,
+        userId: dbUser.id,
       },
     });
 
-    console.log(`🧹 ${result.count} rascunho(s) do usuário ${user.id} foram deletados`);
+    console.log(`🧹 ${result.count} rascunho(s) do usuário ${dbUser.id} foram deletados`);
 
     return NextResponse.json({
       success: true,

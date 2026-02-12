@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
+import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 
 // ⚙️ Configuração - Aumentar limite de body para 50MB
 export const config = {
@@ -18,10 +19,19 @@ export const dynamic = 'force-dynamic';
 // 🎯 POST - Salvar/Atualizar rascunho do checklist
 export async function POST(request: NextRequest) {
   try {
-    const user = await stackServerApp.getUser({ or: 'return-null' });
-    if (!user) {
+    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
+    if (!stackUser) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
+
+    // Sincronizar StackUser com User do banco
+    const dbUser = await syncStackAuthUser({
+      id: stackUser.id,
+      primaryEmail: stackUser.primaryEmail || undefined,
+      displayName: stackUser.displayName || undefined,
+      profileImageUrl: stackUser.profileImageUrl || undefined,
+      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
+    });
 
     const data = await request.json();
     const evaluation = data.evaluation;
@@ -98,11 +108,11 @@ export async function POST(request: NextRequest) {
     const existingDraft = await prisma.checklistDraft.findFirst({
       where: storeId 
         ? {
-            userId: user.id,
+            userId: dbUser.id,
             storeId: storeId,
           }
         : {
-            userId: user.id,
+            userId: dbUser.id,
             storeId: null,
           },
       orderBy: {
@@ -140,7 +150,7 @@ export async function POST(request: NextRequest) {
       // Criar novo draft
       draft = await prisma.checklistDraft.create({
         data: {
-          userId: user.id,
+          userId: dbUser.id,
           ...draftData,
         },
       });
@@ -197,15 +207,24 @@ export async function POST(request: NextRequest) {
 // 🎯 GET - Buscar rascunhos do usuário
 export async function GET(request: NextRequest) {
   try {
-    const user = await stackServerApp.getUser({ or: 'return-null' });
-    if (!user) {
+    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
+    if (!stackUser) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
+
+    // Sincronizar StackUser com User do banco
+    const dbUser = await syncStackAuthUser({
+      id: stackUser.id,
+      primaryEmail: stackUser.primaryEmail || undefined,
+      displayName: stackUser.displayName || undefined,
+      profileImageUrl: stackUser.profileImageUrl || undefined,
+      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
+    });
 
     // Buscar rascunhos não expirados
     const drafts = await prisma.checklistDraft.findMany({
       where: {
-        userId: user.id,
+        userId: dbUser.id,
         expiresAt: { gte: new Date() },
       },
       orderBy: { lastSaved: 'desc' },
@@ -224,7 +243,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    console.log(`📋 ${drafts.length} rascunho(s) encontrado(s) para usuário ${user.id}`);
+    console.log(`📋 ${drafts.length} rascunho(s) encontrado(s) para usuário ${dbUser.id}`);
 
     return NextResponse.json(drafts);
   } catch (error) {

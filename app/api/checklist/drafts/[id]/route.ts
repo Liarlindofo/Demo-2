@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
+import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 
 // 🎯 GET - Recuperar rascunho específico
 export async function GET(
@@ -8,17 +9,26 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await stackServerApp.getUser({ or: 'return-null' });
-    if (!user) {
+    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
+    if (!stackUser) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
+
+    // Sincronizar StackUser com User do banco
+    const dbUser = await syncStackAuthUser({
+      id: stackUser.id,
+      primaryEmail: stackUser.primaryEmail || undefined,
+      displayName: stackUser.displayName || undefined,
+      profileImageUrl: stackUser.profileImageUrl || undefined,
+      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
+    });
 
     const { id } = await params;
 
     const draft = await prisma.checklistDraft.findFirst({
       where: {
         id,
-        userId: user.id,
+        userId: dbUser.id,
       },
     });
 
@@ -48,10 +58,19 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await stackServerApp.getUser({ or: 'return-null' });
-    if (!user) {
+    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
+    if (!stackUser) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
+
+    // Sincronizar StackUser com User do banco
+    const dbUser = await syncStackAuthUser({
+      id: stackUser.id,
+      primaryEmail: stackUser.primaryEmail || undefined,
+      displayName: stackUser.displayName || undefined,
+      profileImageUrl: stackUser.profileImageUrl || undefined,
+      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
+    });
 
     const { id } = await params;
 
@@ -59,7 +78,7 @@ export async function DELETE(
     const draft = await prisma.checklistDraft.findFirst({
       where: {
         id,
-        userId: user.id,
+        userId: dbUser.id,
       },
     });
 
