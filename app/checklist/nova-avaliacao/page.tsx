@@ -34,9 +34,7 @@ export default function NewEvaluationPage() {
   const [maintenanceList, setMaintenanceList] = useState('');
   const [improvementSuggestions, setImprovementSuggestions] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
-  const [savingStatus, setSavingStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
   useEffect(() => {
@@ -234,89 +232,6 @@ export default function NewEvaluationPage() {
     }
   }, [selectedStoreId, stores]);
 
-  // 💾 Auto-save a cada 5 minutos durante o checklist (apenas API/Database)
-  useEffect(() => {
-    if (currentStep !== 'checklist') return;
-
-    const saveNow = async () => {
-      try {
-        setSavingStatus('saving');
-        
-        const { topicsData, totalScore, maxTotalScore } = calculateScore();
-        const percentageScore = maxTotalScore > 0 ? (totalScore / maxTotalScore) * 100 : 0;
-
-        const evaluation = {
-          storeId: selectedStoreId || undefined,
-          storeName,
-          supervisorName,
-          evaluationDate,
-          topics: topicsData,
-          totalScore: percentageScore,
-          maxTotalScore,
-          maintenanceList,
-          improvementSuggestions,
-          lastOvenMaintenance: lastOvenMaintenance || undefined,
-          lastRefrigeratorMaintenance: lastRefrigeratorMaintenance || undefined,
-          lastPestControl: lastPestControl || undefined,
-        };
-
-        // 🎯 Tentar salvar no servidor (prioridade)
-        try {
-          const response = await fetch('/api/checklist/drafts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ evaluation }),
-          });
-
-          if (response.ok) {
-            const { draftId, lastSaved, totalItems, totalPhotos, totalComments } = await response.json();
-            setCurrentDraftId(draftId);
-            setLastAutoSave(new Date(lastSaved));
-            setSavingStatus('saved');
-            
-            console.log('✅ Rascunho salvo no servidor:', {
-              draftId,
-              itens: totalItems,
-              fotos: totalPhotos,
-              comentarios: totalComments
-            });
-
-            // Limpar status após 3 segundos
-            setTimeout(() => setSavingStatus('idle'), 3000);
-          } else {
-            const errorText = await response.text();
-            console.error('❌ Erro ao salvar:', {
-              status: response.status,
-              error: errorText
-            });
-            
-            throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
-          }
-        } catch (apiError) {
-          console.error('❌ Erro no auto-save:', apiError);
-          setSavingStatus('error');
-          
-          // Mostrar erro para o usuário
-          alert(`Erro ao salvar: ${apiError instanceof Error ? apiError.message : 'Erro desconhecido'}\n\nVerifique sua conexão e recarregue a página.`);
-
-          // Limpar status após 5 segundos
-          setTimeout(() => setSavingStatus('idle'), 5000);
-        }
-      } catch (e) {
-        console.error('❌ Erro no auto-save:', e);
-        setSavingStatus('error');
-        setTimeout(() => setSavingStatus('idle'), 5000);
-      }
-    };
-
-    // Salvar IMEDIATAMENTE ao entrar no checklist
-    saveNow();
-    console.log('💾 Primeiro auto-save realizado');
-
-    const autoSaveInterval = setInterval(saveNow, 5 * 60 * 1000); // 5 minutos
-
-    return () => clearInterval(autoSaveInterval);
-  }, [currentStep, evaluations, topicObservations, maintenanceList, improvementSuggestions]);
 
   const fetchStores = async () => {
     try {
@@ -354,95 +269,6 @@ export default function NewEvaluationPage() {
     setEvaluations(newEvaluations);
     
     console.log('✅ Item salvo no Map:', { topicId, itemId, status });
-
-    // 💾 Salvar imediatamente após marcar um item (incremental se tiver draftId)
-    if (currentStep === 'checklist') {
-      setTimeout(async () => {
-        try {
-          setSavingStatus('saving');
-          
-          // Se já tem draftId, usar PATCH incremental (apenas mudanças)
-          if (currentDraftId) {
-            try {
-              const response = await fetch('/api/checklist/drafts', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  draftId: currentDraftId,
-                  changes: {
-                    itemUpdate: {
-                      topicId,
-                      itemId,
-                      status,
-                      observations,
-                      photoUrls,
-                    },
-                  },
-                }),
-              });
-
-              if (response.ok) {
-                const { lastSaved } = await response.json();
-                setLastAutoSave(new Date(lastSaved));
-                setSavingStatus('saved');
-                console.log('💾 Item atualizado incrementalmente');
-                setTimeout(() => setSavingStatus('idle'), 2000);
-                return; // Sucesso, sair
-              } else {
-                // Se PATCH falhar, tentar POST completo
-                console.warn('⚠️ PATCH falhou, tentando POST completo...');
-              }
-            } catch (patchError) {
-              // Se PATCH falhar, tentar POST completo
-              console.warn('⚠️ Erro no PATCH, tentando POST completo...', patchError);
-            }
-          }
-
-          // POST completo (fallback ou primeiro save)
-          const { topicsData, totalScore, maxTotalScore } = calculateScore();
-          const percentageScore = maxTotalScore > 0 ? (totalScore / maxTotalScore) * 100 : 0;
-
-          const evaluation = {
-            storeId: selectedStoreId || undefined,
-            storeName,
-            supervisorName,
-            evaluationDate,
-            topics: topicsData,
-            totalScore: percentageScore,
-            maxTotalScore,
-            maintenanceList,
-            improvementSuggestions,
-            lastOvenMaintenance: lastOvenMaintenance || undefined,
-            lastRefrigeratorMaintenance: lastRefrigeratorMaintenance || undefined,
-            lastPestControl: lastPestControl || undefined,
-          };
-
-          const response = await fetch('/api/checklist/drafts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ evaluation }),
-          });
-
-          if (response.ok) {
-            const { draftId, lastSaved } = await response.json();
-            setCurrentDraftId(draftId);
-            setLastAutoSave(new Date(lastSaved));
-            setSavingStatus('saved');
-            console.log('💾 Rascunho salvo (POST completo)');
-            setTimeout(() => setSavingStatus('idle'), 2000);
-          } else {
-            const errorText = await response.text();
-            console.error('❌ Erro ao salvar:', response.status, errorText);
-            setSavingStatus('error');
-            setTimeout(() => setSavingStatus('idle'), 3000);
-          }
-        } catch (e) {
-          console.error('Erro ao salvar:', e);
-          setSavingStatus('error');
-          setTimeout(() => setSavingStatus('idle'), 3000);
-        }
-      }, 500); // 500ms de debounce
-    }
   };
 
   const handlePhotoUpload = async (topicId: string, itemId: string, files: FileList) => {
@@ -484,48 +310,6 @@ export default function NewEvaluationPage() {
       // Atualizar estado local
       if (currentEval) {
         setItemEvaluation(topicId, itemId, currentEval.status, currentEval.observations, updatedPhotos);
-      }
-
-      // 💾 Salvar imediatamente cada foto (PATCH incremental se tiver draftId)
-      if (currentDraftId) {
-        try {
-          setSavingStatus('saving');
-          
-          const response = await fetch('/api/checklist/drafts', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              draftId: currentDraftId,
-              changes: {
-                itemUpdate: {
-                  topicId,
-                  itemId,
-                  photoUrls: updatedPhotos, // Apenas as fotos deste item
-                },
-              },
-            }),
-          });
-
-          if (response.ok) {
-            const { lastSaved } = await response.json();
-            setLastAutoSave(new Date(lastSaved));
-            setSavingStatus('saved');
-            console.log('💾 Foto(s) salva(s) incrementalmente');
-            setTimeout(() => setSavingStatus('idle'), 2000);
-          } else {
-            // Se PATCH falhar, o auto-save vai tentar POST completo depois
-            console.warn('⚠️ Erro ao salvar foto incrementalmente, será salvo no próximo auto-save');
-            setSavingStatus('idle');
-          }
-        } catch (error) {
-          console.warn('⚠️ Erro ao salvar foto incrementalmente:', error);
-          setSavingStatus('idle');
-          // O auto-save vai tentar salvar depois
-        }
-      } else {
-        // Se não tem draftId, criar um primeiro (POST completo)
-        // Isso vai acontecer no próximo auto-save
-        console.log('💡 Draft ainda não criado, será criado no próximo auto-save');
       }
     } catch (error) {
       console.error('Error uploading photo:', error);
@@ -891,34 +675,6 @@ export default function NewEvaluationPage() {
               <div>
                 <h2 className="text-2xl font-bold text-white">{storeName}</h2>
                 <p className="text-gray-400">Supervisor: {supervisorName}</p>
-                
-                {/* Indicador de status de salvamento */}
-                <div className="mt-2 flex items-center gap-2">
-                  {savingStatus === 'saving' && (
-                    <p className="text-xs text-blue-400 flex items-center gap-1 animate-pulse">
-                      <span className="inline-block w-2 h-2 bg-blue-400 rounded-full animate-ping"></span>
-                      <span>Salvando...</span>
-                    </p>
-                  )}
-                  {savingStatus === 'saved' && lastAutoSave && (
-                    <p className="text-xs text-green-400 flex items-center gap-1">
-                      <span>✅</span>
-                      <span>Salvo às {lastAutoSave.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </p>
-                  )}
-                  {savingStatus === 'error' && (
-                    <p className="text-xs text-red-400 flex items-center gap-1">
-                      <span>⚠️</span>
-                      <span>Erro ao salvar (usando backup local)</span>
-                    </p>
-                  )}
-                  {savingStatus === 'idle' && lastAutoSave && (
-                    <p className="text-xs text-gray-400 flex items-center gap-1">
-                      <span>💾</span>
-                      <span>Último salvamento: {lastAutoSave.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </p>
-                  )}
-                </div>
               </div>
               <div className="text-right">
                 <div className="text-3xl font-bold text-green-400">
