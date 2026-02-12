@@ -18,9 +18,29 @@ export async function POST(request: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!supabaseUrl || !supabaseServiceKey) {
+    if (!supabaseUrl) {
+      console.error('NEXT_PUBLIC_SUPABASE_URL não configurada');
       return NextResponse.json(
-        { error: 'Supabase não configurado. Configure NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY' },
+        { error: 'NEXT_PUBLIC_SUPABASE_URL não configurada. Adicione no .env.local' },
+        { status: 500 }
+      );
+    }
+
+    if (!supabaseServiceKey) {
+      console.error('SUPABASE_SERVICE_ROLE_KEY não configurada');
+      return NextResponse.json(
+        { error: 'SUPABASE_SERVICE_ROLE_KEY não configurada. Adicione no .env.local' },
+        { status: 500 }
+      );
+    }
+
+    // Validar formato da URL
+    try {
+      new URL(supabaseUrl);
+    } catch (e) {
+      console.error('URL do Supabase inválida:', supabaseUrl);
+      return NextResponse.json(
+        { error: `URL do Supabase inválida: ${supabaseUrl}. Deve ser uma URL HTTP/HTTPS válida.` },
         { status: 500 }
       );
     }
@@ -50,10 +70,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Nome do bucket (ajuste conforme seu bucket no Supabase)
+    const bucketName = 'checklist';
+
     // Gerar nome único para o arquivo
     const fileExt = file.name.split('.').pop();
     const fileName = `${stackUser.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `checklist-photos/${fileName}`;
 
     // Converter File para ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
@@ -61,8 +83,8 @@ export async function POST(request: NextRequest) {
 
     // Upload para Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('checklist-photos')
-      .upload(filePath, buffer, {
+      .from(bucketName)
+      .upload(fileName, buffer, {
         contentType: file.type,
         upsert: false, // Não sobrescrever arquivos existentes
       });
@@ -77,15 +99,15 @@ export async function POST(request: NextRequest) {
 
     // Obter URL pública da imagem
     const { data: urlData } = supabase.storage
-      .from('checklist-photos')
-      .getPublicUrl(filePath);
+      .from(bucketName)
+      .getPublicUrl(fileName);
 
     const publicUrl = urlData.publicUrl;
 
     return NextResponse.json({
       success: true,
       url: publicUrl,
-      path: filePath,
+      path: fileName,
       size: file.size,
     });
   } catch (error) {
