@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNotification } from "@/components/ui/notification";
-import { Lock, Mail } from "lucide-react";
+import { Lock, Mail, ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -108,10 +109,17 @@ export default function AdminLoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-2">
             <p className="text-xs text-gray-500">
               Acesso restrito ao pessoal autorizado
             </p>
+            <Link
+              href="/calenza-adm/setup"
+              className="text-xs text-[#001F05] hover:text-[#001F05]/80 flex items-center justify-center gap-1"
+            >
+              Primeira vez? Configure o usuário master
+              <ExternalLink className="h-3 w-3" />
+            </Link>
           </div>
         </div>
       </div>
