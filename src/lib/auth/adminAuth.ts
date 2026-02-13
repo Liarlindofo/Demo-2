@@ -7,6 +7,11 @@ import { UserRole, Permission, AdminSession } from '@/types/admin';
 const JWT_SECRET = process.env.ADMIN_JWT_SECRET || 'change-this-secret-in-production-min-32-chars';
 const SESSION_DURATION = 2 * 60 * 60; // 2 horas em segundos
 
+// Validar JWT_SECRET
+if (!process.env.ADMIN_JWT_SECRET || process.env.ADMIN_JWT_SECRET.length < 32) {
+  console.warn('⚠️ ADMIN_JWT_SECRET não configurado ou muito curto. Use uma chave de pelo menos 32 caracteres em produção!');
+}
+
 export function hasMinimumRole(userRole: UserRole, minRole: UserRole): boolean {
   const hierarchy = {
     [UserRole.SUPER_ADMIN]: 3,
@@ -42,18 +47,34 @@ export async function createAdminSession(user: {
     exp: Math.floor(Date.now() / 1000) + SESSION_DURATION,
   };
 
-  const token = jwt.sign(session, JWT_SECRET, {
-    expiresIn: SESSION_DURATION,
-  });
+  let token: string;
+  try {
+    token = jwt.sign(session, JWT_SECRET, {
+      expiresIn: SESSION_DURATION,
+    });
+  } catch (jwtError) {
+    console.error('Erro ao assinar JWT:', jwtError);
+    throw new Error('Erro ao criar token de sessão. Verifique ADMIN_JWT_SECRET.');
+  }
 
   // Salvar sessão no banco
-  await prisma.adminSession.create({
-    data: {
-      userId: user.id,
-      token,
-      expiresAt: new Date(Date.now() + SESSION_DURATION * 1000),
-    },
-  });
+  try {
+    await prisma.adminSession.create({
+      data: {
+        userId: user.id,
+        token,
+        expiresAt: new Date(Date.now() + SESSION_DURATION * 1000),
+      },
+    });
+  } catch (dbError: any) {
+    console.error('Erro ao salvar sessão no banco:', dbError);
+    // Se for erro de constraint ou similar, ainda retornar o token
+    if (dbError?.code === 'P2002') {
+      console.warn('Sessão já existe, continuando...');
+    } else {
+      throw new Error('Erro ao salvar sessão no banco de dados');
+    }
+  }
 
   return token;
 }
@@ -157,17 +178,22 @@ export async function createAuditLog(data: {
   ipAddress?: string;
   userAgent?: string;
 }): Promise<void> {
-  await prisma.adminAuditLog.create({
-    data: {
-      userId: data.userId,
-      action: data.action,
-      entityType: data.entityType || null,
-      entityId: data.entityId || null,
-      details: data.details || {},
-      ipAddress: data.ipAddress || null,
-      userAgent: data.userAgent || null,
-    },
-  });
+  try {
+    await prisma.adminAuditLog.create({
+      data: {
+        userId: data.userId,
+        action: data.action,
+        entityType: data.entityType || null,
+        entityId: data.entityId || null,
+        details: data.details || {},
+        ipAddress: data.ipAddress || null,
+        userAgent: data.userAgent || null,
+      },
+    });
+  } catch (error) {
+    // Não bloquear operações por erro em log de auditoria
+    console.error('Erro ao criar log de auditoria:', error);
+  }
 }
 
 export function getClientIp(request: NextRequest): string {

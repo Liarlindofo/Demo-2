@@ -57,13 +57,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Buscar usuário
-    const user = await prisma.adminUser.findUnique({
-      where: { email: email.trim().toLowerCase() },
+    // Buscar usuário (tentar exato primeiro, depois lowercase)
+    const emailTrimmed = email.trim();
+    let user = await prisma.adminUser.findUnique({
+      where: { email: emailTrimmed },
       include: {
         permissions: true,
       },
     });
+
+    // Se não encontrar, tentar lowercase
+    if (!user) {
+      user = await prisma.adminUser.findUnique({
+        where: { email: emailTrimmed.toLowerCase() },
+        include: {
+          permissions: true,
+        },
+      });
+    }
 
     if (!user) {
       await createAuditLog({
@@ -115,38 +126,72 @@ export async function POST(request: NextRequest) {
     }
 
     // Criar sessão
-    const token = await createAdminSession({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      clientId: user.clientId,
-      permissions: user.permissions,
-    });
+    let token: string;
+    try {
+      token = await createAdminSession({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        clientId: user.clientId,
+        permissions: user.permissions,
+      });
+    } catch (sessionError) {
+      console.error('Erro ao criar sessão:', sessionError);
+      return NextResponse.json(
+        { error: 'Erro ao criar sessão. Verifique ADMIN_JWT_SECRET no .env' },
+        { status: 500 }
+      );
+    }
 
     // Atualizar último login
-    await prisma.adminUser.update({
-      where: { id: user.id },
-      data: { lastLogin: new Date() },
-    });
+    try {
+      await prisma.adminUser.update({
+        where: { id: user.id },
+        data: { lastLogin: new Date() },
+      });
+    } catch (updateError) {
+      console.error('Erro ao atualizar último login:', updateError);
+      // Não bloquear o login por isso, apenas logar
+    }
 
-    // Log de sucesso
-    await createAuditLog({
-      userId: user.id,
-      action: 'login_success',
-      details: { email },
-      ipAddress: ip,
-      userAgent,
-    });
+    // Log de sucesso (não bloquear se falhar)
+    try {
+      await createAuditLog({
+        userId: user.id,
+        action: 'login_success',
+        details: { email },
+        ipAddress: ip,
+        userAgent,
+      });
+    } catch (logError) {
+      console.error('Erro ao criar log de auditoria:', logError);
+      // Não bloquear o login por isso
+    }
 
     // Definir cookie
-    const cookieStore = await cookies();
-    cookieStore.set('admin_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 2 * 60 * 60, // 2 horas
-      path: '/',
-    });
+    try {
+      const cookieStore = await cookies();
+      cookieStore.set('admin_token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 2 * 60 * 60, // 2 horas
+        path: '/',
+      });
+    } catch (cookieError) {
+      console.error('Erro ao definir cookie:', cookieError);
+      // Retornar token no body como fallback
+      return NextResponse.json({
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        },
+        token, // Enviar token no body se cookie falhar
+      });
+    }
 
     return NextResponse.json({
       success: true,
@@ -157,10 +202,14 @@ export async function POST(request: NextRequest) {
         role: user.role,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro no login:', error);
+    console.error('Stack:', error?.stack);
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { 
+        error: 'Erro interno do servidor',
+        details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+      },
       { status: 500 }
     );
   }

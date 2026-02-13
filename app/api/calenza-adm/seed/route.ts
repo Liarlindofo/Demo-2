@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     // Criar admin master
     const admin = await prisma.adminUser.create({
       data: {
-        email: 'plateclz',
+        email: 'plateclz', // Manter exatamente como está (sem lowercase)
         passwordHash,
         name: 'Admin Master',
         role: UserRole.SUPER_ADMIN,
@@ -31,15 +31,26 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    console.log('✅ Admin master criado:', {
+      id: admin.id,
+      email: admin.email,
+      role: admin.role,
+    });
+
     return NextResponse.json({
       success: true,
       message: 'Admin master criado com sucesso',
       userId: admin.id,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro ao criar admin master:', error);
+    console.error('Stack:', error?.stack);
     return NextResponse.json(
-      { error: 'Erro ao criar admin master' },
+      { 
+        error: 'Erro ao criar admin master',
+        details: process.env.NODE_ENV === 'development' ? error?.message : undefined,
+        code: error?.code
+      },
       { status: 500 }
     );
   }
