@@ -48,14 +48,14 @@ export async function createAdminSession(user: {
     select: { name: true },
   });
 
-  const session: AdminSession = {
+  // Criar payload do JWT (sem exp, será adicionado automaticamente pelo jwt.sign)
+  const sessionPayload = {
     userId: user.id,
     email: user.email,
     name: userWithName?.name,
     role: user.role as UserRole,
     clientId: user.clientId || undefined,
     permissions,
-    exp: Math.floor(Date.now() / 1000) + SESSION_DURATION,
   };
 
   let token: string;
@@ -63,7 +63,8 @@ export async function createAdminSession(user: {
     const jwtSecret = getJwtSecret();
     console.log('🔑 JWT_SECRET configurado:', jwtSecret.substring(0, 10) + '...');
     
-    token = jwt.sign(session, jwtSecret, {
+    // Usar expiresIn nas opções - o JWT library adiciona exp automaticamente
+    token = jwt.sign(sessionPayload, jwtSecret, {
       expiresIn: SESSION_DURATION,
     });
     
@@ -133,10 +134,10 @@ export async function verifyAdminSession(
 
     // Verificar JWT
     const jwtSecret = getJwtSecret();
-    const decoded = jwt.verify(token, jwtSecret) as AdminSession;
+    const decoded = jwt.verify(token, jwtSecret) as AdminSession & { exp?: number };
 
-    // Verificar se sessão expirou
-    if (decoded.exp < Date.now() / 1000) {
+    // Verificar se sessão expirou (exp é adicionado automaticamente pelo JWT)
+    if (decoded.exp && decoded.exp < Date.now() / 1000) {
       return null;
     }
 

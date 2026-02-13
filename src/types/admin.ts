@@ -43,7 +43,7 @@ export interface AdminSession {
   role: UserRole;
   clientId?: string;
   permissions: Permission[];
-  exp: number;
+  exp?: number; // Opcional - será adicionado automaticamente pelo JWT
 }
 
 export interface AdminClient {
