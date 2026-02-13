@@ -55,22 +55,34 @@ async function getDashboardData() {
 }
 
 export default async function AdminPage() {
-  // Verificar autenticação
-  const headersList = await headers();
-  const request = new NextRequest(
-    new URL(`http://localhost${headersList.get("x-pathname") || "/calenza-adm"}`),
-    {
-      headers: headersList as any,
+  try {
+    // Verificar autenticação
+    const headersList = await headers();
+    const pathname = headersList.get("x-pathname") || "/calenza-adm";
+    const cookieHeader = headersList.get("cookie") || "";
+    
+    const request = new NextRequest(
+      new URL(`http://localhost${pathname}`),
+      {
+        headers: {
+          cookie: cookieHeader,
+        } as any,
+      }
+    );
+
+    const session = await verifyAdminSession(request);
+
+    if (!session) {
+      redirect("/calenza-adm/login");
+      return null;
     }
-  );
 
-  const session = await verifyAdminSession(request);
+    const dashboardData = await getDashboardData();
 
-  if (!session) {
+    return <AdminDashboard session={session} data={dashboardData} />;
+  } catch (error) {
+    console.error("Erro na página admin:", error);
     redirect("/calenza-adm/login");
+    return null;
   }
-
-  const dashboardData = await getDashboardData();
-
-  return <AdminDashboard session={session} data={dashboardData} />;
 }

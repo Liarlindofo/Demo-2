@@ -55,24 +55,25 @@ export default function AdminLoginPage() {
             <p className="text-gray-400">Painel Administrativo</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6" noValidate>
             <div>
               <Label htmlFor="email" className="text-gray-300 mb-2 block">
-                Email
+                Email ou Usuário
               </Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <Input
                   id="email"
-                  type="email"
+                  type="text"
                   value={formData.email}
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
                   }
                   required
                   className="pl-10 bg-[#0f0f10] border-[#374151] text-white"
-                  placeholder="seu@email.com"
+                  placeholder="plateclz ou seu@email.com"
                   disabled={loading}
+                  autoComplete="username"
                 />
               </div>
             </div>
