@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useNotification } from "@/components/ui/notification";
 import type { Produto, Categoria } from "@/types/etiquetagem";
 
 export default function ProdutosPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const unidadeId = searchParams.get("unidade");
+  const { showNotification, NotificationContainer } = useNotification();
 
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -112,7 +114,21 @@ export default function ProdutosPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Erro ao salvar produto");
+        const errorMessage = errorData.error || "Erro ao salvar produto";
+        
+        // Mensagem amigável baseada no tipo de erro
+        let mensagemAmigavel = errorMessage;
+        if (errorMessage.includes('já existe')) {
+          mensagemAmigavel = `O produto "${formData.nome}" já existe no sistema.`;
+        } else if (errorMessage.includes('Categoria não encontrada')) {
+          mensagemAmigavel = 'A categoria selecionada não é válida.';
+        } else if (errorMessage.includes('Peso padrão')) {
+          mensagemAmigavel = 'O peso padrão deve ser um número maior que zero.';
+        } else if (errorMessage.includes('Unidade de medida')) {
+          mensagemAmigavel = 'A unidade de medida selecionada não é válida.';
+        }
+        
+        throw new Error(mensagemAmigavel);
       }
 
       setShowModal(false);
@@ -125,9 +141,15 @@ export default function ProdutosPage() {
         tipoArmazenamentoPadrao: "",
       });
       await loadData();
+      showNotification(
+        editingProduct ? "Produto atualizado com sucesso!" : "Produto criado com sucesso!",
+        "success"
+      );
     } catch (error) {
       console.error("Erro ao salvar produto:", error);
-      setError(error instanceof Error ? error.message : "Erro ao salvar produto");
+      const errorMessage = error instanceof Error ? error.message : "Erro ao salvar produto";
+      setError(errorMessage);
+      showNotification(errorMessage, "error");
     } finally {
       setSaving(false);
     }
@@ -155,9 +177,10 @@ export default function ProdutosPage() {
 
       if (!response.ok) throw new Error("Erro ao excluir produto");
       await loadData();
+      showNotification("Produto excluído com sucesso!", "success");
     } catch (error) {
       console.error("Erro ao excluir produto:", error);
-      alert("Erro ao excluir produto");
+      showNotification("Erro ao excluir produto. Tente novamente.", "error");
     }
   };
 
@@ -230,7 +253,8 @@ export default function ProdutosPage() {
     } catch (error) {
       console.error('❌ Erro ao importar:', error);
       setImporting(false);
-      alert(error instanceof Error ? error.message : 'Erro ao importar arquivo');
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao importar arquivo';
+      showNotification(errorMessage, "error");
     } finally {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -286,9 +310,22 @@ export default function ProdutosPage() {
             const mensagemErro = errorData.error || 'Erro desconhecido';
             console.error(`Erro ao salvar ${produto.nome}:`, errorData);
             erros++;
+            
+            // Mensagem amigável baseada no tipo de erro
+            let mensagemAmigavel = mensagemErro;
+            if (mensagemErro.includes('já existe')) {
+              mensagemAmigavel = `O produto "${produto.nome}" já existe no sistema.`;
+            } else if (mensagemErro.includes('Categoria não encontrada')) {
+              mensagemAmigavel = `Categoria inválida para o produto "${produto.nome}".`;
+            } else if (mensagemErro.includes('Peso padrão')) {
+              mensagemAmigavel = `Peso inválido para o produto "${produto.nome}".`;
+            } else if (mensagemErro.includes('Unidade de medida')) {
+              mensagemAmigavel = `Unidade de medida inválida para o produto "${produto.nome}".`;
+            }
+            
             errosDetalhados.push({
               nome: produto.nome,
-              erro: mensagemErro
+              erro: mensagemAmigavel
             });
           }
         } catch (error) {
@@ -307,21 +344,39 @@ export default function ProdutosPage() {
       await loadData();
       
       if (erros === 0) {
-        alert(`✅ Importação concluída com sucesso!\n${sucessos} produtos salvos`);
+        showNotification(
+          `Importação concluída com sucesso! ${sucessos} produto${sucessos !== 1 ? 's' : ''} salvo${sucessos !== 1 ? 's' : ''}.`,
+          "success"
+        );
       } else {
-        // Mostrar mensagem com detalhes dos erros
-        const mensagemErros = errosDetalhados
-          .slice(0, 10) // Limitar a 10 erros para não sobrecarregar
-          .map(e => `• ${e.nome}: ${e.erro}`)
-          .join('\n');
+        // Mostrar notificação de resumo
+        const mensagemResumo = `Importação concluída: ${sucessos} produto${sucessos !== 1 ? 's' : ''} salvo${sucessos !== 1 ? 's' : ''}, ${erros} erro${erros !== 1 ? 's' : ''}.`;
         
-        const mensagemCompleta = `Importação concluída\n\n✅ ${sucessos} produtos salvos\n❌ ${erros} erros${errosDetalhados.length > 0 ? '\n\nErros encontrados:\n' + mensagemErros + (erros > 10 ? `\n\n... e mais ${erros - 10} erros` : '') : ''}`;
+        if (sucessos > 0) {
+          showNotification(mensagemResumo, "warning");
+        } else {
+          showNotification(mensagemResumo, "error");
+        }
         
-        alert(mensagemCompleta);
+        // Mostrar erros individuais (limitado a 5 para não sobrecarregar)
+        errosDetalhados.slice(0, 5).forEach((erro, index) => {
+          setTimeout(() => {
+            showNotification(`${erro.nome}: ${erro.erro}`, "error");
+          }, (index + 1) * 500);
+        });
+        
+        if (errosDetalhados.length > 5) {
+          setTimeout(() => {
+            showNotification(
+              `... e mais ${errosDetalhados.length - 5} erro${errosDetalhados.length - 5 !== 1 ? 's' : ''}. Verifique o console para mais detalhes.`,
+              "info"
+            );
+          }, (5 + 1) * 500);
+        }
       }
     } catch (error) {
       console.error('Erro ao salvar produtos:', error);
-      alert('Erro ao salvar produtos');
+      showNotification('Erro ao salvar produtos. Tente novamente.', "error");
     } finally {
       setSaving(false);
     }
@@ -677,13 +732,13 @@ export default function ProdutosPage() {
                         const data = await response.json();
                         if (response.ok || data.message?.includes('já foram populadas')) {
                           await loadData();
-                          alert('Categorias criadas com sucesso!');
+                          showNotification('Categorias criadas com sucesso!', "success");
                         } else {
-                          alert('Erro ao criar categorias: ' + (data.error || 'Erro desconhecido'));
+                          showNotification('Erro ao criar categorias: ' + (data.error || 'Erro desconhecido'), "error");
                         }
                       } catch (error) {
                         console.error('Erro ao criar categorias:', error);
-                        alert('Erro ao criar categorias');
+                        showNotification('Erro ao criar categorias. Tente novamente.', "error");
                       } finally {
                         setLoading(false);
                       }
@@ -906,6 +961,9 @@ export default function ProdutosPage() {
           </div>
         </div>
       )}
+
+      {/* Container de Notificações */}
+      <NotificationContainer />
     </div>
   );
 }
