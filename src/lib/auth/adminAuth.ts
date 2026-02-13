@@ -4,13 +4,24 @@ import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { UserRole, Permission, AdminSession } from '@/types/admin';
 
-const JWT_SECRET = process.env.ADMIN_JWT_SECRET || 'change-this-secret-in-production-min-32-chars';
-const SESSION_DURATION = 2 * 60 * 60; // 2 horas em segundos
-
-// Validar JWT_SECRET
-if (!process.env.ADMIN_JWT_SECRET || process.env.ADMIN_JWT_SECRET.length < 32) {
-  console.warn('⚠️ ADMIN_JWT_SECRET não configurado ou muito curto. Use uma chave de pelo menos 32 caracteres em produção!');
+// Obter JWT_SECRET com validação
+function getJwtSecret(): string {
+  const secret = process.env.ADMIN_JWT_SECRET;
+  
+  if (!secret) {
+    console.error('❌ ADMIN_JWT_SECRET não está configurado!');
+    throw new Error('ADMIN_JWT_SECRET não configurado. Configure a variável de ambiente na Vercel.');
+  }
+  
+  if (secret.length < 32) {
+    console.error('❌ ADMIN_JWT_SECRET muito curto! Mínimo 32 caracteres.');
+    throw new Error('ADMIN_JWT_SECRET deve ter pelo menos 32 caracteres.');
+  }
+  
+  return secret;
 }
+
+const SESSION_DURATION = 2 * 60 * 60; // 2 horas em segundos
 
 export function hasMinimumRole(userRole: UserRole, minRole: UserRole): boolean {
   const hierarchy = {
@@ -49,31 +60,61 @@ export async function createAdminSession(user: {
 
   let token: string;
   try {
-    token = jwt.sign(session, JWT_SECRET, {
+    const jwtSecret = getJwtSecret();
+    console.log('🔑 JWT_SECRET configurado:', jwtSecret.substring(0, 10) + '...');
+    
+    token = jwt.sign(session, jwtSecret, {
       expiresIn: SESSION_DURATION,
     });
-  } catch (jwtError) {
-    console.error('Erro ao assinar JWT:', jwtError);
-    throw new Error('Erro ao criar token de sessão. Verifique ADMIN_JWT_SECRET.');
+    
+    console.log('✅ Token JWT criado com sucesso');
+  } catch (jwtError: any) {
+    console.error('❌ Erro ao assinar JWT:', jwtError);
+    console.error('Erro detalhado:', {
+      message: jwtError?.message,
+      name: jwtError?.name,
+      stack: jwtError?.stack,
+    });
+    throw new Error(`Erro ao criar token de sessão: ${jwtError?.message || 'Erro desconhecido'}`);
   }
 
-  // Salvar sessão no banco
+  // Verificar tamanho do token
+  if (token.length > 500) {
+    console.warn('⚠️ Token JWT muito longo (' + token.length + ' chars). Limitando para 500.');
+    token = token.substring(0, 500);
+  }
+
+  // Salvar sessão no banco (não bloquear login se falhar)
   try {
+    console.log('💾 Salvando sessão no banco para usuário:', user.id);
+    console.log('📏 Tamanho do token:', token.length, 'caracteres');
+    
     await prisma.adminSession.create({
       data: {
         userId: user.id,
-        token,
+        token: token.substring(0, 500), // Garantir que não excede limite
         expiresAt: new Date(Date.now() + SESSION_DURATION * 1000),
       },
     });
+    console.log('✅ Sessão salva no banco com sucesso');
   } catch (dbError: any) {
-    console.error('Erro ao salvar sessão no banco:', dbError);
-    // Se for erro de constraint ou similar, ainda retornar o token
+    console.error('❌ Erro ao salvar sessão no banco:', dbError);
+    console.error('Detalhes do erro DB:', {
+      code: dbError?.code,
+      message: dbError?.message,
+      meta: dbError?.meta,
+    });
+    
+    // Não bloquear o login - o token JWT ainda funciona sem a sessão no banco
+    // A sessão no banco é apenas para auditoria/logout forçado
     if (dbError?.code === 'P2002') {
-      console.warn('Sessão já existe, continuando...');
+      console.warn('⚠️ Sessão já existe, continuando...');
+    } else if (dbError?.code === 'P2003') {
+      console.warn('⚠️ Foreign key constraint falhou, mas continuando (token ainda válido)');
     } else {
-      throw new Error('Erro ao salvar sessão no banco de dados');
+      console.warn('⚠️ Erro ao salvar sessão no banco, mas token JWT foi criado. Login continuará.');
     }
+    // Não lançar erro - permitir login mesmo sem sessão no banco
   }
 
   return token;
@@ -91,7 +132,8 @@ export async function verifyAdminSession(
     }
 
     // Verificar JWT
-    const decoded = jwt.verify(token, JWT_SECRET) as AdminSession;
+    const jwtSecret = getJwtSecret();
+    const decoded = jwt.verify(token, jwtSecret) as AdminSession;
 
     // Verificar se sessão expirou
     if (decoded.exp < Date.now() / 1000) {

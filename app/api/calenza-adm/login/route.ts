@@ -128,6 +128,9 @@ export async function POST(request: NextRequest) {
     // Criar sessão
     let token: string;
     try {
+      console.log('🔄 Criando sessão para usuário:', user.email);
+      console.log('🔑 ADMIN_JWT_SECRET configurado:', process.env.ADMIN_JWT_SECRET ? 'Sim (' + process.env.ADMIN_JWT_SECRET.substring(0, 10) + '...)' : 'NÃO');
+      
       token = await createAdminSession({
         id: user.id,
         email: user.email,
@@ -135,10 +138,24 @@ export async function POST(request: NextRequest) {
         clientId: user.clientId,
         permissions: user.permissions,
       });
-    } catch (sessionError) {
-      console.error('Erro ao criar sessão:', sessionError);
+      
+      console.log('✅ Sessão criada com sucesso');
+    } catch (sessionError: any) {
+      console.error('❌ Erro ao criar sessão:', sessionError);
+      console.error('Detalhes do erro:', {
+        message: sessionError?.message,
+        name: sessionError?.name,
+        stack: sessionError?.stack,
+      });
+      
+      const errorMessage = sessionError?.message || 'Erro ao criar sessão';
       return NextResponse.json(
-        { error: 'Erro ao criar sessão. Verifique ADMIN_JWT_SECRET no .env' },
+        { 
+          error: errorMessage,
+          hint: errorMessage.includes('ADMIN_JWT_SECRET') 
+            ? 'Configure ADMIN_JWT_SECRET nas variáveis de ambiente da Vercel e faça redeploy'
+            : 'Verifique os logs do servidor para mais detalhes'
+        },
         { status: 500 }
       );
     }
