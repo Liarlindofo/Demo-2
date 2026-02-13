@@ -39,6 +39,7 @@ export interface AdminUser {
 export interface AdminSession {
   userId: string;
   email: string;
+  name?: string;
   role: UserRole;
   clientId?: string;
   permissions: Permission[];
