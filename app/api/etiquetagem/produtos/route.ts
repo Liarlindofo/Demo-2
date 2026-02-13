@@ -69,20 +69,73 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (isNaN(parseFloat(pesoPadrao)) || parseFloat(pesoPadrao) <= 0) {
+    // Validar nome
+    const nomeTrimmed = nome.toString().trim();
+    if (nomeTrimmed.length < 2) {
+      return NextResponse.json(
+        { error: 'Nome do produto deve ter pelo menos 2 caracteres' },
+        { status: 400 }
+      );
+    }
+
+    // Validar peso
+    const pesoNumero = parseFloat(pesoPadrao);
+    if (isNaN(pesoNumero) || pesoNumero <= 0) {
       return NextResponse.json(
         { error: 'Peso padrão deve ser um número maior que zero' },
         { status: 400 }
       );
     }
 
+    // Validar unidade de medida
+    const unidadesValidas = ['kg', 'g', 'L', 'ml', 'un'];
+    const unidadeTrimmed = unidadeMedida.toString().trim().toLowerCase();
+    if (!unidadesValidas.includes(unidadeTrimmed)) {
+      return NextResponse.json(
+        { error: `Unidade de medida inválida. Use uma das: ${unidadesValidas.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    // Validar categoria se fornecida
+    if (categoriaId) {
+      const categoriaExiste = await prisma.etiquetagemCategoria.findFirst({
+        where: {
+          id: categoriaId,
+          isAtivo: 1,
+        },
+      });
+      if (!categoriaExiste) {
+        return NextResponse.json(
+          { error: 'Categoria não encontrada ou inativa' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Verificar se produto já existe (mesmo nome para o mesmo usuário)
+    const produtoExistente = await prisma.etiquetagemProduto.findFirst({
+      where: {
+        userId: dbUser.id,
+        nome: nomeTrimmed,
+        isAtivo: 1,
+      },
+    });
+
+    if (produtoExistente) {
+      return NextResponse.json(
+        { error: `Produto "${nomeTrimmed}" já existe` },
+        { status: 409 }
+      );
+    }
+
     const produto = await prisma.etiquetagemProduto.create({
       data: {
         userId: dbUser.id,
-        nome,
+        nome: nomeTrimmed,
         categoriaId: categoriaId || null,
-        pesoPadrao: parseFloat(pesoPadrao),
-        unidadeMedida: unidadeMedida,
+        pesoPadrao: pesoNumero,
+        unidadeMedida: unidadeTrimmed,
         marcaFornecedor: null,
         tipoArmazenamentoPadrao: tipoArmazenamentoPadrao || null,
         isAtivo: 1,
@@ -93,10 +146,28 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(produto, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro ao criar produto:', error);
+    
+    // Tratar erros específicos do Prisma
+    if (error.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'Produto duplicado. Já existe um produto com este nome.' },
+        { status: 409 }
+      );
+    }
+
+    if (error.code === 'P2003') {
+      return NextResponse.json(
+        { error: 'Categoria inválida ou não encontrada' },
+        { status: 400 }
+      );
+    }
+
+    // Retornar mensagem de erro mais específica se disponível
+    const errorMessage = error.message || 'Erro interno do servidor';
     return NextResponse.json(
-      { error: 'Erro interno do servidor' },
+      { error: errorMessage },
       { status: 500 }
     );
   }

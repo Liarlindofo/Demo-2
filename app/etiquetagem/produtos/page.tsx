@@ -243,12 +243,30 @@ export default function ProdutosPage() {
       setSaving(true);
       let sucessos = 0;
       let erros = 0;
+      const errosDetalhados: Array<{ nome: string; erro: string }> = [];
 
       for (const produto of importedProducts) {
         // Salvar todos os produtos com status 'sucesso', mesmo sem categoria
-        if (produto.status !== 'sucesso') continue;
+        if (produto.status !== 'sucesso') {
+          erros++;
+          errosDetalhados.push({
+            nome: produto.nome,
+            erro: produto.erro || 'Erro ao processar produto na importação'
+          });
+          continue;
+        }
 
         try {
+          // Validar dados antes de enviar
+          if (!produto.nome || !produto.peso || !produto.unidade) {
+            erros++;
+            errosDetalhados.push({
+              nome: produto.nome || 'Produto sem nome',
+              erro: 'Dados incompletos: nome, peso ou unidade faltando'
+            });
+            continue;
+          }
+
           const response = await fetch('/api/etiquetagem/produtos', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -265,12 +283,22 @@ export default function ProdutosPage() {
             sucessos++;
           } else {
             const errorData = await response.json();
+            const mensagemErro = errorData.error || 'Erro desconhecido';
             console.error(`Erro ao salvar ${produto.nome}:`, errorData);
             erros++;
+            errosDetalhados.push({
+              nome: produto.nome,
+              erro: mensagemErro
+            });
           }
         } catch (error) {
+          const mensagemErro = error instanceof Error ? error.message : 'Erro de conexão';
           console.error(`Erro ao salvar ${produto.nome}:`, error);
           erros++;
+          errosDetalhados.push({
+            nome: produto.nome,
+            erro: mensagemErro
+          });
         }
       }
 
@@ -281,7 +309,15 @@ export default function ProdutosPage() {
       if (erros === 0) {
         alert(`✅ Importação concluída com sucesso!\n${sucessos} produtos salvos`);
       } else {
-        alert(`Importação concluída\n✅ ${sucessos} produtos salvos\n❌ ${erros} erros`);
+        // Mostrar mensagem com detalhes dos erros
+        const mensagemErros = errosDetalhados
+          .slice(0, 10) // Limitar a 10 erros para não sobrecarregar
+          .map(e => `• ${e.nome}: ${e.erro}`)
+          .join('\n');
+        
+        const mensagemCompleta = `Importação concluída\n\n✅ ${sucessos} produtos salvos\n❌ ${erros} erros${errosDetalhados.length > 0 ? '\n\nErros encontrados:\n' + mensagemErros + (erros > 10 ? `\n\n... e mais ${erros - 10} erros` : '') : ''}`;
+        
+        alert(mensagemCompleta);
       }
     } catch (error) {
       console.error('Erro ao salvar produtos:', error);

@@ -225,15 +225,43 @@ Armazenamento válido: RESFRIADO, CONGELADO, TEMPERATURA AMBIENTE`
             const jsonMatch = detalhesTexto.match(/\{[^}]+\}/);
             if (jsonMatch) {
               const detalhes = JSON.parse(jsonMatch[0]);
-              produto.peso = detalhes.peso || 1.0;
-              produto.unidade = detalhes.unidade || 'kg';
-              produto.armazenamento = detalhes.armazenamento || '';
+              // Validar e normalizar peso
+              const pesoValido = parseFloat(detalhes.peso);
+              produto.peso = (!isNaN(pesoValido) && pesoValido > 0) ? pesoValido : 1.0;
+              
+              // Validar e normalizar unidade
+              const unidadesValidas = ['kg', 'g', 'L', 'ml', 'un'];
+              const unidadeLower = (detalhes.unidade || 'kg').toString().toLowerCase().trim();
+              produto.unidade = unidadesValidas.includes(unidadeLower) ? unidadeLower : 'kg';
+              
+              // Validar armazenamento
+              const armazenamentosValidos = ['RESFRIADO', 'CONGELADO', 'TEMPERATURA AMBIENTE'];
+              const armazenamentoUpper = (detalhes.armazenamento || '').toString().toUpperCase().trim();
+              produto.armazenamento = armazenamentosValidos.includes(armazenamentoUpper) ? armazenamentoUpper : '';
+            } else {
+              // Se não conseguir parsear, usar valores padrão
+              produto.peso = 1.0;
+              produto.unidade = 'kg';
             }
           } catch (e) {
             console.error('⚠️ Erro ao parsear detalhes:', e);
             produto.peso = 1.0;
             produto.unidade = 'kg';
+            produto.armazenamento = '';
           }
+        } else {
+          // Se a API de detalhes falhar, usar valores padrão
+          produto.peso = 1.0;
+          produto.unidade = 'kg';
+          produto.armazenamento = '';
+        }
+
+        // Garantir que peso e unidade estão definidos
+        if (!produto.peso || produto.peso <= 0) {
+          produto.peso = 1.0;
+        }
+        if (!produto.unidade) {
+          produto.unidade = 'kg';
         }
 
         // Tentar encontrar categoria correspondente (busca mais flexível)
@@ -264,6 +292,11 @@ Armazenamento válido: RESFRIADO, CONGELADO, TEMPERATURA AMBIENTE`
         } else {
           console.log(`⚠️ Categoria NÃO encontrada para: "${categoriaSugerida}"`);
           console.log(`📋 Categorias disponíveis:`, categorias.map(c => c.nome));
+        }
+
+        // Validar dados finais antes de marcar como sucesso
+        if (!produto.nome || produto.nome.trim().length < 2) {
+          throw new Error('Nome do produto inválido');
         }
 
         produto.status = 'sucesso';
