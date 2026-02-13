@@ -39,7 +39,7 @@ export interface Processo {
 export interface Produto {
   id: string;
   nome: string;
-  categoriaId: string;
+  categoriaId: string | null;
   pesoPadrao: number | null;
   unidadeMedida: string | null;
   marcaFornecedor: string | null;

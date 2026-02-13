@@ -37,6 +37,22 @@ export async function PUT(
     const body = await request.json();
     const { nome, categoriaId, pesoPadrao, unidadeMedida, tipoArmazenamentoPadrao } = body;
 
+    // Validar categoria se fornecida
+    if (categoriaId !== undefined && categoriaId !== null && categoriaId !== '') {
+      const categoriaExiste = await prisma.etiquetagemCategoria.findFirst({
+        where: {
+          id: categoriaId,
+          isAtivo: 1,
+        },
+      });
+      if (!categoriaExiste) {
+        return NextResponse.json(
+          { error: 'Categoria não encontrada ou inativa' },
+          { status: 400 }
+        );
+      }
+    }
+
     const produtoAtualizado = await prisma.etiquetagemProduto.update({
       where: { id },
       data: {

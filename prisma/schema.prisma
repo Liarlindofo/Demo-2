@@ -370,8 +370,8 @@ model EtiquetagemProduto {
   userId                  String
   user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   nome                    String
-  categoriaId             String   @map("categoria_id")
-  categoria               EtiquetagemCategoria @relation(fields: [categoriaId], references: [id])
+  categoriaId             String?  @map("categoria_id")
+  categoria               EtiquetagemCategoria? @relation(fields: [categoriaId], references: [id])
   pesoPadrao              Float?   @map("peso_padrao")
   unidadeMedida           String?  @map("unidade_medida")
   marcaFornecedor         String?  @map("marca_fornecedor")
