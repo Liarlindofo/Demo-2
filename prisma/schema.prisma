@@ -437,3 +437,98 @@ model EtiquetagemEtiqueta {
   @@index([createdAt])
   @@map("etiquetagem_etiquetas")
 }
+
+// ============================================
+// PAINEL ADMINISTRATIVO - CALENZA ADM
+// ============================================
+
+model AdminUser {
+  id                    String   @id @default(cuid())
+  email                 String   @unique
+  passwordHash          String   @map("password_hash")
+  name                  String
+  role                  String   @default("user") // super_admin, admin, user
+  isActive              Boolean  @default(true) @map("is_active")
+  clientId              String?  @map("client_id")
+  lastLogin             DateTime? @map("last_login")
+  passwordResetToken    String?  @map("password_reset_token")
+  passwordResetExpires  DateTime? @map("password_reset_expires")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  client                AdminClient? @relation(fields: [clientId], references: [id])
+  permissions           AdminUserPermission[]
+  sessions              AdminSession[]
+  auditLogs             AdminAuditLog[]
+
+  @@index([email])
+  @@index([clientId])
+  @@index([isActive])
+  @@map("admin_users")
+}
+
+model AdminUserPermission {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  permission  String
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user        AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permission])
+  @@index([userId])
+  @@map("admin_user_permissions")
+}
+
+model AdminSession {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  token     String    @db.VarChar(500)
+  ipAddress String?   @map("ip_address") @db.VarChar(45)
+  userAgent String?   @map("user_agent") @db.Text
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([expiresAt])
+  @@index([userId])
+  @@map("admin_sessions")
+}
+
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  action     String   @db.VarChar(100)
+  entityType String?  @map("entity_type") @db.VarChar(50)
+  entityId   String?  @map("entity_id")
+  details    Json?
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  userAgent  String?  @map("user_agent") @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user      AdminUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt(sort: Desc)])
+  @@map("admin_audit_logs")
+}
+
+model AdminClient {
+  id            String   @id @default(cuid())
+  name          String
+  cnpj          String?  @unique
+  databaseSchema String? @map("database_schema") @db.VarChar(100)
+  isActive      Boolean  @default(true) @map("is_active")
+  maxUsers      Int?     @map("max_users")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  users         AdminUser[]
+
+  @@index([isActive])
+  @@map("admin_clients")
+}
