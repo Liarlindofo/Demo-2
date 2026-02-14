@@ -206,20 +206,30 @@ export default function UsuariosPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ permissions }),
+        cache: 'no-store', // Evitar cache
       });
 
       if (response.ok) {
+        const result = await response.json();
         showNotification(
           `Permissão de ${TOOL_LABELS[tool]} ${newEnabled ? "habilitada" : "desabilitada"}`,
           "success"
         );
-        loadUsers();
+        // Recarregar usuários após um pequeno delay para garantir que o banco foi atualizado
+        setTimeout(() => {
+          loadUsers();
+        }, 300);
       } else {
-        const error = await response.json();
-        showNotification(error.error || "Erro ao atualizar permissão", "error");
+        const errorData = await response.json().catch(() => ({ error: "Erro desconhecido" }));
+        showNotification(errorData.error || "Erro ao atualizar permissão", "error");
+        console.error("Erro ao atualizar permissão:", errorData);
       }
-    } catch (error) {
-      showNotification("Erro ao atualizar permissão", "error");
+    } catch (error: any) {
+      console.error("Erro ao atualizar permissão:", error);
+      showNotification(
+        error?.message || "Erro ao atualizar permissão. Tente novamente.",
+        "error"
+      );
     } finally {
       setSaving(false);
     }
