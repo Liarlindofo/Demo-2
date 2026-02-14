@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AdminSession } from "@/types/admin";
+import { AdminSession, UserRole } from "@/types/admin";
 import {
   LayoutDashboard,
   Users,
@@ -27,11 +27,11 @@ export default function AdminSidebar({ session, onLogout, loading }: SidebarProp
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Garantir que session sempre tenha valores válidos
-  const safeSession = {
+  const safeSession: AdminSession = {
     userId: session?.userId || "",
     email: session?.email || "",
     name: session?.name || session?.email || "",
-    role: session?.role || "user",
+    role: (session?.role as UserRole) || (UserRole.USER as UserRole),
     permissions: Array.isArray(session?.permissions) ? session.permissions : [],
     clientId: session?.clientId || undefined,
   };

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AdminSession } from "@/types/admin";
+import { AdminSession, UserRole } from "@/types/admin";
 import { Users, UserCheck, UserX, Clock, LogOut, Settings, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AdminSidebar from "./Sidebar";
@@ -38,11 +38,11 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
   const [loading, setLoading] = useState(false);
 
   // Garantir que session sempre tenha valores válidos
-  const safeSession = {
+  const safeSession: AdminSession = {
     userId: session?.userId || "",
     email: session?.email || "",
     name: session?.name || session?.email || "",
-    role: session?.role || "user",
+    role: (session?.role as UserRole) || (UserRole.USER as UserRole),
     permissions: Array.isArray(session?.permissions) ? session.permissions : [],
     clientId: session?.clientId || undefined,
   };
