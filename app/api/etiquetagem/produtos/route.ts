@@ -6,6 +6,15 @@ import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 // GET /api/etiquetagem/produtos - Listar produtos do usuário com categoria
 export async function GET() {
   try {
+    // Verificar permissão de ferramenta
+    const { requireToolPermission } = await import('@/lib/auth/toolPermissions');
+    const { SystemTool } = await import('@/types/admin');
+    
+    const permissionCheck = await requireToolPermission(SystemTool.ETIQUETAGEM);
+    if (permissionCheck) {
+      return permissionCheck; // Retorna erro 403 se não tiver permissão
+    }
+
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
@@ -45,6 +54,14 @@ export async function GET() {
 // POST /api/etiquetagem/produtos - Criar novo produto
 export async function POST(request: NextRequest) {
   try {
+    // Verificar permissão de ferramenta
+    const { requireToolPermission } = await import('@/lib/auth/toolPermissions');
+    const { SystemTool } = await import('@/types/admin');
+    
+    const permissionCheck = await requireToolPermission(SystemTool.ETIQUETAGEM);
+    if (permissionCheck) {
+      return permissionCheck; // Retorna erro 403 se não tiver permissão
+    }
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });

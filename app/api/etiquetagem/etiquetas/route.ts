@@ -54,6 +54,15 @@ async function gerarCodigoEtiqueta(unidadeCodigo: string, userId: string): Promi
 // POST /api/etiquetagem/etiquetas - Gerar nova etiqueta
 export async function POST(request: NextRequest) {
   try {
+    // Verificar permissão de ferramenta
+    const { requireToolPermission } = await import('@/lib/auth/toolPermissions');
+    const { SystemTool } = await import('@/types/admin');
+    
+    const permissionCheck = await requireToolPermission(SystemTool.ETIQUETAGEM);
+    if (permissionCheck) {
+      return permissionCheck; // Retorna erro 403 se não tiver permissão
+    }
+
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });

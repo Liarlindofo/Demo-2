@@ -38,25 +38,41 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
   const [loading, setLoading] = useState(false);
 
   // Garantir que session sempre tenha valores válidos
+  if (!session || !session.userId || !session.email) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-red-400">Erro: Sessão inválida</p>
+      </div>
+    );
+  }
+
   const safeSession: AdminSession = {
-    userId: session?.userId || "",
-    email: session?.email || "",
-    name: session?.name || session?.email || "",
-    role: (session?.role as UserRole) || (UserRole.USER as UserRole),
-    permissions: Array.isArray(session?.permissions) ? session.permissions : [],
-    clientId: session?.clientId || undefined,
+    userId: String(session.userId || ""),
+    email: String(session.email || ""),
+    name: String(session.name || session.email || ""),
+    role: (session.role as UserRole) || UserRole.USER,
+    permissions: Array.isArray(session.permissions) ? session.permissions : [],
+    clientId: session.clientId || undefined,
   };
 
   // Garantir que data sempre tenha valores válidos
+  if (!data) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-red-400">Erro: Dados não disponíveis</p>
+      </div>
+    );
+  }
+
   const safeData = {
-    totalUsers: typeof data?.totalUsers === 'number' ? data.totalUsers : 0,
-    activeUsers: typeof data?.activeUsers === 'number' ? data.activeUsers : 0,
-    blockedUsers: typeof data?.blockedUsers === 'number' ? data.blockedUsers : 0,
-    recentLogins: Array.isArray(data?.recentLogins) 
-      ? data.recentLogins.filter((item: any) => item && typeof item === 'object' && item.id)
+    totalUsers: Number(data.totalUsers) || 0,
+    activeUsers: Number(data.activeUsers) || 0,
+    blockedUsers: Number(data.blockedUsers) || 0,
+    recentLogins: Array.isArray(data.recentLogins) 
+      ? data.recentLogins.filter((item: any) => item && typeof item === 'object' && item.id && item.name && item.email)
       : [],
-    recentLogs: Array.isArray(data?.recentLogs)
-      ? data.recentLogs.filter((item: any) => item && typeof item === 'object' && item.id)
+    recentLogs: Array.isArray(data.recentLogs)
+      ? data.recentLogs.filter((item: any) => item && typeof item === 'object' && item.id && item.action)
       : [],
   };
 
@@ -167,21 +183,21 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
                   <p className="text-gray-400 text-sm">Nenhuma ação recente</p>
                 ) : (
                   safeData.recentLogs.map((log: any) => {
-                    if (!log || !log.id) return null;
+                    if (!log || !log.id || !log.action) return null;
                     return (
                       <div
-                        key={log.id}
+                        key={String(log.id)}
                         className="p-3 bg-[#0f0f10] rounded text-sm"
                       >
                         <div className="flex items-center justify-between mb-1">
                           <span className="font-medium">
-                            {String(log?.user?.name || "Sistema")}
+                            {String(log.user?.name || "Sistema")}
                           </span>
                           <span className="text-gray-500 text-xs">
-                            {formatDate(log?.createdAt)}
+                            {formatDate(log.createdAt)}
                           </span>
                         </div>
-                        <p className="text-gray-400">{String(log?.action || "Ação desconhecida")}</p>
+                        <p className="text-gray-400">{String(log.action)}</p>
                       </div>
                     );
                   }).filter(Boolean)
