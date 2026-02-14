@@ -7,7 +7,7 @@ import { createAuditLog } from '@/lib/auth/adminAuth';
 // PATCH - Alterar senha do usuário
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await requireAdminAuth(request);
@@ -23,6 +23,7 @@ export async function PATCH(
       );
     }
 
+    const { id } = await params;
     const body = await request.json();
     const { newPassword } = body;
 
@@ -35,7 +36,7 @@ export async function PATCH(
 
     // Buscar StackUser
     const stackUser = await prisma.stackUser.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: { user: true },
     });
 
@@ -69,7 +70,7 @@ export async function PATCH(
         userId: session.userId,
         action: 'password_reset',
         entityType: 'StackUser',
-        entityId: params.id,
+        entityId: id,
         details: { resetBy: session.email },
         ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
         userAgent: request.headers.get('user-agent') || null,

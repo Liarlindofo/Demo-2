@@ -7,7 +7,7 @@ import { createAuditLog } from '@/lib/auth/adminAuth';
 // GET - Buscar usuário específico
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await requireAdminAuth(request);
@@ -23,8 +23,9 @@ export async function GET(
       );
     }
 
+    const { id } = await params;
     const user = await prisma.stackUser.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         user: {
           select: {
@@ -58,7 +59,7 @@ export async function GET(
 // PATCH - Atualizar usuário
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await requireAdminAuth(request);
@@ -74,12 +75,13 @@ export async function PATCH(
       );
     }
 
+    const { id } = await params;
     const body = await request.json();
     const { primaryEmail, displayName, isActive } = body;
 
     // Verificar se usuário existe
     const existingUser = await prisma.stackUser.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!existingUser) {
@@ -96,7 +98,7 @@ export async function PATCH(
     if (isActive !== undefined) updateData.isActive = isActive;
 
     const updatedUser = await prisma.stackUser.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       include: {
         user: {
@@ -125,7 +127,7 @@ export async function PATCH(
         userId: session.userId,
         action: 'user_updated',
         entityType: 'StackUser',
-        entityId: params.id,
+        entityId: id,
         details: { changes: updateData },
         ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
         userAgent: request.headers.get('user-agent') || null,

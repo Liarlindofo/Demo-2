@@ -7,7 +7,7 @@ import { SystemTool } from '@/types/admin';
 // GET - Buscar permissões do usuário
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await requireAdminAuth(request);
@@ -23,8 +23,9 @@ export async function GET(
       );
     }
 
+    const { id } = await params;
     const permissions = await prisma.userToolPermission.findMany({
-      where: { stackUserId: params.id },
+      where: { stackUserId: id },
     });
 
     return NextResponse.json(permissions);
@@ -40,7 +41,7 @@ export async function GET(
 // PATCH - Atualizar permissões de ferramentas
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await requireAdminAuth(request);
@@ -56,6 +57,7 @@ export async function PATCH(
       );
     }
 
+    const { id } = await params;
     const body = await request.json();
     const { permissions } = body; // Array de { tool: SystemTool, isEnabled: boolean }
 
@@ -68,7 +70,7 @@ export async function PATCH(
 
     // Verificar se usuário existe
     const stackUser = await prisma.stackUser.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!stackUser) {
@@ -89,13 +91,13 @@ export async function PATCH(
         return prisma.userToolPermission.upsert({
           where: {
             stackUserId_tool: {
-              stackUserId: params.id,
+              stackUserId: id,
               tool: tool as SystemTool,
             },
           },
           update: { isEnabled },
           create: {
-            stackUserId: params.id,
+            stackUserId: id,
             tool: tool as SystemTool,
             isEnabled,
           },
@@ -109,7 +111,7 @@ export async function PATCH(
         userId: session.userId,
         action: 'tool_permissions_updated',
         entityType: 'StackUser',
-        entityId: params.id,
+        entityId: id,
         details: { permissions },
         ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
         userAgent: request.headers.get('user-agent') || null,
