@@ -59,15 +59,27 @@ async function getDashboardData() {
     id: user.id,
     name: user.displayName || user.primaryEmail || user.user?.email || "Sem nome",
     email: user.primaryEmail || user.user?.email || "Sem email",
-    lastLogin: user.lastActiveAt,
+    lastLogin: user.lastActiveAt ? new Date(user.lastActiveAt).toISOString() : null,
   }));
 
+  // Formatar recentLogs para garantir serialização correta
+  const formattedLogs = recentLogs.map((log) => ({
+    id: log.id,
+    action: log.action || "Ação desconhecida",
+    createdAt: log.createdAt ? new Date(log.createdAt).toISOString() : new Date().toISOString(),
+    user: log.user ? {
+      name: log.user.name || "Sistema",
+      email: log.user.email || "",
+    } : null,
+  }));
+
+  // Garantir que os dados estejam sempre no formato correto
   return {
-    totalUsers,
-    activeUsers,
-    blockedUsers,
-    recentLogins: formattedLogins,
-    recentLogs,
+    totalUsers: totalUsers || 0,
+    activeUsers: activeUsers || 0,
+    blockedUsers: blockedUsers || 0,
+    recentLogins: formattedLogins || [],
+    recentLogs: formattedLogs || [],
   };
 }
 

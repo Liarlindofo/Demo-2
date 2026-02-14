@@ -15,12 +15,12 @@ interface DashboardData {
     id: string;
     name: string;
     email: string;
-    lastLogin: Date | null;
+    lastLogin: string | null;
   }>;
   recentLogs: Array<{
     id: string;
     action: string;
-    createdAt: Date;
+    createdAt: string;
     user: {
       name: string;
       email: string;
@@ -36,6 +36,15 @@ interface DashboardProps {
 export default function AdminDashboard({ session, data }: DashboardProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+
+  // Garantir que data sempre tenha valores válidos
+  const safeData = {
+    totalUsers: data?.totalUsers ?? 0,
+    activeUsers: data?.activeUsers ?? 0,
+    blockedUsers: data?.blockedUsers ?? 0,
+    recentLogins: Array.isArray(data?.recentLogins) ? data.recentLogins : [],
+    recentLogs: Array.isArray(data?.recentLogs) ? data.recentLogs : [],
+  };
 
   const handleLogout = async () => {
     setLoading(true);
@@ -81,7 +90,7 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
                 <h3 className="text-gray-400 text-sm">Total de Usuários</h3>
                 <Users className="h-8 w-8 text-blue-400" />
               </div>
-              <p className="text-3xl font-bold">{data.totalUsers}</p>
+              <p className="text-3xl font-bold">{safeData.totalUsers}</p>
             </div>
 
             <div className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6">
@@ -89,7 +98,7 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
                 <h3 className="text-gray-400 text-sm">Usuários Ativos</h3>
                 <UserCheck className="h-8 w-8 text-green-400" />
               </div>
-              <p className="text-3xl font-bold text-green-400">{data.activeUsers}</p>
+              <p className="text-3xl font-bold text-green-400">{safeData.activeUsers}</p>
             </div>
 
             <div className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6">
@@ -97,7 +106,7 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
                 <h3 className="text-gray-400 text-sm">Usuários Bloqueados</h3>
                 <UserX className="h-8 w-8 text-red-400" />
               </div>
-              <p className="text-3xl font-bold text-red-400">{data.blockedUsers}</p>
+              <p className="text-3xl font-bold text-red-400">{safeData.blockedUsers}</p>
             </div>
           </div>
 
@@ -109,17 +118,17 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
                 Últimos Logins
               </h2>
               <div className="space-y-3">
-                {data.recentLogins.length === 0 ? (
+                {safeData.recentLogins.length === 0 ? (
                   <p className="text-gray-400 text-sm">Nenhum login recente</p>
                 ) : (
-                  data.recentLogins.map((user) => (
+                  safeData.recentLogins.map((user) => (
                     <div
                       key={user.id}
                       className="flex items-center justify-between p-3 bg-[#0f0f10] rounded"
                     >
                       <div>
-                        <p className="font-medium">{user.name || "Sem nome"}</p>
-                        <p className="text-sm text-gray-400">{user.email || "Sem email"}</p>
+                        <p className="font-medium">{String(user?.name || "Sem nome")}</p>
+                        <p className="text-sm text-gray-400">{String(user?.email || "Sem email")}</p>
                       </div>
                       <p className="text-sm text-gray-500">
                         {formatDate(user.lastLogin)}
@@ -137,23 +146,23 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
                 Ações Recentes
               </h2>
               <div className="space-y-3 max-h-96 overflow-y-auto">
-                {data.recentLogs.length === 0 ? (
+                {safeData.recentLogs.length === 0 ? (
                   <p className="text-gray-400 text-sm">Nenhuma ação recente</p>
                 ) : (
-                  data.recentLogs.map((log) => (
+                  safeData.recentLogs.map((log) => (
                     <div
                       key={log.id}
                       className="p-3 bg-[#0f0f10] rounded text-sm"
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-medium">
-                          {log.user?.name || "Sistema"}
+                          {String(log?.user?.name || "Sistema")}
                         </span>
                         <span className="text-gray-500 text-xs">
                           {formatDate(log.createdAt)}
                         </span>
                       </div>
-                      <p className="text-gray-400">{log.action || "Ação desconhecida"}</p>
+                      <p className="text-gray-400">{String(log?.action || "Ação desconhecida")}</p>
                     </div>
                   ))
                 )}
