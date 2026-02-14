@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { verifyAdminSession } from "@/lib/auth/adminAuth";
 import AdminSidebar from "@/components/admin/Sidebar";
 import { StackUser, SystemTool, UserToolPermission } from "@/types/admin";
 import {
@@ -188,13 +187,17 @@ export default function UsuariosPage() {
       const currentPermission = user.toolPermissions?.find((p) => p.tool === tool);
       const newEnabled = !currentPermission?.isEnabled;
 
-      const permissions = Object.values(SystemTool).map((t) => ({
-        tool: t,
-        isEnabled:
-          t === tool
-            ? newEnabled
-            : user.toolPermissions?.find((p) => p.tool === t)?.isEnabled ?? false,
-      }));
+      // Buscar todas as permissões atuais do usuário
+      const currentPermissions = user.toolPermissions || [];
+      
+      // Criar array com todas as ferramentas e seus estados
+      const permissions = Object.values(SystemTool).map((t) => {
+        const existing = currentPermissions.find((p) => p.tool === t);
+        return {
+          tool: t,
+          isEnabled: t === tool ? newEnabled : (existing?.isEnabled ?? false),
+        };
+      });
 
       const response = await fetch(`/api/calenza-adm/usuarios/${user.id}/permissoes`, {
         method: "PATCH",

@@ -19,6 +19,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    console.error("ErrorBoundary capturou erro:", error);
     return { hasError: true, error };
   }
 
@@ -29,7 +30,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) {
-        return this.props.fallback;
+        return <>{this.props.fallback}</>;
       }
 
       return (
@@ -45,12 +46,15 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                   Detalhes do erro
                 </summary>
                 <pre className="text-xs bg-[#0f0f10] p-3 rounded overflow-auto max-h-40">
-                  {this.state.error.toString()}
+                  {String(this.state.error?.message || this.state.error?.toString() || "Erro desconhecido")}
                 </pre>
               </details>
             )}
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.reload();
+              }}
               className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
             >
               Recarregar Página
@@ -60,6 +64,6 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       );
     }
 
-    return this.props.children;
+    return <>{this.props.children}</>;
   }
 }

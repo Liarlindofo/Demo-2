@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminSession, UserRole } from "@/types/admin";
-import { Users, UserCheck, UserX, Clock, LogOut, Settings, Shield } from "lucide-react";
+import { Users, UserCheck, UserX, Clock, LogOut, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AdminSidebar from "./Sidebar";
 
@@ -33,17 +33,17 @@ interface DashboardProps {
   data: DashboardData;
 }
 
-export default function AdminDashboard({ session, data }: DashboardProps) {
+export default function AdminDashboardSimple({ session, data }: DashboardProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  // Garantir que session sempre tenha valores válidos
-  if (!session || !session.userId || !session.email) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <p className="text-red-400">Erro: Sessão inválida</p>
-      </div>
-    );
+  // Validações básicas
+  if (!session || typeof session !== 'object') {
+    return <div className="min-h-screen bg-black text-white flex items-center justify-center"><p>Erro: Sessão inválida</p></div>;
+  }
+
+  if (!data || typeof data !== 'object') {
+    return <div className="min-h-screen bg-black text-white flex items-center justify-center"><p>Erro: Dados não disponíveis</p></div>;
   }
 
   const safeSession: AdminSession = {
@@ -55,25 +55,12 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
     clientId: session.clientId || undefined,
   };
 
-  // Garantir que data sempre tenha valores válidos
-  if (!data) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <p className="text-red-400">Erro: Dados não disponíveis</p>
-      </div>
-    );
-  }
-
   const safeData = {
     totalUsers: Number(data.totalUsers) || 0,
     activeUsers: Number(data.activeUsers) || 0,
     blockedUsers: Number(data.blockedUsers) || 0,
-    recentLogins: Array.isArray(data.recentLogins) 
-      ? data.recentLogins.filter((item: any) => item && typeof item === 'object' && item.id && item.name && item.email)
-      : [],
-    recentLogs: Array.isArray(data.recentLogs)
-      ? data.recentLogs.filter((item: any) => item && typeof item === 'object' && item.id && item.action)
-      : [],
+    recentLogins: Array.isArray(data.recentLogins) ? data.recentLogins.filter((u: any) => u && u.id && u.name && u.email) : [],
+    recentLogs: Array.isArray(data.recentLogs) ? data.recentLogs.filter((l: any) => l && l.id && l.action) : [],
   };
 
   const handleLogout = async () => {
@@ -81,7 +68,6 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
     try {
       await fetch("/api/calenza-adm/logout", { method: "POST" });
       router.push("/calenza-adm/login");
-      router.refresh();
     } catch (error) {
       console.error("Erro no logout:", error);
     } finally {
@@ -89,13 +75,13 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
     }
   };
 
-  const formatDate = (date: Date | null | string) => {
-    if (!date) return "Nunca";
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "Nunca";
     try {
-      const dateObj = typeof date === 'string' ? new Date(date) : date;
-      if (isNaN(dateObj.getTime())) return "Data inválida";
-      return dateObj.toLocaleString("pt-BR");
-    } catch (error) {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return "Data inválida";
+      return date.toLocaleString("pt-BR");
+    } catch {
       return "Data inválida";
     }
   };
@@ -108,12 +94,9 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
             <h1 className="text-3xl font-bold mb-2">Dashboard Administrativo</h1>
-            <p className="text-gray-400">
-              Bem-vindo, {safeSession.name || safeSession.email}
-            </p>
+            <p className="text-gray-400">Bem-vindo, {safeSession.name || safeSession.email}</p>
           </div>
 
-          {/* Cards de Estatísticas */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6">
               <div className="flex items-center justify-between mb-4">
@@ -141,7 +124,6 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Últimos Logins */}
             <div className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6">
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
                 <Clock className="h-5 w-5" />
@@ -151,27 +133,19 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
                 {safeData.recentLogins.length === 0 ? (
                   <p className="text-gray-400 text-sm">Nenhum login recente</p>
                 ) : (
-                  safeData.recentLogins
-                    .filter((user: any) => user && user.id && user.name && user.email)
-                    .map((user: any) => (
-                      <div
-                        key={String(user.id)}
-                        className="flex items-center justify-between p-3 bg-[#0f0f10] rounded"
-                      >
-                        <div>
-                          <p className="font-medium">{String(user.name)}</p>
-                          <p className="text-sm text-gray-400">{String(user.email)}</p>
-                        </div>
-                        <p className="text-sm text-gray-500">
-                          {formatDate(user.lastLogin)}
-                        </p>
+                  safeData.recentLogins.map((user) => (
+                    <div key={String(user.id)} className="flex items-center justify-between p-3 bg-[#0f0f10] rounded">
+                      <div>
+                        <p className="font-medium">{String(user.name)}</p>
+                        <p className="text-sm text-gray-400">{String(user.email)}</p>
                       </div>
-                    ))
+                      <p className="text-sm text-gray-500">{formatDate(user.lastLogin)}</p>
+                    </div>
+                  ))
                 )}
               </div>
             </div>
 
-            {/* Logs Recentes */}
             <div className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6">
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
                 <Shield className="h-5 w-5" />
@@ -181,24 +155,15 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
                 {safeData.recentLogs.length === 0 ? (
                   <p className="text-gray-400 text-sm">Nenhuma ação recente</p>
                 ) : (
-                  safeData.recentLogs
-                    .filter((log: any) => log && log.id && log.action)
-                    .map((log: any) => (
-                      <div
-                        key={String(log.id)}
-                        className="p-3 bg-[#0f0f10] rounded text-sm"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium">
-                            {String(log.user?.name || "Sistema")}
-                          </span>
-                          <span className="text-gray-500 text-xs">
-                            {formatDate(log.createdAt)}
-                          </span>
-                        </div>
-                        <p className="text-gray-400">{String(log.action)}</p>
+                  safeData.recentLogs.map((log) => (
+                    <div key={String(log.id)} className="p-3 bg-[#0f0f10] rounded text-sm">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium">{String(log.user?.name || "Sistema")}</span>
+                        <span className="text-gray-500 text-xs">{formatDate(log.createdAt)}</span>
                       </div>
-                    ))
+                      <p className="text-gray-400">{String(log.action)}</p>
+                    </div>
+                  ))
                 )}
               </div>
             </div>

@@ -3,7 +3,7 @@ import { verifyAdminSession } from "@/lib/auth/adminAuth";
 import { NextRequest } from "next/server";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import AdminDashboard from "@/components/admin/Dashboard";
+import AdminDashboardSimple from "@/components/admin/DashboardSimple";
 import { ErrorBoundary } from "@/components/admin/ErrorBoundary";
 
 async function getDashboardData() {
@@ -111,7 +111,7 @@ export default async function AdminPage() {
 
     return (
       <ErrorBoundary>
-        <AdminDashboard session={session} data={dashboardData} />
+        <AdminDashboardSimple session={session} data={dashboardData} />
       </ErrorBoundary>
     );
   } catch (error) {
