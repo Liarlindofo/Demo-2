@@ -23,6 +23,44 @@ export enum Permission {
   SYSTEM_SETTINGS = 'system_settings',
 }
 
+// Ferramentas disponíveis no sistema
+export enum SystemTool {
+  ETIQUETAGEM = 'etiquetagem',
+  CHECKLIST = 'checklist',
+  CMV = 'cmv',
+  ANALYTICS = 'analytics',
+}
+
+export interface StackUser {
+  id: string;
+  primaryEmail: string | null;
+  displayName: string | null;
+  profileImageUrl: string | null;
+  primaryEmailVerified: Date | null;
+  lastActiveAt: Date | null;
+  userId: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  toolPermissions?: UserToolPermission[];
+  user?: {
+    id: string;
+    email: string | null;
+    username: string | null;
+    fullName: string | null;
+    password: string | null;
+  } | null;
+}
+
+export interface UserToolPermission {
+  id: string;
+  stackUserId: string;
+  tool: SystemTool;
+  isEnabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface AdminUser {
   id: string;
   email: string;
