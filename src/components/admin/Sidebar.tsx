@@ -74,7 +74,15 @@ export default function AdminSidebar({ session, onLogout, loading }: SidebarProp
   ];
 
   const filteredItems = menuItems.filter((item) => {
+    // Verificar se o role tem acesso
     if (!item.roles.includes(safeSession.role)) return false;
+    
+    // SUPER_ADMIN tem acesso a tudo
+    if (safeSession.role === UserRole.SUPER_ADMIN) {
+      return true;
+    }
+    
+    // Para outros roles, verificar permissão específica
     if (item.permission && !safeSession.permissions.includes(item.permission as any)) {
       return false;
     }

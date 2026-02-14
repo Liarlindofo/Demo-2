@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AdminSession, UserRole } from "@/types/admin";
-import { Users, UserCheck, UserX, Clock, LogOut, Shield } from "lucide-react";
+import Link from "next/link";
+import { AdminSession, UserRole, Permission } from "@/types/admin";
+import { Users, UserCheck, UserX, Clock, LogOut, Shield, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AdminSidebar from "./Sidebar";
 
@@ -98,30 +99,61 @@ export default function AdminDashboardSimple({ session, data }: DashboardProps) 
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6">
+            <Link 
+              href="/calenza-adm/usuarios"
+              className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6 hover:border-green-500 transition-colors cursor-pointer group"
+            >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-gray-400 text-sm">Total de Usuários</h3>
-                <Users className="h-8 w-8 text-blue-400" />
+                <Users className="h-8 w-8 text-blue-400 group-hover:text-green-400 transition-colors" />
               </div>
-              <p className="text-3xl font-bold">{safeData.totalUsers}</p>
-            </div>
+              <div className="flex items-center justify-between">
+                <p className="text-3xl font-bold">{safeData.totalUsers}</p>
+                <ArrowRight className="h-5 w-5 text-gray-500 group-hover:text-green-400 transition-colors" />
+              </div>
+            </Link>
 
-            <div className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6">
+            <Link 
+              href="/calenza-adm/usuarios"
+              className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6 hover:border-green-500 transition-colors cursor-pointer group"
+            >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-gray-400 text-sm">Usuários Ativos</h3>
                 <UserCheck className="h-8 w-8 text-green-400" />
               </div>
-              <p className="text-3xl font-bold text-green-400">{safeData.activeUsers}</p>
-            </div>
+              <div className="flex items-center justify-between">
+                <p className="text-3xl font-bold text-green-400">{safeData.activeUsers}</p>
+                <ArrowRight className="h-5 w-5 text-gray-500 group-hover:text-green-400 transition-colors" />
+              </div>
+            </Link>
 
-            <div className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6">
+            <Link 
+              href="/calenza-adm/usuarios"
+              className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6 hover:border-green-500 transition-colors cursor-pointer group"
+            >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-gray-400 text-sm">Usuários Bloqueados</h3>
                 <UserX className="h-8 w-8 text-red-400" />
               </div>
-              <p className="text-3xl font-bold text-red-400">{safeData.blockedUsers}</p>
-            </div>
+              <div className="flex items-center justify-between">
+                <p className="text-3xl font-bold text-red-400">{safeData.blockedUsers}</p>
+                <ArrowRight className="h-5 w-5 text-gray-500 group-hover:text-green-400 transition-colors" />
+              </div>
+            </Link>
           </div>
+
+          {/* Botão de Acesso Rápido */}
+          {safeSession.permissions.includes(Permission.VIEW_USERS) && (
+            <div className="mb-8">
+              <Link href="/calenza-adm/usuarios">
+                <Button className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Gerenciar Usuários
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6">
