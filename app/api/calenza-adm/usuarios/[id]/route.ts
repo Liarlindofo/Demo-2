@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAdminAuth } from '@/lib/auth/adminAuth';
-import { hashPassword } from '@/lib/auth/password';
-import { createAuditLog } from '@/lib/auth/adminAuth';
+import { requireAdminAuth, hasPermission, createAuditLog } from '@/lib/auth/adminAuth';
+import { Permission } from '@/types/admin';
 
 // GET - Buscar usuário específico
 export async function GET(
@@ -13,10 +12,7 @@ export async function GET(
     const session = await requireAdminAuth(request);
     if (session instanceof NextResponse) return session;
 
-    const hasPermission = await import('@/lib/auth/adminAuth').then(m => 
-      m.checkAdminPermission(session, 'view_users' as any)
-    );
-    if (!hasPermission) {
+    if (!(await hasPermission(session, Permission.VIEW_USERS))) {
       return NextResponse.json(
         { error: 'Sem permissão para visualizar usuários' },
         { status: 403 }
@@ -65,10 +61,7 @@ export async function PATCH(
     const session = await requireAdminAuth(request);
     if (session instanceof NextResponse) return session;
 
-    const hasPermission = await import('@/lib/auth/adminAuth').then(m => 
-      m.checkAdminPermission(session, 'edit_users' as any)
-    );
-    if (!hasPermission) {
+    if (!(await hasPermission(session, Permission.EDIT_USERS))) {
       return NextResponse.json(
         { error: 'Sem permissão para editar usuários' },
         { status: 403 }

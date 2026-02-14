@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAdminAuth } from '@/lib/auth/adminAuth';
-import { SystemTool } from '@/types/admin';
+import { requireAdminAuth, hasPermission } from '@/lib/auth/adminAuth';
+import { SystemTool, Permission } from '@/types/admin';
 
 // GET - Listar todos os usuários
 export async function GET(request: NextRequest) {
@@ -10,10 +10,7 @@ export async function GET(request: NextRequest) {
     if (session instanceof NextResponse) return session;
 
     // Verificar permissão
-    const hasPermission = await import('@/lib/auth/adminAuth').then(m => 
-      m.checkAdminPermission(session, 'view_users' as any)
-    );
-    if (!hasPermission) {
+    if (!(await hasPermission(session, Permission.VIEW_USERS))) {
       return NextResponse.json(
         { error: 'Sem permissão para visualizar usuários' },
         { status: 403 }

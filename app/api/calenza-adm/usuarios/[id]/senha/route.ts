@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAdminAuth } from '@/lib/auth/adminAuth';
+import { requireAdminAuth, hasPermission, createAuditLog } from '@/lib/auth/adminAuth';
 import { hashPassword } from '@/lib/auth/password';
-import { createAuditLog } from '@/lib/auth/adminAuth';
+import { Permission } from '@/types/admin';
 
 // PATCH - Alterar senha do usuário
 export async function PATCH(
@@ -13,10 +13,7 @@ export async function PATCH(
     const session = await requireAdminAuth(request);
     if (session instanceof NextResponse) return session;
 
-    const hasPermission = await import('@/lib/auth/adminAuth').then(m => 
-      m.checkAdminPermission(session, 'reset_passwords' as any)
-    );
-    if (!hasPermission) {
+    if (!(await hasPermission(session, Permission.RESET_PASSWORDS))) {
       return NextResponse.json(
         { error: 'Sem permissão para alterar senhas' },
         { status: 403 }
