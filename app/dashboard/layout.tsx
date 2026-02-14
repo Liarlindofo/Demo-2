@@ -8,10 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Settings, User, Moon, Sun, LogOut, Menu, Link2, Calendar, MessageSquare, ClipboardCheck, Tag } from 'lucide-react';
+import { Settings, User, Moon, Sun, LogOut, Menu, Link2, Calendar, MessageSquare, ClipboardCheck, Tag, Lock } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import { AppProvider } from '@/contexts/app-context';
 import { useRouter } from 'next/navigation';
+import { useToolPermissions } from '@/hooks/useToolPermissions';
+import { SystemTool } from '@/types/admin';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -20,6 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   
   // Usar Stack Auth real - redireciona para login se não autenticado
   const user = useUser({ or: 'redirect' });
+  const { permissions, loading: permissionsLoading } = useToolPermissions();
   
   const router = useRouter();
 
@@ -62,70 +65,116 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   </SheetTrigger>
                   <SheetContent side="left" className="w-64 bg-[#141415] border-[#374151] text-white">
                     <div className="flex flex-col gap-4 mt-8">
-                      <Link 
-                        href="/connections" 
-                        onClick={() => setIsSidebarOpen(false)}
-                        className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                          pathname === '/connections' 
-                            ? 'bg-[#001F05] text-green-400' 
-                            : 'text-gray-300 hover:bg-[#374151] hover:text-white'
-                        }`}
-                      >
-                        <Link2 className="h-5 w-5" />
-                        <span className="font-medium">Conexões</span>
-                      </Link>
-                      
-                      <Link 
-                        href="/whatsapp-config" 
-                        onClick={() => setIsSidebarOpen(false)}
-                        className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                          pathname === '/whatsapp-config' 
-                            ? 'bg-[#001F05] text-green-400' 
-                            : 'text-gray-300 hover:bg-[#374151] hover:text-white'
-                        }`}
-                      >
-                        <Calendar className="h-5 w-5" />
-                        <span className="font-medium">Agendamento de relatório</span>
-                      </Link>
-                      
-                      <Link 
-                        href="/whatsapp-tools" 
-                        onClick={() => setIsSidebarOpen(false)}
-                        className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                          pathname === '/whatsapp-tools' 
-                            ? 'bg-[#001F05] text-green-400' 
-                            : 'text-gray-300 hover:bg-[#374151] hover:text-white'
-                        }`}
-                      >
-                        <MessageSquare className="h-5 w-5" />
-                        <span className="font-medium">WhatsApp Chat</span>
-                      </Link>
-                      
-                      <Link 
-                        href="/checklist" 
-                        onClick={() => setIsSidebarOpen(false)}
-                        className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                          pathname?.startsWith('/checklist') 
-                            ? 'bg-[#001F05] text-green-400' 
-                            : 'text-gray-300 hover:bg-[#374151] hover:text-white'
-                        }`}
-                      >
-                        <ClipboardCheck className="h-5 w-5" />
-                        <span className="font-medium">Checklist</span>
-                      </Link>
-                      
-                      <Link 
-                        href="/etiquetagem" 
-                        onClick={() => setIsSidebarOpen(false)}
-                        className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                          pathname?.startsWith('/etiquetagem') 
-                            ? 'bg-[#001F05] text-green-400' 
-                            : 'text-gray-300 hover:bg-[#374151] hover:text-white'
-                        }`}
-                      >
-                        <Tag className="h-5 w-5" />
-                        <span className="font-medium">Etiquetagem</span>
-                      </Link>
+                      {/* Conexões */}
+                      {permissionsLoading ? (
+                        <div className="px-4 py-3 text-gray-400 text-sm">Carregando permissões...</div>
+                      ) : (
+                        <>
+                          {permissions[SystemTool.CONEXOES] ? (
+                            <Link 
+                              href="/connections" 
+                              onClick={() => setIsSidebarOpen(false)}
+                              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                                pathname === '/connections' 
+                                  ? 'bg-[#001F05] text-green-400' 
+                                  : 'text-gray-300 hover:bg-[#374151] hover:text-white'
+                              }`}
+                            >
+                              <Link2 className="h-5 w-5" />
+                              <span className="font-medium">Conexões</span>
+                            </Link>
+                          ) : (
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 cursor-not-allowed">
+                              <Lock className="h-5 w-5" />
+                              <span className="font-medium">Conexões</span>
+                            </div>
+                          )}
+                          
+                          {/* Agendamento de Relatórios */}
+                          {permissions[SystemTool.AGENDAMENTO_RELATORIOS] ? (
+                            <Link 
+                              href="/whatsapp-config" 
+                              onClick={() => setIsSidebarOpen(false)}
+                              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                                pathname === '/whatsapp-config' 
+                                  ? 'bg-[#001F05] text-green-400' 
+                                  : 'text-gray-300 hover:bg-[#374151] hover:text-white'
+                              }`}
+                            >
+                              <Calendar className="h-5 w-5" />
+                              <span className="font-medium">Agendamento de relatório</span>
+                            </Link>
+                          ) : (
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 cursor-not-allowed">
+                              <Lock className="h-5 w-5" />
+                              <span className="font-medium">Agendamento de relatório</span>
+                            </div>
+                          )}
+                          
+                          {/* WhatsApp Chat */}
+                          {permissions[SystemTool.WHATSAPP_CHAT] ? (
+                            <Link 
+                              href="/whatsapp-tools" 
+                              onClick={() => setIsSidebarOpen(false)}
+                              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                                pathname === '/whatsapp-tools' 
+                                  ? 'bg-[#001F05] text-green-400' 
+                                  : 'text-gray-300 hover:bg-[#374151] hover:text-white'
+                              }`}
+                            >
+                              <MessageSquare className="h-5 w-5" />
+                              <span className="font-medium">WhatsApp Chat</span>
+                            </Link>
+                          ) : (
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 cursor-not-allowed">
+                              <Lock className="h-5 w-5" />
+                              <span className="font-medium">WhatsApp Chat</span>
+                            </div>
+                          )}
+                          
+                          {/* Checklist */}
+                          {permissions[SystemTool.CHECKLIST] ? (
+                            <Link 
+                              href="/checklist" 
+                              onClick={() => setIsSidebarOpen(false)}
+                              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                                pathname?.startsWith('/checklist') 
+                                  ? 'bg-[#001F05] text-green-400' 
+                                  : 'text-gray-300 hover:bg-[#374151] hover:text-white'
+                              }`}
+                            >
+                              <ClipboardCheck className="h-5 w-5" />
+                              <span className="font-medium">Checklist</span>
+                            </Link>
+                          ) : (
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 cursor-not-allowed">
+                              <Lock className="h-5 w-5" />
+                              <span className="font-medium">Checklist</span>
+                            </div>
+                          )}
+                          
+                          {/* Etiquetagem */}
+                          {permissions[SystemTool.ETIQUETAGEM] ? (
+                            <Link 
+                              href="/etiquetagem" 
+                              onClick={() => setIsSidebarOpen(false)}
+                              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                                pathname?.startsWith('/etiquetagem') 
+                                  ? 'bg-[#001F05] text-green-400' 
+                                  : 'text-gray-300 hover:bg-[#374151] hover:text-white'
+                              }`}
+                            >
+                              <Tag className="h-5 w-5" />
+                              <span className="font-medium">Etiquetagem</span>
+                            </Link>
+                          ) : (
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 cursor-not-allowed">
+                              <Lock className="h-5 w-5" />
+                              <span className="font-medium">Etiquetagem</span>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   </SheetContent>
                 </Sheet>

@@ -29,7 +29,8 @@ export default function ToolProtection({ tool, toolName, children }: ToolProtect
 
   useEffect(() => {
     checkPermission();
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, tool]); // Re-executar quando o ID do usuário ou a ferramenta mudar
 
   async function checkPermission() {
     if (!user) {
@@ -39,7 +40,11 @@ export default function ToolProtection({ tool, toolName, children }: ToolProtect
     }
 
     try {
-      const response = await fetch(`/api/auth/check-tool-permission?tool=${tool}`);
+      // Adicionar timestamp para evitar cache
+      const response = await fetch(
+        `/api/auth/check-tool-permission?tool=${tool}&_t=${Date.now()}`,
+        { cache: 'no-store' }
+      );
       if (response.ok) {
         const data = await response.json();
         setHasPermission(data.hasPermission === true);
