@@ -27,6 +27,9 @@ export enum Permission {
 export enum SystemTool {
   ETIQUETAGEM = 'etiquetagem',
   CHECKLIST = 'checklist',
+  WHATSAPP_CHAT = 'whatsapp_chat',
+  CONEXOES = 'conexoes',
+  AGENDAMENTO_RELATORIOS = 'agendamento_relatorios',
   CMV = 'cmv',
   ANALYTICS = 'analytics',
 }

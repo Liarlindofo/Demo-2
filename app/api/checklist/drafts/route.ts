@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { SystemTool } from '@/types/admin';
+import { requireToolPermission } from '@/lib/auth/toolPermissions';
 
 // ⚙️ Configuração - Aumentar limite de body para 50MB
 export const config = {
@@ -18,6 +20,9 @@ export const dynamic = 'force-dynamic';
 
 // 🎯 POST - Salvar/Atualizar rascunho do checklist (completo)
 export async function POST(request: NextRequest) {
+  const permissionCheck = await requireToolPermission(SystemTool.CHECKLIST);
+  if (permissionCheck) return permissionCheck;
+
   try {
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
@@ -205,6 +210,9 @@ export async function POST(request: NextRequest) {
 
 // 🎯 GET - Buscar rascunhos do usuário
 export async function GET(request: NextRequest) {
+  const permissionCheck = await requireToolPermission(SystemTool.CHECKLIST);
+  if (permissionCheck) return permissionCheck;
+
   try {
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {

@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stackServerApp } from '@/stack';
 import { createClient } from '@supabase/supabase-js';
+import { SystemTool } from '@/types/admin';
+import { requireToolPermission } from '@/lib/auth/toolPermissions';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 // POST /api/checklist/upload-photo - Upload de foto para Supabase Storage
 export async function POST(request: NextRequest) {
+  const permissionCheck = await requireToolPermission(SystemTool.CHECKLIST);
+  if (permissionCheck) return permissionCheck;
+
   try {
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     

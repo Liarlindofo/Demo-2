@@ -9,8 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useNotification } from "@/components/ui/notification";
 import type { Produto, Categoria } from "@/types/etiquetagem";
+import ToolProtection from "@/components/auth/ToolProtection";
+import { SystemTool } from "@/types/admin";
 
-export default function ProdutosPage() {
+function ProdutosPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const unidadeId = searchParams.get("unidade");
@@ -965,5 +967,13 @@ export default function ProdutosPage() {
       {/* Container de Notificações */}
       <NotificationContainer />
     </div>
+  );
+}
+
+export default function ProdutosPage() {
+  return (
+    <ToolProtection tool={SystemTool.ETIQUETAGEM} toolName="Etiquetagem">
+      <ProdutosPageContent />
+    </ToolProtection>
   );
 }

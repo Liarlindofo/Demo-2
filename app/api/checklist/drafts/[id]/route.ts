@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { SystemTool } from '@/types/admin';
+import { requireToolPermission } from '@/lib/auth/toolPermissions';
 
 // 🎯 GET - Recuperar rascunho específico
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const permissionCheck = await requireToolPermission(SystemTool.CHECKLIST);
+  if (permissionCheck) return permissionCheck;
+
   try {
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
@@ -57,6 +62,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const permissionCheck = await requireToolPermission(SystemTool.CHECKLIST);
+  if (permissionCheck) return permissionCheck;
+
   try {
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {

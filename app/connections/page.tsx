@@ -5,6 +5,8 @@ import { useUser } from "@stackframe/stack";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import ToolProtection from "@/components/auth/ToolProtection";
+import { SystemTool } from "@/types/admin";
 import {
   Dialog,
   DialogContent,
@@ -66,7 +68,7 @@ interface SaiposStore {
 const API_URL =
   process.env.NEXT_PUBLIC_WHATSAPP_API_URL || "https://api.platefull.com.br";
 
-export default function ConnectionsPage() {
+function ConnectionsPageContent() {
   const user = useUser();
   const [whatsappConnections, setWhatsappConnections] = useState<
     WhatsAppConnection[]
@@ -963,5 +965,13 @@ export default function ConnectionsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function ConnectionsPage() {
+  return (
+    <ToolProtection tool={SystemTool.CONEXOES} toolName="Conexões">
+      <ConnectionsPageContent />
+    </ToolProtection>
   );
 }

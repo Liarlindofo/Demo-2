@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ClipboardCheck } from "lucide-react";
 import { useUser } from "@stackframe/stack";
+import ToolProtection from "@/components/auth/ToolProtection";
+import { SystemTool } from "@/types/admin";
 
 interface StoreData {
   id: string;
@@ -14,7 +16,7 @@ interface StoreData {
   displayOrder: number | null;
 }
 
-export default function ChecklistPage() {
+function ChecklistPageContent() {
   const [stores, setStores] = useState<StoreData[]>([]);
   const [loading, setLoading] = useState(true);
   const user = useUser({ or: 'redirect' });
@@ -122,3 +124,10 @@ export default function ChecklistPage() {
   );
 }
 
+export default function ChecklistPage() {
+  return (
+    <ToolProtection tool={SystemTool.CHECKLIST} toolName="Checklist">
+      <ChecklistPageContent />
+    </ToolProtection>
+  );
+}

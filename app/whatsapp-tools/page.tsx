@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Save, Bot, Clock, Store, MessageSquare, Shield, Hash, Power } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import ToolProtection from "@/components/auth/ToolProtection";
+import { SystemTool } from "@/types/admin";
 
 // Usar API routes do Next.js ao invés do backend separado
 const API_URL = "";
@@ -41,7 +43,7 @@ interface WhatsAppConnection {
   apiKey: string;
 }
 
-export default function WhatsAppToolsPage() {
+function WhatsAppToolsPageContent() {
   const user = useUser();
   const [connections, setConnections] = useState<WhatsAppConnection[]>([]);
   const [selectedConnection, setSelectedConnection] = useState<string>("");
@@ -443,5 +445,13 @@ export default function WhatsAppToolsPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function WhatsAppToolsPage() {
+  return (
+    <ToolProtection tool={SystemTool.WHATSAPP_CHAT} toolName="WhatsApp Chat">
+      <WhatsAppToolsPageContent />
+    </ToolProtection>
   );
 }
