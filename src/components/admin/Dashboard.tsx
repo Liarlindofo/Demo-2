@@ -50,9 +50,15 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
     }
   };
 
-  const formatDate = (date: Date | null) => {
+  const formatDate = (date: Date | null | string) => {
     if (!date) return "Nunca";
-    return new Date(date).toLocaleString("pt-BR");
+    try {
+      const dateObj = typeof date === 'string' ? new Date(date) : date;
+      if (isNaN(dateObj.getTime())) return "Data inválida";
+      return dateObj.toLocaleString("pt-BR");
+    } catch (error) {
+      return "Data inválida";
+    }
   };
 
   return (
@@ -112,8 +118,8 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
                       className="flex items-center justify-between p-3 bg-[#0f0f10] rounded"
                     >
                       <div>
-                        <p className="font-medium">{user.name}</p>
-                        <p className="text-sm text-gray-400">{user.email}</p>
+                        <p className="font-medium">{user.name || "Sem nome"}</p>
+                        <p className="text-sm text-gray-400">{user.email || "Sem email"}</p>
                       </div>
                       <p className="text-sm text-gray-500">
                         {formatDate(user.lastLogin)}
@@ -147,7 +153,7 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
                           {formatDate(log.createdAt)}
                         </span>
                       </div>
-                      <p className="text-gray-400">{log.action}</p>
+                      <p className="text-gray-400">{log.action || "Ação desconhecida"}</p>
                     </div>
                   ))
                 )}

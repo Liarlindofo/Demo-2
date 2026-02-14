@@ -6,30 +6,39 @@ import { prisma } from "@/lib/prisma";
 import AdminDashboard from "@/components/admin/Dashboard";
 
 async function getDashboardData() {
-  const totalUsers = await prisma.adminUser.count();
-  const activeUsers = await prisma.adminUser.count({
+  // Buscar dados de stack_users (usuários do sistema)
+  const totalUsers = await prisma.stackUser.count();
+  const activeUsers = await prisma.stackUser.count({
     where: { isActive: true },
   });
   const blockedUsers = totalUsers - activeUsers;
 
-  const recentLogins = await prisma.adminUser.findMany({
+  // Últimos logins baseados em lastActiveAt
+  const recentLogins = await prisma.stackUser.findMany({
     where: {
-      lastLogin: {
+      lastActiveAt: {
         not: null,
       },
     },
     orderBy: {
-      lastLogin: "desc",
+      lastActiveAt: "desc",
     },
     take: 5,
     select: {
       id: true,
-      name: true,
-      email: true,
-      lastLogin: true,
+      displayName: true,
+      primaryEmail: true,
+      lastActiveAt: true,
+      user: {
+        select: {
+          email: true,
+          username: true,
+        },
+      },
     },
   });
 
+  // Logs de auditoria (mantém admin_users para logs de ações administrativas)
   const recentLogs = await prisma.adminAuditLog.findMany({
     orderBy: {
       createdAt: "desc",
@@ -45,11 +54,19 @@ async function getDashboardData() {
     },
   });
 
+  // Formatar recentLogins para o formato esperado pelo componente
+  const formattedLogins = recentLogins.map((user) => ({
+    id: user.id,
+    name: user.displayName || user.primaryEmail || user.user?.email || "Sem nome",
+    email: user.primaryEmail || user.user?.email || "Sem email",
+    lastLogin: user.lastActiveAt,
+  }));
+
   return {
     totalUsers,
     activeUsers,
     blockedUsers,
-    recentLogins,
+    recentLogins: formattedLogins,
     recentLogs,
   };
 }
