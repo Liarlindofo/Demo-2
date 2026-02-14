@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import AdminDashboard from "@/components/admin/Dashboard";
+import { ErrorBoundary } from "@/components/admin/ErrorBoundary";
 
 async function getDashboardData() {
   // Buscar dados de stack_users (usuários do sistema)
@@ -108,7 +109,11 @@ export default async function AdminPage() {
 
     const dashboardData = await getDashboardData();
 
-    return <AdminDashboard session={session} data={dashboardData} />;
+    return (
+      <ErrorBoundary>
+        <AdminDashboard session={session} data={dashboardData} />
+      </ErrorBoundary>
+    );
   } catch (error) {
     console.error("Erro na página admin:", error);
     redirect("/calenza-adm/login");

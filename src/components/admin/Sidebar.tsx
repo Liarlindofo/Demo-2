@@ -26,6 +26,16 @@ export default function AdminSidebar({ session, onLogout, loading }: SidebarProp
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Garantir que session sempre tenha valores válidos
+  const safeSession = {
+    userId: session?.userId || "",
+    email: session?.email || "",
+    name: session?.name || session?.email || "",
+    role: session?.role || "user",
+    permissions: Array.isArray(session?.permissions) ? session.permissions : [],
+    clientId: session?.clientId || undefined,
+  };
+
   const menuItems = [
     {
       href: "/calenza-adm",
@@ -64,8 +74,8 @@ export default function AdminSidebar({ session, onLogout, loading }: SidebarProp
   ];
 
   const filteredItems = menuItems.filter((item) => {
-    if (!item.roles.includes(session.role)) return false;
-    if (item.permission && !session.permissions.includes(item.permission as any)) {
+    if (!item.roles.includes(safeSession.role)) return false;
+    if (item.permission && !safeSession.permissions.includes(item.permission as any)) {
       return false;
     }
     return true;
@@ -76,10 +86,10 @@ export default function AdminSidebar({ session, onLogout, loading }: SidebarProp
       <div className="p-6 border-b border-[#374151]">
         <h2 className="text-xl font-bold">Plateful Admin</h2>
         <p className="text-sm text-gray-400 mt-1">
-          {session.name || session.email}
+          {safeSession.name || safeSession.email}
         </p>
         <p className="text-xs text-gray-500 mt-1 capitalize">
-          {session.role.replace("_", " ")}
+          {String(safeSession.role).replace("_", " ")}
         </p>
       </div>
 

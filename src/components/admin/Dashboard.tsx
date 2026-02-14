@@ -37,13 +37,27 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
+  // Garantir que session sempre tenha valores válidos
+  const safeSession = {
+    userId: session?.userId || "",
+    email: session?.email || "",
+    name: session?.name || session?.email || "",
+    role: session?.role || "user",
+    permissions: Array.isArray(session?.permissions) ? session.permissions : [],
+    clientId: session?.clientId || undefined,
+  };
+
   // Garantir que data sempre tenha valores válidos
   const safeData = {
-    totalUsers: data?.totalUsers ?? 0,
-    activeUsers: data?.activeUsers ?? 0,
-    blockedUsers: data?.blockedUsers ?? 0,
-    recentLogins: Array.isArray(data?.recentLogins) ? data.recentLogins : [],
-    recentLogs: Array.isArray(data?.recentLogs) ? data.recentLogs : [],
+    totalUsers: typeof data?.totalUsers === 'number' ? data.totalUsers : 0,
+    activeUsers: typeof data?.activeUsers === 'number' ? data.activeUsers : 0,
+    blockedUsers: typeof data?.blockedUsers === 'number' ? data.blockedUsers : 0,
+    recentLogins: Array.isArray(data?.recentLogins) 
+      ? data.recentLogins.filter((item: any) => item && typeof item === 'object' && item.id)
+      : [],
+    recentLogs: Array.isArray(data?.recentLogs)
+      ? data.recentLogs.filter((item: any) => item && typeof item === 'object' && item.id)
+      : [],
   };
 
   const handleLogout = async () => {
@@ -72,14 +86,14 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
 
   return (
     <div className="min-h-screen bg-black text-white flex">
-      <AdminSidebar session={session} onLogout={handleLogout} loading={loading} />
+      <AdminSidebar session={safeSession} onLogout={handleLogout} loading={loading} />
 
       <div className="flex-1 ml-64 p-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
             <h1 className="text-3xl font-bold mb-2">Dashboard Administrativo</h1>
             <p className="text-gray-400">
-              Bem-vindo, {session.name || session.email}
+              Bem-vindo, {safeSession.name || safeSession.email}
             </p>
           </div>
 
@@ -121,20 +135,23 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
                 {safeData.recentLogins.length === 0 ? (
                   <p className="text-gray-400 text-sm">Nenhum login recente</p>
                 ) : (
-                  safeData.recentLogins.map((user) => (
-                    <div
-                      key={user.id}
-                      className="flex items-center justify-between p-3 bg-[#0f0f10] rounded"
-                    >
-                      <div>
-                        <p className="font-medium">{String(user?.name || "Sem nome")}</p>
-                        <p className="text-sm text-gray-400">{String(user?.email || "Sem email")}</p>
+                  safeData.recentLogins.map((user: any) => {
+                    if (!user || !user.id) return null;
+                    return (
+                      <div
+                        key={user.id}
+                        className="flex items-center justify-between p-3 bg-[#0f0f10] rounded"
+                      >
+                        <div>
+                          <p className="font-medium">{String(user?.name || "Sem nome")}</p>
+                          <p className="text-sm text-gray-400">{String(user?.email || "Sem email")}</p>
+                        </div>
+                        <p className="text-sm text-gray-500">
+                          {formatDate(user?.lastLogin)}
+                        </p>
                       </div>
-                      <p className="text-sm text-gray-500">
-                        {formatDate(user.lastLogin)}
-                      </p>
-                    </div>
-                  ))
+                    );
+                  }).filter(Boolean)
                 )}
               </div>
             </div>
@@ -149,22 +166,25 @@ export default function AdminDashboard({ session, data }: DashboardProps) {
                 {safeData.recentLogs.length === 0 ? (
                   <p className="text-gray-400 text-sm">Nenhuma ação recente</p>
                 ) : (
-                  safeData.recentLogs.map((log) => (
-                    <div
-                      key={log.id}
-                      className="p-3 bg-[#0f0f10] rounded text-sm"
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium">
-                          {String(log?.user?.name || "Sistema")}
-                        </span>
-                        <span className="text-gray-500 text-xs">
-                          {formatDate(log.createdAt)}
-                        </span>
+                  safeData.recentLogs.map((log: any) => {
+                    if (!log || !log.id) return null;
+                    return (
+                      <div
+                        key={log.id}
+                        className="p-3 bg-[#0f0f10] rounded text-sm"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium">
+                            {String(log?.user?.name || "Sistema")}
+                          </span>
+                          <span className="text-gray-500 text-xs">
+                            {formatDate(log?.createdAt)}
+                          </span>
+                        </div>
+                        <p className="text-gray-400">{String(log?.action || "Ação desconhecida")}</p>
                       </div>
-                      <p className="text-gray-400">{String(log?.action || "Ação desconhecida")}</p>
-                    </div>
-                  ))
+                    );
+                  }).filter(Boolean)
                 )}
               </div>
             </div>
