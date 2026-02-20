@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import ToolProtection from "@/components/auth/ToolProtection";
 import { SystemTool } from "@/types/admin";
+import { useApp } from "@/contexts/app-context";
 import {
   Dialog,
   DialogContent,
@@ -70,6 +71,7 @@ const API_URL =
 
 function ConnectionsPageContent() {
   const user = useUser();
+  const { addToast } = useApp();
   const [whatsappConnections, setWhatsappConnections] = useState<
     WhatsAppConnection[]
   >([]);
@@ -807,6 +809,49 @@ function ConnectionsPageContent() {
                             </span>
                           </div>
                         </div>
+                        <Button
+                          onClick={async () => {
+                            const key = `test-${store.id}`;
+                            setActionLoading({ ...actionLoading, [key]: true });
+                            try {
+                              const response = await fetch(`/api/user-apis/test?id=${store.id}`, {
+                                method: 'POST',
+                              });
+                              if (response.ok) {
+                                const data = await response.json();
+                                if (data.api?.status === 'connected') {
+                                  addToast('✅ Conexão estabelecida com sucesso!', 'success');
+                                } else {
+                                  addToast('❌ Falha na conexão. Verifique o token.', 'error');
+                                }
+                                await loadConnections();
+                              } else {
+                                const errorData = await response.json().catch(() => ({}));
+                                addToast(errorData?.error || 'Erro ao testar conexão', 'error');
+                              }
+                            } catch (error) {
+                              console.error('Erro ao testar conexão:', error);
+                              addToast('Erro ao testar conexão', 'error');
+                            } finally {
+                              setActionLoading({ ...actionLoading, [key]: false });
+                            }
+                          }}
+                          disabled={actionLoading[`test-${store.id}`]}
+                          className="w-full bg-[#001F05] hover:bg-[#003308] text-white mt-2"
+                          size="sm"
+                        >
+                          {actionLoading[`test-${store.id}`] ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Testando...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Testar Conexão
+                            </>
+                          )}
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>

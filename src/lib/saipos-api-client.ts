@@ -153,11 +153,32 @@ export async function fetchSaiposSales(
 
   // Tentar primeiro o endpoint da documentação oficial
   let url = `${BASE_URL}/sales/sales?${params.toString()}`;
-  let response = await fetchWithRateLimit(url, token);
+  let response: Response;
+  
+  try {
+    response = await fetchWithRateLimit(url, token);
+  } catch (error) {
+    // Se falhar, tentar endpoint antigo
+    console.warn('⚠️ Erro ao acessar /sales/sales, tentando /search_sales como fallback...', error);
+    const oldParams = new URLSearchParams({
+      'p_date_column_filter': withDate === 'created_at' ? 'shift_date' : 'sale_date',
+      'p_filter_date_start': startDate,
+      'p_filter_date_end': endDate,
+      'p_limit': String(limit),
+      'p_offset': String(offset),
+    });
+    
+    if (storeId) {
+      oldParams.append('store_id', storeId);
+    }
+    
+    url = `${BASE_URL}/search_sales?${oldParams.toString()}`;
+    response = await fetchWithRateLimit(url, token);
+  }
 
   // Se retornar 404, tentar o endpoint antigo como fallback
   if (response.status === 404) {
-    console.warn('⚠️ Endpoint /sales/sales não encontrado, tentando /search_sales como fallback...');
+    console.warn('⚠️ Endpoint /sales/sales não encontrado (404), tentando /search_sales como fallback...');
     // Converter parâmetros para formato antigo
     const oldParams = new URLSearchParams({
       'p_date_column_filter': withDate === 'created_at' ? 'shift_date' : 'sale_date',

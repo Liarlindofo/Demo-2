@@ -104,34 +104,35 @@ export class SaiposAPIService {
       const cleanToken = token.replace(/^Bearer\s+/i, '');
       
       console.log('🔗 Testando conexão real com Saipos...');
-      console.log(`📍 URL: ${baseUrl}/search_sales`);
       
-      // Usar o endpoint /search_sales para testar a conexão
+      // Usar o novo cliente da API para testar a conexão
       // Criar data de hoje para o teste
       const today = new Date();
       const todayISO = today.toISOString().split('T')[0];
+      const startDateTime = `${todayISO}T00:00:00`;
+      const endDateTime = `${todayISO}T23:59:59`;
       
-      let response: Response;
+      // Importar o cliente da API
+      const { fetchSaiposSales } = await import('@/lib/saipos-api-client');
+      
       try {
-        // Adicionar timeout manual para evitar travamentos
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos
-        
-        // Usar parâmetros mínimos para testar a conexão
-        const testUrl = `${baseUrl}/search_sales?p_date_column_filter=shift_date&p_filter_date_start=${todayISO}T00:00:00&p_filter_date_end=${todayISO}T23:59:59&p_limit=1&p_offset=0`;
-        
-        response = await fetch(testUrl, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${cleanToken}`,
-            'accept': 'application/json',
-            'Content-Type': 'application/json',
-            'User-Agent': 'Drin-Platform/1.0',
-          },
-          signal: controller.signal,
+        // Usar o novo cliente com parâmetros corretos da documentação
+        const result = await fetchSaiposSales({
+          token: cleanToken,
+          startDate: startDateTime,
+          endDate: endDateTime,
+          withDate: 'created_at',
+          dataColumnsFilter: 'default',
+          limit: 1,
+          offset: 0
         });
         
-        clearTimeout(timeoutId);
+        if (result.success) {
+          console.log('✅ Conexão com Saipos estabelecida!');
+          return true;
+        } else {
+          throw new Error(result.error || 'Falha ao conectar com a API Saipos');
+        }
       } catch (fetchError) {
         // Erro de rede ou conexão
         const networkError = fetchError instanceof Error ? fetchError.message : String(fetchError);
@@ -142,11 +143,11 @@ export class SaiposAPIService {
           message: networkError,
           name: errorName,
           cause: errorCause,
-          url: `${baseUrl}/search_sales`
+          url: `${baseUrl}/sales/sales`
         });
         
         // Verificar se foi abortado por timeout
-        if (errorName === 'AbortError' || networkError.includes('aborted')) {
+        if (errorName === 'AbortError' || networkError.includes('aborted') || networkError.includes('Timeout')) {
           throw new Error(`Timeout ao conectar com a API Saipos (15s). Verifique se a URL está correta: ${baseUrl}`);
         }
         
@@ -173,42 +174,13 @@ export class SaiposAPIService {
           throw new Error(`Erro de certificado SSL. Verifique se a URL usa HTTPS: ${baseUrl}`);
         }
         
-        throw new Error(`Erro de conexão: ${networkError}`);
+        if (networkError.includes('401') || networkError.includes('403')) {
+          throw new Error(`Token inválido ou sem permissão. Verifique se o Bearer Token está correto.`);
+        }
+        
+        // Re-throw o erro original se tiver mensagem útil
+        throw new Error(networkError || 'Erro de conexão desconhecido');
       }
-
-      const responseText = await response.text();
-      let responseData: unknown;
-      
-      try {
-        responseData = JSON.parse(responseText);
-      } catch {
-        responseData = responseText;
-      }
-
-      if (response.ok) {
-        console.log('✅ Conexão com Saipos estabelecida!');
-        return true;
-      }
-      
-      // Capturar mensagem de erro específica da API
-      let errorMessage = `Erro ${response.status}: ${response.statusText}`;
-      if (responseData && typeof responseData === 'object') {
-        const errorObj = responseData as { message?: string; error?: string; detail?: string };
-        errorMessage = errorObj.message || errorObj.error || errorObj.detail || errorMessage;
-      }
-      
-      // Se retornar 401 ou 403, o token está inválido
-      if (response.status === 401 || response.status === 403) {
-        throw new Error(`Token inválido ou sem permissão: ${errorMessage}`);
-      }
-      
-      // Se retornar 404, o endpoint pode não existir
-      if (response.status === 404) {
-        throw new Error(`Endpoint não encontrado. Verifique se a URL base está correta: ${baseUrl}`);
-      }
-      
-      // Outros erros
-      throw new Error(errorMessage);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('❌ Erro ao testar conexão com Saipos:', errorMessage);
