@@ -7,6 +7,15 @@ import { CHECKLIST_TOPICS, type EvaluationStatus } from "@/lib/checklist-data";
 import { ArrowLeft, Save, ChevronDown, ChevronUp, Camera, X } from "lucide-react";
 import { useUser } from "@stackframe/stack";
 import { startTokenRefresh, stopTokenRefresh } from "@/lib/refresh-token";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface StoreData {
   id: string;
@@ -35,6 +44,9 @@ export default function NewEvaluationPage() {
   const [improvementSuggestions, setImprovementSuggestions] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [showReloadDialog, setShowReloadDialog] = useState(false);
+  const [pendingReload, setPendingReload] = useState(false);
+  const confirmedReload = useRef(false);
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
   useEffect(() => {
@@ -231,6 +243,76 @@ export default function NewEvaluationPage() {
       }
     }
   }, [selectedStoreId, stores]);
+
+  // Interceptar tentativa de recarregar a página quando há progresso
+  useEffect(() => {
+    // Verificar se há progresso no checklist
+    const hasProgress = () => {
+      if (currentStep !== 'checklist') return false;
+      // Verificar se há avaliações feitas
+      if (evaluations.size > 0) return true;
+      // Verificar se há observações de tópicos
+      if (topicObservations.size > 0) return true;
+      return false;
+    };
+
+    if (!hasProgress()) return;
+
+    // Interceptar teclas de atalho para recarregar (F5, Ctrl+R, Ctrl+Shift+R)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // F5 ou Ctrl+R ou Ctrl+Shift+R
+      if (
+        e.key === 'F5' ||
+        (e.ctrlKey && e.key === 'r') ||
+        (e.ctrlKey && e.shiftKey && e.key === 'R')
+      ) {
+        e.preventDefault();
+        setShowReloadDialog(true);
+        setPendingReload(true);
+      }
+    };
+
+    // Interceptar tentativa de sair/recarregar (para outros casos como botão do navegador)
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Se o usuário já confirmou o recarregamento, permitir
+      if (confirmedReload.current) {
+        return;
+      }
+      
+      // Se já mostramos o popup customizado, não mostrar o alerta nativo novamente
+      if (showReloadDialog) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+      
+      // Se não mostramos o popup ainda, mostrar alerta nativo como fallback
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [currentStep, evaluations, topicObservations, showReloadDialog]);
+
+  const handleConfirmReload = () => {
+    confirmedReload.current = true;
+    setShowReloadDialog(false);
+    setPendingReload(false);
+    // Recarregar a página
+    window.location.reload();
+  };
+
+  const handleCancelReload = () => {
+    setShowReloadDialog(false);
+    setPendingReload(false);
+  };
 
 
   const fetchStores = async () => {
@@ -682,7 +764,34 @@ export default function NewEvaluationPage() {
     const percentage = maxTotalScore > 0 ? (totalScore / maxTotalScore) * 100 : 0;
 
     return (
-      <div className="min-h-screen bg-black text-white py-8">
+      <>
+        <Dialog open={showReloadDialog} onOpenChange={setShowReloadDialog}>
+          <DialogContent className="bg-[#141415] border-[#374151] text-white" showCloseButton={false}>
+            <DialogHeader>
+              <DialogTitle className="text-white">Recarregar Página?</DialogTitle>
+              <DialogDescription className="text-gray-400">
+                Você tem progresso não salvo no checklist. Deseja recarregar a página? Todo o progresso será perdido.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                onClick={handleCancelReload}
+                className="bg-[#0f0f10] border-[#374151] text-white hover:bg-[#374151]"
+              >
+                Não
+              </Button>
+              <Button
+                onClick={handleConfirmReload}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                Sim, Recarregar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <div className="min-h-screen bg-black text-white py-8">
         <div className="container mx-auto px-4 max-w-4xl">
           <div className="bg-[#141415] rounded-2xl shadow-xl p-6 mb-6 sticky top-4 z-10 border border-[#374151]">
             <div className="flex items-center justify-between mb-4">
@@ -890,6 +999,7 @@ export default function NewEvaluationPage() {
           </div>
         </div>
       </div>
+      </>
     );
   }
 
