@@ -148,6 +148,7 @@ export async function POST(request: Request) {
     console.log(`🔄 Buscando vendas da Saipos para o período: ${startISO} até ${endISO}`);
 
     // Usar o novo cliente da API que respeita limites e trata rate limiting
+    // O token já está associado às lojas, não precisamos passar storeId
     const result = await fetchSaiposSalesLargePeriod({
       token: cleanToken,
       startDate: startISO,
@@ -155,8 +156,7 @@ export async function POST(request: Request) {
       withDate: 'created_at',
       dataColumnsFilter: 'all',
       limit: 100,
-      offset: 0,
-      storeId: targetStoreId || undefined
+      offset: 0
     });
 
     if (!result.success) {

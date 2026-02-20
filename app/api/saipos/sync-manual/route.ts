@@ -224,10 +224,12 @@ export async function POST(request: Request) {
     }
 
     // 3) Calcular intervalo dos últimos N dias
+    // Usar UTC para garantir consistência
     const today = new Date();
-    const endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+    const endDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 23, 59, 59, 999));
     const startDate = new Date(endDate);
-    startDate.setDate(startDate.getDate() - (days - 1));
+    startDate.setUTCDate(startDate.getUTCDate() - (days - 1));
+    startDate.setUTCHours(0, 0, 0, 0);
 
     console.log(
       `🔄 Sincronizando ${days} dias para apiId=${apiId}, storeId=${resolvedStoreId}`
@@ -244,11 +246,13 @@ export async function POST(request: Request) {
     console.log(`🧹 Removidos ${deletedOld.count} registros antigos`);
 
     // 5) Buscar vendas da Saipos usando o novo cliente
+    // Formato ISO 8601 completo conforme documentação: 2024-01-01T00:00:00
     const startISO = startDate.toISOString();
     const endISO = endDate.toISOString();
     
     console.log(`🔄 Buscando vendas da Saipos para o período: ${startISO} até ${endISO}`);
     
+    // O token já está associado às lojas, não precisamos passar storeId
     const result = await fetchSaiposSalesLargePeriod({
       token: apiKey,
       startDate: startISO,
@@ -256,8 +260,7 @@ export async function POST(request: Request) {
       withDate: 'created_at',
       dataColumnsFilter: 'all',
       limit: 100,
-      offset: 0,
-      storeId: resolvedStoreId || undefined
+      offset: 0
     });
 
     if (!result.success) {

@@ -137,7 +137,9 @@ export async function fetchSaiposSales(
     };
   }
 
-  // Construir URL com parâmetros corretos
+  // Construir URL com parâmetros corretos conforme documentação oficial
+  // A documentação não menciona store_id como parâmetro de query
+  // O token já está associado às lojas, então não precisamos filtrar por store_id
   const params = new URLSearchParams({
     'p_data_columns_filter': dataColumnsFilter,
     'p_filter_date_start': startDate,
@@ -147,54 +149,11 @@ export async function fetchSaiposSales(
     'p_offset': String(offset),
   });
 
-  if (storeId) {
-    params.append('store_id', storeId);
-  }
-
-  // Tentar primeiro o endpoint da documentação oficial
-  let url = `${BASE_URL}/sales/sales?${params.toString()}`;
-  let response: Response;
+  // Usar apenas o endpoint oficial da documentação
+  const url = `${BASE_URL}/sales/sales?${params.toString()}`;
+  console.log(`📡 Fazendo requisição para: ${url.replace(token, '***')}`);
   
-  try {
-    response = await fetchWithRateLimit(url, token);
-  } catch (error) {
-    // Se falhar, tentar endpoint antigo
-    console.warn('⚠️ Erro ao acessar /sales/sales, tentando /search_sales como fallback...', error);
-    const oldParams = new URLSearchParams({
-      'p_date_column_filter': withDate === 'created_at' ? 'shift_date' : 'sale_date',
-      'p_filter_date_start': startDate,
-      'p_filter_date_end': endDate,
-      'p_limit': String(limit),
-      'p_offset': String(offset),
-    });
-    
-    if (storeId) {
-      oldParams.append('store_id', storeId);
-    }
-    
-    url = `${BASE_URL}/search_sales?${oldParams.toString()}`;
-    response = await fetchWithRateLimit(url, token);
-  }
-
-  // Se retornar 404, tentar o endpoint antigo como fallback
-  if (response.status === 404) {
-    console.warn('⚠️ Endpoint /sales/sales não encontrado (404), tentando /search_sales como fallback...');
-    // Converter parâmetros para formato antigo
-    const oldParams = new URLSearchParams({
-      'p_date_column_filter': withDate === 'created_at' ? 'shift_date' : 'sale_date',
-      'p_filter_date_start': startDate,
-      'p_filter_date_end': endDate,
-      'p_limit': String(limit),
-      'p_offset': String(offset),
-    });
-    
-    if (storeId) {
-      oldParams.append('store_id', storeId);
-    }
-    
-    url = `${BASE_URL}/search_sales?${oldParams.toString()}`;
-    response = await fetchWithRateLimit(url, token);
-  }
+  const response = await fetchWithRateLimit(url, token);
 
   try {
     if (!response.ok) {
