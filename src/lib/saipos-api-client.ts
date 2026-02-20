@@ -26,12 +26,30 @@ interface SaiposResponse<T> {
 
 /**
  * Valida se o período está dentro do limite de 15 dias
+ * Calcula o número de dias únicos (não horas)
  */
 export function validatePeriod(startDate: string, endDate: string): { valid: boolean; days: number; error?: string } {
   const start = new Date(startDate);
   const end = new Date(endDate);
-  const diffTime = Math.abs(end.getTime() - start.getTime());
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 para incluir ambos os dias
+  
+  // Normalizar para meia-noite UTC para calcular apenas dias únicos
+  const startDateOnly = new Date(Date.UTC(
+    start.getUTCFullYear(),
+    start.getUTCMonth(),
+    start.getUTCDate()
+  ));
+  
+  const endDateOnly = new Date(Date.UTC(
+    end.getUTCFullYear(),
+    end.getUTCMonth(),
+    end.getUTCDate()
+  ));
+  
+  // Calcular diferença em dias (não em horas)
+  const diffTime = endDateOnly.getTime() - startDateOnly.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 para incluir ambos os dias
+  
+  console.log(`📅 Validação de período: ${startDateOnly.toISOString().split('T')[0]} até ${endDateOnly.toISOString().split('T')[0]} = ${diffDays} dias`);
   
   if (diffDays > MAX_PERIOD_DAYS) {
     return {

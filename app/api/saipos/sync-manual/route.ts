@@ -224,12 +224,28 @@ export async function POST(request: Request) {
     }
 
     // 3) Calcular intervalo dos últimos N dias
-    // Usar UTC para garantir consistência
-    const today = new Date();
-    const endDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 23, 59, 59, 999));
+    // Usar UTC para garantir consistência e evitar problemas de timezone
+    const now = new Date();
+    const endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+    
+    // Calcular startDate: se days=15, queremos exatamente 15 dias (hoje + 14 dias anteriores)
+    // Garantir que não ultrapasse 15 dias
     const startDate = new Date(endDate);
     startDate.setUTCDate(startDate.getUTCDate() - (days - 1));
     startDate.setUTCHours(0, 0, 0, 0);
+    
+    // Validar que o período não excede 15 dias
+    const diffTime = endDate.getTime() - startDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    
+    if (diffDays > 15) {
+      console.warn(`⚠️ Período calculado (${diffDays} dias) excede 15 dias. Ajustando para exatamente 15 dias.`);
+      // Ajustar para exatamente 15 dias
+      const adjustedStartDate = new Date(endDate);
+      adjustedStartDate.setUTCDate(adjustedStartDate.getUTCDate() - 14);
+      adjustedStartDate.setUTCHours(0, 0, 0, 0);
+      startDate.setTime(adjustedStartDate.getTime());
+    }
 
     console.log(
       `🔄 Sincronizando ${days} dias para apiId=${apiId}, storeId=${resolvedStoreId}`
