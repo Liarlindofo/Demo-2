@@ -121,7 +121,7 @@ function ConnectionsPageContent() {
         const whatsappAPIs = data.filter((api) => api.type === "whatsapp");
         const saiposAPIs = data
           .filter((api) => api.type === "saipos")
-          .slice(0, 3);
+          .slice(0, 4);
 
         // Carregar status das conexões WhatsApp (APENAS STATUS, NUNCA START)
         let connectionsWithStatus: WhatsAppConnection[] = [];
@@ -247,8 +247,8 @@ function ConnectionsPageContent() {
       return;
     }
 
-    if (connectionType === "saipos" && saiposStores.length >= 3) {
-      setErrorMsg("Você já possui 3 lojas Saipos cadastradas (limite máximo)");
+    if (connectionType === "saipos" && saiposStores.length >= 4) {
+      setErrorMsg("Você já possui 4 lojas Saipos cadastradas (limite máximo)");
       return;
     }
 
@@ -529,7 +529,7 @@ function ConnectionsPageContent() {
               className="data-[state=active]:bg-[#001F05] text-white"
             >
               <Store className="h-4 w-4 mr-2" />
-              Saipos ({saiposStores.length}/3)
+              Saipos ({saiposStores.length}/4)
             </TabsTrigger>
           </TabsList>
 
@@ -720,9 +720,9 @@ function ConnectionsPageContent() {
           <TabsContent value="saipos" className="space-y-6">
             <div className="flex justify-between items-center mb-4">
               <p className="text-gray-400">
-                Conecte até 3 lojas Saipos usando Bearer Token
+                Conecte até 4 lojas Saipos usando Bearer Token
               </p>
-              {saiposStores.length < 3 && (
+              {saiposStores.length < 4 && (
                 <Button
                   onClick={() => {
                     setAddConnectionModal(true);
@@ -888,8 +888,8 @@ function ConnectionsPageContent() {
 
             {connectionType === "saipos" && (
               <p className="text-sm text-gray-400">
-                Você pode adicionar até 3 lojas Saipos. Atualmente:{" "}
-                {saiposStores.length}/3
+                Você pode adicionar até 4 lojas Saipos. Atualmente:{" "}
+                {saiposStores.length}/4
               </p>
             )}
           </div>

@@ -77,10 +77,10 @@ export function StoreCarousel() {
         setIsLoadingStores(true);
         console.log('🏪 Carregando lojas da API Saipos...');
         
-        // Verificar se há APIs conectadas (até 4)
+        // Verificar se há APIs conectadas (até 4 lojas)
         const connectedSaiposAPIs = connectedAPIs
           .filter(api => api.type === 'saipos' && api.status === 'connected' && api.apiKey)
-          .slice(0, 4);
+          .slice(0, 4); // Limite de 4 lojas
 
         if (connectedSaiposAPIs.length === 0) {
           console.log('⚠️ Nenhuma API Saipos conectada');
