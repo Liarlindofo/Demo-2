@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { normalizeSalesResponse, type SaiposRawSale } from "@/lib/saipos-api";
 import { stackServerApp } from "@/stack";
 import { syncStackAuthUser } from "@/lib/stack-auth-sync";
+import { fetchSaiposSalesLargePeriod } from "@/lib/saipos-api-client";
 
 interface SyncRequest {
   apiId?: string;
@@ -140,102 +141,41 @@ export async function POST(request: Request) {
       `🧹 Removidos ${deletedOld.count} registros antigos de sales_daily para apiId=${apiId}`
     );
 
-    // 5) Buscar vendas reais da Saipos para o período inteiro
+    // 5) Buscar vendas reais da Saipos para o período inteiro usando o novo cliente
     const startISO = start.toISOString();
     const endISO = end.toISOString();
 
-    async function fetchSalesFromSaiposPeriod(): Promise<SaiposRawSale[]> {
-      const allSales: unknown[] = [];
-      const limit = 200;
-      let offset = 0;
-      let totalRequests = 0;
+    console.log(`🔄 Buscando vendas da Saipos para o período: ${startISO} até ${endISO}`);
 
-      while (true) {
-        const url = `https://data.saipos.io/v1/search_sales?p_date_column_filter=shift_date&p_filter_date_start=${encodeURIComponent(
-          startISO
-        )}&p_filter_date_end=${encodeURIComponent(
-          endISO
-        )}&p_limit=${limit}&p_offset=${offset}`;
+    // Usar o novo cliente da API que respeita limites e trata rate limiting
+    const result = await fetchSaiposSalesLargePeriod({
+      token: cleanToken,
+      startDate: startISO,
+      endDate: endISO,
+      withDate: 'created_at',
+      dataColumnsFilter: 'all',
+      limit: 100,
+      offset: 0,
+      storeId: targetStoreId || undefined
+    });
 
-        totalRequests++;
-        console.log(
-          `📥 [Saipos] Página ${totalRequests} (offset=${offset}) para apiId=${apiId}`
-        );
-
-        const res = await fetch(url, {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${cleanToken}`,
-          },
-          cache: "no-store",
-        });
-
-        if (!res.ok) {
-          const txt = await res.text().catch(() => "");
-          console.error(
-            "❌ Erro na API Saipos:",
-            res.status,
-            res.statusText,
-            txt.slice(0, 300)
-          );
-          break;
-        }
-
-        let pageData: unknown;
-        try {
-          const text = await res.text();
-          pageData = text ? JSON.parse(text) : null;
-        } catch (err) {
-          console.error("❌ Erro ao parsear JSON da Saipos:", err);
-          break;
-        }
-
-        // Type guard para verificar se o objeto tem propriedades data ou items
-        const hasDataProperty = (obj: unknown): obj is { data: unknown[] } => {
-          if (typeof obj !== 'object' || obj === null) return false;
-          const candidate = obj as Record<string, unknown>;
-          return 'data' in candidate && Array.isArray(candidate.data);
-        };
-
-        const hasItemsProperty = (obj: unknown): obj is { items: unknown[] } => {
-          if (typeof obj !== 'object' || obj === null) return false;
-          const candidate = obj as Record<string, unknown>;
-          return 'items' in candidate && Array.isArray(candidate.items);
-        };
-
-        const pageArray = Array.isArray(pageData)
-          ? pageData
-          : hasDataProperty(pageData)
-          ? pageData.data
-          : hasItemsProperty(pageData)
-          ? pageData.items
-          : [];
-
-        if (pageArray.length === 0) {
-          console.log("⚠️ Página vazia, encerrando paginação.");
-          break;
-        }
-
-        allSales.push(...pageArray);
-        offset += limit;
-
-        if (totalRequests >= 100) {
-          console.warn(
-            "⚠️ Limite de 100 requisições atingido, parando paginação."
-          );
-          break;
-        }
-
-        await sleep(800);
-      }
-
-      console.log(`📊 Total bruto de vendas carregadas: ${allSales.length}`);
-      return allSales as SaiposRawSale[];
+    if (!result.success) {
+      console.error('❌ Erro ao buscar vendas:', result.error);
+      return NextResponse.json({
+        success: false,
+        apiId,
+        storeId: targetStoreId,
+        startDate: start,
+        endDate: end,
+        daysSynced: 0,
+        error: result.error || 'Erro ao buscar vendas da API Saipos',
+      }, { status: 500 });
     }
 
-    const rawSales = await fetchSalesFromSaiposPeriod();
+    console.log(`📊 Total de vendas carregadas da API: ${result.data.length}`);
+
+    // Converter para o formato esperado
+    const rawSales = result.data as SaiposRawSale[];
     const normalized = normalizeSalesResponse(rawSales);
 
     console.log(
@@ -254,9 +194,34 @@ export async function POST(request: Request) {
       });
     }
 
-    // 6) UPSERT em sales_daily por (apiId, date)
+    // 6) Calcular clientes únicos por dia
+    const uniqueCustomersByDate = new Map<string, Set<string>>();
+    for (const sale of rawSales) {
+      const saleDate = sale.shift_date ?? sale.sale_date ?? sale.created_at ?? new Date().toISOString();
+      const dateKey = new Date(saleDate).toISOString().split("T")[0];
+      
+      if (!uniqueCustomersByDate.has(dateKey)) {
+        uniqueCustomersByDate.set(dateKey, new Set());
+      }
+      
+      // Extrair customer.id_customer conforme documentação
+      if (sale.customer?.id_customer) {
+        const customerId = String(sale.customer.id_customer);
+        uniqueCustomersByDate.get(dateKey)!.add(customerId);
+      }
+    }
+
+    // 7) UPSERT em sales_daily por (apiId, date)
     const upserts = normalized.map((data) => {
-      const date = new Date(data.date);
+      const date = new Date(data.date + 'T00:00:00.000Z'); // Garantir UTC
+      const uniqueCustomers = uniqueCustomersByDate.get(data.date)?.size || 0;
+      
+      console.log(`📊 Salvando dados para ${data.date}:`, {
+        totalOrders: data.totalOrders,
+        totalSales: data.totalSales,
+        uniqueCustomers,
+      });
+      
       return db.salesDaily.upsert({
         where: {
           sales_daily_api_date_unique: {
@@ -270,6 +235,7 @@ export async function POST(request: Request) {
           date,
           totalOrders: data.totalOrders,
           totalSales: data.totalSales,
+          uniqueCustomers,
           channels: {
             ifood: data.qtdIFood,
             telefone: data.qtdTelefone,
@@ -289,6 +255,7 @@ export async function POST(request: Request) {
         update: {
           totalOrders: data.totalOrders,
           totalSales: data.totalSales,
+          uniqueCustomers,
           channels: {
             ifood: data.qtdIFood,
             telefone: data.qtdTelefone,

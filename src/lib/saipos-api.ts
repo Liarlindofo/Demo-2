@@ -564,17 +564,57 @@ export function normalizeStoresResponse(apiJson: unknown): SaiposStore[] {
   }
 }
 
-// Tipo para dados brutos de venda da API Saipos
+// Tipo para dados brutos de venda da API Saipos (baseado na documentação oficial)
 export interface SaiposRawSale {
+  id_sale?: string | number;
+  id_store?: string | number;
   shift_date?: string;
   sale_date?: string;
   created_at?: string;
+  updated_at?: string;
   status?: string;
+  // Campos financeiros da documentação
+  total_amount?: number; // Campo principal da documentação
+  total_discount?: number;
+  total_increase?: number;
+  // Campos antigos (fallback)
   total_value?: number;
   amount_total?: number;
+  total?: number;
+  valor_total?: number;
+  amount?: number;
+  // Tipo de venda (1=Delivery, 2=Retirada, 3=Salão, 4=Ficha)
+  id_sale_type?: number;
   order_type?: string;
+  // Cliente
+  customer?: {
+    id_customer?: string | number;
+    name?: string;
+    email?: string;
+    phone?: string;
+    cpf_cnpj?: string;
+  };
+  // Canais/origem
   origin_name?: string;
   channel?: string;
+  partner_sale?: {
+    desc_store_partner?: string;
+    name?: string;
+  };
+  desc_sale?: string;
+  origin?: string;
+  // Itens
+  items?: Array<{
+    id_sale_item?: string | number;
+    desc_sale_item?: string;
+    desc_store_item?: string;
+    quantity?: number;
+    unit_price?: number;
+    deleted?: boolean;
+    choices?: Array<{
+      aditional_price?: number;
+    }>;
+  }>;
   total_items?: number;
   additional_value?: number;
   discount_value?: number;
@@ -608,6 +648,7 @@ export function normalizeSalesResponse(sales: SaiposRawSale[]): NormalizedSalesD
   const grouped: Record<string, Omit<NormalizedSalesData, 'averageTicketDelivery' | 'averageTicketBalcao'>> = {};
 
   for (const sale of sales) {
+    // Usar shift_date como prioridade (data do turno conforme documentação)
     const saleDate = sale.shift_date ?? sale.sale_date ?? sale.created_at ?? new Date().toISOString();
     const dateKey = new Date(saleDate).toISOString().split("T")[0];
     if (!grouped[dateKey]) {
@@ -637,32 +678,72 @@ export function normalizeSalesResponse(sales: SaiposRawSale[]): NormalizedSalesD
     // Cancelados
     if (sale.status?.toLowerCase().includes("cancel")) g.canceledOrders++;
 
-    // Valores
-    const value = Number(sale.total_value ?? sale.amount_total ?? 0);
+    // Valores - usar campos da documentação oficial da API Saipos
+    // Quando p_data_columns_filter=all, retorna: total_amount, total_discount, total_increase
+    // total_amount já inclui descontos e acréscimos
+    const value = Number(
+      sale.total_amount ?? 
+      sale.total_value ?? 
+      sale.amount_total ?? 
+      sale.total ?? 
+      sale.valor_total ?? 
+      sale.amount ?? 
+      0
+    );
     g.totalSales += value;
 
-    // Tipo de pedido
-    const type = sale.order_type?.toLowerCase() ?? "";
-    if (type.includes("delivery")) {
+    // Tipo de pedido usando id_sale_type da documentação
+    // 1=Entrega, 2=Retirada/Balcão, 3=Salão/mesa, 4=Ficha/Senha
+    const saleType = sale.id_sale_type ?? 0;
+    if (saleType === 1) {
+      // Delivery
       g.qtdDelivery++;
       g.totalSalesDelivery += value;
       g.totalDeliveryFee += Number(sale.delivery_fee ?? 0);
-    } else {
+    } else if (saleType === 2) {
+      // Balcão/Retirada
       g.qtdBalcao++;
       g.totalSalesBalcao += value;
     }
+    // Fallback para campos antigos
+    else {
+      const type = sale.order_type?.toLowerCase() ?? "";
+      if (type.includes("delivery")) {
+        g.qtdDelivery++;
+        g.totalSalesDelivery += value;
+        g.totalDeliveryFee += Number(sale.delivery_fee ?? 0);
+      } else {
+        g.qtdBalcao++;
+        g.totalSalesBalcao += value;
+      }
+    }
 
-    // Canais
-    const channel = (sale.origin_name ?? sale.channel ?? "").toLowerCase();
-    if (channel.includes("ifood")) g.qtdIFood++;
-    else if (channel.includes("telefone")) g.qtdTelefone++;
-    else if (channel.includes("central")) g.qtdCentralPedidos++;
-    else if (channel.includes("delivery direto")) g.qtdDeliveryDireto++;
+    // Canais - usar partner_sale da documentação
+    let channelName = '';
+    if (sale.partner_sale) {
+      channelName = String(sale.partner_sale.desc_store_partner ?? sale.partner_sale.name ?? '').toLowerCase();
+    }
+    if (!channelName) {
+      channelName = String(sale.desc_sale ?? sale.origin_name ?? sale.channel ?? sale.origin ?? '').toLowerCase();
+    }
+    
+    if (channelName.includes("ifood")) g.qtdIFood++;
+    else if (channelName.includes("telefone")) g.qtdTelefone++;
+    else if (channelName.includes("central")) g.qtdCentralPedidos++;
+    else if (channelName.includes("delivery direto") || channelName.includes("direto")) g.qtdDeliveryDireto++;
 
     // Itens e adicionais
-    g.totalItems += Number(sale.total_items ?? 0);
-    g.totalAdditions += Number(sale.additional_value ?? 0);
-    g.totalDiscounts += Number(sale.discount_value ?? 0);
+    // Se tiver items array, contar itens reais
+    if (sale.items && Array.isArray(sale.items)) {
+      const validItems = sale.items.filter(item => !item.deleted);
+      g.totalItems += validItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+    } else {
+      g.totalItems += Number(sale.total_items ?? 0);
+    }
+    
+    // Usar total_increase e total_discount da documentação
+    g.totalAdditions += Number(sale.total_increase ?? sale.additional_value ?? 0);
+    g.totalDiscounts += Number(sale.total_discount ?? sale.discount_value ?? 0);
   }
 
   return Object.values(grouped).map((g) => ({

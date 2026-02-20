@@ -41,20 +41,33 @@ export async function POST(request: NextRequest) {
 
     const api = await UserAPIService.testAndUpdateAPI(apiId)
     
-    // Se a API foi conectada com sucesso e é Saipos, fazer carregamento inicial de 90 dias
+    // Se a API foi conectada com sucesso e é Saipos, fazer carregamento inicial de 15 dias
     if (api.status === 'connected' && api.type === 'saipos') {
       // Verificar se já existem dados no cache para esta loja
       const { db } = await import('@/lib/db')
       const storeId = api.storeId
       
-      // Verificar se já existem dados para esta API
+      // Verificar se já existem dados para esta API (últimos 15 dias)
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      const fifteenDaysAgo = new Date(today);
+      fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 14);
+      fifteenDaysAgo.setHours(0, 0, 0, 0);
+      
       const existingData = await db.salesDaily.findFirst({
-        where: { apiId: api.id, storeId },
+        where: { 
+          apiId: api.id, 
+          storeId,
+          date: {
+            gte: fifteenDaysAgo,
+            lte: today,
+          }
+        },
       })
       
-      // Se não houver dados, fazer carregamento inicial em background (não bloquear resposta)
+      // Se não houver dados recentes, fazer carregamento inicial em background (não bloquear resposta)
       if (!existingData) {
-        console.log(`🔄 Iniciando carregamento inicial de 90 dias para ${storeId}...`)
+        console.log(`🔄 Iniciando carregamento inicial de 15 dias para ${storeId}...`)
         
         // Determinar URL base baseado no ambiente
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://platefull.com.br";
@@ -65,8 +78,7 @@ export async function POST(request: NextRequest) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             apiId: api.id,
-            storeId: storeId,
-            initialLoad: true,
+            days: 15, // Sincronizar últimos 15 dias
           }),
         }).catch(err => {
           console.error('Erro ao iniciar carregamento inicial:', err)

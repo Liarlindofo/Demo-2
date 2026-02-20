@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stackServerApp } from "@/stack";
 import { syncStackAuthUser } from "@/lib/stack-auth-sync";
+import { fetchSaiposSalesLargePeriod } from "@/lib/saipos-api-client";
 
 interface SyncRequest {
   apiId: string;
@@ -242,8 +243,32 @@ export async function POST(request: Request) {
     });
     console.log(`🧹 Removidos ${deletedOld.count} registros antigos`);
 
-    // 5) Buscar vendas da Saipos
-    const rawSales = await fetchSalesFromSaipos(apiKey, startDate, endDate);
+    // 5) Buscar vendas da Saipos usando o novo cliente
+    const startISO = startDate.toISOString();
+    const endISO = endDate.toISOString();
+    
+    console.log(`🔄 Buscando vendas da Saipos para o período: ${startISO} até ${endISO}`);
+    
+    const result = await fetchSaiposSalesLargePeriod({
+      token: apiKey,
+      startDate: startISO,
+      endDate: endISO,
+      withDate: 'created_at',
+      dataColumnsFilter: 'all',
+      limit: 100,
+      offset: 0,
+      storeId: resolvedStoreId || undefined
+    });
+
+    if (!result.success) {
+      console.error('❌ Erro ao buscar vendas:', result.error);
+      return NextResponse.json({
+        success: false,
+        error: result.error || 'Erro ao buscar vendas da API Saipos',
+      }, { status: 500 });
+    }
+
+    const rawSales = result.data;
     console.log(`📊 Total de vendas brutas carregadas: ${rawSales.length}`);
 
     if (rawSales.length === 0) {
@@ -258,11 +283,32 @@ export async function POST(request: Request) {
       });
     }
 
-    // 6) Agregar por dia
+    // 6) Calcular clientes únicos por dia
+    const uniqueCustomersByDate = new Map<string, Set<string>>();
+    for (const sale of rawSales) {
+      const saleObj = sale as Record<string, unknown>;
+      const saleDate = saleObj.shift_date ?? saleObj.sale_date ?? saleObj.created_at;
+      if (!saleDate) continue;
+      
+      const dateKey = new Date(saleDate as string).toISOString().split("T")[0];
+      
+      if (!uniqueCustomersByDate.has(dateKey)) {
+        uniqueCustomersByDate.set(dateKey, new Set());
+      }
+      
+      // Extrair customer.id_customer conforme documentação
+      const customer = saleObj.customer as Record<string, unknown> | undefined;
+      if (customer?.id_customer) {
+        const customerId = String(customer.id_customer);
+        uniqueCustomersByDate.get(dateKey)!.add(customerId);
+      }
+    }
+
+    // 7) Agregar por dia
     const dailyAggregated = aggregateSalesByDay(rawSales);
     console.log(`📊 ${dailyAggregated.size} dias únicos para sincronizar`);
 
-    // 7) Loop de datas e UPSERT
+    // 8) Loop de datas e UPSERT
     const dates = [];
     const currentDate = new Date(startDate);
     while (currentDate <= endDate) {
@@ -281,6 +327,8 @@ export async function POST(request: Request) {
         totalSales: 0,
         channels: {},
       };
+      
+      const uniqueCustomers = uniqueCustomersByDate.get(dateKey)?.size || 0;
 
       totalSalesSum += dayData.totalSales;
       totalOrdersSum += dayData.totalOrders;
@@ -290,6 +338,7 @@ export async function POST(request: Request) {
         console.log(`📊 Dia ${dateKey}:`, {
           totalOrders: dayData.totalOrders,
           totalSales: dayData.totalSales,
+          uniqueCustomers,
           channels: dayData.channels,
         });
       }
@@ -308,11 +357,13 @@ export async function POST(request: Request) {
             date,
             totalOrders: dayData.totalOrders,
             totalSales: dayData.totalSales,
+            uniqueCustomers,
             channels: dayData.channels,
           },
           update: {
             totalOrders: dayData.totalOrders,
             totalSales: dayData.totalSales,
+            uniqueCustomers,
             channels: dayData.channels,
           },
         })
