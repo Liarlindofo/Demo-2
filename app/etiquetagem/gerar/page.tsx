@@ -267,6 +267,97 @@ export default function GerarEtiquetaPage() {
     }
   };
 
+  // Função auxiliar para gerar HTML de uma etiqueta individual
+  const gerarEtiquetaHTML = () => {
+    return `
+      <table class="etiqueta-coluna" cellspacing="0" cellpadding="0">
+        <tbody>
+          <!-- Cabeçalho -->
+          <tr>
+            <td colspan="2" class="header">
+              <div style="text-align: center; font-size: 11pt; font-weight: bold; text-transform: uppercase; margin-bottom: 1mm;">
+                ${produtoSelecionado.nome}
+              </div>
+              <div style="text-align: center; font-size: 9pt; font-weight: bold; padding-bottom: 1mm; border-bottom: 1px solid black;">
+                ${tipoArmazenamento}
+              </div>
+            </td>
+          </tr>
+          
+          <!-- Peso/Qtd -->
+          <tr>
+            <td class="info-label">Peso/Qtd:</td>
+            <td class="info-value">${peso} ${unidadeMedida}</td>
+          </tr>
+          
+          <!-- Validade -->
+          <tr>
+            <td class="info-label">Validade:</td>
+            <td class="info-value">${periodoDias} dias</td>
+          </tr>
+          
+          <!-- Divisor -->
+          <tr>
+            <td colspan="2" style="border-top: 1px solid black; height: 1mm;"></td>
+          </tr>
+          
+          <!-- Manipulado -->
+          <tr>
+            <td class="info-label">Manipulado:</td>
+            <td class="info-value">${getDataHoje()}</td>
+          </tr>
+          
+          <!-- Vence em -->
+          <tr>
+            <td class="info-label">Vence em:</td>
+            <td class="info-value">${calcularDataValidade()}</td>
+          </tr>
+          
+          <!-- Divisor -->
+          <tr>
+            <td colspan="2" style="border-top: 1px solid black; height: 1mm;"></td>
+          </tr>
+          
+          <!-- Responsável -->
+          <tr>
+            <td colspan="2" style="text-align: center; padding: 0.5mm 0; font-size: 7pt;">
+              Responsável: <strong>${nomeResponsavel}</strong>
+            </td>
+          </tr>
+          
+          <!-- Unidade -->
+          <tr>
+            <td colspan="2" style="text-align: center; font-weight: bold; font-size: 7pt;">
+              ${unidade.nomeExibicao}
+            </td>
+          </tr>
+          
+          <!-- CNPJ -->
+          <tr>
+            <td colspan="2" style="text-align: center; font-size: 6pt;">
+              CNPJ: ${unidade.cnpjFormatado}
+            </td>
+          </tr>
+          
+          <!-- Cidade -->
+          <tr>
+            <td colspan="2" style="text-align: center; font-size: 6pt;">
+              ${unidade.cidade}
+            </td>
+          </tr>
+          
+          ${produtoSelecionado.marcaFornecedor ? `
+          <tr>
+            <td colspan="2" style="text-align: center; font-size: 6pt;">
+              Marca: ${produtoSelecionado.marcaFornecedor}
+            </td>
+          </tr>
+          ` : ''}
+        </tbody>
+      </table>
+    `;
+  };
+
   // Impressão via driver do Windows (RECOMENDADO para Elgin i9!)
   const handlePrintViaDriver = () => {
     if (!produtoSelecionado || !unidade || !tipoArmazenamento || !periodoDias) return;
@@ -278,100 +369,24 @@ export default function GerarEtiquetaPage() {
       return;
     }
 
-    // Gerar HTML para cada cópia usando TABLE (não quebra no meio)
+    // Gerar HTML para cada cópia - SEMPRE em duas colunas
     let etiquetasHTML = '';
     for (let i = 0; i < copias; i++) {
+      // Cada linha da bobina tem duas colunas lado a lado
       etiquetasHTML += `
-        <table class="etiqueta-page" cellspacing="0" cellpadding="0">
-          <tbody>
-            <!-- Cabeçalho -->
-            <tr>
-              <td colspan="2" class="header">
-                <div style="text-align: center; font-size: 14pt; font-weight: bold; text-transform: uppercase; margin-bottom: 2mm;">
-                  ${produtoSelecionado.nome}
-                </div>
-                <div style="text-align: center; font-size: 11pt; font-weight: bold; padding-bottom: 2mm; border-bottom: 2px solid black;">
-                  ${tipoArmazenamento}
-                </div>
-              </td>
-            </tr>
-            
-            <!-- Peso/Qtd -->
-            <tr>
-              <td class="info-label">Peso/Qtd:</td>
-              <td class="info-value">${peso} ${unidadeMedida}</td>
-            </tr>
-            
-            <!-- Validade -->
-            <tr>
-              <td class="info-label">Validade:</td>
-              <td class="info-value">${periodoDias} dias</td>
-            </tr>
-            
-            <!-- Divisor -->
-            <tr>
-              <td colspan="2" style="border-top: 1px solid black; height: 2mm;"></td>
-            </tr>
-            
-            <!-- Manipulado -->
-            <tr>
-              <td class="info-label">Manipulado:</td>
-              <td class="info-value">${getDataHoje()}</td>
-            </tr>
-            
-            <!-- Vence em -->
-            <tr>
-              <td class="info-label">Vence em:</td>
-              <td class="info-value">${calcularDataValidade()}</td>
-            </tr>
-            
-            <!-- Divisor -->
-            <tr>
-              <td colspan="2" style="border-top: 2px solid black; height: 3mm;"></td>
-            </tr>
-            
-            <!-- Responsável -->
-            <tr>
-              <td colspan="2" style="text-align: center; padding: 1mm 0;">
-                Responsável: <strong>${nomeResponsavel}</strong>
-              </td>
-            </tr>
-            
-            <!-- Unidade -->
-            <tr>
-              <td colspan="2" style="text-align: center; font-weight: bold; font-size: 9pt;">
-                ${unidade.nomeExibicao}
-              </td>
-            </tr>
-            
-            <!-- CNPJ -->
-            <tr>
-              <td colspan="2" style="text-align: center; font-size: 8pt;">
-                CNPJ: ${unidade.cnpjFormatado}
-              </td>
-            </tr>
-            
-            <!-- Cidade -->
-            <tr>
-              <td colspan="2" style="text-align: center; font-size: 8pt;">
-                ${unidade.cidade}
-              </td>
-            </tr>
-            
-            ${produtoSelecionado.marcaFornecedor ? `
-            <tr>
-              <td colspan="2" style="text-align: center; font-size: 8pt;">
-                Marca: ${produtoSelecionado.marcaFornecedor}
-              </td>
-            </tr>
-            ` : ''}
-          </tbody>
-        </table>
+        <div class="linha-bobina">
+          <div class="coluna-etiqueta">
+            ${gerarEtiquetaHTML()}
+          </div>
+          <div class="coluna-etiqueta">
+            ${gerarEtiquetaHTML()}
+          </div>
+        </div>
         ${i < copias - 1 ? '<div style="page-break-after: always;"></div>' : ''}
       `;
     }
 
-    // Escrever HTML com CSS otimizado para impressora térmica
+    // Escrever HTML com CSS otimizado para bobina de 100mm x 30mm (duas colunas de 50mm x 30mm)
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -386,124 +401,105 @@ export default function GerarEtiquetaPage() {
             box-sizing: border-box;
           }
 
-          /* Página para impressora térmica */
+          /* Página para bobina de 100mm x 30mm (duas colunas) */
           @page {
-            size: 80mm auto;
-            margin: 3mm;
+            size: 100mm 30mm;
+            margin: 0mm;
           }
 
           body {
-            width: 80mm;
+            width: 100mm;
             margin: 0;
             padding: 0;
             font-family: Arial, sans-serif;
+            background: white;
           }
 
-          /* TABLE = BLOCO ÚNICO que não quebra */
-          table.etiqueta-page {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            color: black;
-            font-family: Arial, sans-serif;
-            font-size: 10pt;
-            margin: 0;
-            padding: 3mm;
-            /* FORÇA: table não pode quebrar no meio */
+          /* Linha da bobina contém duas colunas */
+          .linha-bobina {
+            width: 100mm;
+            height: 30mm;
+            display: flex;
+            flex-direction: row;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
 
-          table.etiqueta-page td {
-            padding: 1mm 2mm;
+          /* Cada coluna de etiqueta (50mm x 30mm) */
+          .coluna-etiqueta {
+            width: 50mm;
+            height: 30mm;
+            display: inline-block;
+            vertical-align: top;
+            border-right: 1px dashed #ccc;
+            padding: 1mm;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          .coluna-etiqueta:last-child {
+            border-right: none;
+          }
+
+          /* Tabela da etiqueta dentro de cada coluna */
+          table.etiqueta-coluna {
+            width: 100%;
+            height: 100%;
+            border-collapse: collapse;
+            background: white;
+            color: black;
+            font-family: Arial, sans-serif;
+            font-size: 7pt;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          table.etiqueta-coluna td {
+            padding: 0.5mm 1mm;
             vertical-align: middle;
           }
 
           .info-label {
             font-weight: normal;
-            font-size: 10pt;
+            font-size: 6pt;
             width: 40%;
           }
 
           .info-value {
             font-weight: bold;
-            font-size: 10pt;
+            font-size: 6pt;
             text-align: right;
             width: 60%;
           }
 
+          .header {
+            text-align: center;
+            margin-bottom: 1mm;
+            border-bottom: 1px solid black;
+            padding-bottom: 0.5mm;
+          }
+
           @media print {
             body {
-              width: 80mm;
+              width: 100mm;
               margin: 0;
               padding: 0;
             }
 
-            table.etiqueta-page {
+            .linha-bobina {
               page-break-inside: avoid !important;
               break-inside: avoid !important;
             }
-          }
 
-          .header {
-            text-align: center;
-            margin-bottom: 3mm;
-            border-bottom: 2px solid black;
-            padding-bottom: 2mm;
-          }
+            .coluna-etiqueta {
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
 
-          .header h1 {
-            font-size: 14pt;
-            font-weight: bold;
-            margin-bottom: 1mm;
-            text-transform: uppercase;
-          }
-
-          .header .tipo {
-            font-size: 11pt;
-            font-weight: bold;
-          }
-
-          .info-row {
-            display: flex;
-            justify-content: space-between;
-            margin: 2mm 0;
-            font-size: 10pt;
-          }
-
-          .info-label {
-            font-weight: normal;
-          }
-
-          .info-value {
-            font-weight: bold;
-          }
-
-          .divider {
-            border-top: 1px solid black;
-            margin: 2mm 0;
-          }
-
-          .footer {
-            text-align: center;
-            margin-top: 3mm;
-            padding-top: 2mm;
-            border-top: 2px solid black;
-            font-size: 9pt;
-          }
-
-          .footer .responsavel {
-            margin: 1mm 0;
-          }
-
-          .footer .unidade {
-            font-weight: bold;
-            margin: 1mm 0;
-          }
-
-          .footer .detalhes {
-            font-size: 8pt;
-            margin: 0.5mm 0;
+            table.etiqueta-coluna {
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
           }
         </style>
       </head>
@@ -1190,54 +1186,98 @@ export default function GerarEtiquetaPage() {
             </div>
 
             <div className="bg-[#141415] border border-[#374151] rounded-xl p-6">
-              <h3 className="text-lg font-bold text-white mb-4">Pré-visualização da Etiqueta (80x30mm)</h3>
+              <h3 className="text-lg font-bold text-white mb-4">Pré-visualização da Etiqueta (100x30mm - Duas Colunas)</h3>
               
               <div className="flex justify-center">
-                <div id="etiqueta-preview" className="bg-white border-2 border-gray-400 shadow-lg" style={{ width: '640px', height: '240px' }}>
-                  <div className="h-full flex flex-col text-black p-2 text-xs leading-tight">
-                    <div className="text-center border-b border-gray-800 pb-1 mb-1">
-                      <p className="font-bold text-sm leading-tight">{produtoSelecionado.nome.toUpperCase()}</p>
-                      <p className="text-xs">{tipoArmazenamento}</p>
-                    </div>
-                    <div className="border-b border-gray-800 pb-1 mb-1">
-                      <div className="flex justify-between items-center">
-                        <span className="font-medium text-xs">Peso/Qtd:</span>
-                        <span className="font-bold text-xs">{peso} {unidadeMedida}</span>
+                <div id="etiqueta-preview" className="bg-white border-2 border-gray-400 shadow-lg" style={{ width: '800px', height: '240px' }}>
+                  <div className="h-full flex flex-row">
+                    {/* Coluna 1 */}
+                    <div className="w-1/2 h-full border-r border-dashed border-gray-400 flex flex-col text-black p-2 text-xs leading-tight">
+                      <div className="text-center border-b border-gray-800 pb-1 mb-1">
+                        <p className="font-bold text-sm leading-tight">{produtoSelecionado.nome.toUpperCase()}</p>
+                        <p className="text-xs">{tipoArmazenamento}</p>
                       </div>
-                      <div className="flex justify-between items-center mt-0.5">
-                        <span className="font-medium text-xs">Validade:</span>
-                        <span className="font-bold text-xs">{periodoDias} dias</span>
+                      <div className="border-b border-gray-800 pb-1 mb-1">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-xs">Peso/Qtd:</span>
+                          <span className="font-bold text-xs">{peso} {unidadeMedida}</span>
+                        </div>
+                        <div className="flex justify-between items-center mt-0.5">
+                          <span className="font-medium text-xs">Validade:</span>
+                          <span className="font-bold text-xs">{periodoDias} dias</span>
+                        </div>
+                      </div>
+                      <div className="border-b border-gray-800 pb-1 mb-1">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-xs">Manipulado:</span>
+                          <span className="font-bold text-xs">{getDataHoje()}</span>
+                        </div>
+                        <div className="flex justify-between items-center mt-0.5">
+                          <span className="font-medium text-xs">Vence em:</span>
+                          <span className="font-bold text-xs">{calcularDataValidade()}</span>
+                        </div>
+                      </div>
+                      <div className="border-b border-gray-800 pb-1 mb-1">
+                        <p className="text-xs font-medium text-center">Responsável:</p>
+                        <p className="font-bold text-xs text-center">{nomeResponsavel}</p>
+                      </div>
+                      <div className="flex-1 flex flex-col justify-center">
+                        <div className="text-center">
+                          <p className="font-bold text-xs">{unidade.nomeExibicao}</p>
+                          <p className="text-xs">CNPJ: {unidade.cnpjFormatado}</p>
+                          <p className="text-xs">{unidade.cidade}</p>
+                          {produtoSelecionado.marcaFornecedor && (
+                            <p className="text-xs">Marca: {produtoSelecionado.marcaFornecedor}</p>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <div className="border-b border-gray-800 pb-1 mb-1">
-                      <div className="flex justify-between items-center">
-                        <span className="font-medium text-xs">Manipulado:</span>
-                        <span className="font-bold text-xs">{getDataHoje()}</span>
+                    {/* Coluna 2 */}
+                    <div className="w-1/2 h-full flex flex-col text-black p-2 text-xs leading-tight">
+                      <div className="text-center border-b border-gray-800 pb-1 mb-1">
+                        <p className="font-bold text-sm leading-tight">{produtoSelecionado.nome.toUpperCase()}</p>
+                        <p className="text-xs">{tipoArmazenamento}</p>
                       </div>
-                      <div className="flex justify-between items-center mt-0.5">
-                        <span className="font-medium text-xs">Vence em:</span>
-                        <span className="font-bold text-xs">{calcularDataValidade()}</span>
+                      <div className="border-b border-gray-800 pb-1 mb-1">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-xs">Peso/Qtd:</span>
+                          <span className="font-bold text-xs">{peso} {unidadeMedida}</span>
+                        </div>
+                        <div className="flex justify-between items-center mt-0.5">
+                          <span className="font-medium text-xs">Validade:</span>
+                          <span className="font-bold text-xs">{periodoDias} dias</span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="border-b border-gray-800 pb-1 mb-1">
-                      <p className="text-xs font-medium text-center">Responsável:</p>
-                      <p className="font-bold text-xs text-center">{nomeResponsavel}</p>
-                    </div>
-                    <div className="flex-1 flex flex-col justify-center">
-                      <div className="text-center">
-                        <p className="font-bold text-xs">{unidade.nomeExibicao}</p>
-                        <p className="text-xs">CNPJ: {unidade.cnpjFormatado}</p>
-                        <p className="text-xs">{unidade.cidade}</p>
-                        {produtoSelecionado.marcaFornecedor && (
-                          <p className="text-xs">Marca: {produtoSelecionado.marcaFornecedor}</p>
-                        )}
+                      <div className="border-b border-gray-800 pb-1 mb-1">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-xs">Manipulado:</span>
+                          <span className="font-bold text-xs">{getDataHoje()}</span>
+                        </div>
+                        <div className="flex justify-between items-center mt-0.5">
+                          <span className="font-medium text-xs">Vence em:</span>
+                          <span className="font-bold text-xs">{calcularDataValidade()}</span>
+                        </div>
+                      </div>
+                      <div className="border-b border-gray-800 pb-1 mb-1">
+                        <p className="text-xs font-medium text-center">Responsável:</p>
+                        <p className="font-bold text-xs text-center">{nomeResponsavel}</p>
+                      </div>
+                      <div className="flex-1 flex flex-col justify-center">
+                        <div className="text-center">
+                          <p className="font-bold text-xs">{unidade.nomeExibicao}</p>
+                          <p className="text-xs">CNPJ: {unidade.cnpjFormatado}</p>
+                          <p className="text-xs">{unidade.cidade}</p>
+                          {produtoSelecionado.marcaFornecedor && (
+                            <p className="text-xs">Marca: {produtoSelecionado.marcaFornecedor}</p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
               <p className="text-xs text-gray-400 text-center mt-3">
-                Dimensões: 80x30mm. Não se esqueça de revidar a impressão manual.
+                Dimensões: 100x30mm (duas colunas de 50x30mm cada). Não se esqueça de revidar a impressão manual.
               </p>
             </div>
 
@@ -1330,8 +1370,9 @@ export default function GerarEtiquetaPage() {
                       1
                     </div>
                     <div className="flex-1">
-                      <p className="font-semibold text-white mb-1">Páginas por folha</p>
-                      <p className="text-sm text-gray-300">Selecionar: <span className="font-bold text-green-400">2</span></p>
+                      <p className="font-semibold text-white mb-1">Tamanho do papel</p>
+                      <p className="text-sm text-gray-300">Configurar: <span className="font-bold text-green-400">100mm x 30mm</span></p>
+                      <p className="text-sm text-gray-300">Ou: <span className="font-bold text-green-400">Personalizado - 100mm x 30mm</span></p>
                     </div>
                   </div>
 
@@ -1341,8 +1382,17 @@ export default function GerarEtiquetaPage() {
                     </div>
                     <div className="flex-1">
                       <p className="font-semibold text-white mb-1">Escala</p>
-                      <p className="text-sm text-gray-300">Deixar em: <span className="font-bold text-green-400">Personalizado</span></p>
-                      <p className="text-sm text-gray-300">Colocar: <span className="font-bold text-green-400">150%</span></p>
+                      <p className="text-sm text-gray-300">Deixar em: <span className="font-bold text-green-400">100%</span> (tamanho real)</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                      3
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-white mb-1">Margens</p>
+                      <p className="text-sm text-gray-300">Configurar: <span className="font-bold text-green-400">0mm</span> (sem margens)</p>
                     </div>
                   </div>
                 </div>
@@ -1350,7 +1400,7 @@ export default function GerarEtiquetaPage() {
 
               <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
                 <p className="text-sm text-yellow-300">
-                  💡 <strong>Dica:</strong> Essas configurações garantem que a etiqueta seja impressa no tamanho correto (80x30mm).
+                  💡 <strong>Dica:</strong> A bobina tem 100mm x 30mm com duas colunas de 50mm x 30mm cada. Cada linha impressa conterá duas etiquetas idênticas lado a lado.
                 </p>
               </div>
 
