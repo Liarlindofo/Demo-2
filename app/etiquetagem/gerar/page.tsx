@@ -371,16 +371,19 @@ export default function GerarEtiquetaPage() {
       const segundaEtiqueta = primeiraEtiqueta + 1;
       
       etiquetasHTML += `
-        <div class="linha-bobina">
-          <div class="coluna-etiqueta">
-            ${gerarEtiquetaHTML()}
-          </div>
-          ${segundaEtiqueta < copias ? `
-          <div class="coluna-etiqueta">
-            ${gerarEtiquetaHTML()}
-          </div>
-          ` : '<div class="coluna-etiqueta vazia"></div>'}
-        </div>
+        <table class="linha-bobina" cellspacing="0" cellpadding="0">
+          <tr>
+            <td class="coluna-etiqueta">
+              ${gerarEtiquetaHTML()}
+            </td>
+            <td class="coluna-espaco"></td>
+            ${segundaEtiqueta < copias ? `
+            <td class="coluna-etiqueta">
+              ${gerarEtiquetaHTML()}
+            </td>
+            ` : '<td class="coluna-etiqueta vazia"></td>'}
+          </tr>
+        </table>
         ${pagina < totalPaginas - 1 ? '<div style="page-break-after: always;"></div>' : ''}
       `;
     }
@@ -415,12 +418,10 @@ export default function GerarEtiquetaPage() {
           }
 
           /* Linha da bobina contém duas colunas */
-          .linha-bobina {
+          table.linha-bobina {
             width: 104mm;
             height: 30mm;
-            display: flex;
-            flex-direction: row;
-            gap: 4mm;
+            border-collapse: collapse;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
@@ -430,12 +431,20 @@ export default function GerarEtiquetaPage() {
             width: 50mm;
             height: 30mm;
             padding: 1mm;
+            vertical-align: top;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
+          }
+          
+          /* Coluna de espaçamento de 4mm */
+          .coluna-espaco {
+            width: 4mm;
+            height: 30mm;
           }
 
           .coluna-etiqueta.vazia {
             background: transparent;
+            width: 50mm;
           }
 
           /* Tabela da etiqueta dentro de cada coluna */
@@ -475,20 +484,37 @@ export default function GerarEtiquetaPage() {
           }
 
           @media print {
+            @page {
+              size: 104mm 30mm;
+              margin: 0mm;
+            }
+            
             body {
-              width: 104mm;
-              margin: 0;
-              padding: 0;
+              width: 104mm !important;
+              height: 30mm !important;
+              margin: 0 !important;
+              padding: 0 !important;
             }
 
-            .linha-bobina {
+            table.linha-bobina {
+              width: 104mm !important;
+              height: 30mm !important;
+              border-collapse: collapse !important;
               page-break-inside: avoid !important;
               break-inside: avoid !important;
             }
 
             .coluna-etiqueta {
+              width: 50mm !important;
+              height: 30mm !important;
+              vertical-align: top !important;
               page-break-inside: avoid !important;
               break-inside: avoid !important;
+            }
+            
+            .coluna-espaco {
+              width: 4mm !important;
+              height: 30mm !important;
             }
 
             table.etiqueta-coluna {
