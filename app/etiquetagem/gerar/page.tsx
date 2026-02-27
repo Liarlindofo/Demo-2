@@ -279,8 +279,8 @@ export default function GerarEtiquetaPage() {
         <tbody>
           <!-- Cabeçalho -->
           <tr>
-            <td colspan="2" class="header">
-              <div style="text-align: center; font-size: 12pt; font-weight: bold; text-transform: uppercase; margin-bottom: 1mm;">
+            <td colspan="2" class="header" style="padding: 1mm 0.5mm;">
+              <div style="text-align: center; font-size: 9pt; font-weight: bold; text-transform: uppercase; line-height: 1.1;">
                 ${produtoSelecionado.nome} ${tipoArmazenamento}
               </div>
             </td>
@@ -288,71 +288,99 @@ export default function GerarEtiquetaPage() {
           
           <!-- Divisor -->
           <tr>
-            <td colspan="2" style="border-top: 1px solid black; height: 0.5mm;"></td>
+            <td colspan="2" style="border-top: 1px solid black; height: 0.3mm; padding: 0;"></td>
           </tr>
           
           <!-- Peso/Qtd e Produzido -->
           <tr>
-            <td style="width: 50%; font-size: 6pt;">
-              <span class="info-label">Peso/Qtd:</span> <span class="info-value">${peso} ${unidadeMedida}</span>
+            <td style="width: 50%; padding: 0.8mm 0.5mm; vertical-align: top;">
+              <div style="font-size: 6pt; line-height: 1.3;">
+                <span style="font-weight: normal;">Peso/Qtd:</span><br>
+                <span style="font-weight: bold; font-size: 7pt;">${peso} ${unidadeMedida}</span>
+              </div>
             </td>
-            <td style="width: 50%; border-left: 1px solid black; padding-left: 1mm; font-size: 6pt;">
-              <span class="info-label">Produzido:</span> <span class="info-value">${getDataHoje()}</span>
+            <td style="width: 50%; border-left: 1px solid black; padding: 0.8mm 0.5mm 0.8mm 1mm; vertical-align: top;">
+              <div style="font-size: 6pt; line-height: 1.3;">
+                <span style="font-weight: normal;">Produzido:</span><br>
+                <span style="font-weight: bold; font-size: 7pt;">${getDataHoje()}</span>
+              </div>
             </td>
           </tr>
           
           <!-- Divisor -->
           <tr>
-            <td colspan="2" style="border-top: 1px solid black; height: 0.5mm;"></td>
+            <td colspan="2" style="border-top: 1px solid black; height: 0.3mm; padding: 0;"></td>
           </tr>
           
           <!-- Validade e Vence -->
           <tr>
-            <td style="width: 50%; font-size: 6pt;">
-              <span class="info-label">Validade:</span> <span class="info-value">${calcularDataValidade()}</span>
+            <td style="width: 50%; padding: 0.8mm 0.5mm; vertical-align: top;">
+              <div style="font-size: 6pt; line-height: 1.3;">
+                <span style="font-weight: normal;">Validade:</span><br>
+                <span style="font-weight: bold; font-size: 7pt;">${calcularDataValidade()}</span>
+              </div>
             </td>
-            <td style="width: 50%; border-left: 1px solid black; padding-left: 1mm; font-size: 6pt;">
-              <span class="info-label">Vence:</span> <span class="info-value">${calcularDataValidade()}</span>
+            <td style="width: 50%; border-left: 1px solid black; padding: 0.8mm 0.5mm 0.8mm 1mm; vertical-align: top;">
+              <div style="font-size: 6pt; line-height: 1.3;">
+                <span style="font-weight: normal;">Vence:</span><br>
+                <span style="font-weight: bold; font-size: 7pt;">${calcularDataValidade()}</span>
+              </div>
             </td>
           </tr>
           
           <!-- Divisor -->
           <tr>
-            <td colspan="2" style="border-top: 1px solid black; height: 0.5mm;"></td>
+            <td colspan="2" style="border-top: 1px solid black; height: 0.3mm; padding: 0;"></td>
           </tr>
           
           <!-- Responsável -->
           <tr>
-            <td colspan="2" style="text-align: center; padding: 0.5mm 0; font-size: 7pt;">
-              Responsável: <strong>${nomeResponsavel}</strong>
+            <td colspan="2" style="text-align: center; padding: 0.8mm 0.5mm;">
+              <div style="font-size: 6pt; line-height: 1.3;">
+                <span style="font-weight: normal;">Responsável:</span><br>
+                <span style="font-weight: bold; font-size: 7pt;">${nomeResponsavel}</span>
+              </div>
             </td>
+          </tr>
+          
+          <!-- Divisor -->
+          <tr>
+            <td colspan="2" style="border-top: 1px solid black; height: 0.3mm; padding: 0;"></td>
           </tr>
           
           <!-- Unidade -->
           <tr>
-            <td colspan="2" style="text-align: center; font-weight: bold; font-size: 7pt;">
-              ${unidade.nomeExibicao}
+            <td colspan="2" style="text-align: left; padding: 0.5mm 0.5mm 0.2mm 0.5mm;">
+              <div style="font-weight: bold; font-size: 6.5pt; line-height: 1.2;">
+                ${unidade.nomeExibicao}
+              </div>
             </td>
           </tr>
           
           <!-- CNPJ -->
           <tr>
-            <td colspan="2" style="text-align: center; font-size: 6pt;">
-              CNPJ: ${unidade.cnpjFormatado}
+            <td colspan="2" style="text-align: left; padding: 0.2mm 0.5mm;">
+              <div style="font-size: 5.5pt; line-height: 1.2;">
+                CNPJ: ${unidade.cnpjFormatado}
+              </div>
             </td>
           </tr>
           
           <!-- Cidade -->
           <tr>
-            <td colspan="2" style="text-align: center; font-size: 6pt;">
-              ${unidade.cidade}
+            <td colspan="2" style="text-align: left; padding: 0.2mm 0.5mm 0.5mm 0.5mm;">
+              <div style="font-size: 5.5pt; line-height: 1.2;">
+                ${unidade.cidade}
+              </div>
             </td>
           </tr>
           
           ${produtoSelecionado.marcaFornecedor ? `
           <tr>
-            <td colspan="2" style="text-align: center; font-size: 6pt;">
-              Marca: ${produtoSelecionado.marcaFornecedor}
+            <td colspan="2" style="text-align: left; padding: 0.2mm 0.5mm 0.5mm 0.5mm;">
+              <div style="font-size: 5.5pt; line-height: 1.2;">
+                Marca: ${produtoSelecionado.marcaFornecedor}
+              </div>
             </td>
           </tr>
           ` : ''}
@@ -458,8 +486,8 @@ export default function GerarEtiquetaPage() {
           }
 
           table.etiqueta-coluna td {
-            padding: 0.5mm 1mm;
-            vertical-align: middle;
+            padding: 0;
+            vertical-align: top;
           }
 
           .info-label {
@@ -470,15 +498,14 @@ export default function GerarEtiquetaPage() {
 
           .info-value {
             font-weight: bold;
-            font-size: 6pt;
+            font-size: 7pt;
             text-align: left;
             width: auto;
           }
 
           .header {
             text-align: center;
-            margin-bottom: 1mm;
-            padding-bottom: 0.5mm;
+            padding: 1mm 0.5mm;
           }
 
           @media print {
@@ -602,23 +629,28 @@ export default function GerarEtiquetaPage() {
             justify-content: space-between;
             align-items: flex-start;
             margin-top: 0;
+            gap: 4px;
           }
           .info-col {
             flex: 1;
             display: flex;
             flex-direction: column;
+            line-height: 1.3;
           }
           .info-col.border-left {
             border-left: 1px solid #1f2937;
             padding-left: 4px;
           }
           .info-label {
-            font-weight: 500;
-            font-size: 9px;
+            font-weight: normal;
+            font-size: 8px;
+            line-height: 1.2;
           }
           .info-value {
             font-weight: bold;
             font-size: 9px;
+            line-height: 1.2;
+            margin-top: 2px;
           }
           .responsavel-section {
             text-align: center;
@@ -753,11 +785,11 @@ export default function GerarEtiquetaPage() {
             <div class="section">
               <div class="info-row-two-cols">
                 <div class="info-col">
-                  <span class="info-label">Peso/Qtd:</span>
+                  <span class="info-label">Peso/Qtd:</span><br>
                   <span class="info-value">${peso} ${unidadeMedida}</span>
                 </div>
                 <div class="info-col border-left">
-                  <span class="info-label">Produzido:</span>
+                  <span class="info-label">Produzido:</span><br>
                   <span class="info-value">${getDataHoje()}</span>
                 </div>
               </div>
@@ -765,18 +797,18 @@ export default function GerarEtiquetaPage() {
             <div class="section">
               <div class="info-row-two-cols">
                 <div class="info-col">
-                  <span class="info-label">Validade:</span>
+                  <span class="info-label">Validade:</span><br>
                   <span class="info-value">${calcularDataValidade()}</span>
                 </div>
                 <div class="info-col border-left">
-                  <span class="info-label">Vence:</span>
+                  <span class="info-label">Vence:</span><br>
                   <span class="info-value">${calcularDataValidade()}</span>
                 </div>
               </div>
             </div>
             <div class="section responsavel-section">
-              <p class="responsavel-label">Responsável:</p>
-              <p class="responsavel-nome">${nomeResponsavel}</p>
+              <span class="responsavel-label">Responsável:</span><br>
+              <span class="responsavel-nome">${nomeResponsavel}</span>
             </div>
             <div class="empresa-section">
               <p class="empresa-nome">${unidade.nomeExibicao}</p>
@@ -1212,89 +1244,93 @@ export default function GerarEtiquetaPage() {
                 <div id="etiqueta-preview" className="bg-white border-2 border-gray-400 shadow-lg" style={{ width: '800px', height: '240px' }}>
                   <div className="h-full flex flex-row">
                     {/* Coluna 1 */}
-                    <div className="w-1/2 h-full border-r border-dashed border-gray-400 flex flex-col text-black p-2 text-xs leading-tight">
+                    <div className="w-1/2 h-full border-r border-dashed border-gray-400 flex flex-col text-black p-1.5 text-xs leading-tight">
                       <div className="text-center border-b border-gray-800 pb-1 mb-1">
-                        <p className="font-bold text-sm leading-tight">{produtoSelecionado.nome.toUpperCase()} {tipoArmazenamento}</p>
+                        <p className="font-bold text-xs leading-tight">{produtoSelecionado.nome.toUpperCase()} {tipoArmazenamento}</p>
                       </div>
                       <div className="border-b border-gray-800 pb-1 mb-1">
                         <div className="grid grid-cols-2 gap-1">
                           <div>
-                            <span className="font-medium text-xs">Peso/Qtd:</span>
-                            <p className="font-bold text-xs">{peso} {unidadeMedida}</p>
+                            <span className="font-normal text-[10px]">Peso/Qtd:</span>
+                            <p className="font-bold text-xs mt-0.5">{peso} {unidadeMedida}</p>
                           </div>
                           <div className="border-l border-gray-800 pl-1">
-                            <span className="font-medium text-xs">Produzido:</span>
-                            <p className="font-bold text-xs">{getDataHoje()}</p>
+                            <span className="font-normal text-[10px]">Produzido:</span>
+                            <p className="font-bold text-xs mt-0.5">{getDataHoje()}</p>
                           </div>
                         </div>
                       </div>
                       <div className="border-b border-gray-800 pb-1 mb-1">
                         <div className="grid grid-cols-2 gap-1">
                           <div>
-                            <span className="font-medium text-xs">Validade:</span>
-                            <p className="font-bold text-xs">{calcularDataValidade()}</p>
+                            <span className="font-normal text-[10px]">Validade:</span>
+                            <p className="font-bold text-xs mt-0.5">{calcularDataValidade()}</p>
                           </div>
                           <div className="border-l border-gray-800 pl-1">
-                            <span className="font-medium text-xs">Vence:</span>
-                            <p className="font-bold text-xs">{calcularDataValidade()}</p>
+                            <span className="font-normal text-[10px]">Vence:</span>
+                            <p className="font-bold text-xs mt-0.5">{calcularDataValidade()}</p>
                           </div>
                         </div>
                       </div>
                       <div className="border-b border-gray-800 pb-1 mb-1">
-                        <p className="text-xs font-medium text-center">Responsável:</p>
-                        <p className="font-bold text-xs text-center">{nomeResponsavel}</p>
-                      </div>
-                      <div className="flex-1 flex flex-col justify-center">
                         <div className="text-center">
-                          <p className="font-bold text-xs">{unidade.nomeExibicao}</p>
-                          <p className="text-xs">CNPJ: {unidade.cnpjFormatado}</p>
-                          <p className="text-xs">{unidade.cidade}</p>
+                          <span className="font-normal text-[10px]">Responsável:</span>
+                          <p className="font-bold text-xs mt-0.5">{nomeResponsavel}</p>
+                        </div>
+                      </div>
+                      <div className="flex-1 flex flex-col justify-end pt-1">
+                        <div className="text-left">
+                          <p className="font-bold text-[10px] leading-tight">{unidade.nomeExibicao}</p>
+                          <p className="text-[9px] leading-tight mt-0.5">CNPJ: {unidade.cnpjFormatado}</p>
+                          <p className="text-[9px] leading-tight mt-0.5">{unidade.cidade}</p>
                           {produtoSelecionado.marcaFornecedor && (
-                            <p className="text-xs">Marca: {produtoSelecionado.marcaFornecedor}</p>
+                            <p className="text-[9px] leading-tight mt-0.5">Marca: {produtoSelecionado.marcaFornecedor}</p>
                           )}
                         </div>
                       </div>
                     </div>
                     {/* Coluna 2 */}
-                    <div className="w-1/2 h-full flex flex-col text-black p-2 text-xs leading-tight">
+                    <div className="w-1/2 h-full flex flex-col text-black p-1.5 text-xs leading-tight">
                       <div className="text-center border-b border-gray-800 pb-1 mb-1">
-                        <p className="font-bold text-sm leading-tight">{produtoSelecionado.nome.toUpperCase()} {tipoArmazenamento}</p>
+                        <p className="font-bold text-xs leading-tight">{produtoSelecionado.nome.toUpperCase()} {tipoArmazenamento}</p>
                       </div>
                       <div className="border-b border-gray-800 pb-1 mb-1">
                         <div className="grid grid-cols-2 gap-1">
                           <div>
-                            <span className="font-medium text-xs">Peso/Qtd:</span>
-                            <p className="font-bold text-xs">{peso} {unidadeMedida}</p>
+                            <span className="font-normal text-[10px]">Peso/Qtd:</span>
+                            <p className="font-bold text-xs mt-0.5">{peso} {unidadeMedida}</p>
                           </div>
                           <div className="border-l border-gray-800 pl-1">
-                            <span className="font-medium text-xs">Produzido:</span>
-                            <p className="font-bold text-xs">{getDataHoje()}</p>
+                            <span className="font-normal text-[10px]">Produzido:</span>
+                            <p className="font-bold text-xs mt-0.5">{getDataHoje()}</p>
                           </div>
                         </div>
                       </div>
                       <div className="border-b border-gray-800 pb-1 mb-1">
                         <div className="grid grid-cols-2 gap-1">
                           <div>
-                            <span className="font-medium text-xs">Validade:</span>
-                            <p className="font-bold text-xs">{calcularDataValidade()}</p>
+                            <span className="font-normal text-[10px]">Validade:</span>
+                            <p className="font-bold text-xs mt-0.5">{calcularDataValidade()}</p>
                           </div>
                           <div className="border-l border-gray-800 pl-1">
-                            <span className="font-medium text-xs">Vence:</span>
-                            <p className="font-bold text-xs">{calcularDataValidade()}</p>
+                            <span className="font-normal text-[10px]">Vence:</span>
+                            <p className="font-bold text-xs mt-0.5">{calcularDataValidade()}</p>
                           </div>
                         </div>
                       </div>
                       <div className="border-b border-gray-800 pb-1 mb-1">
-                        <p className="text-xs font-medium text-center">Responsável:</p>
-                        <p className="font-bold text-xs text-center">{nomeResponsavel}</p>
-                      </div>
-                      <div className="flex-1 flex flex-col justify-center">
                         <div className="text-center">
-                          <p className="font-bold text-xs">{unidade.nomeExibicao}</p>
-                          <p className="text-xs">CNPJ: {unidade.cnpjFormatado}</p>
-                          <p className="text-xs">{unidade.cidade}</p>
+                          <span className="font-normal text-[10px]">Responsável:</span>
+                          <p className="font-bold text-xs mt-0.5">{nomeResponsavel}</p>
+                        </div>
+                      </div>
+                      <div className="flex-1 flex flex-col justify-end pt-1">
+                        <div className="text-left">
+                          <p className="font-bold text-[10px] leading-tight">{unidade.nomeExibicao}</p>
+                          <p className="text-[9px] leading-tight mt-0.5">CNPJ: {unidade.cnpjFormatado}</p>
+                          <p className="text-[9px] leading-tight mt-0.5">{unidade.cidade}</p>
                           {produtoSelecionado.marcaFornecedor && (
-                            <p className="text-xs">Marca: {produtoSelecionado.marcaFornecedor}</p>
+                            <p className="text-[9px] leading-tight mt-0.5">Marca: {produtoSelecionado.marcaFornecedor}</p>
                           )}
                         </div>
                       </div>
