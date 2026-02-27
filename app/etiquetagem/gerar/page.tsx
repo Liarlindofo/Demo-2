@@ -167,11 +167,16 @@ export default function GerarEtiquetaPage() {
     if (!periodoDias) return "";
     const hoje = new Date();
     hoje.setDate(hoje.getDate() + periodoDias);
-    return hoje.toLocaleDateString("pt-BR");
+    const dia = String(hoje.getDate()).padStart(2, '0');
+    const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+    return `${dia}/${mes}`;
   };
 
   const getDataHoje = () => {
-    return new Date().toLocaleDateString("pt-BR");
+    const hoje = new Date();
+    const dia = String(hoje.getDate()).padStart(2, '0');
+    const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+    return `${dia}/${mes}`;
   };
 
   const handlePrint = async () => {
@@ -275,47 +280,45 @@ export default function GerarEtiquetaPage() {
           <!-- Cabeçalho -->
           <tr>
             <td colspan="2" class="header">
-              <div style="text-align: center; font-size: 11pt; font-weight: bold; text-transform: uppercase; margin-bottom: 1mm;">
-                ${produtoSelecionado.nome}
-              </div>
-              <div style="text-align: center; font-size: 9pt; font-weight: bold; padding-bottom: 1mm; border-bottom: 1px solid black;">
-                ${tipoArmazenamento}
+              <div style="text-align: center; font-size: 12pt; font-weight: bold; text-transform: uppercase; margin-bottom: 1mm;">
+                ${produtoSelecionado.nome} ${tipoArmazenamento}
               </div>
             </td>
           </tr>
           
-          <!-- Peso/Qtd -->
+          <!-- Divisor -->
           <tr>
-            <td class="info-label">Peso/Qtd:</td>
-            <td class="info-value">${peso} ${unidadeMedida}</td>
+            <td colspan="2" style="border-top: 1px solid black; height: 0.5mm;"></td>
           </tr>
           
-          <!-- Validade -->
+          <!-- Peso/Qtd e Produzido -->
           <tr>
-            <td class="info-label">Validade:</td>
-            <td class="info-value">${periodoDias} dias</td>
+            <td style="width: 50%; font-size: 6pt;">
+              <span class="info-label">Peso/Qtd:</span> <span class="info-value">${peso} ${unidadeMedida}</span>
+            </td>
+            <td style="width: 50%; border-left: 1px solid black; padding-left: 1mm; font-size: 6pt;">
+              <span class="info-label">Produzido:</span> <span class="info-value">${getDataHoje()}</span>
+            </td>
           </tr>
           
           <!-- Divisor -->
           <tr>
-            <td colspan="2" style="border-top: 1px solid black; height: 1mm;"></td>
+            <td colspan="2" style="border-top: 1px solid black; height: 0.5mm;"></td>
           </tr>
           
-          <!-- Manipulado -->
+          <!-- Validade e Vence -->
           <tr>
-            <td class="info-label">Manipulado:</td>
-            <td class="info-value">${getDataHoje()}</td>
-          </tr>
-          
-          <!-- Vence em -->
-          <tr>
-            <td class="info-label">Vence em:</td>
-            <td class="info-value">${calcularDataValidade()}</td>
+            <td style="width: 50%; font-size: 6pt;">
+              <span class="info-label">Validade:</span> <span class="info-value">${calcularDataValidade()}</span>
+            </td>
+            <td style="width: 50%; border-left: 1px solid black; padding-left: 1mm; font-size: 6pt;">
+              <span class="info-label">Vence:</span> <span class="info-value">${calcularDataValidade()}</span>
+            </td>
           </tr>
           
           <!-- Divisor -->
           <tr>
-            <td colspan="2" style="border-top: 1px solid black; height: 1mm;"></td>
+            <td colspan="2" style="border-top: 1px solid black; height: 0.5mm;"></td>
           </tr>
           
           <!-- Responsável -->
@@ -462,20 +465,19 @@ export default function GerarEtiquetaPage() {
           .info-label {
             font-weight: normal;
             font-size: 6pt;
-            width: 40%;
+            width: auto;
           }
 
           .info-value {
             font-weight: bold;
             font-size: 6pt;
-            text-align: right;
-            width: 60%;
+            text-align: left;
+            width: auto;
           }
 
           .header {
             text-align: center;
             margin-bottom: 1mm;
-            border-bottom: 1px solid black;
             padding-bottom: 0.5mm;
           }
 
@@ -594,6 +596,21 @@ export default function GerarEtiquetaPage() {
             justify-content: space-between;
             align-items: center;
             margin-top: 0;
+          }
+          .info-row-two-cols {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-top: 0;
+          }
+          .info-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+          }
+          .info-col.border-left {
+            border-left: 1px solid #1f2937;
+            padding-left: 4px;
           }
           .info-label {
             font-weight: 500;
@@ -731,27 +748,30 @@ export default function GerarEtiquetaPage() {
         <div class="etiqueta-container">
           <div class="etiqueta-content">
             <div class="section section-header">
-              <p class="produto-nome">${produtoSelecionado.nome.toUpperCase()}</p>
-              <p class="armazenamento">${tipoArmazenamento}</p>
+              <p class="produto-nome">${produtoSelecionado.nome.toUpperCase()} ${tipoArmazenamento}</p>
             </div>
             <div class="section">
-              <div class="info-row">
-                <span class="info-label">Peso/Qtd:</span>
-                <span class="info-value">${peso} ${unidadeMedida}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Validade:</span>
-                <span class="info-value">${periodoDias} dias</span>
+              <div class="info-row-two-cols">
+                <div class="info-col">
+                  <span class="info-label">Peso/Qtd:</span>
+                  <span class="info-value">${peso} ${unidadeMedida}</span>
+                </div>
+                <div class="info-col border-left">
+                  <span class="info-label">Produzido:</span>
+                  <span class="info-value">${getDataHoje()}</span>
+                </div>
               </div>
             </div>
             <div class="section">
-              <div class="info-row">
-                <span class="info-label">Manipulado:</span>
-                <span class="info-value">${getDataHoje()}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Vence em:</span>
-                <span class="info-value">${calcularDataValidade()}</span>
+              <div class="info-row-two-cols">
+                <div class="info-col">
+                  <span class="info-label">Validade:</span>
+                  <span class="info-value">${calcularDataValidade()}</span>
+                </div>
+                <div class="info-col border-left">
+                  <span class="info-label">Vence:</span>
+                  <span class="info-value">${calcularDataValidade()}</span>
+                </div>
               </div>
             </div>
             <div class="section responsavel-section">
@@ -1194,27 +1214,30 @@ export default function GerarEtiquetaPage() {
                     {/* Coluna 1 */}
                     <div className="w-1/2 h-full border-r border-dashed border-gray-400 flex flex-col text-black p-2 text-xs leading-tight">
                       <div className="text-center border-b border-gray-800 pb-1 mb-1">
-                        <p className="font-bold text-sm leading-tight">{produtoSelecionado.nome.toUpperCase()}</p>
-                        <p className="text-xs">{tipoArmazenamento}</p>
+                        <p className="font-bold text-sm leading-tight">{produtoSelecionado.nome.toUpperCase()} {tipoArmazenamento}</p>
                       </div>
                       <div className="border-b border-gray-800 pb-1 mb-1">
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium text-xs">Peso/Qtd:</span>
-                          <span className="font-bold text-xs">{peso} {unidadeMedida}</span>
-                        </div>
-                        <div className="flex justify-between items-center mt-0.5">
-                          <span className="font-medium text-xs">Validade:</span>
-                          <span className="font-bold text-xs">{periodoDias} dias</span>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <span className="font-medium text-xs">Peso/Qtd:</span>
+                            <p className="font-bold text-xs">{peso} {unidadeMedida}</p>
+                          </div>
+                          <div className="border-l border-gray-800 pl-1">
+                            <span className="font-medium text-xs">Produzido:</span>
+                            <p className="font-bold text-xs">{getDataHoje()}</p>
+                          </div>
                         </div>
                       </div>
                       <div className="border-b border-gray-800 pb-1 mb-1">
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium text-xs">Manipulado:</span>
-                          <span className="font-bold text-xs">{getDataHoje()}</span>
-                        </div>
-                        <div className="flex justify-between items-center mt-0.5">
-                          <span className="font-medium text-xs">Vence em:</span>
-                          <span className="font-bold text-xs">{calcularDataValidade()}</span>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <span className="font-medium text-xs">Validade:</span>
+                            <p className="font-bold text-xs">{calcularDataValidade()}</p>
+                          </div>
+                          <div className="border-l border-gray-800 pl-1">
+                            <span className="font-medium text-xs">Vence:</span>
+                            <p className="font-bold text-xs">{calcularDataValidade()}</p>
+                          </div>
                         </div>
                       </div>
                       <div className="border-b border-gray-800 pb-1 mb-1">
@@ -1235,27 +1258,30 @@ export default function GerarEtiquetaPage() {
                     {/* Coluna 2 */}
                     <div className="w-1/2 h-full flex flex-col text-black p-2 text-xs leading-tight">
                       <div className="text-center border-b border-gray-800 pb-1 mb-1">
-                        <p className="font-bold text-sm leading-tight">{produtoSelecionado.nome.toUpperCase()}</p>
-                        <p className="text-xs">{tipoArmazenamento}</p>
+                        <p className="font-bold text-sm leading-tight">{produtoSelecionado.nome.toUpperCase()} {tipoArmazenamento}</p>
                       </div>
                       <div className="border-b border-gray-800 pb-1 mb-1">
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium text-xs">Peso/Qtd:</span>
-                          <span className="font-bold text-xs">{peso} {unidadeMedida}</span>
-                        </div>
-                        <div className="flex justify-between items-center mt-0.5">
-                          <span className="font-medium text-xs">Validade:</span>
-                          <span className="font-bold text-xs">{periodoDias} dias</span>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <span className="font-medium text-xs">Peso/Qtd:</span>
+                            <p className="font-bold text-xs">{peso} {unidadeMedida}</p>
+                          </div>
+                          <div className="border-l border-gray-800 pl-1">
+                            <span className="font-medium text-xs">Produzido:</span>
+                            <p className="font-bold text-xs">{getDataHoje()}</p>
+                          </div>
                         </div>
                       </div>
                       <div className="border-b border-gray-800 pb-1 mb-1">
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium text-xs">Manipulado:</span>
-                          <span className="font-bold text-xs">{getDataHoje()}</span>
-                        </div>
-                        <div className="flex justify-between items-center mt-0.5">
-                          <span className="font-medium text-xs">Vence em:</span>
-                          <span className="font-bold text-xs">{calcularDataValidade()}</span>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <span className="font-medium text-xs">Validade:</span>
+                            <p className="font-bold text-xs">{calcularDataValidade()}</p>
+                          </div>
+                          <div className="border-l border-gray-800 pl-1">
+                            <span className="font-medium text-xs">Vence:</span>
+                            <p className="font-bold text-xs">{calcularDataValidade()}</p>
+                          </div>
                         </div>
                       </div>
                       <div className="border-b border-gray-800 pb-1 mb-1">
