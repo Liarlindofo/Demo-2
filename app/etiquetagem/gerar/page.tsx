@@ -179,6 +179,10 @@ export default function GerarEtiquetaPage() {
     return `${dia}/${mes}`;
   };
 
+  const getValidadeEmDias = () => {
+    return `${periodoDias} dias`;
+  };
+
   const handlePrint = async () => {
     if (!produtoSelecionado || !unidade || !tipoArmazenamento || !periodoDias) return;
 
@@ -277,9 +281,24 @@ export default function GerarEtiquetaPage() {
     return `
       <table class="etiqueta-coluna" cellspacing="0" cellpadding="0">
         <tbody>
-          <!-- Cabeçalho -->
+          <!-- Responsável -->
           <tr>
-            <td colspan="2" class="header" style="padding: 1mm 0.5mm;">
+            <td colspan="2" style="text-align: center; padding: 0.8mm 0.5mm;">
+              <div style="font-size: 5.5pt; line-height: 1.2;">
+                <span style="font-weight: normal;">Responsável:</span><br>
+                <span style="font-weight: bold; font-size: 6.5pt;">${nomeResponsavel}</span>
+              </div>
+            </td>
+          </tr>
+          
+          <!-- Divisor -->
+          <tr>
+            <td colspan="2" style="border-top: 1px solid black; height: 0.3mm; padding: 0;"></td>
+          </tr>
+          
+          <!-- Cabeçalho do Produto -->
+          <tr>
+            <td colspan="2" class="header" style="padding: 0.8mm 0.5mm;">
               <div style="text-align: center; font-size: 9pt; font-weight: bold; text-transform: uppercase; line-height: 1.1;">
                 ${produtoSelecionado.nome} ${tipoArmazenamento}
               </div>
@@ -317,7 +336,7 @@ export default function GerarEtiquetaPage() {
             <td style="width: 50%; padding: 0.8mm 0.5mm; vertical-align: top;">
               <div style="font-size: 6pt; line-height: 1.3;">
                 <span style="font-weight: normal;">Validade:</span><br>
-                <span style="font-weight: bold; font-size: 7pt;">${calcularDataValidade()}</span>
+                <span style="font-weight: bold; font-size: 7pt;">${getValidadeEmDias()}</span>
               </div>
             </td>
             <td style="width: 50%; border-left: 1px solid black; padding: 0.8mm 0.5mm 0.8mm 1mm; vertical-align: top;">
@@ -327,63 +346,6 @@ export default function GerarEtiquetaPage() {
               </div>
             </td>
           </tr>
-          
-          <!-- Divisor -->
-          <tr>
-            <td colspan="2" style="border-top: 1px solid black; height: 0.3mm; padding: 0;"></td>
-          </tr>
-          
-          <!-- Responsável -->
-          <tr>
-            <td colspan="2" style="text-align: center; padding: 0.8mm 0.5mm;">
-              <div style="font-size: 6pt; line-height: 1.3;">
-                <span style="font-weight: normal;">Responsável:</span><br>
-                <span style="font-weight: bold; font-size: 7pt;">${nomeResponsavel}</span>
-              </div>
-            </td>
-          </tr>
-          
-          <!-- Divisor -->
-          <tr>
-            <td colspan="2" style="border-top: 1px solid black; height: 0.3mm; padding: 0;"></td>
-          </tr>
-          
-          <!-- Unidade -->
-          <tr>
-            <td colspan="2" style="text-align: left; padding: 0.5mm 0.5mm 0.2mm 0.5mm;">
-              <div style="font-weight: bold; font-size: 6.5pt; line-height: 1.2;">
-                ${unidade.nomeExibicao}
-              </div>
-            </td>
-          </tr>
-          
-          <!-- CNPJ -->
-          <tr>
-            <td colspan="2" style="text-align: left; padding: 0.2mm 0.5mm;">
-              <div style="font-size: 5.5pt; line-height: 1.2;">
-                CNPJ: ${unidade.cnpjFormatado}
-              </div>
-            </td>
-          </tr>
-          
-          <!-- Cidade -->
-          <tr>
-            <td colspan="2" style="text-align: left; padding: 0.2mm 0.5mm 0.5mm 0.5mm;">
-              <div style="font-size: 5.5pt; line-height: 1.2;">
-                ${unidade.cidade}
-              </div>
-            </td>
-          </tr>
-          
-          ${produtoSelecionado.marcaFornecedor ? `
-          <tr>
-            <td colspan="2" style="text-align: left; padding: 0.2mm 0.5mm 0.5mm 0.5mm;">
-              <div style="font-size: 5.5pt; line-height: 1.2;">
-                Marca: ${produtoSelecionado.marcaFornecedor}
-              </div>
-            </td>
-          </tr>
-          ` : ''}
         </tbody>
       </table>
     `;
@@ -400,24 +362,18 @@ export default function GerarEtiquetaPage() {
       return;
     }
 
-    // Gerar HTML para cada cópia - SEMPRE em duas colunas
+    // Gerar HTML para cada cópia - uma etiqueta por página
     let etiquetasHTML = '';
     for (let i = 0; i < copias; i++) {
-      // Cada linha da bobina tem duas colunas lado a lado
       etiquetasHTML += `
-        <div class="linha-bobina">
-          <div class="coluna-etiqueta">
-            ${gerarEtiquetaHTML()}
-          </div>
-          <div class="coluna-etiqueta">
-            ${gerarEtiquetaHTML()}
-          </div>
+        <div class="etiqueta-container">
+          ${gerarEtiquetaHTML()}
         </div>
         ${i < copias - 1 ? '<div style="page-break-after: always;"></div>' : ''}
       `;
     }
 
-    // Escrever HTML com CSS otimizado para bobina de 100mm x 30mm (duas colunas de 50mm x 30mm)
+    // Escrever HTML com CSS otimizado para etiqueta de 50mm x 30mm
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -432,44 +388,27 @@ export default function GerarEtiquetaPage() {
             box-sizing: border-box;
           }
 
-          /* Página para bobina de 100mm x 30mm (duas colunas) */
+          /* Página para etiqueta de 50mm x 30mm */
           @page {
-            size: 100mm 30mm;
+            size: 50mm 30mm;
             margin: 0mm;
           }
 
           body {
-            width: 100mm;
+            width: 50mm;
             margin: 0;
             padding: 0;
             font-family: Arial, sans-serif;
             background: white;
           }
 
-          /* Linha da bobina contém duas colunas */
-          .linha-bobina {
-            width: 100mm;
-            height: 30mm;
-            display: flex;
-            flex-direction: row;
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-
-          /* Cada coluna de etiqueta (50mm x 30mm) */
-          .coluna-etiqueta {
+          /* Container da etiqueta */
+          .etiqueta-container {
             width: 50mm;
             height: 30mm;
-            display: inline-block;
-            vertical-align: top;
-            border-right: 1px dashed #ccc;
             padding: 1mm;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-          }
-
-          .coluna-etiqueta:last-child {
-            border-right: none;
           }
 
           /* Tabela da etiqueta dentro de cada coluna */
@@ -510,17 +449,12 @@ export default function GerarEtiquetaPage() {
 
           @media print {
             body {
-              width: 100mm;
+              width: 50mm;
               margin: 0;
               padding: 0;
             }
 
-            .linha-bobina {
-              page-break-inside: avoid !important;
-              break-inside: avoid !important;
-            }
-
-            .coluna-etiqueta {
+            .etiqueta-container {
               page-break-inside: avoid !important;
               break-inside: avoid !important;
             }
@@ -779,6 +713,10 @@ export default function GerarEtiquetaPage() {
       <body>
         <div class="etiqueta-container">
           <div class="etiqueta-content">
+            <div class="section responsavel-section">
+              <span class="responsavel-label">Responsável:</span><br>
+              <span class="responsavel-nome">${nomeResponsavel}</span>
+            </div>
             <div class="section section-header">
               <p class="produto-nome">${produtoSelecionado.nome.toUpperCase()} ${tipoArmazenamento}</p>
             </div>
@@ -798,23 +736,13 @@ export default function GerarEtiquetaPage() {
               <div class="info-row-two-cols">
                 <div class="info-col">
                   <span class="info-label">Validade:</span><br>
-                  <span class="info-value">${calcularDataValidade()}</span>
+                  <span class="info-value">${getValidadeEmDias()}</span>
                 </div>
                 <div class="info-col border-left">
                   <span class="info-label">Vence:</span><br>
                   <span class="info-value">${calcularDataValidade()}</span>
                 </div>
               </div>
-            </div>
-            <div class="section responsavel-section">
-              <span class="responsavel-label">Responsável:</span><br>
-              <span class="responsavel-nome">${nomeResponsavel}</span>
-            </div>
-            <div class="empresa-section">
-              <p class="empresa-nome">${unidade.nomeExibicao}</p>
-              <p class="empresa-info">CNPJ: ${unidade.cnpjFormatado}</p>
-              <p class="empresa-info">${unidade.cidade}</p>
-              ${produtoSelecionado.marcaFornecedor ? `<p class="empresa-info">Marca: ${produtoSelecionado.marcaFornecedor}</p>` : ''}
             </div>
           </div>
         </div>
@@ -1238,100 +1166,46 @@ export default function GerarEtiquetaPage() {
             </div>
 
             <div className="bg-[#141415] border border-[#374151] rounded-xl p-6">
-              <h3 className="text-lg font-bold text-white mb-4">Pré-visualização da Etiqueta (100x30mm - Duas Colunas)</h3>
+              <h3 className="text-lg font-bold text-white mb-4">Pré-visualização da Etiqueta (50x30mm)</h3>
               
               <div className="flex justify-center">
-                <div id="etiqueta-preview" className="bg-white border-2 border-gray-400 shadow-lg" style={{ width: '800px', height: '240px' }}>
-                  <div className="h-full flex flex-row">
-                    {/* Coluna 1 */}
-                    <div className="w-1/2 h-full border-r border-dashed border-gray-400 flex flex-col text-black p-1.5 text-xs leading-tight">
-                      <div className="text-center border-b border-gray-800 pb-1 mb-1">
-                        <p className="font-bold text-xs leading-tight">{produtoSelecionado.nome.toUpperCase()} {tipoArmazenamento}</p>
-                      </div>
-                      <div className="border-b border-gray-800 pb-1 mb-1">
-                        <div className="grid grid-cols-2 gap-1">
-                          <div>
-                            <span className="font-normal text-[10px]">Peso/Qtd:</span>
-                            <p className="font-bold text-xs mt-0.5">{peso} {unidadeMedida}</p>
-                          </div>
-                          <div className="border-l border-gray-800 pl-1">
-                            <span className="font-normal text-[10px]">Produzido:</span>
-                            <p className="font-bold text-xs mt-0.5">{getDataHoje()}</p>
-                          </div>
+                <div id="etiqueta-preview" className="bg-white border-2 border-gray-400 shadow-lg" style={{ width: '400px', height: '240px' }}>
+                  <div className="h-full flex flex-col text-black p-2 text-xs leading-tight">
+                    {/* Responsável */}
+                    <div className="text-center border-b border-gray-800 pb-1 mb-1">
+                      <span className="font-normal text-[9px]">Responsável:</span>
+                      <p className="font-bold text-[10px] mt-0.5">{nomeResponsavel}</p>
+                    </div>
+                    
+                    {/* Produto */}
+                    <div className="text-center border-b border-gray-800 pb-1 mb-1">
+                      <p className="font-bold text-sm leading-tight">{produtoSelecionado.nome.toUpperCase()} {tipoArmazenamento}</p>
+                    </div>
+                    
+                    {/* Peso/Qtd e Produzido */}
+                    <div className="border-b border-gray-800 pb-1 mb-1">
+                      <div className="grid grid-cols-2 gap-1">
+                        <div>
+                          <span className="font-normal text-[9px]">Peso/Qtd:</span>
+                          <p className="font-bold text-xs mt-0.5">{peso} {unidadeMedida}</p>
                         </div>
-                      </div>
-                      <div className="border-b border-gray-800 pb-1 mb-1">
-                        <div className="grid grid-cols-2 gap-1">
-                          <div>
-                            <span className="font-normal text-[10px]">Validade:</span>
-                            <p className="font-bold text-xs mt-0.5">{calcularDataValidade()}</p>
-                          </div>
-                          <div className="border-l border-gray-800 pl-1">
-                            <span className="font-normal text-[10px]">Vence:</span>
-                            <p className="font-bold text-xs mt-0.5">{calcularDataValidade()}</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="border-b border-gray-800 pb-1 mb-1">
-                        <div className="text-center">
-                          <span className="font-normal text-[10px]">Responsável:</span>
-                          <p className="font-bold text-xs mt-0.5">{nomeResponsavel}</p>
-                        </div>
-                      </div>
-                      <div className="flex-1 flex flex-col justify-end pt-1">
-                        <div className="text-left">
-                          <p className="font-bold text-[10px] leading-tight">{unidade.nomeExibicao}</p>
-                          <p className="text-[9px] leading-tight mt-0.5">CNPJ: {unidade.cnpjFormatado}</p>
-                          <p className="text-[9px] leading-tight mt-0.5">{unidade.cidade}</p>
-                          {produtoSelecionado.marcaFornecedor && (
-                            <p className="text-[9px] leading-tight mt-0.5">Marca: {produtoSelecionado.marcaFornecedor}</p>
-                          )}
+                        <div className="border-l border-gray-800 pl-1">
+                          <span className="font-normal text-[9px]">Produzido:</span>
+                          <p className="font-bold text-xs mt-0.5">{getDataHoje()}</p>
                         </div>
                       </div>
                     </div>
-                    {/* Coluna 2 */}
-                    <div className="w-1/2 h-full flex flex-col text-black p-1.5 text-xs leading-tight">
-                      <div className="text-center border-b border-gray-800 pb-1 mb-1">
-                        <p className="font-bold text-xs leading-tight">{produtoSelecionado.nome.toUpperCase()} {tipoArmazenamento}</p>
-                      </div>
-                      <div className="border-b border-gray-800 pb-1 mb-1">
-                        <div className="grid grid-cols-2 gap-1">
-                          <div>
-                            <span className="font-normal text-[10px]">Peso/Qtd:</span>
-                            <p className="font-bold text-xs mt-0.5">{peso} {unidadeMedida}</p>
-                          </div>
-                          <div className="border-l border-gray-800 pl-1">
-                            <span className="font-normal text-[10px]">Produzido:</span>
-                            <p className="font-bold text-xs mt-0.5">{getDataHoje()}</p>
-                          </div>
+                    
+                    {/* Validade e Vence */}
+                    <div className="border-b border-gray-800 pb-1 mb-1">
+                      <div className="grid grid-cols-2 gap-1">
+                        <div>
+                          <span className="font-normal text-[9px]">Validade:</span>
+                          <p className="font-bold text-xs mt-0.5">{getValidadeEmDias()}</p>
                         </div>
-                      </div>
-                      <div className="border-b border-gray-800 pb-1 mb-1">
-                        <div className="grid grid-cols-2 gap-1">
-                          <div>
-                            <span className="font-normal text-[10px]">Validade:</span>
-                            <p className="font-bold text-xs mt-0.5">{calcularDataValidade()}</p>
-                          </div>
-                          <div className="border-l border-gray-800 pl-1">
-                            <span className="font-normal text-[10px]">Vence:</span>
-                            <p className="font-bold text-xs mt-0.5">{calcularDataValidade()}</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="border-b border-gray-800 pb-1 mb-1">
-                        <div className="text-center">
-                          <span className="font-normal text-[10px]">Responsável:</span>
-                          <p className="font-bold text-xs mt-0.5">{nomeResponsavel}</p>
-                        </div>
-                      </div>
-                      <div className="flex-1 flex flex-col justify-end pt-1">
-                        <div className="text-left">
-                          <p className="font-bold text-[10px] leading-tight">{unidade.nomeExibicao}</p>
-                          <p className="text-[9px] leading-tight mt-0.5">CNPJ: {unidade.cnpjFormatado}</p>
-                          <p className="text-[9px] leading-tight mt-0.5">{unidade.cidade}</p>
-                          {produtoSelecionado.marcaFornecedor && (
-                            <p className="text-[9px] leading-tight mt-0.5">Marca: {produtoSelecionado.marcaFornecedor}</p>
-                          )}
+                        <div className="border-l border-gray-800 pl-1">
+                          <span className="font-normal text-[9px]">Vence:</span>
+                          <p className="font-bold text-xs mt-0.5">{calcularDataValidade()}</p>
                         </div>
                       </div>
                     </div>
@@ -1339,7 +1213,7 @@ export default function GerarEtiquetaPage() {
                 </div>
               </div>
               <p className="text-xs text-gray-400 text-center mt-3">
-                Dimensões: 100x30mm (duas colunas de 50x30mm cada). Não se esqueça de revidar a impressão manual.
+                Dimensões: 50x30mm. Não se esqueça de revisar a impressão manual.
               </p>
             </div>
 
@@ -1433,8 +1307,8 @@ export default function GerarEtiquetaPage() {
                     </div>
                     <div className="flex-1">
                       <p className="font-semibold text-white mb-1">Tamanho do papel</p>
-                      <p className="text-sm text-gray-300">Configurar: <span className="font-bold text-green-400">100mm x 30mm</span></p>
-                      <p className="text-sm text-gray-300">Ou: <span className="font-bold text-green-400">Personalizado - 100mm x 30mm</span></p>
+                      <p className="text-sm text-gray-300">Configurar: <span className="font-bold text-green-400">50mm x 30mm</span></p>
+                      <p className="text-sm text-gray-300">Ou: <span className="font-bold text-green-400">Personalizado - 50mm x 30mm</span></p>
                     </div>
                   </div>
 
@@ -1462,7 +1336,7 @@ export default function GerarEtiquetaPage() {
 
               <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
                 <p className="text-sm text-yellow-300">
-                  💡 <strong>Dica:</strong> A bobina tem 100mm x 30mm com duas colunas de 50mm x 30mm cada. Cada linha impressa conterá duas etiquetas idênticas lado a lado.
+                  💡 <strong>Dica:</strong> Cada etiqueta tem 50mm x 30mm. Certifique-se de configurar o tamanho correto no painel de impressão.
                 </p>
               </div>
 
