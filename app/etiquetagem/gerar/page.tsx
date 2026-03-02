@@ -283,8 +283,8 @@ export default function GerarEtiquetaPage() {
         <tbody>
           <!-- Responsável -->
           <tr>
-            <td colspan="2" style="text-align: center; padding: 0.8mm 0.5mm;">
-              <div style="font-size: 5.5pt; line-height: 1.2;">
+            <td colspan="2" style="text-align: center; padding: 0.4mm 0.3mm;">
+              <div style="font-size: 5.5pt; line-height: 1.1;">
                 <span style="font-weight: normal;">Responsável:</span><br>
                 <span style="font-weight: bold; font-size: 6.5pt;">${nomeResponsavel}</span>
               </div>
@@ -293,13 +293,13 @@ export default function GerarEtiquetaPage() {
           
           <!-- Divisor -->
           <tr>
-            <td colspan="2" style="border-top: 1px solid black; height: 0.3mm; padding: 0;"></td>
+            <td colspan="2" style="border-top: 1px solid black; height: 0.2mm; padding: 0;"></td>
           </tr>
           
           <!-- Cabeçalho do Produto -->
           <tr>
-            <td colspan="2" class="header" style="padding: 0.8mm 0.5mm;">
-              <div style="text-align: center; font-size: 9pt; font-weight: bold; text-transform: uppercase; line-height: 1.1;">
+            <td colspan="2" class="header" style="padding: 0.4mm 0.3mm;">
+              <div style="text-align: center; font-size: 9pt; font-weight: bold; text-transform: uppercase; line-height: 1.0;">
                 ${produtoSelecionado.nome} ${tipoArmazenamento}
               </div>
             </td>
@@ -307,19 +307,19 @@ export default function GerarEtiquetaPage() {
           
           <!-- Divisor -->
           <tr>
-            <td colspan="2" style="border-top: 1px solid black; height: 0.3mm; padding: 0;"></td>
+            <td colspan="2" style="border-top: 1px solid black; height: 0.2mm; padding: 0;"></td>
           </tr>
           
           <!-- Peso/Qtd e Produzido -->
           <tr>
-            <td style="width: 50%; padding: 0.8mm 0.5mm; vertical-align: top;">
-              <div style="font-size: 6pt; line-height: 1.3;">
+            <td style="width: 50%; padding: 0.4mm 0.3mm; vertical-align: top;">
+              <div style="font-size: 6pt; line-height: 1.2;">
                 <span style="font-weight: normal;">Peso/Qtd:</span><br>
                 <span style="font-weight: bold; font-size: 7pt;">${peso} ${unidadeMedida}</span>
               </div>
             </td>
-            <td style="width: 50%; border-left: 1px solid black; padding: 0.8mm 0.5mm 0.8mm 1mm; vertical-align: top;">
-              <div style="font-size: 6pt; line-height: 1.3;">
+            <td style="width: 50%; border-left: 1px solid black; padding: 0.4mm 0.3mm 0.4mm 0.5mm; vertical-align: top;">
+              <div style="font-size: 6pt; line-height: 1.2;">
                 <span style="font-weight: normal;">Produzido:</span><br>
                 <span style="font-weight: bold; font-size: 7pt;">${getDataHoje()}</span>
               </div>
@@ -328,19 +328,19 @@ export default function GerarEtiquetaPage() {
           
           <!-- Divisor -->
           <tr>
-            <td colspan="2" style="border-top: 1px solid black; height: 0.3mm; padding: 0;"></td>
+            <td colspan="2" style="border-top: 1px solid black; height: 0.2mm; padding: 0;"></td>
           </tr>
           
           <!-- Validade e Vence -->
           <tr>
-            <td style="width: 50%; padding: 0.8mm 0.5mm; vertical-align: top;">
-              <div style="font-size: 6pt; line-height: 1.3;">
+            <td style="width: 50%; padding: 0.4mm 0.3mm; vertical-align: top;">
+              <div style="font-size: 6pt; line-height: 1.2;">
                 <span style="font-weight: normal;">Validade:</span><br>
                 <span style="font-weight: bold; font-size: 7pt;">${getValidadeEmDias()}</span>
               </div>
             </td>
-            <td style="width: 50%; border-left: 1px solid black; padding: 0.8mm 0.5mm 0.8mm 1mm; vertical-align: top;">
-              <div style="font-size: 6pt; line-height: 1.3;">
+            <td style="width: 50%; border-left: 1px solid black; padding: 0.4mm 0.3mm 0.4mm 0.5mm; vertical-align: top;">
+              <div style="font-size: 6pt; line-height: 1.2;">
                 <span style="font-weight: normal;">Vence:</span><br>
                 <span style="font-weight: bold; font-size: 7pt;">${calcularDataValidade()}</span>
               </div>
@@ -375,13 +375,13 @@ export default function GerarEtiquetaPage() {
       const htmlEtiqueta2 = segundaEtiqueta < copias ? gerarEtiquetaHTML() : htmlEtiqueta1;
       
       etiquetasHTML += `
-        <table class="linha-bobina" cellspacing="0" cellpadding="0" style="width: 104mm; min-height: 30mm; height: auto;">
-          <tr>
-            <td class="coluna-etiqueta" style="width: 50mm; min-height: 30mm; height: auto;">
+        <table class="linha-bobina" cellspacing="0" cellpadding="0" style="width: 104mm; min-height: 30mm; height: auto; overflow: visible;">
+          <tr style="height: auto;">
+            <td class="coluna-etiqueta" style="width: 50mm; min-height: 30mm; height: auto; overflow: visible;">
               ${htmlEtiqueta1}
             </td>
-            <td class="coluna-espaco" style="width: 4mm; height: 30mm;"></td>
-            <td class="coluna-etiqueta" style="width: 50mm; min-height: 30mm; height: auto;">
+            <td class="coluna-espaco" style="width: 4mm; min-height: 30mm; height: 30mm;"></td>
+            <td class="coluna-etiqueta" style="width: 50mm; min-height: 30mm; height: auto; overflow: visible;">
               ${htmlEtiqueta2}
             </td>
           </tr>
@@ -409,6 +409,7 @@ export default function GerarEtiquetaPage() {
           @page {
             size: 104mm 30mm;
             margin: 0mm;
+            padding: 0mm;
           }
 
           body {
@@ -417,6 +418,7 @@ export default function GerarEtiquetaPage() {
             padding: 0;
             font-family: Arial, sans-serif;
             background: white;
+            overflow: visible !important;
           }
 
           /* Linha da bobina contém duas colunas */
@@ -428,8 +430,9 @@ export default function GerarEtiquetaPage() {
             table-layout: fixed;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            margin: 0;
-            padding: 0;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
           }
 
           /* Cada coluna de etiqueta (50mm x 30mm) */
@@ -437,8 +440,8 @@ export default function GerarEtiquetaPage() {
             width: 50mm !important;
             min-height: 30mm !important;
             height: auto !important;
-            padding: 1mm;
-            vertical-align: top;
+            padding: 0.5mm !important;
+            vertical-align: top !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
             overflow: visible !important;
@@ -464,11 +467,13 @@ export default function GerarEtiquetaPage() {
             font-size: 7pt;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
+            overflow: visible !important;
           }
 
           table.etiqueta-coluna td {
             padding: 0;
             vertical-align: top;
+            overflow: visible !important;
           }
 
           .info-label {
@@ -486,13 +491,20 @@ export default function GerarEtiquetaPage() {
 
           .header {
             text-align: center;
-            padding: 1mm 0.5mm;
+            padding: 0.5mm;
+          }
+          
+          /* Garantir que células da etiqueta não cortem conteúdo */
+          table.etiqueta-coluna tr td {
+            padding: 0.3mm 0.5mm !important;
+            line-height: 1.2 !important;
           }
 
           @media print {
             @page {
               size: 104mm 30mm;
-              margin: 0mm;
+              margin: 0mm !important;
+              padding: 0mm !important;
             }
             
             * {
@@ -502,10 +514,11 @@ export default function GerarEtiquetaPage() {
             
             html, body {
               width: 104mm !important;
-              height: 30mm !important;
+              height: auto !important;
+              min-height: 30mm !important;
               margin: 0 !important;
               padding: 0 !important;
-              overflow: hidden;
+              overflow: visible !important;
             }
 
             table.linha-bobina {
@@ -519,6 +532,7 @@ export default function GerarEtiquetaPage() {
               break-inside: avoid !important;
               margin: 0 !important;
               padding: 0 !important;
+              overflow: visible !important;
             }
             
             table.linha-bobina tr {
@@ -536,12 +550,14 @@ export default function GerarEtiquetaPage() {
               page-break-inside: avoid !important;
               break-inside: avoid !important;
               overflow: visible !important;
+              padding: 0.5mm !important;
             }
             
             .coluna-espaco {
               width: 4mm !important;
               max-width: 4mm !important;
               height: 30mm !important;
+              min-height: 30mm !important;
               padding: 0 !important;
               margin: 0 !important;
             }
@@ -552,12 +568,17 @@ export default function GerarEtiquetaPage() {
               height: auto !important;
               page-break-inside: avoid !important;
               break-inside: avoid !important;
+              overflow: visible !important;
+            }
+            
+            table.etiqueta-coluna td {
+              overflow: visible !important;
             }
           }
         </style>
       </head>
       <body>
-        <div style="width: 104mm; height: 30mm; margin: 0; padding: 0; overflow: hidden;">
+        <div style="width: 104mm; min-height: 30mm; height: auto; margin: 0; padding: 0; overflow: visible;">
           ${etiquetasHTML}
         </div>
       </body>
