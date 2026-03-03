@@ -25,6 +25,7 @@ export enum Permission {
 
 // Ferramentas disponíveis no sistema
 export enum SystemTool {
+  PRODUTOS = 'produtos',
   ETIQUETAGEM = 'etiquetagem',
   CHECKLIST = 'checklist',
   WHATSAPP_CHAT = 'whatsapp_chat',

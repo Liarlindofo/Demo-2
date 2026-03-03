@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Settings, User, Moon, Sun, LogOut, Menu, Link2, Calendar, MessageSquare, ClipboardCheck, Tag, Lock } from 'lucide-react';
+import { Settings, User, Moon, Sun, LogOut, Menu, Link2, Calendar, MessageSquare, ClipboardCheck, Tag, Lock, Package } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import { AppProvider } from '@/contexts/app-context';
 import { useRouter } from 'next/navigation';
@@ -70,6 +70,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         <div className="px-4 py-3 text-gray-400 text-sm">Carregando permissões...</div>
                       ) : (
                         <>
+                          {/* Produtos */}
+                          {permissions[SystemTool.PRODUTOS] ? (
+                            <Link 
+                              href="/produtos" 
+                              onClick={() => setIsSidebarOpen(false)}
+                              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                                pathname === '/produtos' 
+                                  ? 'bg-[#001F05] text-green-400' 
+                                  : 'text-gray-300 hover:bg-[#374151] hover:text-white'
+                              }`}
+                            >
+                              <Package className="h-5 w-5" />
+                              <span className="font-medium">Produtos</span>
+                            </Link>
+                          ) : (
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 cursor-not-allowed">
+                              <Lock className="h-5 w-5" />
+                              <span className="font-medium">Produtos</span>
+                            </div>
+                          )}
+                          
                           {permissions[SystemTool.CONEXOES] ? (
                             <Link 
                               href="/connections" 

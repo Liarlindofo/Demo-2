@@ -6,18 +6,28 @@ import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 // GET /api/etiquetagem/produtos - Listar produtos do usuário com categoria
 export async function GET() {
   try {
-    // Verificar permissão de ferramenta
-    const { requireToolPermission } = await import('@/lib/auth/toolPermissions');
+    // Verificar permissão de ferramenta (PRODUTOS ou ETIQUETAGEM)
+    const { checkToolPermission } = await import('@/lib/auth/toolPermissions');
     const { SystemTool } = await import('@/types/admin');
+    const { stackServerApp } = await import('@/stack');
     
-    const permissionCheck = await requireToolPermission(SystemTool.ETIQUETAGEM);
-    if (permissionCheck) {
-      return permissionCheck; // Retorna erro 403 se não tiver permissão
-    }
-
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
+    }
+    
+    // Verificar se tem permissão para PRODUTOS ou ETIQUETAGEM
+    const hasProdutosPermission = await checkToolPermission(stackUser.id, SystemTool.PRODUTOS);
+    const hasEtiquetagemPermission = await checkToolPermission(stackUser.id, SystemTool.ETIQUETAGEM);
+    
+    if (!hasProdutosPermission && !hasEtiquetagemPermission) {
+      return NextResponse.json(
+        {
+          error: 'Acesso negado',
+          message: 'Você não tem permissão para acessar produtos. Entre em contato com o administrador.',
+        },
+        { status: 403 }
+      );
     }
 
     const dbUser = await syncStackAuthUser({
@@ -54,17 +64,27 @@ export async function GET() {
 // POST /api/etiquetagem/produtos - Criar novo produto
 export async function POST(request: NextRequest) {
   try {
-    // Verificar permissão de ferramenta
-    const { requireToolPermission } = await import('@/lib/auth/toolPermissions');
+    // Verificar permissão de ferramenta (PRODUTOS ou ETIQUETAGEM)
+    const { checkToolPermission } = await import('@/lib/auth/toolPermissions');
     const { SystemTool } = await import('@/types/admin');
     
-    const permissionCheck = await requireToolPermission(SystemTool.ETIQUETAGEM);
-    if (permissionCheck) {
-      return permissionCheck; // Retorna erro 403 se não tiver permissão
-    }
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
+    }
+    
+    // Verificar se tem permissão para PRODUTOS ou ETIQUETAGEM
+    const hasProdutosPermission = await checkToolPermission(stackUser.id, SystemTool.PRODUTOS);
+    const hasEtiquetagemPermission = await checkToolPermission(stackUser.id, SystemTool.ETIQUETAGEM);
+    
+    if (!hasProdutosPermission && !hasEtiquetagemPermission) {
+      return NextResponse.json(
+        {
+          error: 'Acesso negado',
+          message: 'Você não tem permissão para criar produtos. Entre em contato com o administrador.',
+        },
+        { status: 403 }
+      );
     }
 
     const dbUser = await syncStackAuthUser({
