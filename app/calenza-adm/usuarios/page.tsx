@@ -25,6 +25,7 @@ interface UserWithPermissions extends StackUser {
 }
 
 const TOOL_LABELS: Record<SystemTool, string> = {
+  [SystemTool.PRODUTOS]: "Produtos",
   [SystemTool.ETIQUETAGEM]: "Etiquetagem",
   [SystemTool.CHECKLIST]: "Checklist",
   [SystemTool.WHATSAPP_CHAT]: "WhatsApp Chat",
