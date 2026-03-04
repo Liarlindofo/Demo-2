@@ -12,6 +12,7 @@ interface ToolPermission {
 export function useToolPermissions() {
   const user = useUser({ or: 'return-null' });
   const [permissions, setPermissions] = useState<Record<SystemTool, boolean>>({
+    [SystemTool.PRODUTOS]: false,
     [SystemTool.ETIQUETAGEM]: false,
     [SystemTool.CHECKLIST]: false,
     [SystemTool.WHATSAPP_CHAT]: false,
@@ -60,6 +61,7 @@ export function useToolPermissions() {
       );
 
       const permissionsMap: Record<SystemTool, boolean> = {
+        [SystemTool.PRODUTOS]: false,
         [SystemTool.ETIQUETAGEM]: false,
         [SystemTool.CHECKLIST]: false,
         [SystemTool.WHATSAPP_CHAT]: false,
