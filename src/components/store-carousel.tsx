@@ -37,21 +37,27 @@ export function StoreCarousel() {
     try {
       addToast('Sincronizando dados...', 'info');
       
+      // Timeout de 55s no frontend para não ficar pending eternamente
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 55000);
+      
       const response = await fetch('/api/saipos/sync-manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           apiId: apiId,
           storeId: storeId,
-          days: 15, // Sincronizar últimos 15 dias
+          days: 15,
         }),
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
       
       const result = await response.json();
       
       if (result.success) {
-        addToast(`Sincronização concluída: ${result.synced || 0} registros`, 'success');
-        // Recarregar página após 2 segundos para atualizar dados
+        addToast(`Sincronização concluída: ${result.daysSynced || result.synced || 0} dias sincronizados`, 'success');
         setTimeout(() => {
           window.location.reload();
         }, 2000);
@@ -60,7 +66,11 @@ export function StoreCarousel() {
       }
     } catch (error) {
       console.error('Erro ao sincronizar:', error);
-      addToast('Erro ao sincronizar dados', 'error');
+      if (error instanceof Error && error.name === 'AbortError') {
+        addToast('Sincronização demorou demais. Tente novamente em alguns minutos.', 'error');
+      } else {
+        addToast('Erro ao sincronizar dados', 'error');
+      }
     } finally {
       setSyncingStoreId(null);
     }

@@ -1,5 +1,5 @@
 export const runtime = "nodejs";
-export const maxDuration = 60; // Permitir até 60s para sincronização completa
+export const maxDuration = 60;
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -14,9 +14,14 @@ interface SyncRequest {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Deadline global - abortar antes do Vercel matar a função
+const GLOBAL_DEADLINE_MS = 50000; // 50s (maxDuration=60s, com margem de 10s)
+const PER_REQUEST_TIMEOUT_MS = 10000; // 10s por requisição individual
+
 /**
  * Busca vendas da API Saipos para um período específico
- * Usa o endpoint /v1/search_sales diretamente com paginação rápida
+ * Usa o endpoint /v1/search_sales diretamente - otimizado para ser rápido
+ * Tem deadline global para nunca exceder o tempo máximo do Vercel
  */
 async function fetchSalesFromSaipos(
   apiKey: string,
@@ -26,23 +31,37 @@ async function fetchSalesFromSaipos(
   const allSales: unknown[] = [];
   const limit = 200;
   let offset = 0;
-  let totalRequests = 0;
+  let pageNumber = 0;
+  const MAX_PAGES = 50;
+  const globalStart = Date.now();
 
   const startISO = startDate.toISOString();
   const endISO = endDate.toISOString();
 
-  while (true) {
+  while (pageNumber < MAX_PAGES) {
+    // Verificar deadline global antes de cada requisição
+    const elapsed = Date.now() - globalStart;
+    if (elapsed > GLOBAL_DEADLINE_MS) {
+      console.warn(`⏰ Deadline global atingido (${Math.round(elapsed / 1000)}s). Retornando ${allSales.length} vendas parciais.`);
+      break;
+    }
+
     const url = `https://data.saipos.io/v1/search_sales?p_date_column_filter=shift_date&p_filter_date_start=${encodeURIComponent(
       startISO
     )}&p_filter_date_end=${encodeURIComponent(
       endISO
     )}&p_limit=${limit}&p_offset=${offset}`;
 
-    totalRequests++;
-    console.log(`📥 [Saipos] Página ${totalRequests} (offset=${offset})`);
+    pageNumber++;
+    console.log(`📥 [Saipos] Página ${pageNumber} (offset=${offset}), tempo: ${Math.round(elapsed / 1000)}s`);
 
-    let res: Response;
+    let res: Response | null = null;
+
     try {
+      // AbortController com timeout para não ficar travado numa requisição lenta
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), PER_REQUEST_TIMEOUT_MS);
+
       res = await fetch(url, {
         method: "GET",
         headers: {
@@ -51,22 +70,46 @@ async function fetchSalesFromSaipos(
           Authorization: `Bearer ${apiKey}`,
         },
         cache: "no-store",
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
+
+      // Se é erro de servidor temporário, espera um pouco e tenta a próxima página
+      if (res.status >= 500) {
+        console.warn(`⚠️ Erro ${res.status} do Saipos. Aguardando 3s e retentando...`);
+        await sleep(3000);
+        
+        // Uma retry com timeout
+        const controller2 = new AbortController();
+        const timeoutId2 = setTimeout(() => controller2.abort(), PER_REQUEST_TIMEOUT_MS);
+        
+        res = await fetch(url, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          cache: "no-store",
+          signal: controller2.signal,
+        });
+        
+        clearTimeout(timeoutId2);
+      }
     } catch (fetchError) {
-      console.error("❌ Erro de rede ao acessar API Saipos:", fetchError);
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        console.error(`⏰ Timeout de ${PER_REQUEST_TIMEOUT_MS / 1000}s na requisição para Saipos`);
+      } else {
+        console.error("❌ Erro de rede ao acessar API Saipos:", fetchError);
+      }
+      // Retorna o que já tem em vez de travar
       break;
     }
 
-    // Retry para erros de servidor (502, 503, 504)
-    if (res.status >= 502 && res.status <= 504 && totalRequests <= 50) {
-      console.warn(`⚠️ Erro ${res.status} do Saipos. Aguardando 3s e tentando novamente...`);
-      await sleep(3000);
-      continue; // Tentar mesma página novamente (não incrementa offset)
-    }
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.error("❌ Erro na API Saipos:", res.status, res.statusText, errText);
+    if (!res || !res.ok) {
+      const errText = res ? await res.text().catch(() => "") : "Sem resposta";
+      console.error("❌ Erro na API Saipos:", res?.status, errText);
       break;
     }
 
@@ -79,42 +122,34 @@ async function fetchSalesFromSaipos(
       break;
     }
 
-    const hasDataProperty = (obj: unknown): obj is { data: unknown[] } => {
-      if (typeof obj !== 'object' || obj === null) return false;
-      const candidate = obj as Record<string, unknown>;
-      return 'data' in candidate && Array.isArray(candidate.data);
-    };
-
-    const hasItemsProperty = (obj: unknown): obj is { items: unknown[] } => {
-      if (typeof obj !== 'object' || obj === null) return false;
-      const candidate = obj as Record<string, unknown>;
-      return 'items' in candidate && Array.isArray(candidate.items);
-    };
-
     const pageArray = Array.isArray(pageData)
       ? pageData
-      : hasDataProperty(pageData)
-      ? pageData.data
-      : hasItemsProperty(pageData)
-      ? pageData.items
-      : [];
+      : (pageData && typeof pageData === 'object' && 'data' in (pageData as Record<string, unknown>) && Array.isArray((pageData as Record<string, unknown>).data))
+        ? (pageData as Record<string, unknown>).data as unknown[]
+        : (pageData && typeof pageData === 'object' && 'items' in (pageData as Record<string, unknown>) && Array.isArray((pageData as Record<string, unknown>).items))
+          ? (pageData as Record<string, unknown>).items as unknown[]
+          : [];
 
     if (pageArray.length === 0) break;
 
-    // Log da primeira venda para debug dos campos disponíveis
+    // Log completo da primeira venda para debug
     if (allSales.length === 0 && pageArray.length > 0) {
       const sample = pageArray[0] as Record<string, unknown>;
-      console.log(`📋 Campos disponíveis na venda:`, Object.keys(sample));
-      console.log(`📋 Amostra de venda:`, JSON.stringify(sample).substring(0, 500));
+      console.log(`📋 CAMPOS DISPONÍVEIS:`, Object.keys(sample));
+      console.log(`📋 AMOSTRA COMPLETA (1ª venda):`, JSON.stringify(sample).substring(0, 1000));
     }
 
     allSales.push(...pageArray);
     offset += limit;
 
-    if (totalRequests >= 100) break;
-    await sleep(300); // Delay curto para não sobrecarregar
+    // Se retornou menos que o limite, não há mais páginas
+    if (pageArray.length < limit) break;
+
+    await sleep(200); // Delay mínimo entre páginas
   }
 
+  const totalTime = Math.round((Date.now() - globalStart) / 1000);
+  console.log(`📊 Total de vendas carregadas: ${allSales.length} em ${pageNumber} páginas (${totalTime}s)`);
   return allSales;
 }
 
@@ -147,58 +182,31 @@ function aggregateSalesByDay(sales: unknown[]): Map<string, {
     const dayData = dailyData.get(dateKey)!;
     dayData.totalOrders++;
     
-    // Buscar valor da venda em vários campos possíveis (incluindo campos aninhados)
-    let value = 0;
-    
-    // Campos diretos
-    if (saleObj.total_value != null && Number(saleObj.total_value) > 0) {
-      value = Number(saleObj.total_value);
-    } else if (saleObj.amount_total != null && Number(saleObj.amount_total) > 0) {
-      value = Number(saleObj.amount_total);
-    } else if (saleObj.total != null && Number(saleObj.total) > 0) {
-      value = Number(saleObj.total);
-    } else if (saleObj.valor_total != null && Number(saleObj.valor_total) > 0) {
-      value = Number(saleObj.valor_total);
-    } else if (saleObj.amount != null && Number(saleObj.amount) > 0) {
-      value = Number(saleObj.amount);
-    } else if (saleObj.value != null && Number(saleObj.value) > 0) {
-      value = Number(saleObj.value);
-    } else if (saleObj.gross_value != null && Number(saleObj.gross_value) > 0) {
-      value = Number(saleObj.gross_value);
-    } else if (saleObj.net_value != null && Number(saleObj.net_value) > 0) {
-      value = Number(saleObj.net_value);
-    }
+    // Buscar valor da venda - total_amount é o campo principal da documentação oficial Saipos
+    const value = Number(
+      saleObj.total_amount ??   // Campo principal da documentação oficial
+      saleObj.total_sale_value ?? // Campo alternativo documentado
+      saleObj.total_value ?? 
+      saleObj.amount_total ?? 
+      saleObj.total ?? 
+      saleObj.valor_total ?? 
+      saleObj.amount ?? 
+      saleObj.value ?? 
+      saleObj.gross_value ?? 
+      saleObj.net_value ?? 
+      0
+    );
 
-    // Se ainda for 0, tentar campos aninhados (sale_values, values, etc.)
-    if (value === 0) {
-      const saleValues = saleObj.sale_values as Record<string, unknown> | undefined;
-      if (saleValues) {
-        value = Number(saleValues.total_value ?? saleValues.gross_value ?? saleValues.net_value ?? saleValues.total ?? 0);
-      }
-    }
-    if (value === 0) {
-      const values = saleObj.values as Record<string, unknown> | undefined;
-      if (values) {
-        value = Number(values.total ?? values.total_value ?? values.gross ?? values.net ?? 0);
-      }
-    }
-
-    // Converter centavos para reais se o valor parece estar em centavos (> 10000 para um pedido simples)
-    // A API Saipos geralmente retorna em reais, mas por segurança verificamos
     dayData.totalSales += value;
 
     // Log de amostra para debug (primeiras 5 vendas)
     if (sampleLogged < 5) {
       console.log(`📊 Amostra venda ${sampleLogged + 1}:`, {
         date: dateKey,
+        total_amount: saleObj.total_amount,
+        total_sale_value: saleObj.total_sale_value,
         total_value: saleObj.total_value,
-        amount_total: saleObj.amount_total,
         total: saleObj.total,
-        value: saleObj.value,
-        gross_value: saleObj.gross_value,
-        net_value: saleObj.net_value,
-        sale_values: saleObj.sale_values,
-        values: saleObj.values,
         valorExtraido: value,
       });
       sampleLogged++;
@@ -432,12 +440,18 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("❌ Erro na sincronização Saipos:", error);
+    
+    const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+    const isTimeout = errorMessage.includes('abort') || errorMessage.includes('timeout') || errorMessage.includes('Timed out');
+    
     return NextResponse.json(
       {
         success: false,
-        error: "Erro ao sincronizar dados",
+        error: isTimeout 
+          ? "Sincronização demorou demais. Tente novamente em alguns minutos."
+          : `Erro ao sincronizar dados: ${errorMessage}`,
       },
-      { status: 500 }
+      { status: isTimeout ? 504 : 500 }
     );
   }
 }
