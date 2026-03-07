@@ -1,6 +1,6 @@
 /**
  * Cliente para API Saipos seguindo a documentação oficial
- * https://data.saipos.io/v1/sales/sales
+ * https://data.saipos.io/v1/search_sales
  */
 
 const BASE_URL = 'https://data.saipos.io/v1';
@@ -155,20 +155,18 @@ export async function fetchSaiposSales(
     };
   }
 
-  // Construir URL com parâmetros corretos conforme documentação oficial
-  // A documentação não menciona store_id como parâmetro de query
-  // O token já está associado às lojas, então não precisamos filtrar por store_id
+  // Construir URL com parâmetros corretos conforme os endpoints que funcionam
+  // Usar p_date_column_filter=shift_date (padrão que funciona em todos os outros endpoints)
   const params = new URLSearchParams({
-    'p_data_columns_filter': dataColumnsFilter,
+    'p_date_column_filter': withDate === 'created_at' ? 'shift_date' : 'shift_date',
     'p_filter_date_start': startDate,
     'p_filter_date_end': endDate,
-    'with_date': withDate,
     'p_limit': String(limit),
     'p_offset': String(offset),
   });
 
-  // Usar apenas o endpoint oficial da documentação
-  const url = `${BASE_URL}/sales/sales?${params.toString()}`;
+  // Usar o endpoint correto: /v1/search_sales (não /v1/sales/sales que retorna 404)
+  const url = `${BASE_URL}/search_sales?${params.toString()}`;
   console.log(`📡 Fazendo requisição para: ${url.replace(token, '***')}`);
   
   const response = await fetchWithRateLimit(url, token);
