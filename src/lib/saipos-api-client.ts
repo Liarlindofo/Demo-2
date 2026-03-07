@@ -93,12 +93,13 @@ export function splitPeriodIntoWindows(startDate: string, endDate: string): Arra
 }
 
 /**
- * Faz requisição para a API Saipos com tratamento de rate limiting
+ * Faz requisição para a API Saipos com tratamento de rate limiting e retries
  */
 async function fetchWithRateLimit(
   url: string,
   token: string,
-  attempt = 1
+  attempt = 1,
+  maxAttempts = 4
 ): Promise<Response> {
   const response = await fetch(url, {
     method: 'GET',
@@ -115,13 +116,28 @@ async function fetchWithRateLimit(
     const retryAfter = Number(response.headers.get('Retry-After')) || 0;
     const backoff = Math.max(retryAfter * 1000, RATE_LIMIT_DELAY);
     
-    console.warn(`⚠️ Rate limit excedido. Aguardando ${backoff / 1000}s antes de tentar novamente...`);
+    console.warn(`⚠️ Rate limit excedido. Aguardando ${backoff / 1000}s antes de tentar novamente... (tentativa ${attempt}/${maxAttempts})`);
     
-    if (attempt <= 3) {
+    if (attempt < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, backoff));
-      return fetchWithRateLimit(url, token, attempt + 1);
+      return fetchWithRateLimit(url, token, attempt + 1, maxAttempts);
     } else {
-      throw new Error('Rate limit excedido após 3 tentativas. Aguarde alguns minutos.');
+      throw new Error('Rate limit excedido após múltiplas tentativas. Aguarde alguns minutos.');
+    }
+  }
+
+  // Tratamento de erros de servidor temporários (502, 503, 504 - connection pool timeout, etc.)
+  if (response.status >= 502 && response.status <= 504) {
+    // Backoff exponencial: 3s, 6s, 12s
+    const backoff = Math.min(3000 * Math.pow(2, attempt - 1), 15000);
+    
+    console.warn(`⚠️ Erro ${response.status} do servidor Saipos. Aguardando ${backoff / 1000}s antes de tentar novamente... (tentativa ${attempt}/${maxAttempts})`);
+    
+    if (attempt < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, backoff));
+      return fetchWithRateLimit(url, token, attempt + 1, maxAttempts);
+    } else {
+      console.error(`❌ Servidor Saipos indisponível após ${maxAttempts} tentativas (status ${response.status})`);
     }
   }
 
@@ -246,9 +262,9 @@ export async function fetchAllSaiposSales(
       currentOffset += limit;
     }
 
-    // Delay entre requisições para respeitar rate limiting
+    // Delay entre requisições para respeitar rate limiting e evitar timeout de connection pool
     if (hasMore) {
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 1500));
     }
   }
 

@@ -281,10 +281,20 @@ export async function POST(request: Request) {
 
     if (!result.success) {
       console.error('❌ Erro ao buscar vendas:', result.error);
+      
+      // Verificar se é erro de timeout/connection pool do Saipos
+      const isTimeoutError = result.error?.includes('504') || 
+                             result.error?.includes('502') || 
+                             result.error?.includes('503') ||
+                             result.error?.includes('Timed out') ||
+                             result.error?.includes('connection pool');
+      
       return NextResponse.json({
         success: false,
-        error: result.error || 'Erro ao buscar vendas da API Saipos',
-      }, { status: 500 });
+        error: isTimeoutError 
+          ? 'Servidor Saipos temporariamente indisponível. Tente novamente em alguns minutos.'
+          : (result.error || 'Erro ao buscar vendas da API Saipos'),
+      }, { status: isTimeoutError ? 503 : 500 });
     }
 
     const rawSales = result.data;
