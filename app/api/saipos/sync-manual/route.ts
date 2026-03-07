@@ -1,10 +1,10 @@
 export const runtime = "nodejs";
+export const maxDuration = 60; // Permitir até 60s para sincronização completa
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stackServerApp } from "@/stack";
 import { syncStackAuthUser } from "@/lib/stack-auth-sync";
-import { fetchSaiposSalesLargePeriod } from "@/lib/saipos-api-client";
 
 interface SyncRequest {
   apiId: string;
@@ -16,6 +16,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Busca vendas da API Saipos para um período específico
+ * Usa o endpoint /v1/search_sales diretamente com paginação rápida
  */
 async function fetchSalesFromSaipos(
   apiKey: string,
@@ -40,19 +41,32 @@ async function fetchSalesFromSaipos(
     totalRequests++;
     console.log(`📥 [Saipos] Página ${totalRequests} (offset=${offset})`);
 
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      cache: "no-store",
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        cache: "no-store",
+      });
+    } catch (fetchError) {
+      console.error("❌ Erro de rede ao acessar API Saipos:", fetchError);
+      break;
+    }
+
+    // Retry para erros de servidor (502, 503, 504)
+    if (res.status >= 502 && res.status <= 504 && totalRequests <= 50) {
+      console.warn(`⚠️ Erro ${res.status} do Saipos. Aguardando 3s e tentando novamente...`);
+      await sleep(3000);
+      continue; // Tentar mesma página novamente (não incrementa offset)
+    }
 
     if (!res.ok) {
-      await res.text().catch(() => "");
-      console.error("❌ Erro na API Saipos:", res.status, res.statusText);
+      const errText = await res.text().catch(() => "");
+      console.error("❌ Erro na API Saipos:", res.status, res.statusText, errText);
       break;
     }
 
@@ -87,11 +101,18 @@ async function fetchSalesFromSaipos(
 
     if (pageArray.length === 0) break;
 
+    // Log da primeira venda para debug dos campos disponíveis
+    if (allSales.length === 0 && pageArray.length > 0) {
+      const sample = pageArray[0] as Record<string, unknown>;
+      console.log(`📋 Campos disponíveis na venda:`, Object.keys(sample));
+      console.log(`📋 Amostra de venda:`, JSON.stringify(sample).substring(0, 500));
+    }
+
     allSales.push(...pageArray);
     offset += limit;
 
     if (totalRequests >= 100) break;
-    await sleep(800);
+    await sleep(300); // Delay curto para não sobrecarregar
   }
 
   return allSales;
@@ -126,24 +147,58 @@ function aggregateSalesByDay(sales: unknown[]): Map<string, {
     const dayData = dailyData.get(dateKey)!;
     dayData.totalOrders++;
     
-    // Buscar valor da venda em vários campos possíveis
-    const value = Number(
-      saleObj.total_value ?? 
-      saleObj.amount_total ?? 
-      saleObj.total ?? 
-      saleObj.valor_total ?? 
-      saleObj.amount ?? 
-      0
-    );
+    // Buscar valor da venda em vários campos possíveis (incluindo campos aninhados)
+    let value = 0;
+    
+    // Campos diretos
+    if (saleObj.total_value != null && Number(saleObj.total_value) > 0) {
+      value = Number(saleObj.total_value);
+    } else if (saleObj.amount_total != null && Number(saleObj.amount_total) > 0) {
+      value = Number(saleObj.amount_total);
+    } else if (saleObj.total != null && Number(saleObj.total) > 0) {
+      value = Number(saleObj.total);
+    } else if (saleObj.valor_total != null && Number(saleObj.valor_total) > 0) {
+      value = Number(saleObj.valor_total);
+    } else if (saleObj.amount != null && Number(saleObj.amount) > 0) {
+      value = Number(saleObj.amount);
+    } else if (saleObj.value != null && Number(saleObj.value) > 0) {
+      value = Number(saleObj.value);
+    } else if (saleObj.gross_value != null && Number(saleObj.gross_value) > 0) {
+      value = Number(saleObj.gross_value);
+    } else if (saleObj.net_value != null && Number(saleObj.net_value) > 0) {
+      value = Number(saleObj.net_value);
+    }
+
+    // Se ainda for 0, tentar campos aninhados (sale_values, values, etc.)
+    if (value === 0) {
+      const saleValues = saleObj.sale_values as Record<string, unknown> | undefined;
+      if (saleValues) {
+        value = Number(saleValues.total_value ?? saleValues.gross_value ?? saleValues.net_value ?? saleValues.total ?? 0);
+      }
+    }
+    if (value === 0) {
+      const values = saleObj.values as Record<string, unknown> | undefined;
+      if (values) {
+        value = Number(values.total ?? values.total_value ?? values.gross ?? values.net ?? 0);
+      }
+    }
+
+    // Converter centavos para reais se o valor parece estar em centavos (> 10000 para um pedido simples)
+    // A API Saipos geralmente retorna em reais, mas por segurança verificamos
     dayData.totalSales += value;
 
-    // Log de amostra para debug (primeiras 3 vendas)
-    if (sampleLogged < 3) {
+    // Log de amostra para debug (primeiras 5 vendas)
+    if (sampleLogged < 5) {
       console.log(`📊 Amostra venda ${sampleLogged + 1}:`, {
         date: dateKey,
         total_value: saleObj.total_value,
         amount_total: saleObj.amount_total,
         total: saleObj.total,
+        value: saleObj.value,
+        gross_value: saleObj.gross_value,
+        net_value: saleObj.net_value,
+        sale_values: saleObj.sale_values,
+        values: saleObj.values,
         valorExtraido: value,
       });
       sampleLogged++;
@@ -224,12 +279,9 @@ export async function POST(request: Request) {
     }
 
     // 3) Calcular intervalo dos últimos N dias
-    // Usar UTC para garantir consistência e evitar problemas de timezone
     const now = new Date();
     const endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
     
-    // Calcular startDate: se days=15, queremos exatamente 15 dias (hoje + 14 dias anteriores)
-    // Garantir que não ultrapasse 15 dias
     const startDate = new Date(endDate);
     startDate.setUTCDate(startDate.getUTCDate() - (days - 1));
     startDate.setUTCHours(0, 0, 0, 0);
@@ -239,8 +291,6 @@ export async function POST(request: Request) {
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
     
     if (diffDays > 15) {
-      console.warn(`⚠️ Período calculado (${diffDays} dias) excede 15 dias. Ajustando para exatamente 15 dias.`);
-      // Ajustar para exatamente 15 dias
       const adjustedStartDate = new Date(endDate);
       adjustedStartDate.setUTCDate(adjustedStartDate.getUTCDate() - 14);
       adjustedStartDate.setUTCHours(0, 0, 0, 0);
@@ -261,43 +311,10 @@ export async function POST(request: Request) {
     });
     console.log(`🧹 Removidos ${deletedOld.count} registros antigos`);
 
-    // 5) Buscar vendas da Saipos usando o novo cliente
-    // Formato ISO 8601 completo conforme documentação: 2024-01-01T00:00:00
-    const startISO = startDate.toISOString();
-    const endISO = endDate.toISOString();
+    // 5) Buscar vendas da Saipos DIRETAMENTE (rápido, sem overhead do client)
+    console.log(`🔄 Buscando vendas da Saipos...`);
     
-    console.log(`🔄 Buscando vendas da Saipos para o período: ${startISO} até ${endISO}`);
-    
-    // O token já está associado às lojas, não precisamos passar storeId
-    const result = await fetchSaiposSalesLargePeriod({
-      token: apiKey,
-      startDate: startISO,
-      endDate: endISO,
-      withDate: 'created_at',
-      dataColumnsFilter: 'all',
-      limit: 100,
-      offset: 0
-    });
-
-    if (!result.success) {
-      console.error('❌ Erro ao buscar vendas:', result.error);
-      
-      // Verificar se é erro de timeout/connection pool do Saipos
-      const isTimeoutError = result.error?.includes('504') || 
-                             result.error?.includes('502') || 
-                             result.error?.includes('503') ||
-                             result.error?.includes('Timed out') ||
-                             result.error?.includes('connection pool');
-      
-      return NextResponse.json({
-        success: false,
-        error: isTimeoutError 
-          ? 'Servidor Saipos temporariamente indisponível. Tente novamente em alguns minutos.'
-          : (result.error || 'Erro ao buscar vendas da API Saipos'),
-      }, { status: isTimeoutError ? 503 : 500 });
-    }
-
-    const rawSales = result.data;
+    const rawSales = await fetchSalesFromSaipos(apiKey, startDate, endDate);
     console.log(`📊 Total de vendas brutas carregadas: ${rawSales.length}`);
 
     if (rawSales.length === 0) {
@@ -410,6 +427,8 @@ export async function POST(request: Request) {
       startDate,
       endDate,
       daysSynced: upserts.length,
+      totalOrders: totalOrdersSum,
+      totalSales: totalSalesSum,
     });
   } catch (error) {
     console.error("❌ Erro na sincronização Saipos:", error);
