@@ -80,13 +80,10 @@ export default function GerarEtiquetaPage() {
       // Só preenche se o campo estiver vazio ou contiver apenas espaços
       const nomeAtual = (nomeResponsavel || "").trim();
       if (nomeAtual === "") {
-        // Usar setTimeout para garantir que o estado seja atualizado após a renderização
-        setTimeout(() => {
-          setNomeResponsavel(nomesRecentes[0].nomeCompleto);
-        }, 0);
+        setNomeResponsavel(nomesRecentes[0].nomeCompleto);
       }
     }
-  }, [step, nomesRecentes]);
+  }, [step, nomesRecentes, nomeResponsavel]);
 
   const loadData = async () => {
     try {

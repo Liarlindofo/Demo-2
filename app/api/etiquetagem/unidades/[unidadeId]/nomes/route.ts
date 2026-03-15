@@ -38,6 +38,8 @@ export async function GET(
       );
     }
 
+    // Buscar todos os nomes da unidade (compartilhados entre todos os usuários)
+    // Isso permite que todos vejam os nomes mais usados na unidade
     const nomes = await prisma.etiquetagemNomeResponsavel.findMany({
       where: {
         unidadeId: unidadeId,
