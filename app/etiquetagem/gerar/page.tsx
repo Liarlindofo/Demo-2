@@ -76,8 +76,15 @@ export default function GerarEtiquetaPage() {
 
   // Preencher automaticamente com o nome mais recente ao entrar no step responsavel
   useEffect(() => {
-    if (step === "responsavel" && nomesRecentes.length > 0 && !nomeResponsavel) {
-      setNomeResponsavel(nomesRecentes[0].nomeCompleto);
+    if (step === "responsavel" && nomesRecentes.length > 0) {
+      // Só preenche se o campo estiver vazio ou contiver apenas espaços
+      const nomeAtual = (nomeResponsavel || "").trim();
+      if (nomeAtual === "") {
+        // Usar setTimeout para garantir que o estado seja atualizado após a renderização
+        setTimeout(() => {
+          setNomeResponsavel(nomesRecentes[0].nomeCompleto);
+        }, 0);
+      }
     }
   }, [step, nomesRecentes]);
 
@@ -122,6 +129,21 @@ export default function GerarEtiquetaPage() {
     setPeso(produto.pesoPadrao && produto.pesoPadrao > 0.01 ? produto.pesoPadrao.toString() : "");
     setUnidadeMedida(produto.unidadeMedida && produto.unidadeMedida.trim() !== '' ? produto.unidadeMedida : "");
     setStep("responsavel");
+  };
+
+  const handleNovaEtiqueta = () => {
+    // Resetar todos os campos do formulário
+    setProdutoSelecionado(null);
+    setNomeResponsavel("");
+    setNomeErro("");
+    setPeso("");
+    setUnidadeMedida("");
+    setTipoArmazenamento("");
+    setPeriodoDias(0);
+    setCopias(1);
+    setPrintStatus("");
+    setPrintError("");
+    setStep("produto");
   };
 
   const handleSelectNome = (nome: NomeResponsavel) => {
@@ -1426,6 +1448,16 @@ export default function GerarEtiquetaPage() {
                   >
                     <Printer className="w-6 h-6 mr-2" />
                     Imprimir Etiqueta
+                  </Button>
+
+                  {/* Botão Criar Nova Etiqueta */}
+                  <Button
+                    onClick={handleNovaEtiqueta}
+                    disabled={printing}
+                    variant="outline"
+                    className="w-full border-[#374151] text-gray-300 hover:bg-[#374151] py-6 text-lg"
+                  >
+                    Criar Nova Etiqueta
                   </Button>
 
                   {/* Link discreto para reabrir instruções */}
