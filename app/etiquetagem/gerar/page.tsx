@@ -74,6 +74,13 @@ export default function GerarEtiquetaPage() {
     }
   }, [step]);
 
+  // Preencher automaticamente com o nome mais recente ao entrar no step responsavel
+  useEffect(() => {
+    if (step === "responsavel" && nomesRecentes.length > 0 && !nomeResponsavel) {
+      setNomeResponsavel(nomesRecentes[0].nomeCompleto);
+    }
+  }, [step, nomesRecentes]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -102,11 +109,6 @@ export default function GerarEtiquetaPage() {
 
       setProdutos(produtosData);
       setNomesRecentes(nomesData);
-      
-      // Preencher automaticamente com o nome mais recente se disponível
-      if (nomesData.length > 0 && !nomeResponsavel) {
-        setNomeResponsavel(nomesData[0].nomeCompleto);
-      }
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
       setError("Erro ao carregar dados. Tente novamente.");
@@ -125,6 +127,17 @@ export default function GerarEtiquetaPage() {
   const handleSelectNome = (nome: NomeResponsavel) => {
     setNomeResponsavel(nome.nomeCompleto);
     setNomeErro("");
+    // Focar no campo após selecionar
+    setTimeout(() => {
+      const input = document.getElementById("nomeResponsavel");
+      if (input) {
+        input.focus();
+        // Mover cursor para o final
+        if (input instanceof HTMLInputElement) {
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+      }
+    }, 100);
   };
 
   const handleDeleteNome = async (nomeId: string, nomeCompleto: string) => {
@@ -1097,14 +1110,18 @@ export default function GerarEtiquetaPage() {
             </div>
 
             {nomesRecentes.length > 0 && (
-              <div>
-                <h3 className="text-sm font-medium text-gray-300 mb-3">Nomes Recentes</h3>
+              <div className="bg-[#141415] border border-[#374151] rounded-xl p-6">
+                <h3 className="text-sm font-medium text-gray-300 mb-4">Últimos Responsáveis</h3>
                 <div className="grid gap-2">
                   {nomesRecentes.map((nome) => (
                     <div
                       key={nome.id}
                       onClick={() => handleSelectNome(nome)}
-                      className="bg-[#141415] border border-[#374151] rounded-xl p-4 hover:bg-[#374151] transition-colors cursor-pointer"
+                      className={`bg-[#0f0f10] border rounded-xl p-4 hover:bg-[#374151] transition-colors cursor-pointer ${
+                        nomeResponsavel === nome.nomeCompleto
+                          ? "border-[#001F05] bg-[#001F05]/20"
+                          : "border-[#374151]"
+                      }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -1113,7 +1130,7 @@ export default function GerarEtiquetaPage() {
                           </div>
                           <div>
                             <p className="font-medium text-white">{nome.nomeCompleto}</p>
-                            <p className="text-xs text-gray-400">{nome.totalUsos} usos</p>
+                            <p className="text-xs text-gray-400">{nome.totalUsos} {nome.totalUsos === 1 ? 'uso' : 'usos'}</p>
                           </div>
                         </div>
                         <button
