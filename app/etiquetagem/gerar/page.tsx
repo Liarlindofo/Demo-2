@@ -102,6 +102,11 @@ export default function GerarEtiquetaPage() {
 
       setProdutos(produtosData);
       setNomesRecentes(nomesData);
+      
+      // Preencher automaticamente com o nome mais recente se disponível
+      if (nomesData.length > 0 && !nomeResponsavel) {
+        setNomeResponsavel(nomesData[0].nomeCompleto);
+      }
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
       setError("Erro ao carregar dados. Tente novamente.");
