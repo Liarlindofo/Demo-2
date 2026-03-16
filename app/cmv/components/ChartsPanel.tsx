@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
 import type { ProductCMV } from '../types';
 import { CMV_COLORS, CMV_THRESHOLDS } from '../constants';
 import { formatCurrency, formatPercent } from '../utils';
@@ -31,7 +31,7 @@ export const ChartsPanel = ({ products }: ChartsPanelProps) => {
           <p className="text-sm text-gray-300">
             <span className="text-gray-400">Venda:</span> {formatCurrency(data.precoVenda)}
           </p>
-          <p className="text-sm font-semibold" style={{ color: CMV_COLORS[data.status] }}>
+          <p className="text-sm font-semibold" style={{ color: CMV_COLORS[data.status as keyof typeof CMV_COLORS] }}>
             <span className="text-gray-400">CMV:</span> {formatPercent(data.cmv)}
           </p>
           <p className="text-sm text-gray-300">
@@ -87,11 +87,11 @@ export const ChartsPanel = ({ products }: ChartsPanelProps) => {
             strokeDasharray="5 5"
             label={{ value: '37%', position: 'right', fill: CMV_COLORS.critico }}
           />
-          <Bar
-            dataKey="cmv"
-            fill={(entry: any) => getBarColor(entry.status)}
-            radius={[4, 4, 0, 0]}
-          />
+          <Bar dataKey="cmv" radius={[4, 4, 0, 0]}>
+            {chartData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={getBarColor(entry.status)} />
+            ))}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend, Cell } from 'recharts';
 import { useStoreState } from '../hooks/useStoreState';
 import { calculateAllProductsCMV, calculateStoreMetrics } from '../utils';
 import { STORE_IDS, STORES, STORE_COLORS, CMV_COLORS, CMV_THRESHOLDS } from '../constants';
@@ -147,11 +147,11 @@ export const ComparisonTab = () => {
               strokeDasharray="5 5"
               label={{ value: '37%', position: 'right', fill: CMV_COLORS.critico }}
             />
-            <Bar
-              dataKey="cmv"
-              fill={(entry: any) => getBarColor(entry.status)}
-              radius={[4, 4, 0, 0]}
-            />
+            <Bar dataKey="cmv" radius={[4, 4, 0, 0]}>
+              {averageCMVData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={getBarColor(entry.status)} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
