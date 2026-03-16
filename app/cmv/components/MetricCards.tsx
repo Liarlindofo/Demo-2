@@ -1,7 +1,8 @@
 'use client';
 
 import type { StoreMetrics } from '../types';
-import { formatPercent, getCMVColor, getCMVStatus } from '../constants';
+import { getCMVColor, getCMVStatus } from '../constants';
+import { formatPercent } from '../utils';
 
 interface MetricCardsProps {
   metrics: StoreMetrics;

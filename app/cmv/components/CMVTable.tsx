@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import type { ProductCMV } from '../types';
-import { formatCurrency, formatPercent, getStatusLabel, CMV_COLORS } from '../constants';
+import { getStatusLabel, CMV_COLORS } from '../constants';
+import { formatCurrency, formatPercent } from '../utils';
 
 interface CMVTableProps {
   products: ProductCMV[];
