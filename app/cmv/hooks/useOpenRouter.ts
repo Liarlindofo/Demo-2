@@ -92,24 +92,73 @@ FORMATO OBRIGATÓRIO DA RESPOSTA:
       }
 
       const data = await response.json();
-      const content = data.choices[0]?.message?.content;
 
-      if (!content) {
+      // Verificar se a API retornou erro no corpo (mesmo com status 200)
+      if (data.error) {
+        throw new Error(
+          typeof data.error === 'object'
+            ? (data.error.message ?? 'Erro na API')
+            : String(data.error)
+        );
+      }
+
+      const rawContent = data.choices?.[0]?.message?.content;
+
+      if (!rawContent) {
         throw new Error('Resposta vazia da API');
       }
 
-      // Tentar extrair JSON da resposta
+      // Normalizar: content pode ser string ou array de partes (Gemini thinking)
+      const contentStr: string =
+        typeof rawContent === 'string'
+          ? rawContent
+          : Array.isArray(rawContent)
+          ? rawContent
+              .map((part: any) =>
+                typeof part === 'string' ? part : (part?.text ?? '')
+              )
+              .join('')
+          : String(rawContent);
+
+      // Tentar extrair JSON da resposta (remover markdown e texto extra)
       let parsed: OpenRouterResponse;
       try {
         // Remover markdown code blocks se existirem
-        const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        let cleaned = contentStr
+          .replace(/```json\s*/gi, '')
+          .replace(/```\s*/g, '')
+          .trim();
+
+        // Se houver texto antes do JSON, extrair só o bloco JSON
+        const jsonStart = cleaned.indexOf('{');
+        const jsonEnd = cleaned.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+          cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
+        }
+
         parsed = JSON.parse(cleaned);
       } catch (parseError) {
-        // Se não conseguir parsear, criar resposta de erro
         throw new Error('Resposta da IA não está em formato JSON válido');
       }
 
-      return parsed;
+      // Garantir que message seja sempre uma string
+      const rawMessage = parsed.message;
+      const safeMessage: string =
+        typeof rawMessage === 'string'
+          ? rawMessage
+          : rawMessage != null
+          ? JSON.stringify(rawMessage)
+          : 'Resposta processada.';
+
+      // Garantir que state seja sempre um objeto válido
+      const safeState: StoreState =
+        parsed.state &&
+        Array.isArray(parsed.state.insumos) &&
+        Array.isArray(parsed.state.fichas)
+          ? parsed.state
+          : currentState;
+
+      return { message: safeMessage, state: safeState };
     } catch (error) {
       console.error('Erro ao chamar OpenRouter:', error);
       throw error;

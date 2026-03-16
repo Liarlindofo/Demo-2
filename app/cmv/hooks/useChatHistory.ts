@@ -25,15 +25,17 @@ export const useChatHistory = (storeId: StoreId) => {
   }, [storeId]);
 
   const addMessage = (message: ChatMessage) => {
-    const newMessages = [...messages, message];
-    setMessages(newMessages);
-    // Salvar no localStorage
-    const key = getStorageKey(storeId, 'chat');
-    try {
-      localStorage.setItem(key, JSON.stringify(newMessages));
-    } catch (error) {
-      console.error('Erro ao salvar histórico no localStorage:', error);
-    }
+    // Usar forma funcional do setState para garantir estado sempre atualizado
+    setMessages(prev => {
+      const newMessages = [...prev, message];
+      const key = getStorageKey(storeId, 'chat');
+      try {
+        localStorage.setItem(key, JSON.stringify(newMessages));
+      } catch (error) {
+        console.error('Erro ao salvar histórico no localStorage:', error);
+      }
+      return newMessages;
+    });
   };
 
   const clearHistory = () => {
