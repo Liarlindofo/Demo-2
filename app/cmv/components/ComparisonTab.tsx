@@ -49,12 +49,11 @@ export const ComparisonTab = () => {
 
   const productComparisonData: Array<{ produto: string; [key: string]: string | number }> = [];
   productMap.forEach((values, _key) => {
-    const entry: Record<string, string | number> = { produto: values[0]?.loja ? '' : '' };
-    // Usar o nome original do produto
     const nomeProduto = storesProducts
       .flatMap(s => s.products)
       .find(p => p.nome.toLowerCase() === _key)?.nome || _key;
-    entry['produto'] = nomeProduto;
+
+    const entry: { produto: string; [key: string]: string | number } = { produto: nomeProduto };
     values.forEach(({ loja, cmv }) => { entry[loja] = parseFloat(cmv.toFixed(1)); });
     productComparisonData.push(entry);
   });
