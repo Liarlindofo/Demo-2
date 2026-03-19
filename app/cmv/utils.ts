@@ -1,69 +1,70 @@
-import type { StoreState, FichaTecnica, Insumo, ProductCMV, CMVCalculation, StoreMetrics } from './types';
-import { getCMVStatus, getCMVColor } from './constants';
+import type { StoreData, Sabor, Ingrediente, ProductCMV, StoreMetrics } from './types';
+import { getCMVStatus, CMV_META } from './constants';
 
-export const calculateCMV = (
-  ficha: FichaTecnica,
-  insumos: Insumo[]
-): CMVCalculation => {
-  const custo = ficha.ingredientes.reduce((total, ingrediente) => {
-    const insumo = insumos.find(i => i.id === ingrediente.insumoId);
-    if (!insumo) return total;
-    return total + insumo.precoPorUnidade * ingrediente.quantidade;
+export const calcularCustoSabor = (sabor: Sabor, ingredientes: Ingrediente[]): number => {
+  return sabor.ingredientes.reduce((total, ing) => {
+    const ingrediente = ingredientes.find(i => i.id === ing.ingredienteId);
+    if (!ingrediente || ingrediente.precoPorKg <= 0) return total;
+
+    let custo = 0;
+    if (ingrediente.unidade === 'g' || ingrediente.unidade === 'ml') {
+      // precoPorKg = preço por 1000g ou 1000ml
+      custo = (ingrediente.precoPorKg / 1000) * ing.quantidade;
+    } else {
+      // 'un' → precoPorKg é preço por unidade
+      custo = ingrediente.precoPorKg * ing.quantidade;
+    }
+    return total + custo;
   }, 0);
+};
 
-  const cmvPercent = (custo / ficha.precoVenda) * 100;
+export const calcularCMVSabor = (sabor: Sabor, ingredientes: Ingrediente[]): ProductCMV => {
+  const custo = calcularCustoSabor(sabor, ingredientes);
+  const cmvPercent = sabor.precoVenda > 0 ? (custo / sabor.precoVenda) * 100 : 0;
   const margem = 100 - cmvPercent;
+  const status = getCMVStatus(cmvPercent);
 
-  return { custo, cmvPercent, margem };
+  return {
+    id: sabor.id,
+    nome: sabor.nome,
+    categoria: sabor.categoria,
+    custo,
+    precoVenda: sabor.precoVenda,
+    cmvPercent,
+    margem,
+    status,
+    numIngredientes: sabor.ingredientes.length,
+  };
 };
 
-export const calculateAllProductsCMV = (
-  state: StoreState
-): ProductCMV[] => {
-  return state.fichas.map(ficha => {
-    const { custo, cmvPercent, margem } = calculateCMV(ficha, state.insumos);
-    const status = getCMVStatus(cmvPercent);
-
-    return {
-      produto: ficha.produto,
-      custo,
-      precoVenda: ficha.precoVenda,
-      cmvPercent,
-      margem,
-      status,
-    };
-  });
+export const calcularTodosCMV = (data: StoreData): ProductCMV[] => {
+  return data.sabores.map(sabor => calcularCMVSabor(sabor, data.ingredientes));
 };
 
-export const calculateStoreMetrics = (
-  state: StoreState
-): StoreMetrics => {
-  const productsCMV = calculateAllProductsCMV(state);
+export const calcularMetricasLoja = (data: StoreData): StoreMetrics => {
+  const products = calcularTodosCMV(data);
 
-  if (productsCMV.length === 0) {
+  if (products.length === 0) {
     return {
       cmvMedio: 0,
-      melhorProduto: { nome: '-', cmv: 0 },
-      piorProduto: { nome: '-', cmv: 0 },
+      melhorSabor: { nome: '-', cmv: 0 },
       totalProdutos: 0,
+      totalAcimaMeta: 0,
+      totalCategorias: 0,
     };
   }
 
-  const cmvMedio = productsCMV.reduce((sum, p) => sum + p.cmvPercent, 0) / productsCMV.length;
-
-  const melhorProduto = productsCMV.reduce((best, current) => 
-    current.cmvPercent < best.cmvPercent ? current : best
-  );
-
-  const piorProduto = productsCMV.reduce((worst, current) => 
-    current.cmvPercent > worst.cmvPercent ? current : worst
-  );
+  const cmvMedio = products.reduce((sum, p) => sum + p.cmvPercent, 0) / products.length;
+  const melhorSabor = products.reduce((best, cur) => cur.cmvPercent < best.cmvPercent ? cur : best);
+  const totalAcimaMeta = products.filter(p => p.status === 'critico').length;
+  const categorias = new Set(data.sabores.map(s => s.categoria)).size;
 
   return {
     cmvMedio,
-    melhorProduto: { nome: melhorProduto.produto, cmv: melhorProduto.cmvPercent },
-    piorProduto: { nome: piorProduto.produto, cmv: piorProduto.cmvPercent },
-    totalProdutos: productsCMV.length,
+    melhorSabor: { nome: melhorSabor.nome, cmv: melhorSabor.cmvPercent },
+    totalProdutos: products.length,
+    totalAcimaMeta,
+    totalCategorias: categorias,
   };
 };
 
@@ -75,13 +76,58 @@ export const formatCurrency = (value: number): string => {
 };
 
 export const formatPercent = (value: number): string => {
-  return `${value.toFixed(2)}%`;
+  return `${value.toFixed(1)}%`;
 };
 
-export const formatTime = (timestamp: string): string => {
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+// Parsear CSV de receitas
+// Formato esperado (separado por ; ou ,):
+// Nome do Sabor;Categoria;Preço Venda;Ingrediente;Quantidade;Unidade
+export const parseCSVReceitas = (content: string): Array<{
+  nome: string;
+  categoria: 'tradicional' | 'especial';
+  precoVenda: number;
+  ingrediente: string;
+  quantidade: number;
+  unidade: 'g' | 'ml' | 'un';
+}> => {
+  const lines = content.trim().split('\n');
+  const results: Array<{
+    nome: string;
+    categoria: 'tradicional' | 'especial';
+    precoVenda: number;
+    ingrediente: string;
+    quantidade: number;
+    unidade: 'g' | 'ml' | 'un';
+  }> = [];
+
+  // Detectar separador
+  const sep = lines[0]?.includes(';') ? ';' : ',';
+
+  // Pular cabeçalho
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    const cols = line.split(sep).map(c => c.trim().replace(/^"|"$/g, ''));
+    if (cols.length < 6) continue;
+
+    const unidadeRaw = cols[5].toLowerCase();
+    const unidade: 'g' | 'ml' | 'un' =
+      unidadeRaw === 'g' ? 'g' :
+      unidadeRaw === 'ml' ? 'ml' : 'un';
+
+    results.push({
+      nome: cols[0],
+      categoria: cols[1].toLowerCase().includes('especial') ? 'especial' : 'tradicional',
+      precoVenda: parseFloat(cols[2].replace(',', '.')) || 0,
+      ingrediente: cols[3],
+      quantidade: parseFloat(cols[4].replace(',', '.')) || 0,
+      unidade,
+    });
+  }
+
+  return results;
 };
+
+// CMV_META exportado para uso nos componentes
+export { CMV_META };

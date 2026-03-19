@@ -1,153 +1,135 @@
 'use client';
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend, Cell } from 'recharts';
-import { useStoreState } from '../hooks/useStoreState';
-import { calculateAllProductsCMV, calculateStoreMetrics } from '../utils';
-import { STORE_IDS, STORES, STORE_COLORS, CMV_COLORS, CMV_THRESHOLDS } from '../constants';
-import { formatPercent } from '../utils';
+import { useStoreData } from '../hooks/useStoreData';
+import { calcularTodosCMV, calcularMetricasLoja, formatPercent } from '../utils';
+import { STORE_IDS, STORES, STORE_COLORS, CMV_COLORS, CMV_THRESHOLDS, CMV_META, getBarColor } from '../constants';
 
 export const ComparisonTab = () => {
-  const ahuState = useStoreState('ahu');
-  const pilarzinhoState = useStoreState('pilarzinho');
-  const portaoState = useStoreState('portao');
-  const uberabaState = useStoreState('uberaba');
+  const ahuData = useStoreData('ahu');
+  const pilarzinhoData = useStoreData('pilarzinho');
+  const portaoData = useStoreData('portao');
+  const uberabaData = useStoreData('uberaba');
 
   const stores = [
-    { id: 'ahu' as const, name: STORES.ahu, color: STORE_COLORS.ahu, state: ahuState.state },
-    { id: 'pilarzinho' as const, name: STORES.pilarzinho, color: STORE_COLORS.pilarzinho, state: pilarzinhoState.state },
-    { id: 'portao' as const, name: STORES.portao, color: STORE_COLORS.portao, state: portaoState.state },
-    { id: 'uberaba' as const, name: STORES.uberaba, color: STORE_COLORS.uberaba, state: uberabaState.state },
+    { id: 'ahu' as const, name: STORES.ahu, color: STORE_COLORS.ahu, data: ahuData.data },
+    { id: 'pilarzinho' as const, name: STORES.pilarzinho, color: STORE_COLORS.pilarzinho, data: pilarzinhoData.data },
+    { id: 'portao' as const, name: STORES.portao, color: STORE_COLORS.portao, data: portaoData.data },
+    { id: 'uberaba' as const, name: STORES.uberaba, color: STORE_COLORS.uberaba, data: uberabaData.data },
   ];
 
-  // Calcular métricas de cada loja
   const storesMetrics = stores.map(store => ({
     ...store,
-    metrics: calculateStoreMetrics(store.state),
+    metrics: calcularMetricasLoja(store.data),
   }));
 
-  // Calcular produtos de cada loja
   const storesProducts = stores.map(store => ({
     ...store,
-    products: calculateAllProductsCMV(store.state),
+    products: calcularTodosCMV(store.data),
   }));
 
   // Gráfico 1: CMV médio por loja
   const averageCMVData = storesMetrics.map(store => ({
     loja: store.name,
-    cmv: store.metrics.cmvMedio,
-    status: store.metrics.cmvMedio < CMV_THRESHOLDS.otimo ? 'otimo' :
-            store.metrics.cmvMedio < CMV_THRESHOLDS.critico ? 'atencao' : 'critico',
+    cmv: parseFloat(store.metrics.cmvMedio.toFixed(1)),
+    status:
+      store.metrics.cmvMedio < CMV_THRESHOLDS.otimo ? 'otimo' :
+      store.metrics.cmvMedio < CMV_THRESHOLDS.atencao ? 'atencao' : 'critico',
   }));
 
-  // Gráfico 2: CMV por produto comparado entre lojas
-  // Agrupar produtos pelo nome (case-insensitive)
+  // Gráfico 2: CMV por produto comparado
   const productMap = new Map<string, Array<{ loja: string; cmv: number; color: string }>>();
-
   storesProducts.forEach(store => {
     store.products.forEach(product => {
-      const key = product.produto.toLowerCase();
-      if (!productMap.has(key)) {
-        productMap.set(key, []);
-      }
-      productMap.get(key)!.push({
-        loja: store.name,
-        cmv: product.cmvPercent,
-        color: store.color,
-      });
+      const key = product.nome.toLowerCase();
+      if (!productMap.has(key)) productMap.set(key, []);
+      productMap.get(key)!.push({ loja: store.name, cmv: product.cmvPercent, color: store.color });
     });
   });
 
-  // Converter para formato do gráfico
-  const productComparisonData: Array<{
-    produto: string;
-    [key: string]: string | number;
-  }> = [];
-
-  productMap.forEach((values, produto) => {
-    const entry: any = { produto };
-    values.forEach(({ loja, cmv }) => {
-      entry[loja] = cmv;
-    });
+  const productComparisonData: Array<{ produto: string; [key: string]: string | number }> = [];
+  productMap.forEach((values, _key) => {
+    const entry: Record<string, string | number> = { produto: values[0]?.loja ? '' : '' };
+    // Usar o nome original do produto
+    const nomeProduto = storesProducts
+      .flatMap(s => s.products)
+      .find(p => p.nome.toLowerCase() === _key)?.nome || _key;
+    entry['produto'] = nomeProduto;
+    values.forEach(({ loja, cmv }) => { entry[loja] = parseFloat(cmv.toFixed(1)); });
     productComparisonData.push(entry);
   });
 
   // Cards de resumo
-  const melhorLoja = storesMetrics.reduce((best, current) =>
-    current.metrics.cmvMedio < best.metrics.cmvMedio ? current : best
-  );
+  const lojaComDados = storesMetrics.filter(s => s.metrics.totalProdutos > 0);
 
-  const piorLoja = storesMetrics.reduce((worst, current) =>
-    current.metrics.cmvMedio > worst.metrics.cmvMedio ? current : worst
-  );
+  const melhorLoja = lojaComDados.length > 0
+    ? lojaComDados.reduce((best, cur) => cur.metrics.cmvMedio < best.metrics.cmvMedio ? cur : best)
+    : null;
 
-  // Produto mais caro (maior CMV% médio)
-  const produtoMaisCaro = productComparisonData
-    .map(entry => {
-      const cmvs = STORE_IDS.map(id => entry[STORES[id]] as number).filter(v => v !== undefined);
-      const media = cmvs.reduce((sum, v) => sum + v, 0) / cmvs.length;
-      return { produto: entry.produto, media };
-    })
-    .reduce((worst, current) => (current.media > worst.media ? current : worst), {
-      produto: '-',
-      media: 0,
-    });
+  const piorLoja = lojaComDados.length > 0
+    ? lojaComDados.reduce((worst, cur) => cur.metrics.cmvMedio > worst.metrics.cmvMedio ? cur : worst)
+    : null;
 
-  // Produto mais eficiente (menor CMV% médio)
-  const produtoMaisEficiente = productComparisonData
-    .map(entry => {
-      const cmvs = STORE_IDS.map(id => entry[STORES[id]] as number).filter(v => v !== undefined);
-      const media = cmvs.reduce((sum, v) => sum + v, 0) / cmvs.length;
-      return { produto: entry.produto, media };
-    })
-    .reduce((best, current) => (current.media < best.media ? current : best), {
-      produto: '-',
-      media: 100,
-    });
+  const produtoMaisCaro = productComparisonData.length > 0
+    ? productComparisonData
+        .map(entry => {
+          const cmvs = STORE_IDS.map(id => entry[STORES[id]] as number).filter(v => v !== undefined && !isNaN(v));
+          const media = cmvs.length > 0 ? cmvs.reduce((s, v) => s + v, 0) / cmvs.length : 0;
+          return { produto: entry['produto'] as string, media };
+        })
+        .reduce((worst, cur) => cur.media > worst.media ? cur : worst, { produto: '-', media: 0 })
+    : null;
 
-  const getBarColor = (status: string) => {
-    switch (status) {
-      case 'otimo':
-        return CMV_COLORS.otimo;
-      case 'atencao':
-        return CMV_COLORS.atencao;
-      case 'critico':
-        return CMV_COLORS.critico;
-      default:
-        return CMV_COLORS.otimo;
-    }
-  };
+  const produtoMaisEficiente = productComparisonData.length > 0
+    ? productComparisonData
+        .map(entry => {
+          const cmvs = STORE_IDS.map(id => entry[STORES[id]] as number).filter(v => v !== undefined && !isNaN(v));
+          const media = cmvs.length > 0 ? cmvs.reduce((s, v) => s + v, 0) / cmvs.length : 100;
+          return { produto: entry['produto'] as string, media };
+        })
+        .reduce((best, cur) => cur.media < best.media ? cur : best, { produto: '-', media: 100 })
+    : null;
+
+  const hasData = lojaComDados.length > 0;
+
+  if (!hasData) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="text-5xl mb-4">📊</div>
+        <h3 className="text-lg font-semibold text-white mb-2">Nenhum dado para comparar</h3>
+        <p className="text-sm text-gray-400 max-w-sm">
+          Adicione produtos em pelo menos uma loja para ver o comparativo
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Gráfico 1: CMV Médio por Loja */}
-      <div className="bg-[#1a1a1a] border border-white/10 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">CMV Médio por Loja</h3>
-        <ResponsiveContainer width="100%" height={300}>
+      <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-4">CMV Médio por Loja</h3>
+        <ResponsiveContainer width="100%" height={280}>
           <BarChart data={averageCMVData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
-            <XAxis dataKey="loja" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" />
+            <XAxis dataKey="loja" tick={{ fill: '#6b7280', fontSize: 12 }} />
             <YAxis
               domain={[0, 60]}
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              label={{ value: 'CMV%', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
+              tick={{ fill: '#6b7280', fontSize: 12 }}
+              label={{ value: 'CMV%', angle: -90, position: 'insideLeft', fill: '#6b7280' }}
             />
             <Tooltip
-              formatter={(value: number) => formatPercent(value)}
-              contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)' }}
+              formatter={(value: number) => [`${value.toFixed(1)}%`, 'CMV']}
+              contentStyle={{ backgroundColor: '#1c1c1e', border: '1px solid #2a2a2e', borderRadius: '12px' }}
+              labelStyle={{ color: '#fff' }}
             />
             <ReferenceLine
-              y={CMV_THRESHOLDS.otimo}
-              stroke={CMV_COLORS.atencao}
-              strokeDasharray="5 5"
-              label={{ value: '35%', position: 'right', fill: CMV_COLORS.atencao }}
-            />
-            <ReferenceLine
-              y={CMV_THRESHOLDS.critico}
+              y={CMV_META}
               stroke={CMV_COLORS.critico}
               strokeDasharray="5 5"
-              label={{ value: '37%', position: 'right', fill: CMV_COLORS.critico }}
+              label={{ value: `${CMV_META}%`, position: 'right', fill: CMV_COLORS.critico, fontSize: 11 }}
             />
-            <Bar dataKey="cmv" radius={[4, 4, 0, 0]}>
+            <Bar dataKey="cmv" radius={[6, 6, 0, 0]}>
               {averageCMVData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={getBarColor(entry.status)} />
               ))}
@@ -157,75 +139,72 @@ export const ComparisonTab = () => {
       </div>
 
       {/* Gráfico 2: CMV por Produto Comparado */}
-      <div className="bg-[#1a1a1a] border border-white/10 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">CMV por Produto - Comparativo</h3>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart
-            data={productComparisonData.slice(0, 20)} // Limitar a 20 produtos para legibilidade
-            margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
-            <XAxis
-              dataKey="produto"
-              angle={-45}
-              textAnchor="end"
-              height={100}
-              tick={{ fill: '#9ca3af', fontSize: 10 }}
-            />
-            <YAxis
-              domain={[0, 60]}
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              label={{ value: 'CMV%', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
-            />
-            <Tooltip
-              formatter={(value: number) => formatPercent(value)}
-              contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)' }}
-            />
-            <Legend />
-            {STORE_IDS.map(id => (
-              <Bar
-                key={id}
-                dataKey={STORES[id]}
-                fill={STORE_COLORS[id]}
-                radius={[4, 4, 0, 0]}
+      {productComparisonData.length > 0 && (
+        <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6">
+          <h3 className="text-base font-semibold text-white mb-4">CMV por Produto – Comparativo entre Lojas</h3>
+          <ResponsiveContainer width="100%" height={400}>
+            <BarChart
+              data={productComparisonData.slice(0, 20)}
+              margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" />
+              <XAxis
+                dataKey="produto"
+                angle={-45}
+                textAnchor="end"
+                height={100}
+                tick={{ fill: '#6b7280', fontSize: 10 }}
               />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+              <YAxis
+                domain={[0, 60]}
+                tick={{ fill: '#6b7280', fontSize: 12 }}
+                label={{ value: 'CMV%', angle: -90, position: 'insideLeft', fill: '#6b7280' }}
+              />
+              <Tooltip
+                formatter={(value: number) => [`${value.toFixed(1)}%`, '']}
+                contentStyle={{ backgroundColor: '#1c1c1e', border: '1px solid #2a2a2e', borderRadius: '12px' }}
+                labelStyle={{ color: '#fff' }}
+              />
+              <ReferenceLine
+                y={CMV_META}
+                stroke={CMV_COLORS.critico}
+                strokeDasharray="5 5"
+              />
+              <Legend wrapperStyle={{ paddingTop: '20px' }} />
+              {STORE_IDS.map(id => (
+                <Bar
+                  key={id}
+                  dataKey={STORES[id]}
+                  fill={STORE_COLORS[id]}
+                  radius={[4, 4, 0, 0]}
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* Cards de Resumo */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="bg-[#1a1a1a] border border-white/10 rounded-lg p-4">
-          <p className="text-sm text-gray-400 mb-1">Melhor CMV Médio</p>
-          <p className="text-lg font-semibold text-white">{melhorLoja.name}</p>
-          <p className="text-sm text-green-500">
-            {formatPercent(melhorLoja.metrics.cmvMedio)}
-          </p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-4">
+          <p className="text-xs text-gray-400 mb-1">Melhor CMV Médio</p>
+          <p className="text-base font-semibold text-white">{melhorLoja?.name || '—'}</p>
+          <p className="text-sm text-green-400">{melhorLoja ? formatPercent(melhorLoja.metrics.cmvMedio) : '—'}</p>
         </div>
-
-        <div className="bg-[#1a1a1a] border border-white/10 rounded-lg p-4">
-          <p className="text-sm text-gray-400 mb-1">Pior CMV Médio</p>
-          <p className="text-lg font-semibold text-white">{piorLoja.name}</p>
-          <p className="text-sm text-red-500">
-            {formatPercent(piorLoja.metrics.cmvMedio)}
-          </p>
+        <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-4">
+          <p className="text-xs text-gray-400 mb-1">Pior CMV Médio</p>
+          <p className="text-base font-semibold text-white">{piorLoja?.name || '—'}</p>
+          <p className="text-sm text-red-400">{piorLoja ? formatPercent(piorLoja.metrics.cmvMedio) : '—'}</p>
         </div>
-
-        <div className="bg-[#1a1a1a] border border-white/10 rounded-lg p-4">
-          <p className="text-sm text-gray-400 mb-1">Produto Mais Caro</p>
-          <p className="text-lg font-semibold text-white truncate">{produtoMaisCaro.produto}</p>
-          <p className="text-sm text-red-500">
-            {formatPercent(produtoMaisCaro.media)}
-          </p>
+        <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-4">
+          <p className="text-xs text-gray-400 mb-1">Produto Mais Caro</p>
+          <p className="text-base font-semibold text-white truncate">{produtoMaisCaro?.produto || '—'}</p>
+          <p className="text-sm text-red-400">{produtoMaisCaro ? formatPercent(produtoMaisCaro.media) : '—'}</p>
         </div>
-
-        <div className="bg-[#1a1a1a] border border-white/10 rounded-lg p-4">
-          <p className="text-sm text-gray-400 mb-1">Produto Mais Eficiente</p>
-          <p className="text-lg font-semibold text-white truncate">{produtoMaisEficiente.produto}</p>
-          <p className="text-sm text-green-500">
-            {formatPercent(produtoMaisEficiente.media)}
-          </p>
+        <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-4">
+          <p className="text-xs text-gray-400 mb-1">Produto Mais Eficiente</p>
+          <p className="text-base font-semibold text-white truncate">{produtoMaisEficiente?.produto || '—'}</p>
+          <p className="text-sm text-green-400">{produtoMaisEficiente ? formatPercent(produtoMaisEficiente.media) : '—'}</p>
         </div>
       </div>
     </div>

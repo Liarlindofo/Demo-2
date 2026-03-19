@@ -1,58 +1,49 @@
-export interface Insumo {
-  id: string;
-  nome: string;
-  unidade: string; // 'g', 'ml', 'un', etc.
-  precoPorUnidade: number;
-}
+export type Unidade = 'g' | 'ml' | 'un';
+export type Categoria = 'tradicional' | 'especial';
 
 export interface Ingrediente {
-  insumoId: string;
-  quantidade: number;
+  id: string;
+  nome: string;
+  unidade: Unidade;
+  precoPorKg: number; // preço por kg (ou por unidade se unidade='un')
 }
 
-export interface FichaTecnica {
+export interface IngredienteSabor {
+  ingredienteId: string;
+  quantidade: number; // em gramas, ml ou unidades
+}
+
+export interface Sabor {
   id: string;
-  produto: string;
+  nome: string;
+  categoria: Categoria;
   precoVenda: number;
+  ingredientes: IngredienteSabor[];
+}
+
+export interface StoreData {
+  sabores: Sabor[];
   ingredientes: Ingrediente[];
 }
 
-export interface StoreState {
-  insumos: Insumo[];
-  fichas: FichaTecnica[];
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
-}
-
-export interface CMVCalculation {
-  custo: number;
-  cmvPercent: number;
-  margem: number;
-}
-
 export interface ProductCMV {
-  produto: string;
+  id: string;
+  nome: string;
+  categoria: Categoria;
   custo: number;
   precoVenda: number;
   cmvPercent: number;
   margem: number;
   status: 'otimo' | 'atencao' | 'critico';
+  numIngredientes: number;
 }
 
 export interface StoreMetrics {
   cmvMedio: number;
-  melhorProduto: { nome: string; cmv: number };
-  piorProduto: { nome: string; cmv: number };
+  melhorSabor: { nome: string; cmv: number };
   totalProdutos: number;
+  totalAcimaMeta: number;
+  totalCategorias: number;
 }
 
 export type StoreId = 'ahu' | 'pilarzinho' | 'portao' | 'uberaba';
-
-export interface OpenRouterResponse {
-  message: string;
-  state: StoreState;
-}

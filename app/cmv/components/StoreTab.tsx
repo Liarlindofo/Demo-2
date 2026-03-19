@@ -1,93 +1,191 @@
 'use client';
 
 import { useState } from 'react';
-import type { StoreId, ChatMessage } from '../types';
-import { useStoreState } from '../hooks/useStoreState';
-import { useChatHistory } from '../hooks/useChatHistory';
-import { useOpenRouter } from '../hooks/useOpenRouter';
-import { calculateAllProductsCMV, calculateStoreMetrics } from '../utils';
-import { STORES } from '../constants';
+import { Search, Plus } from 'lucide-react';
+import type { StoreId, ProductCMV, Sabor } from '../types';
+import { useStoreData } from '../hooks/useStoreData';
+import { calcularTodosCMV, calcularMetricasLoja } from '../utils';
+import { CMV_META, CMV_COLORS } from '../constants';
 import { MetricCards } from './MetricCards';
-import { ChartsPanel } from './ChartsPanel';
-import { CMVTable } from './CMVTable';
-import { ChatPanel } from './ChatPanel';
+import { PizzaCard } from './PizzaCard';
+import { PizzaModal } from './PizzaModal';
+import { AddProductModal } from './AddProductModal';
 
 interface StoreTabProps {
   storeId: StoreId;
 }
 
+type FilterStatus = 'todos' | 'otimo' | 'atencao' | 'critico' | 'tradicional' | 'especial';
+
+const FILTER_LABELS: Record<FilterStatus, string> = {
+  todos: 'Todos',
+  otimo: 'Ótimo',
+  atencao: 'Atenção',
+  critico: 'Acima da meta',
+  tradicional: 'Tradicionais',
+  especial: 'Especiais',
+};
+
 export const StoreTab = ({ storeId }: StoreTabProps) => {
-  const { state, updateState, isLoading: stateLoading } = useStoreState(storeId);
-  const { messages, addMessage, clearHistory, isLoading: chatLoading } = useChatHistory(storeId);
-  const { sendMessage: sendToOpenRouter, isLoading: apiLoading } = useOpenRouter(storeId, state);
+  const { data, updateData, isLoading } = useStoreData(storeId);
 
-  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<FilterStatus>('todos');
+  const [selectedSabor, setSelectedSabor] = useState<Sabor | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
-  const productsCMV = calculateAllProductsCMV(state);
-  const metrics = calculateStoreMetrics(state);
+  const products = calcularTodosCMV(data);
+  const metrics = calcularMetricasLoja(data);
 
-  const handleSendMessage = async (userMessage: string) => {
-    setError(null);
+  // Filtrar produtos
+  const filtered = products.filter(p => {
+    const matchSearch = p.nome.toLowerCase().includes(search.toLowerCase());
+    if (!matchSearch) return false;
 
-    // Adicionar mensagem do usuário
-    const userMsg: ChatMessage = {
-      role: 'user',
-      content: userMessage,
-      timestamp: new Date().toISOString(),
-    };
-    addMessage(userMsg);
-
-    try {
-      // Enviar para OpenRouter
-      const response = await sendToOpenRouter(userMessage, messages);
-
-      // Adicionar resposta da IA
-      const assistantMsg: ChatMessage = {
-        role: 'assistant',
-        content: response.message,
-        timestamp: new Date().toISOString(),
-      };
-      addMessage(assistantMsg);
-
-      // Atualizar estado
-      updateState(response.state);
-    } catch (err) {
-      console.error('Erro ao enviar mensagem:', err);
-      setError('Não consegui conectar. Tente novamente.');
-
-      // Adicionar mensagem de erro
-      const errorMsg: ChatMessage = {
-        role: 'assistant',
-        content: 'Não consegui conectar. Tente novamente.',
-        timestamp: new Date().toISOString(),
-      };
-      addMessage(errorMsg);
+    switch (filter) {
+      case 'otimo': return p.status === 'otimo';
+      case 'atencao': return p.status === 'atencao';
+      case 'critico': return p.status === 'critico';
+      case 'tradicional': return p.categoria === 'tradicional';
+      case 'especial': return p.categoria === 'especial';
+      default: return true;
     }
+  });
+
+  const handleClickCard = (product: ProductCMV) => {
+    const sabor = data.sabores.find(s => s.id === product.id);
+    if (sabor) setSelectedSabor(sabor);
   };
 
-  const handleClearHistory = () => {
-    clearHistory();
+  const handleDeleteSabor = (saborId: string) => {
+    updateData({
+      ...data,
+      sabores: data.sabores.filter(s => s.id !== saborId),
+    });
   };
 
   return (
-    <div className="grid grid-cols-[60%_40%] gap-6 h-[calc(100vh-200px)]">
-      {/* Painel Esquerdo - Métricas e Gráficos */}
-      <div className="overflow-y-auto pr-2">
-        <MetricCards metrics={metrics} isLoading={stateLoading} />
-        <ChartsPanel products={productsCMV} />
-        <CMVTable products={productsCMV} />
+    <div className="flex flex-col gap-4">
+      {/* Métricas */}
+      <MetricCards metrics={metrics} isLoading={isLoading} />
+
+      {/* Controles */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar produto..."
+            className="w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#374151]"
+          />
+        </div>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-green-500/50 hover:bg-green-500/10 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap"
+        >
+          <Plus className="w-4 h-4" />
+          Produto
+        </button>
       </div>
 
-      {/* Painel Direito - Chat */}
-      <div className="h-full">
-        <ChatPanel
-          storeName={STORES[storeId]}
-          messages={messages}
-          onSendMessage={handleSendMessage}
-          onClearHistory={handleClearHistory}
-          isLoading={apiLoading}
-        />
+      {/* Filtros */}
+      <div className="flex flex-wrap gap-2">
+        {(Object.keys(FILTER_LABELS) as FilterStatus[]).map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-3 py-1.5 rounded-xl text-sm font-medium border transition-colors ${
+              filter === f
+                ? 'bg-white text-black border-white'
+                : 'bg-transparent text-gray-400 border-[#2a2a2e] hover:border-[#374151] hover:text-white'
+            }`}
+          >
+            {FILTER_LABELS[f]}
+          </button>
+        ))}
       </div>
+
+      {/* Linha de meta */}
+      <div className="flex items-center gap-2 text-xs text-gray-500">
+        <div className="w-6 h-0.5 bg-red-500" />
+        <span>Linha vermelha = meta de {CMV_META}% CMV</span>
+      </div>
+
+      {/* Grid de cards */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 animate-pulse">
+              <div className="h-4 bg-white/10 rounded mb-3 w-3/4" />
+              <div className="h-1.5 bg-white/10 rounded mb-4" />
+              <div className="space-y-2">
+                {[...Array(3)].map((_, j) => (
+                  <div key={j} className="h-3 bg-white/10 rounded" />
+                ))}
+              </div>
+              <div className="h-8 bg-white/10 rounded mt-3 w-1/2" />
+            </div>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          {data.sabores.length === 0 ? (
+            <>
+              <div className="text-5xl mb-4">🍕</div>
+              <h3 className="text-lg font-semibold text-white mb-2">Nenhum produto ainda</h3>
+              <p className="text-sm text-gray-400 mb-6 max-w-sm">
+                Adicione seus sabores de pizza manualmente ou importe de uma planilha CSV
+              </p>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white rounded-xl px-5 py-2.5 text-sm font-medium transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Adicionar primeiro produto
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="text-4xl mb-3">🔍</div>
+              <h3 className="text-base font-semibold text-white mb-1">Nenhum produto encontrado</h3>
+              <p className="text-sm text-gray-400">Tente ajustar a busca ou os filtros</p>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filtered.map(product => (
+            <PizzaCard
+              key={product.id}
+              product={product}
+              onClick={() => handleClickCard(product)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Modais */}
+      {selectedSabor && (
+        <PizzaModal
+          sabor={selectedSabor}
+          data={data}
+          onClose={() => setSelectedSabor(null)}
+          onSave={updateData}
+          onDelete={handleDeleteSabor}
+        />
+      )}
+
+      {showAddModal && (
+        <AddProductModal
+          data={data}
+          onClose={() => setShowAddModal(false)}
+          onSave={newData => {
+            updateData(newData);
+            setShowAddModal(false);
+          }}
+        />
+      )}
     </div>
   );
 };
