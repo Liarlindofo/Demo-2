@@ -17,12 +17,12 @@ function isValidSlug(slug: string): slug is StoreSlug {
 // ── GET: carregar dados da loja ───────────────────────────────────────────────
 export async function GET(
   request: NextRequest,
-  { params }: { params: { storeId: string } },
+  { params }: { params: Promise<{ storeId: string }> },
 ) {
   const permissionCheck = await requireToolPermission(SystemTool.CMV);
   if (permissionCheck) return permissionCheck;
 
-  const { storeId } = params;
+  const { storeId } = await params;
   if (!isValidSlug(storeId)) {
     return NextResponse.json({ error: 'Loja inválida' }, { status: 400 });
   }
@@ -68,12 +68,12 @@ export async function GET(
 // ── PUT: salvar/atualizar dados da loja ───────────────────────────────────────
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { storeId: string } },
+  { params }: { params: Promise<{ storeId: string }> },
 ) {
   const permissionCheck = await requireToolPermission(SystemTool.CMV);
   if (permissionCheck) return permissionCheck;
 
-  const { storeId } = params;
+  const { storeId } = await params;
   if (!isValidSlug(storeId)) {
     return NextResponse.json({ error: 'Loja inválida' }, { status: 400 });
   }
