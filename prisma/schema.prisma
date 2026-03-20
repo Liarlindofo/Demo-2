@@ -51,6 +51,7 @@ model User {
   etiquetagemProdutos EtiquetagemProduto[]
   etiquetagemNomes     EtiquetagemNomeResponsavel[]
   etiquetagemEtiquetas EtiquetagemEtiqueta[]
+  cmvStoreData         CmvStoreData[]
 
   @@map("users")
 }
@@ -534,6 +535,24 @@ model AdminClient {
 
   @@index([isActive])
   @@map("admin_clients")
+}
+
+// ============================================
+// CMV - Custo da Mercadoria Vendida
+// ============================================
+
+model CmvStoreData {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storeSlug String   // 'ahu', 'pilarzinho', 'portao', 'uberaba'
+  data      Json     // StoreData JSON (sabores + ingredientes)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, storeSlug])
+  @@index([userId])
+  @@map("cmv_store_data")
 }
 
 // Permissões de ferramentas para usuários do sistema (stack_users)
