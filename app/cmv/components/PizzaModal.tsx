@@ -16,6 +16,7 @@ interface PizzaModalProps {
 
 export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModalProps) => {
   const [precos, setPrecos] = useState<Record<string, string>>({});
+  const [quantidades, setQuantidades] = useState<Record<string, string>>({});
   const [editNome, setEditNome] = useState('');
   const [editCategoria, setEditCategoria] = useState<Categoria>('tradicional');
   const [editPrecoVenda, setEditPrecoVenda] = useState('');
@@ -26,22 +27,32 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
     setEditCategoria(sabor.categoria);
     setEditPrecoVenda(sabor.precoVenda.toString());
 
-    // Preencher preços existentes dos ingredientes
+    // Preencher preços e quantidades existentes dos ingredientes
     const initialPrecos: Record<string, string> = {};
+    const initialQuantidades: Record<string, string> = {};
     sabor.ingredientes.forEach(ing => {
       const ingrediente = data.ingredientes.find(i => i.id === ing.ingredienteId);
       if (ingrediente) {
         initialPrecos[ing.ingredienteId] = ingrediente.precoPorKg > 0
           ? ingrediente.precoPorKg.toString()
           : '';
+        initialQuantidades[ing.ingredienteId] = ing.quantidade.toString();
       }
     });
     setPrecos(initialPrecos);
+    setQuantidades(initialQuantidades);
   }, [sabor, data]);
 
   if (!sabor) return null;
 
-  // Calcular CMV atual com os preços do estado local
+  // Calcular CMV atual com preços e quantidades do estado local
+  const saborComQuantidades = {
+    ...sabor,
+    ingredientes: sabor.ingredientes.map(ing => ({
+      ...ing,
+      quantidade: parseFloat(quantidades[ing.ingredienteId] || '0') || ing.quantidade,
+    })),
+  };
   const dataComPrecos: StoreData = {
     ...data,
     ingredientes: data.ingredientes.map(ing => ({
@@ -50,16 +61,17 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
     })),
   };
 
-  const product = calcularCMVSabor(sabor, dataComPrecos.ingredientes);
+  const product = calcularCMVSabor(saborComQuantidades, dataComPrecos.ingredientes);
   const cmvColor = CMV_COLORS[product.status];
 
   const handleSave = () => {
-    // Atualizar preços dos ingredientes e dados do sabor
+    // Atualizar preços dos ingredientes
     const newIngredientes = data.ingredientes.map(ing => ({
       ...ing,
       precoPorKg: parseFloat(precos[ing.id] || '0') || ing.precoPorKg,
     }));
 
+    // Atualizar sabor com nova quantidade em cada ingrediente
     const newSabores = data.sabores.map(s =>
       s.id === sabor.id
         ? {
@@ -67,6 +79,10 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
             nome: editNome,
             categoria: editCategoria,
             precoVenda: parseFloat(editPrecoVenda.replace(',', '.')) || s.precoVenda,
+            ingredientes: s.ingredientes.map(ing => ({
+              ...ing,
+              quantidade: parseFloat(quantidades[ing.ingredienteId] || '0') || ing.quantidade,
+            })),
           }
         : s
     );
@@ -177,10 +193,11 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
               if (!ingrediente) return null;
 
               const precoAtual = parseFloat(precos[ing.ingredienteId] || '0') || 0;
+              const qtdAtual = parseFloat(quantidades[ing.ingredienteId] || '0') || ing.quantidade;
               const custoIng =
                 ingrediente.unidade === 'un'
-                  ? precoAtual * ing.quantidade
-                  : (precoAtual / 1000) * ing.quantidade;
+                  ? precoAtual * qtdAtual
+                  : (precoAtual / 1000) * qtdAtual;
 
               const unidadeLabel =
                 ingrediente.unidade === 'g' ? 'g' :
@@ -191,13 +208,26 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
                   key={ing.ingredienteId}
                   className="bg-[#141416] border border-[#2a2a2e] rounded-xl p-3"
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-white">{ingrediente.nome}</span>
-                    <span className="text-xs text-gray-400">
-                      {ing.quantidade}{unidadeLabel}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-white">{ingrediente.nome}</span>
+                  <div className="flex items-center gap-2 mt-2">
+                    {/* Quantidade */}
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500">
+                        Qtd ({unidadeLabel})
+                      </label>
+                      <input
+                        type="number"
+                        value={quantidades[ing.ingredienteId] || ''}
+                        onChange={e =>
+                          setQuantidades(prev => ({ ...prev, [ing.ingredienteId]: e.target.value }))
+                        }
+                        placeholder="0"
+                        className="w-full mt-0.5 bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-green-500"
+                        step="any"
+                        min="0"
+                      />
+                    </div>
+                    {/* Preço por kg/un */}
                     <div className="flex-1">
                       <label className="text-xs text-gray-500">
                         Preço/{ingrediente.unidade === 'un' ? 'un' : 'kg'} (R$)
@@ -214,9 +244,10 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
                         min="0"
                       />
                     </div>
-                    <div className="text-right min-w-[70px]">
+                    {/* Custo calculado */}
+                    <div className="text-right min-w-[64px]">
                       <p className="text-xs text-gray-500">Custo</p>
-                      <p className="text-sm font-medium text-white">
+                      <p className="text-sm font-semibold text-white mt-0.5">
                         {formatCurrency(custoIng)}
                       </p>
                     </div>

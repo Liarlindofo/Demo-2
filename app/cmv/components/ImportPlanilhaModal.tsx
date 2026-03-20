@@ -27,8 +27,8 @@ interface PlanilhaRow {
   sabor: string;
   tamanho: string;
   ingrediente: string;
-  quantidade: number; // em kg ou un (raw da planilha)
-  unidade: 'kg' | 'un';
+  quantidade: number; // valor bruto da planilha
+  unidade: 'kg' | 'g' | 'ml' | 'un';
   precoKg: number;
 }
 
@@ -80,12 +80,24 @@ export const ImportPlanilhaModal = ({ data, onClose, onSave }: ImportPlanilhaMod
             if (ingrediente.length > MAX_INGREDIENTE_LENGTH) continue; // modo de preparo
             if (quantidade === 0 && precoKg === 0) continue;
 
+            // Normalizar unidade: suportar kg, g, ml e un
+            let unidade: PlanilhaRow['unidade'] = 'kg';
+            if (unidadeRaw === 'un' || unidadeRaw === 'unid' || unidadeRaw === 'unidade') {
+              unidade = 'un';
+            } else if (unidadeRaw === 'g' || unidadeRaw === 'gr' || unidadeRaw === 'grama' || unidadeRaw === 'gramas') {
+              unidade = 'g';
+            } else if (unidadeRaw === 'ml' || unidadeRaw === 'mililitro' || unidadeRaw === 'mililitros') {
+              unidade = 'ml';
+            } else {
+              unidade = 'kg'; // kg, kilo, quilograma, etc
+            }
+
             rows.push({
               sabor,
               tamanho,
               ingrediente,
               quantidade,
-              unidade: unidadeRaw === 'un' ? 'un' : 'kg',
+              unidade,
               precoKg,
             });
           }
@@ -173,13 +185,28 @@ export const ImportPlanilhaModal = ({ data, onClose, onSave }: ImportPlanilhaMod
         const ingredientesSabor: { ingredienteId: string; quantidade: number }[] = [];
 
         for (const row of groupRows) {
-          // Normalizar unidade: planilha usa 'kg', sistema usa 'g'
-          const unidadeSistema = row.unidade === 'un' ? 'un' : 'g';
+          // Converter unidade e quantidade para o sistema interno
+          // Sistema interno: 'g' (quantidade em gramas), 'ml' (em ml), 'un' (unidades)
+          let unidadeSistema: 'g' | 'ml' | 'un';
+          let quantidadeSistema: number;
 
-          // Converter quantidade para gramas se necessário
-          const quantidadeSistema = row.unidade === 'kg'
-            ? row.quantidade * 1000
-            : row.quantidade;
+          if (row.unidade === 'kg') {
+            // kg → converter para gramas multiplicando por 1000
+            unidadeSistema = 'g';
+            quantidadeSistema = row.quantidade * 1000;
+          } else if (row.unidade === 'g') {
+            // já está em gramas, sem conversão
+            unidadeSistema = 'g';
+            quantidadeSistema = row.quantidade;
+          } else if (row.unidade === 'ml') {
+            // já está em ml, sem conversão
+            unidadeSistema = 'ml';
+            quantidadeSistema = row.quantidade;
+          } else {
+            // 'un' → unidades, sem conversão
+            unidadeSistema = 'un';
+            quantidadeSistema = row.quantidade;
+          }
 
           // Encontrar ingrediente existente (mesmo nome + mesma unidade)
           const nomeNorm = row.ingrediente.toUpperCase();
