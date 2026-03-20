@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, Plus } from 'lucide-react';
+import { Search, Plus, Upload } from 'lucide-react';
 import type { StoreId, ProductCMV, Sabor } from '../types';
 import { useStoreData } from '../hooks/useStoreData';
 import { calcularTodosCMV, calcularMetricasLoja } from '../utils';
@@ -10,6 +10,7 @@ import { MetricCards } from './MetricCards';
 import { PizzaCard } from './PizzaCard';
 import { PizzaModal } from './PizzaModal';
 import { AddProductModal } from './AddProductModal';
+import { ImportPlanilhaModal } from './ImportPlanilhaModal';
 
 interface StoreTabProps {
   storeId: StoreId;
@@ -33,6 +34,7 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
   const [filter, setFilter] = useState<FilterStatus>('todos');
   const [selectedSabor, setSelectedSabor] = useState<Sabor | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const products = calcularTodosCMV(data);
   const metrics = calcularMetricasLoja(data);
@@ -80,6 +82,13 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
             className="w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#374151]"
           />
         </div>
+        <button
+          onClick={() => setShowImportModal(true)}
+          className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-blue-500/50 hover:bg-blue-500/10 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap"
+        >
+          <Upload className="w-4 h-4" />
+          Importar
+        </button>
         <button
           onClick={() => setShowAddModal(true)}
           className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-green-500/50 hover:bg-green-500/10 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap"
@@ -183,6 +192,17 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
           onSave={newData => {
             updateData(newData);
             setShowAddModal(false);
+          }}
+        />
+      )}
+
+      {showImportModal && (
+        <ImportPlanilhaModal
+          data={data}
+          onClose={() => setShowImportModal(false)}
+          onSave={newData => {
+            updateData(newData);
+            setShowImportModal(false);
           }}
         />
       )}
