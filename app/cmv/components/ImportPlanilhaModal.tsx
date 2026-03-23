@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { X, Upload, CheckCircle, AlertCircle, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import type { StoreData, Ingrediente } from '../types';
+import type { StoreData, Ingrediente, SaborItem } from '../types';
 
 interface ImportPlanilhaModalProps {
   data: StoreData;
@@ -157,8 +157,9 @@ export const ImportPlanilhaModal = ({ data, onClose, onSave }: ImportPlanilhaMod
 
     // Cópia profunda dos dados para mutação segura
     let workingData: StoreData = {
-      sabores: [...data.sabores.map(s => ({ ...s, ingredientes: [...s.ingredientes] }))],
+      sabores: [...data.sabores.map(s => ({ ...s, itens: [...(s.itens ?? [])] }))],
       ingredientes: [...data.ingredientes.map(i => ({ ...i }))],
+      receitas: [...(data.receitas ?? [])],
     };
 
     let imported = 0;
@@ -182,7 +183,7 @@ export const ImportPlanilhaModal = ({ data, onClose, onSave }: ImportPlanilhaMod
       await new Promise(resolve => setTimeout(resolve, 8));
 
       try {
-        const ingredientesSabor: { ingredienteId: string; quantidade: number }[] = [];
+        const ingredientesSabor: SaborItem[] = [];
 
         for (const row of groupRows) {
           // Converter unidade e quantidade para o sistema interno
@@ -233,7 +234,9 @@ export const ImportPlanilhaModal = ({ data, onClose, onSave }: ImportPlanilhaMod
           }
 
           ingredientesSabor.push({
-            ingredienteId: ingrediente.id,
+            id: crypto.randomUUID(),
+            tipo: 'ingrediente',
+            referenciaId: ingrediente.id,
             quantidade: quantidadeSistema,
           });
         }
@@ -244,10 +247,10 @@ export const ImportPlanilhaModal = ({ data, onClose, onSave }: ImportPlanilhaMod
         );
 
         if (existingIdx >= 0) {
-          // Atualizar ingredientes mas preservar precoVenda e categoria existentes
+          // Atualizar itens mas preservar precoVenda e categoria existentes
           workingData.sabores[existingIdx] = {
             ...workingData.sabores[existingIdx],
-            ingredientes: ingredientesSabor,
+            itens: ingredientesSabor,
           };
           updated++;
         } else {
@@ -256,7 +259,7 @@ export const ImportPlanilhaModal = ({ data, onClose, onSave }: ImportPlanilhaMod
             nome: nomeProduto,
             categoria: 'tradicional',
             precoVenda: 0,
-            ingredientes: ingredientesSabor,
+            itens: ingredientesSabor,
           });
           imported++;
         }

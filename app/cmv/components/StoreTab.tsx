@@ -36,14 +36,13 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
+  // calcularTodosCMV já recebe data.receitas via StoreData
   const products = calcularTodosCMV(data);
   const metrics = calcularMetricasLoja(data);
 
-  // Filtrar produtos
   const filtered = products.filter(p => {
     const matchSearch = p.nome.toLowerCase().includes(search.toLowerCase());
     if (!matchSearch) return false;
-
     switch (filter) {
       case 'otimo': return p.status === 'otimo';
       case 'atencao': return p.status === 'atencao';
@@ -60,10 +59,7 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
   };
 
   const handleDeleteSabor = (saborId: string) => {
-    updateData({
-      ...data,
-      sabores: data.sabores.filter(s => s.id !== saborId),
-    });
+    updateData({ ...data, sabores: data.sabores.filter(s => s.id !== saborId) });
   };
 
   return (
@@ -144,7 +140,11 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
               <div className="text-5xl mb-4">🍕</div>
               <h3 className="text-lg font-semibold text-white mb-2">Nenhum produto ainda</h3>
               <p className="text-sm text-gray-400 mb-6 max-w-sm">
-                Adicione seus sabores de pizza manualmente ou importe de uma planilha CSV
+                Adicione seus sabores de pizza manualmente ou importe de uma planilha CSV.
+                <br />
+                <span className="text-gray-500">
+                  Dica: cadastre ingredientes e receitas primeiro para montar a ficha técnica completa.
+                </span>
               </p>
               <button
                 onClick={() => setShowAddModal(true)}

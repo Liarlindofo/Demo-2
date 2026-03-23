@@ -1,9 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Save, ChevronDown } from 'lucide-react';
-import type { Sabor, Ingrediente, StoreData, Categoria } from '../types';
-import { calcularCustoSabor, calcularCMVSabor, formatCurrency, formatPercent } from '../utils';
+import { X, Save, Plus, Trash2, ChevronDown } from 'lucide-react';
+import type { Sabor, StoreData, Categoria, SaborItem, SaborItemTipo } from '../types';
+import {
+  calcularCustoItem,
+  calcularCMVSabor,
+  migrarSaborItens,
+  calcularCustoPorKgReceita,
+  formatCurrency,
+  formatPercent,
+} from '../utils';
 import { CMV_COLORS, CMV_META, getStatusLabel } from '../constants';
 
 interface PizzaModalProps {
@@ -15,92 +22,123 @@ interface PizzaModalProps {
 }
 
 export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModalProps) => {
-  const [precos, setPrecos] = useState<Record<string, string>>({});
-  const [quantidades, setQuantidades] = useState<Record<string, string>>({});
   const [editNome, setEditNome] = useState('');
   const [editCategoria, setEditCategoria] = useState<Categoria>('tradicional');
   const [editPrecoVenda, setEditPrecoVenda] = useState('');
+  const [itens, setItens] = useState<SaborItem[]>([]);
 
   useEffect(() => {
     if (!sabor) return;
     setEditNome(sabor.nome);
     setEditCategoria(sabor.categoria);
-    setEditPrecoVenda(sabor.precoVenda.toString());
-
-    // Preencher preços e quantidades existentes dos ingredientes
-    const initialPrecos: Record<string, string> = {};
-    const initialQuantidades: Record<string, string> = {};
-    sabor.ingredientes.forEach(ing => {
-      const ingrediente = data.ingredientes.find(i => i.id === ing.ingredienteId);
-      if (ingrediente) {
-        initialPrecos[ing.ingredienteId] = ingrediente.precoPorKg > 0
-          ? ingrediente.precoPorKg.toString()
-          : '';
-        initialQuantidades[ing.ingredienteId] = ing.quantidade.toString();
-      }
-    });
-    setPrecos(initialPrecos);
-    setQuantidades(initialQuantidades);
-  }, [sabor, data]);
+    setEditPrecoVenda(sabor.precoVenda > 0 ? sabor.precoVenda.toString() : '');
+    setItens(migrarSaborItens(sabor).map(it => ({ ...it })));
+  }, [sabor]);
 
   if (!sabor) return null;
 
-  // Calcular CMV atual com preços e quantidades do estado local
-  const saborComQuantidades = {
+  // ── Sabor preview para cálculo em tempo real ──────────────────────────────
+  const saborPreview: Sabor = {
     ...sabor,
-    ingredientes: sabor.ingredientes.map(ing => ({
-      ...ing,
-      quantidade: parseFloat(quantidades[ing.ingredienteId] || '0') || ing.quantidade,
-    })),
+    nome: editNome,
+    categoria: editCategoria,
+    precoVenda: parseFloat(editPrecoVenda.replace(',', '.')) || 0,
+    itens,
   };
-  const dataComPrecos: StoreData = {
-    ...data,
-    ingredientes: data.ingredientes.map(ing => ({
-      ...ing,
-      precoPorKg: parseFloat(precos[ing.id] || '0') || ing.precoPorKg,
-    })),
-  };
-
-  const product = calcularCMVSabor(saborComQuantidades, dataComPrecos.ingredientes);
+  const product = calcularCMVSabor(saborPreview, data.ingredientes, data.receitas);
   const cmvColor = CMV_COLORS[product.status];
 
-  const handleSave = () => {
-    // Atualizar preços dos ingredientes
-    const newIngredientes = data.ingredientes.map(ing => ({
-      ...ing,
-      precoPorKg: parseFloat(precos[ing.id] || '0') || ing.precoPorKg,
-    }));
+  // ── Helpers de nome / unidade de cada item ────────────────────────────────
+  const resolveItemNome = (item: SaborItem): string => {
+    if (item.tipo === 'ingrediente') {
+      return data.ingredientes.find(i => i.id === item.referenciaId)?.nome ?? '—';
+    }
+    return data.receitas.find(r => r.id === item.referenciaId)?.nome ?? '—';
+  };
 
-    // Atualizar sabor com nova quantidade em cada ingrediente
+  const resolveItemUnidade = (item: SaborItem): string => {
+    if (item.tipo === 'ingrediente') {
+      return data.ingredientes.find(i => i.id === item.referenciaId)?.unidade ?? '';
+    }
+    return data.receitas.find(r => r.id === item.referenciaId)?.unidade ?? '';
+  };
+
+  const resolvePrecoLabel = (item: SaborItem): string => {
+    if (item.tipo === 'ingrediente') {
+      const ing = data.ingredientes.find(i => i.id === item.referenciaId);
+      if (!ing) return '';
+      const preco = ing.precoPorKg;
+      const label = ing.unidade === 'un' ? '/un' : '/kg';
+      return preco > 0 ? `${formatCurrency(preco)}${label}` : 'sem preço';
+    }
+    const rec = data.receitas.find(r => r.id === item.referenciaId);
+    if (!rec) return '';
+    const custo = calcularCustoPorKgReceita(rec, data.ingredientes);
+    const label = rec.unidade === 'un' ? '/un' : '/kg';
+    return custo > 0 ? `${formatCurrency(custo)}${label}` : 'sem preço';
+  };
+
+  // ── Itens CRUD ─────────────────────────────────────────────────────────────
+  const addItem = () =>
+    setItens(prev => [
+      ...prev,
+      { id: crypto.randomUUID(), tipo: 'ingrediente', referenciaId: '', quantidade: 0 },
+    ]);
+
+  const removeItem = (id: string) =>
+    setItens(prev => prev.filter(it => it.id !== id));
+
+  const updateTipo = (id: string, tipo: SaborItemTipo) =>
+    setItens(prev =>
+      prev.map(it => (it.id === id ? { ...it, tipo, referenciaId: '' } : it)),
+    );
+
+  const updateReferencia = (id: string, referenciaId: string) =>
+    setItens(prev =>
+      prev.map(it => (it.id === id ? { ...it, referenciaId } : it)),
+    );
+
+  const updateQuantidade = (id: string, valor: string) =>
+    setItens(prev =>
+      prev.map(it =>
+        it.id === id ? { ...it, quantidade: parseFloat(valor) || 0 } : it,
+      ),
+    );
+
+  // ── Salvar ────────────────────────────────────────────────────────────────
+  const handleSave = () => {
+    const precoVenda = parseFloat(editPrecoVenda.replace(',', '.')) || sabor.precoVenda;
+    const validItens = itens.filter(it => it.referenciaId && it.quantidade > 0);
+
     const newSabores = data.sabores.map(s =>
       s.id === sabor.id
         ? {
             ...s,
-            nome: editNome,
+            nome: editNome || s.nome,
             categoria: editCategoria,
-            precoVenda: parseFloat(editPrecoVenda.replace(',', '.')) || s.precoVenda,
-            ingredientes: s.ingredientes.map(ing => ({
-              ...ing,
-              quantidade: parseFloat(quantidades[ing.ingredienteId] || '0') || ing.quantidade,
-            })),
+            precoVenda,
+            itens: validItens,
           }
-        : s
+        : s,
     );
 
-    onSave({ sabores: newSabores, ingredientes: newIngredientes });
+    onSave({ ...data, sabores: newSabores });
     onClose();
   };
 
   const handleDelete = () => {
-    if (confirm(`Tem certeza que deseja remover "${sabor.nome}"?`)) {
+    if (confirm(`Remover "${sabor.nome}"?`)) {
       onDelete?.(sabor.id);
       onClose();
     }
   };
 
+  const hasIngredientes = data.ingredientes.length > 0;
+  const hasReceitas = data.receitas.length > 0;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-[#2a2a2e]">
           <div className="flex-1 mr-3">
@@ -134,13 +172,12 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
               <div className="text-xs text-gray-400">
                 Margem: <span className="text-white font-medium">{formatPercent(product.margem)}</span>
               </div>
-              <div className="text-xs text-gray-400 mt-2">
+              <div className="text-xs text-gray-400 mt-1">
                 Meta: <span className="text-red-400 font-medium">{CMV_META}%</span>
               </div>
             </div>
           </div>
 
-          {/* Barra de CMV */}
           <div className="mt-3 h-1.5 bg-[#2a2a2e] rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-300"
@@ -151,7 +188,7 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
             />
           </div>
 
-          {/* Edição de preço de venda e categoria */}
+          {/* Preço de venda + Categoria */}
           <div className="flex gap-3 mt-3">
             <div className="flex-1">
               <label className="text-xs text-gray-400">Preço de Venda (R$)</label>
@@ -181,87 +218,123 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
           </div>
         </div>
 
-        {/* Lista de Ingredientes */}
+        {/* Lista de itens (ingredientes + receitas) */}
         <div className="flex-1 overflow-y-auto p-5">
-          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-            Ingredientes ({sabor.ingredientes.length})
-          </h4>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              Ficha Técnica ({itens.filter(it => it.referenciaId).length} itens)
+            </h4>
+            {(hasIngredientes || hasReceitas) && (
+              <button
+                onClick={addItem}
+                className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Adicionar
+              </button>
+            )}
+          </div>
 
           <div className="space-y-2">
-            {sabor.ingredientes.map(ing => {
-              const ingrediente = data.ingredientes.find(i => i.id === ing.ingredienteId);
-              if (!ingrediente) return null;
-
-              const precoAtual = parseFloat(precos[ing.ingredienteId] || '0') || 0;
-              const qtdAtual = parseFloat(quantidades[ing.ingredienteId] || '0') || ing.quantidade;
-              const custoIng =
-                ingrediente.unidade === 'un'
-                  ? precoAtual * qtdAtual
-                  : (precoAtual / 1000) * qtdAtual;
-
-              const unidadeLabel =
-                ingrediente.unidade === 'g' ? 'g' :
-                ingrediente.unidade === 'ml' ? 'ml' : 'un';
+            {itens.map(item => {
+              const custo = calcularCustoItem(item, data.ingredientes, data.receitas);
+              const unidade = resolveItemUnidade(item);
+              const precoLabel = resolvePrecoLabel(item);
 
               return (
                 <div
-                  key={ing.ingredienteId}
+                  key={item.id}
                   className="bg-[#141416] border border-[#2a2a2e] rounded-xl p-3"
                 >
-                  <span className="text-sm font-medium text-white">{ingrediente.nome}</span>
-                  <div className="flex items-center gap-2 mt-2">
-                    {/* Quantidade */}
-                    <div className="flex-1">
-                      <label className="text-xs text-gray-500">
-                        Qtd ({unidadeLabel})
-                      </label>
-                      <input
-                        type="number"
-                        value={quantidades[ing.ingredienteId] || ''}
-                        onChange={e =>
-                          setQuantidades(prev => ({ ...prev, [ing.ingredienteId]: e.target.value }))
+                  {/* Linha 1: tipo + selector */}
+                  <div className="flex gap-2 items-center mb-2">
+                    {/* Tipo */}
+                    <div className="relative w-32 shrink-0">
+                      <select
+                        value={item.tipo}
+                        onChange={e => updateTipo(item.id, e.target.value as SaborItemTipo)}
+                        className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-green-500"
+                      >
+                        <option value="ingrediente">Ingrediente</option>
+                        <option value="receita">Receita</option>
+                      </select>
+                      <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+                    </div>
+
+                    {/* Selector do item */}
+                    <div className="flex-1 relative">
+                      <select
+                        value={item.referenciaId}
+                        onChange={e => updateReferencia(item.id, e.target.value)}
+                        className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
+                      >
+                        <option value="">Selecionar…</option>
+                        {item.tipo === 'ingrediente'
+                          ? data.ingredientes.map(i => (
+                              <option key={i.id} value={i.id}>{i.nome}</option>
+                            ))
+                          : data.receitas.map(r => (
+                              <option key={r.id} value={r.id}>{r.nome}</option>
+                            ))
                         }
-                        placeholder="0"
-                        className="w-full mt-0.5 bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-green-500"
-                        step="any"
-                        min="0"
-                      />
+                      </select>
+                      <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
                     </div>
-                    {/* Preço por kg/un */}
-                    <div className="flex-1">
-                      <label className="text-xs text-gray-500">
-                        Preço/{ingrediente.unidade === 'un' ? 'un' : 'kg'} (R$)
-                      </label>
-                      <input
-                        type="number"
-                        value={precos[ing.ingredienteId] || ''}
-                        onChange={e =>
-                          setPrecos(prev => ({ ...prev, [ing.ingredienteId]: e.target.value }))
-                        }
-                        placeholder="0,00"
-                        className="w-full mt-0.5 bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-green-500"
-                        step="0.01"
-                        min="0"
-                      />
-                    </div>
-                    {/* Custo calculado */}
-                    <div className="text-right min-w-[64px]">
-                      <p className="text-xs text-gray-500">Custo</p>
-                      <p className="text-sm font-semibold text-white mt-0.5">
-                        {formatCurrency(custoIng)}
-                      </p>
-                    </div>
+
+                    <button
+                      onClick={() => removeItem(item.id)}
+                      className="p-1 text-gray-600 hover:text-red-400 transition-colors shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
+
+                  {/* Linha 2: quantidade + custo */}
+                  {item.referenciaId && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-1 flex-1">
+                        <input
+                          type="number"
+                          value={item.quantidade || ''}
+                          onChange={e => updateQuantidade(item.id, e.target.value)}
+                          placeholder="Qtd"
+                          className="w-full bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-green-500"
+                          step="any"
+                          min="0"
+                        />
+                        <span className="text-xs text-gray-500 w-6 shrink-0">{unidade}</span>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {precoLabel}
+                      </div>
+                      <div className="text-right min-w-[64px]">
+                        <p className="text-xs text-gray-500">custo</p>
+                        <p className="text-sm font-semibold text-white">
+                          {custo > 0 ? formatCurrency(custo) : '—'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
-
-            {sabor.ingredientes.length === 0 && (
-              <p className="text-sm text-gray-500 text-center py-4">
-                Nenhum ingrediente cadastrado
-              </p>
-            )}
           </div>
+
+          {!hasIngredientes && !hasReceitas && (
+            <p className="text-sm text-gray-500 text-center py-6">
+              Cadastre ingredientes (Etapa 1) ou receitas (Etapa 2) primeiro
+            </p>
+          )}
+
+          {itens.length === 0 && (hasIngredientes || hasReceitas) && (
+            <button
+              onClick={addItem}
+              className="w-full mt-2 flex items-center justify-center gap-2 border border-dashed border-[#374151] hover:border-green-500/50 rounded-xl py-4 text-sm text-gray-500 hover:text-green-400 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Adicionar item à ficha técnica
+            </button>
+          )}
         </div>
 
         {/* Footer */}

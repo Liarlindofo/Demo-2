@@ -3,21 +3,23 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { StoreData, StoreId } from '../types';
 import { getStorageKey } from '../constants';
+import { migrarStoreData } from '../utils';
 
 const INITIAL_DATA: StoreData = {
-  sabores: [],
   ingredientes: [],
+  receitas: [],
+  sabores: [],
 };
 
 const API_BASE = '/api/cmv';
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ─── helpers ──────────────────────────────────────────────────────────────────
 
 function loadFromLocalStorage(storeId: StoreId): StoreData | null {
   try {
     const raw = localStorage.getItem(getStorageKey(storeId));
     if (!raw) return null;
-    return JSON.parse(raw) as StoreData;
+    return migrarStoreData(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -31,7 +33,7 @@ function saveToLocalStorage(storeId: StoreId, data: StoreData) {
   }
 }
 
-// ─── hook ────────────────────────────────────────────────────────────────────
+// ─── hook ─────────────────────────────────────────────────────────────────────
 
 export const useStoreData = (storeId: StoreId) => {
   const [data, setData] = useState<StoreData>(INITIAL_DATA);
@@ -39,16 +41,15 @@ export const useStoreData = (storeId: StoreId) => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Debounce ref para evitar múltiplos saves simultâneos
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Carregamento inicial ──────────────────────────────────────────────────
+  // ── Carregamento inicial ───────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
     setSaveError(null);
 
-    // 1. Exibe cache local instantaneamente para não travar a UI
+    // 1. Exibe cache local instantaneamente
     const cached = loadFromLocalStorage(storeId);
     if (cached) setData(cached);
 
@@ -59,18 +60,18 @@ export const useStoreData = (storeId: StoreId) => {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || `HTTP ${res.status}`);
         }
-        return res.json() as Promise<StoreData>;
+        return res.json();
       })
-      .then(serverData => {
+      .then(raw => {
         if (cancelled) return;
-        // Dados do banco prevalecem sobre o cache local
+        // Migra dados antigos para o novo formato (cascata automática)
+        const serverData = migrarStoreData(raw);
         setData(serverData);
         saveToLocalStorage(storeId, serverData);
       })
       .catch(err => {
         if (cancelled) return;
         console.warn('[CMV] Não foi possível carregar dados do servidor, usando cache local:', err.message);
-        // Já exibimos o cache acima — não faz mais nada
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -81,7 +82,7 @@ export const useStoreData = (storeId: StoreId) => {
     };
   }, [storeId]);
 
-  // ── Persistência ─────────────────────────────────────────────────────────
+  // ── Persistência ──────────────────────────────────────────────────────────
   const persistToServer = useCallback(async (newData: StoreData) => {
     try {
       setIsSaving(true);
@@ -108,12 +109,9 @@ export const useStoreData = (storeId: StoreId) => {
 
   // ── updateData: atualiza estado + cache local + banco (debounced) ─────────
   const updateData = useCallback((newData: StoreData) => {
-    // Atualização otimista: UI responde imediatamente
     setData(newData);
     saveToLocalStorage(storeId, newData);
 
-    // Debounce: espera 400ms de inatividade antes de enviar ao banco
-    // (evita spam de requests durante importação de muitos produtos)
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       persistToServer(newData);
