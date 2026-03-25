@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Layers, ChefHat, Pizza, BarChart2 } from 'lucide-react';
+import { Layers, ChefHat, Pizza, BarChart2, FileSpreadsheet } from 'lucide-react';
 import type { StoreId } from '../types';
 import { STORE_IDS, STORES } from '../constants';
+import { useStoreData } from '../hooks/useStoreData';
 import { IngredientsTab } from './IngredientsTab';
 import { ReceitasTab } from './ReceitasTab';
 import { StoreTab } from './StoreTab';
 import { ComparisonTab } from './ComparisonTab';
+import { ImportPlanilhaModal } from './ImportPlanilhaModal';
 
 type Section = 'ingredientes' | 'receitas' | 'produtos' | 'comparativo';
 
@@ -41,6 +43,9 @@ const SECTIONS: { id: Section; label: string; icon: React.ReactNode; desc: strin
 export const CMVDashboard = () => {
   const [section, setSection] = useState<Section>('ingredientes');
   const [activeStore, setActiveStore] = useState<StoreId>('ahu');
+  const [showImportModal, setShowImportModal] = useState(false);
+
+  const { data, updateData } = useStoreData(activeStore);
 
   const showStoreTabs = section !== 'comparativo';
 
@@ -48,11 +53,22 @@ export const CMVDashboard = () => {
     <div className="min-h-screen bg-black text-white">
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-white">CMV — Custo da Mercadoria Vendida</h1>
-          <p className="text-sm text-gray-400 mt-1">
-            Configure ingredientes → receitas → produtos para calcular o CMV automaticamente
-          </p>
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white">CMV — Custo da Mercadoria Vendida</h1>
+            <p className="text-sm text-gray-400 mt-1">
+              Configure ingredientes → receitas → produtos para calcular o CMV automaticamente
+            </p>
+          </div>
+          {showStoreTabs && (
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-2 shrink-0 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-green-500/50 hover:bg-green-500/5 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-green-400" />
+              Importar Planilha
+            </button>
+          )}
         </div>
 
         {/* Navegação das seções */}
@@ -156,6 +172,17 @@ export const CMVDashboard = () => {
         {section === 'produtos' && <StoreTab storeId={activeStore} />}
         {section === 'comparativo' && <ComparisonTab />}
       </div>
+
+      {showImportModal && (
+        <ImportPlanilhaModal
+          data={data}
+          onClose={() => setShowImportModal(false)}
+          onSave={newData => {
+            updateData(newData);
+            setShowImportModal(false);
+          }}
+        />
+      )}
     </div>
   );
 };
