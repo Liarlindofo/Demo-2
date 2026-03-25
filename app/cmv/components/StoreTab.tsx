@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, Plus, Upload } from 'lucide-react';
+import { Search, Plus, Upload, CheckSquare, Square, Trash2, X, AlertTriangle } from 'lucide-react';
 import type { StoreId, ProductCMV, Sabor } from '../types';
 import { useStoreData } from '../hooks/useStoreData';
 import { calcularTodosCMV, calcularMetricasLoja } from '../utils';
@@ -36,7 +36,11 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
-  // calcularTodosCMV já recebe data.receitas via StoreData
+  // ── Seleção múltipla ───────────────────────────────────────────────────────
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+
   const products = calcularTodosCMV(data);
   const metrics = calcularMetricasLoja(data);
 
@@ -53,7 +57,47 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
     }
   });
 
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every(p => selectedIds.has(p.id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(p => p.id)));
+    }
+  };
+
+  const enterSelectMode = () => {
+    setSelectMode(true);
+    setSelectedIds(new Set());
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setShowConfirmDelete(false);
+  };
+
+  const deleteSelected = () => {
+    updateData({ ...data, sabores: data.sabores.filter(s => !selectedIds.has(s.id)) });
+    exitSelectMode();
+  };
+
   const handleClickCard = (product: ProductCMV) => {
+    if (selectMode) {
+      toggleSelect(product.id);
+      return;
+    }
     const sabor = data.sabores.find(s => s.id === product.id);
     if (sabor) setSelectedSabor(sabor);
   };
@@ -68,8 +112,8 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
       <MetricCards metrics={metrics} isLoading={isLoading} />
 
       {/* Controles */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
             value={search}
@@ -78,20 +122,69 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
             className="w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#374151]"
           />
         </div>
-        <button
-          onClick={() => setShowImportModal(true)}
-          className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-blue-500/50 hover:bg-blue-500/10 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap"
-        >
-          <Upload className="w-4 h-4" />
-          Importar
-        </button>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-green-500/50 hover:bg-green-500/10 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap"
-        >
-          <Plus className="w-4 h-4" />
-          Produto
-        </button>
+
+        {!selectMode ? (
+          <>
+            {products.length > 0 && (
+              <button
+                onClick={enterSelectMode}
+                className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-[#374151] text-gray-400 hover:text-white rounded-xl px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap"
+              >
+                <CheckSquare className="w-4 h-4" />
+                Selecionar
+              </button>
+            )}
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-blue-500/50 hover:bg-blue-500/10 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap"
+            >
+              <Upload className="w-4 h-4" />
+              Importar
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-green-500/50 hover:bg-green-500/10 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              Produto
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={toggleSelectAll}
+              className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-[#374151] text-gray-400 hover:text-white rounded-xl px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap"
+            >
+              {allFilteredSelected ? (
+                <CheckSquare className="w-4 h-4 text-red-400" />
+              ) : (
+                <Square className="w-4 h-4" />
+              )}
+              Selecionar tudo
+            </button>
+            <span className="text-sm text-gray-400 whitespace-nowrap">
+              {selectedIds.size > 0
+                ? `${selectedIds.size} selecionado${selectedIds.size !== 1 ? 's' : ''}`
+                : 'Nenhum selecionado'}
+            </span>
+            {someSelected && (
+              <button
+                onClick={() => setShowConfirmDelete(true)}
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap"
+              >
+                <Trash2 className="w-4 h-4" />
+                Excluir {selectedIds.size}
+              </button>
+            )}
+            <button
+              onClick={exitSelectMode}
+              className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-[#374151] text-gray-400 hover:text-white rounded-xl px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap"
+            >
+              <X className="w-4 h-4" />
+              Cancelar
+            </button>
+          </>
+        )}
       </div>
 
       {/* Filtros */}
@@ -164,13 +257,28 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map(product => (
-            <PizzaCard
-              key={product.id}
-              product={product}
-              onClick={() => handleClickCard(product)}
-            />
-          ))}
+          {filtered.map(product => {
+            const isSelected = selectedIds.has(product.id);
+            return (
+              <div key={product.id} className="relative">
+                {selectMode && (
+                  <div className="absolute top-3 right-3 z-10 pointer-events-none">
+                    {isSelected ? (
+                      <CheckSquare className="w-5 h-5 text-red-400 drop-shadow" />
+                    ) : (
+                      <Square className="w-5 h-5 text-gray-400 drop-shadow" />
+                    )}
+                  </div>
+                )}
+                <div className={selectMode && isSelected ? 'ring-2 ring-red-500/60 rounded-2xl' : ''}>
+                  <PizzaCard
+                    product={product}
+                    onClick={() => handleClickCard(product)}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -205,6 +313,43 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
             setShowImportModal(false);
           }}
         />
+      )}
+
+      {showConfirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl w-full max-w-sm shadow-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white">Excluir produtos?</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Esta ação não pode ser desfeita</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-300 mb-6">
+              Você está prestes a excluir{' '}
+              <span className="font-semibold text-white">
+                {selectedIds.size} produto{selectedIds.size !== 1 ? 's' : ''}
+              </span>{' '}
+              permanentemente.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirmDelete(false)}
+                className="flex-1 py-2.5 bg-[#2a2a2e] hover:bg-[#333] text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={deleteSelected}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-xl text-sm font-semibold transition-colors"
+              >
+                Excluir de vez
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

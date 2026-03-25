@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Pencil, Check, X, Trash2, Search, ChevronDown } from 'lucide-react';
+import { Plus, Pencil, Check, X, Trash2, Search, ChevronDown, CheckSquare, Square, AlertTriangle } from 'lucide-react';
 import type { StoreId, Ingrediente, Unidade } from '../types';
 import { useStoreData } from '../hooks/useStoreData';
 import { formatCurrency } from '../utils';
@@ -39,9 +39,54 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
   const [editPreco, setEditPreco] = useState('');
   const [editUnidade, setEditUnidade] = useState<Unidade>('g');
 
+  // ── Seleção múltipla ───────────────────────────────────────────────────────
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+
   const filtered = data.ingredientes.filter(i =>
     i.nome.toLowerCase().includes(search.toLowerCase()),
   );
+
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every(i => selectedIds.has(i.id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(i => i.id)));
+    }
+  };
+
+  const enterSelectMode = () => {
+    setSelectMode(true);
+    setSelectedIds(new Set());
+    setEditId(null);
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setShowConfirmDelete(false);
+  };
+
+  const deleteSelected = () => {
+    updateData({
+      ...data,
+      ingredientes: data.ingredientes.filter(i => !selectedIds.has(i.id)),
+    });
+    exitSelectMode();
+  };
 
   // Quantos sabores/receitas usam esse ingrediente
   const contarUsos = (ingredienteId: string): { receitas: number; sabores: number } => {
@@ -79,7 +124,6 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
     setEditUnidade(ing.unidade);
   };
 
-  // ── Salvar edição (recalcula cascata automaticamente via calcularTodosCMV) ──
   const saveEdit = () => {
     if (!editId) return;
     const preco = parseFloat(editPreco.replace(',', '.')) || 0;
@@ -94,7 +138,7 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
 
   const cancelEdit = () => setEditId(null);
 
-  // ── Deletar ────────────────────────────────────────────────────────────────
+  // ── Deletar individual ─────────────────────────────────────────────────────
   const handleDelete = (ing: Ingrediente) => {
     const { receitas, sabores } = contarUsos(ing.id);
     const msg =
@@ -105,7 +149,6 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
     updateData({ ...data, ingredientes: data.ingredientes.filter(i => i.id !== ing.id) });
   };
 
-  // ── Edição inline de preço (mais rápida, direto na linha) ─────────────────
   const updatePrecoInline = (id: string, valor: string) => {
     const preco = parseFloat(valor.replace(',', '.'));
     if (isNaN(preco) || preco < 0) return;
@@ -125,10 +168,14 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
     );
   }
 
+  const gridCols = selectMode
+    ? 'grid-cols-[32px_1fr_120px_160px_100px_80px]'
+    : 'grid-cols-[1fr_120px_160px_100px_80px]';
+
   return (
     <div className="flex flex-col gap-4">
       {/* Cabeçalho */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-lg font-bold text-white">Ingredientes</h2>
           <p className="text-xs text-gray-400 mt-0.5">
@@ -136,17 +183,55 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
             {' · '}Alterar preço aqui recalcula receitas e produtos automaticamente
           </p>
         </div>
-        <button
-          onClick={() => setShowAdd(v => !v)}
-          className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-green-500/50 hover:bg-green-500/10 text-white rounded-xl px-4 py-2 text-sm font-medium transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Ingrediente
-        </button>
+
+        <div className="flex items-center gap-2">
+          {!selectMode ? (
+            <>
+              {data.ingredientes.length > 0 && (
+                <button
+                  onClick={enterSelectMode}
+                  className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-[#374151] text-gray-400 hover:text-white rounded-xl px-3 py-2 text-sm font-medium transition-colors"
+                >
+                  <CheckSquare className="w-4 h-4" />
+                  Selecionar
+                </button>
+              )}
+              <button
+                onClick={() => setShowAdd(v => !v)}
+                className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-green-500/50 hover:bg-green-500/10 text-white rounded-xl px-4 py-2 text-sm font-medium transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Novo Ingrediente
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="text-sm text-gray-400">
+                {selectedIds.size > 0 ? `${selectedIds.size} selecionado${selectedIds.size !== 1 ? 's' : ''}` : 'Nenhum selecionado'}
+              </span>
+              {someSelected && (
+                <button
+                  onClick={() => setShowConfirmDelete(true)}
+                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white rounded-xl px-4 py-2 text-sm font-semibold transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Excluir {selectedIds.size}
+                </button>
+              )}
+              <button
+                onClick={exitSelectMode}
+                className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-[#374151] text-gray-400 hover:text-white rounded-xl px-3 py-2 text-sm font-medium transition-colors"
+              >
+                <X className="w-4 h-4" />
+                Cancelar
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Formulário de adição */}
-      {showAdd && (
+      {showAdd && !selectMode && (
         <div className="bg-[#1c1c1e] border border-green-500/30 rounded-xl p-4 flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-[160px]">
             <label className="text-xs text-gray-400 block mb-1">Nome *</label>
@@ -219,7 +304,7 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
         />
       </div>
 
-      {/* Tabela de ingredientes */}
+      {/* Tabela */}
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           {data.ingredientes.length === 0 ? (
@@ -247,7 +332,20 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
       ) : (
         <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl overflow-hidden">
           {/* Header da tabela */}
-          <div className="grid grid-cols-[1fr_120px_160px_100px_80px] gap-3 px-4 py-2.5 border-b border-[#2a2a2e]">
+          <div className={`grid ${gridCols} gap-3 px-4 py-2.5 border-b border-[#2a2a2e]`}>
+            {selectMode && (
+              <button
+                onClick={toggleSelectAll}
+                className="flex items-center justify-center"
+                title={allFilteredSelected ? 'Desmarcar todos' : 'Selecionar todos'}
+              >
+                {allFilteredSelected ? (
+                  <CheckSquare className="w-4 h-4 text-red-400" />
+                ) : (
+                  <Square className="w-4 h-4 text-gray-500" />
+                )}
+              </button>
+            )}
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Nome</span>
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Unidade</span>
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Preço</span>
@@ -258,19 +356,36 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
           {/* Linhas */}
           {filtered.map((ing, idx) => {
             const isEditing = editId === ing.id;
+            const isSelected = selectedIds.has(ing.id);
             const usos = contarUsos(ing.id);
             const totalUsos = usos.receitas + usos.sabores;
 
             return (
               <div
                 key={ing.id}
-                className={`grid grid-cols-[1fr_120px_160px_100px_80px] gap-3 px-4 py-3 items-center transition-colors
+                onClick={selectMode && !isEditing ? () => toggleSelect(ing.id) : undefined}
+                className={`grid ${gridCols} gap-3 px-4 py-3 items-center transition-colors
                   ${idx % 2 === 0 ? 'bg-transparent' : 'bg-[#141416]'}
                   ${isEditing ? 'bg-green-500/5 border-l-2 border-green-500' : ''}
+                  ${selectMode && isSelected ? 'bg-red-500/8 border-l-2 border-red-500/60' : ''}
+                  ${selectMode ? 'cursor-pointer hover:bg-white/5' : ''}
                 `}
               >
+                {/* Checkbox */}
+                {selectMode && (
+                  <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => toggleSelect(ing.id)}>
+                      {isSelected ? (
+                        <CheckSquare className="w-4 h-4 text-red-400" />
+                      ) : (
+                        <Square className="w-4 h-4 text-gray-500" />
+                      )}
+                    </button>
+                  </div>
+                )}
+
                 {/* Nome */}
-                {isEditing ? (
+                {isEditing && !selectMode ? (
                   <input
                     value={editNome}
                     onChange={e => setEditNome(e.target.value)}
@@ -279,11 +394,11 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
                     className="bg-[#2a2a2e] border border-green-500/60 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
                   />
                 ) : (
-                  <span className="text-sm text-white font-medium">{ing.nome}</span>
+                  <span className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-white'}`}>{ing.nome}</span>
                 )}
 
                 {/* Unidade */}
-                {isEditing ? (
+                {isEditing && !selectMode ? (
                   <div className="relative">
                     <select
                       value={editUnidade}
@@ -301,7 +416,7 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
                 )}
 
                 {/* Preço */}
-                {isEditing ? (
+                {isEditing && !selectMode ? (
                   <div className="flex items-center gap-1.5">
                     <input
                       type="number"
@@ -336,52 +451,72 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
                       {usos.sabores} produto{usos.sabores > 1 ? 's' : ''}
                     </span>
                   )}
-                  {totalUsos === 0 && (
-                    <span className="text-xs text-gray-600">—</span>
-                  )}
+                  {totalUsos === 0 && <span className="text-xs text-gray-600">—</span>}
                 </div>
 
                 {/* Ações */}
-                <div className="flex items-center gap-1.5 justify-end">
-                  {isEditing ? (
-                    <>
-                      <button
-                        onClick={saveEdit}
-                        className="p-1.5 text-green-400 hover:text-green-300 hover:bg-green-500/10 rounded-lg transition-colors"
-                        title="Salvar"
-                      >
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={cancelEdit}
-                        className="p-1.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                        title="Cancelar"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => startEdit(ing)}
-                        className="p-1.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                        title="Editar"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(ing)}
-                        className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                        title="Remover"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </>
+                <div className="flex items-center gap-1.5 justify-end" onClick={e => e.stopPropagation()}>
+                  {!selectMode && (
+                    isEditing ? (
+                      <>
+                        <button onClick={saveEdit} className="p-1.5 text-green-400 hover:text-green-300 hover:bg-green-500/10 rounded-lg transition-colors" title="Salvar">
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button onClick={cancelEdit} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Cancelar">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => startEdit(ing)} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Editar">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDelete(ing)} className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Remover">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )
                   )}
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal de confirmação de exclusão */}
+      {showConfirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl w-full max-w-sm shadow-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white">Excluir ingredientes?</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Esta ação não pode ser desfeita</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-300 mb-6">
+              Você está prestes a excluir{' '}
+              <span className="font-semibold text-white">{selectedIds.size} ingrediente{selectedIds.size !== 1 ? 's' : ''}</span>.
+              Receitas e produtos que os utilizam podem ficar incompletos.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirmDelete(false)}
+                className="flex-1 py-2.5 bg-[#2a2a2e] hover:bg-[#333] text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={deleteSelected}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-xl text-sm font-semibold transition-colors"
+              >
+                Excluir de vez
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
