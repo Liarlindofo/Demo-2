@@ -4,6 +4,7 @@ import type {
   SaborItem,
   Ingrediente,
   Receita,
+  CategoriaPreco,
   ProductCMV,
   StoreMetrics,
 } from './types';
@@ -37,6 +38,7 @@ export const migrarSaborItens = (sabor: Sabor): SaborItem[] => {
 export const migrarStoreData = (data: Partial<StoreData>): StoreData => ({
   ingredientes: data.ingredientes ?? [],
   receitas: data.receitas ?? [],
+  categorias: data.categorias ?? [],
   sabores: (data.sabores ?? []).map(s => ({
     ...s,
     itens: migrarSaborItens(s),
@@ -124,9 +126,16 @@ export const calcularCMVSabor = (
   sabor: Sabor,
   ingredientes: Ingrediente[],
   receitas: Receita[] = [],
+  categorias: CategoriaPreco[] = [],
 ): ProductCMV => {
   const custo = calcularCustoSabor(sabor, ingredientes, receitas);
-  const cmvPercent = sabor.precoVenda > 0 ? (custo / sabor.precoVenda) * 100 : 0;
+
+  // Resolve preço de venda: categoria (nova) > precoVenda legado
+  const precoVenda = sabor.categoriaId
+    ? (categorias.find(c => c.id === sabor.categoriaId)?.precoVenda ?? sabor.precoVenda ?? 0)
+    : (sabor.precoVenda ?? 0);
+
+  const cmvPercent = precoVenda > 0 ? (custo / precoVenda) * 100 : 0;
   const margem = 100 - cmvPercent;
   const status = getCMVStatus(cmvPercent);
   const numIngredientes = migrarSaborItens(sabor).length;
@@ -136,7 +145,7 @@ export const calcularCMVSabor = (
     nome: sabor.nome,
     categoria: sabor.categoria,
     custo,
-    precoVenda: sabor.precoVenda,
+    precoVenda,
     cmvPercent,
     margem,
     status,
@@ -146,7 +155,7 @@ export const calcularCMVSabor = (
 
 export const calcularTodosCMV = (data: StoreData): ProductCMV[] =>
   data.sabores.map(sabor =>
-    calcularCMVSabor(sabor, data.ingredientes, data.receitas),
+    calcularCMVSabor(sabor, data.ingredientes, data.receitas, data.categorias),
   );
 
 export const calcularMetricasLoja = (data: StoreData): StoreMetrics => {

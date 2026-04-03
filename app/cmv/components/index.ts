@@ -2,6 +2,7 @@ export { CMVDashboard } from './CMVDashboard';
 export { IngredientsTab } from './IngredientsTab';
 export { ReceitasTab } from './ReceitasTab';
 export { ReceitaModal } from './ReceitaModal';
+export { CategoriasTab } from './CategoriasTab';
 export { StoreTab } from './StoreTab';
 export { ComparisonTab } from './ComparisonTab';
 export { MetricCards } from './MetricCards';

@@ -1,17 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { Layers, ChefHat, Pizza, BarChart2, FileSpreadsheet } from 'lucide-react';
+import { Layers, ChefHat, Pizza, BarChart2, FileSpreadsheet, Tag } from 'lucide-react';
 import type { StoreId } from '../types';
 import { STORE_IDS, STORES } from '../constants';
 import { useStoreData } from '../hooks/useStoreData';
 import { IngredientsTab } from './IngredientsTab';
 import { ReceitasTab } from './ReceitasTab';
+import { CategoriasTab } from './CategoriasTab';
 import { StoreTab } from './StoreTab';
 import { ComparisonTab } from './ComparisonTab';
 import { ImportPlanilhaModal } from './ImportPlanilhaModal';
 
-type Section = 'ingredientes' | 'receitas' | 'produtos' | 'comparativo';
+type Section = 'ingredientes' | 'receitas' | 'categorias' | 'produtos' | 'comparativo';
 
 const SECTIONS: { id: Section; label: string; icon: React.ReactNode; desc: string }[] = [
   {
@@ -25,6 +26,12 @@ const SECTIONS: { id: Section; label: string; icon: React.ReactNode; desc: strin
     label: 'Receitas',
     icon: <ChefHat className="w-4 h-4" />,
     desc: 'Preparações compostas',
+  },
+  {
+    id: 'categorias',
+    label: 'Categorias',
+    icon: <Tag className="w-4 h-4" />,
+    desc: 'Preços de venda',
   },
   {
     id: 'produtos',
@@ -86,7 +93,7 @@ export const CMVDashboard = () => {
                 }`}
               >
                 {/* Número da etapa (não para comparativo) */}
-                {idx < 3 && (
+                {idx < 4 && (
                   <span
                     className={`flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold shrink-0 ${
                       isActive ? 'bg-black text-white' : 'bg-[#2a2a2e] text-gray-400'
@@ -97,7 +104,7 @@ export const CMVDashboard = () => {
                 )}
                 {s.icon}
                 <span className="hidden sm:inline">{s.label}</span>
-                <span className="sm:hidden">{idx < 3 ? `Etapa ${idx + 1}` : s.label}</span>
+                <span className="sm:hidden">{idx < 4 ? `Etapa ${idx + 1}` : s.label}</span>
               </button>
             );
           })}
@@ -125,15 +132,21 @@ export const CMVDashboard = () => {
         {/* Indicador de fluxo (apenas decorativo, visível em desktop) */}
         {section !== 'comparativo' && (
           <div className="hidden lg:flex items-center gap-2 mb-6 px-1">
-            {['Ingredientes', 'Receitas', 'Produtos'].map((label, idx) => {
-              const sectionId = ['ingredientes', 'receitas', 'produtos'][idx] as Section;
+            {(['ingredientes', 'receitas', 'categorias', 'produtos'] as Section[]).map((sectionId, idx) => {
+              const labels: Record<string, string> = {
+                ingredientes: 'Ingredientes',
+                receitas: 'Receitas',
+                categorias: 'Categorias',
+                produtos: 'Produtos',
+              };
+              const label = labels[sectionId];
+              const sectionOrder = ['ingredientes', 'receitas', 'categorias', 'produtos'];
+              const currentIdx = sectionOrder.indexOf(section);
               const isCurrent = section === sectionId;
-              const isPast =
-                (section === 'receitas' && idx === 0) ||
-                (section === 'produtos' && idx < 2);
+              const isPast = currentIdx > idx;
 
               return (
-                <div key={label} className="flex items-center gap-2">
+                <div key={sectionId} className="flex items-center gap-2">
                   <button
                     onClick={() => setSection(sectionId)}
                     className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${
@@ -157,7 +170,7 @@ export const CMVDashboard = () => {
                     </span>
                     {label}
                   </button>
-                  {idx < 2 && (
+                  {idx < 3 && (
                     <div className={`w-8 h-px ${isPast ? 'bg-green-600/40' : 'bg-[#2a2a2e]'}`} />
                   )}
                 </div>
@@ -169,6 +182,7 @@ export const CMVDashboard = () => {
         {/* Conteúdo da seção ativa */}
         {section === 'ingredientes' && <IngredientsTab storeId={activeStore} />}
         {section === 'receitas' && <ReceitasTab storeId={activeStore} />}
+        {section === 'categorias' && <CategoriasTab storeId={activeStore} />}
         {section === 'produtos' && <StoreTab storeId={activeStore} />}
         {section === 'comparativo' && <ComparisonTab />}
       </div>

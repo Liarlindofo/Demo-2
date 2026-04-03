@@ -2,7 +2,8 @@
 
 import { useState, useRef } from 'react';
 import { X, Plus, ChevronDown, Trash2, Download, Upload } from 'lucide-react';
-import type { StoreData, Sabor, Categoria, SaborItem, SaborItemTipo } from '../types';
+import type { StoreData, Sabor, Categoria, SaborItem, SaborItemTipo, CategoriaPreco } from '../types';
+// SaborItemTipo é resolvido via fromCompositeId (internamente)
 import { parseCSVReceitas } from '../utils';
 
 interface AddProductModalProps {
@@ -26,8 +27,11 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
   // Manual form
   const [nome, setNome] = useState('');
   const [categoria, setCategoria] = useState<Categoria>('tradicional');
-  const [precoVenda, setPrecoVenda] = useState('');
+  const [categoriaId, setCategoriaId] = useState('');
   const [itens, setItens] = useState<SaborItem[]>([makeItem()]);
+
+  // Categoria selecionada
+  const categoriaAtual: CategoriaPreco | undefined = data.categorias.find(c => c.id === categoriaId);
 
   // Import state
   const [csvContent, setCsvContent] = useState('');
@@ -39,21 +43,29 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
   const hasReceitas = data.receitas.length > 0;
   const hasOpcoes = hasIngredientes || hasReceitas;
 
+  // ── Seletor unificado (ingredientes + receitas) ────────────────────────────
+  const toCompositeId = (tipo: SaborItemTipo, id: string) => `${tipo}::${id}`;
+  const fromCompositeId = (value: string): { tipo: SaborItemTipo; referenciaId: string } => {
+    const [tipo, ...rest] = value.split('::');
+    return { tipo: tipo as SaborItemTipo, referenciaId: rest.join('::') };
+  };
+
   // ── Itens CRUD ─────────────────────────────────────────────────────────────
   const addItem = () => setItens(prev => [...prev, makeItem()]);
 
   const removeItem = (id: string) =>
     setItens(prev => prev.filter(it => it.id !== id));
 
-  const updateTipo = (id: string, tipo: SaborItemTipo) =>
+  const updateReferencia = (id: string, compositeValue: string) => {
+    if (!compositeValue) {
+      setItens(prev => prev.map(it => it.id === id ? { ...it, referenciaId: '' } : it));
+      return;
+    }
+    const { tipo, referenciaId } = fromCompositeId(compositeValue);
     setItens(prev =>
-      prev.map(it => (it.id === id ? { ...it, tipo, referenciaId: '' } : it)),
+      prev.map(it => (it.id === id ? { ...it, tipo, referenciaId } : it)),
     );
-
-  const updateReferencia = (id: string, referenciaId: string) =>
-    setItens(prev =>
-      prev.map(it => (it.id === id ? { ...it, referenciaId } : it)),
-    );
+  };
 
   const updateQuantidade = (id: string, valor: string) =>
     setItens(prev =>
@@ -64,8 +76,7 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
 
   // ── Salvar manual ──────────────────────────────────────────────────────────
   const handleSaveManual = () => {
-    if (!nome.trim()) { alert('Informe o nome do sabor'); return; }
-    if (!precoVenda || parseFloat(precoVenda) <= 0) { alert('Informe o preço de venda'); return; }
+    if (!nome.trim()) { alert('Informe o nome do produto'); return; }
 
     const validItens = itens.filter(it => it.referenciaId && it.quantidade > 0);
 
@@ -73,7 +84,8 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
       id: crypto.randomUUID(),
       nome: nome.trim(),
       categoria,
-      precoVenda: parseFloat(precoVenda.replace(',', '.')) || 0,
+      categoriaId: categoriaId || undefined,
+      precoVenda: categoriaAtual?.precoVenda ?? 0,
       itens: validItens,
     };
 
@@ -217,10 +229,40 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                 />
               </div>
 
-              {/* Categoria + Preço */}
+              {/* Categoria de preço + Grupo */}
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="text-xs text-gray-400 block mb-1">Categoria *</label>
+                  <label className="text-xs text-gray-400 block mb-1">Categoria de Preço</label>
+                  <div className="relative">
+                    <select
+                      value={categoriaId}
+                      onChange={e => setCategoriaId(e.target.value)}
+                      className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
+                    >
+                      <option value="">— Sem categoria —</option>
+                      {data.categorias.map(cat => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.nome} ({cat.precoVenda > 0
+                            ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cat.precoVenda)
+                            : 'sem preço'})
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                  </div>
+                  {data.categorias.length === 0 && (
+                    <p className="text-xs text-amber-400 mt-1">
+                      ⚠️ Crie categorias na aba "Categorias" para definir o preço de venda
+                    </p>
+                  )}
+                  {categoriaAtual && (
+                    <p className="text-xs text-green-400 mt-1">
+                      Preço: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(categoriaAtual.precoVenda)}
+                    </p>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs text-gray-400 block mb-1">Grupo</label>
                   <div className="relative">
                     <select
                       value={categoria}
@@ -232,18 +274,6 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                     </select>
                     <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                   </div>
-                </div>
-                <div className="flex-1">
-                  <label className="text-xs text-gray-400 block mb-1">Preço de Venda (R$) *</label>
-                  <input
-                    type="number"
-                    value={precoVenda}
-                    onChange={e => setPrecoVenda(e.target.value)}
-                    placeholder="0,00"
-                    className="w-full bg-[#2a2a2e] border border-[#374151] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
-                    step="0.01"
-                    min="0"
-                  />
                 </div>
               </div>
 
@@ -273,34 +303,32 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                   <div className="space-y-2">
                     {itens.map(item => (
                       <div key={item.id} className="flex gap-2 items-center bg-[#141416] border border-[#2a2a2e] rounded-xl p-2">
-                        {/* Tipo */}
-                        <div className="relative w-28 shrink-0">
-                          <select
-                            value={item.tipo}
-                            onChange={e => updateTipo(item.id, e.target.value as SaborItemTipo)}
-                            className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-green-500"
-                          >
-                            {hasIngredientes && <option value="ingrediente">Ingrediente</option>}
-                            {hasReceitas && <option value="receita">Receita</option>}
-                          </select>
-                          <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
-                        </div>
-
-                        {/* Selector */}
+                        {/* Seletor unificado: ingredientes + receitas no mesmo lugar */}
                         <div className="flex-1 relative">
                           <select
-                            value={item.referenciaId}
+                            value={item.referenciaId ? toCompositeId(item.tipo, item.referenciaId) : ''}
                             onChange={e => updateReferencia(item.id, e.target.value)}
                             className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
                           >
-                            <option value="">Selecionar…</option>
-                            {item.tipo === 'ingrediente'
-                              ? data.ingredientes.map(i => (
-                                  <option key={i.id} value={i.id}>{i.nome}</option>
-                                ))
-                              : data.receitas.map(r => (
-                                  <option key={r.id} value={r.id}>{r.nome}</option>
+                            <option value="">Selecionar ingrediente ou receita…</option>
+                            {hasIngredientes && (
+                              <optgroup label="── Ingredientes">
+                                {data.ingredientes.map(i => (
+                                  <option key={i.id} value={toCompositeId('ingrediente', i.id)}>
+                                    {i.nome}
+                                  </option>
                                 ))}
+                              </optgroup>
+                            )}
+                            {hasReceitas && (
+                              <optgroup label="── Receitas">
+                                {data.receitas.map(r => (
+                                  <option key={r.id} value={toCompositeId('receita', r.id)}>
+                                    {r.nome}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
                           </select>
                           <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
                         </div>

@@ -1,6 +1,13 @@
 export type Unidade = 'g' | 'ml' | 'un';
 export type Categoria = 'tradicional' | 'especial';
 
+// ── Categorias de preço (criadas pelo usuário) ────────────────────────────────
+export interface CategoriaPreco {
+  id: string;
+  nome: string;        // Ex: "Pizza Grande", "Pizza Pequena", "Bordas"
+  precoVenda: number;  // Preço de venda de todos os produtos desta categoria
+}
+
 // ── Etapa 1: Ingredientes ─────────────────────────────────────────────────────
 export interface Ingrediente {
   id: string;
@@ -43,6 +50,9 @@ export interface Sabor {
   id: string;
   nome: string;
   categoria: Categoria;
+  /** ID da CategoriaPreco — o preço de venda vem dela (obrigatório para CMV) */
+  categoriaId?: string;
+  /** @deprecated mantido para compatibilidade com dados antigos sem categoriaId */
   precoVenda: number;
   itens: SaborItem[];
   /** @deprecated mantido para leitura de dados antigos, migrado automaticamente */
@@ -53,6 +63,7 @@ export interface StoreData {
   ingredientes: Ingrediente[];
   receitas: Receita[];
   sabores: Sabor[];
+  categorias: CategoriaPreco[]; // Categorias de preço criadas pelo usuário
 }
 
 export interface ProductCMV {

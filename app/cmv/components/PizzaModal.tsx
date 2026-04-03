@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { X, Save, Plus, Trash2, ChevronDown } from 'lucide-react';
-import type { Sabor, StoreData, Categoria, SaborItem, SaborItemTipo } from '../types';
+import type { Sabor, StoreData, Categoria, SaborItem, SaborItemTipo, CategoriaPreco } from '../types';
+// SaborItemTipo é usado internamente via fromCompositeId
 import {
   calcularCustoItem,
   calcularCMVSabor,
@@ -24,28 +25,32 @@ interface PizzaModalProps {
 export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModalProps) => {
   const [editNome, setEditNome] = useState('');
   const [editCategoria, setEditCategoria] = useState<Categoria>('tradicional');
-  const [editPrecoVenda, setEditPrecoVenda] = useState('');
+  const [editCategoriaId, setEditCategoriaId] = useState<string>('');
   const [itens, setItens] = useState<SaborItem[]>([]);
 
   useEffect(() => {
     if (!sabor) return;
     setEditNome(sabor.nome);
     setEditCategoria(sabor.categoria);
-    setEditPrecoVenda(sabor.precoVenda > 0 ? sabor.precoVenda.toString() : '');
+    setEditCategoriaId(sabor.categoriaId ?? '');
     setItens(migrarSaborItens(sabor).map(it => ({ ...it })));
   }, [sabor]);
 
   if (!sabor) return null;
+
+  // Categoria selecionada (para mostrar preço e calcular CMV em tempo real)
+  const categoriaAtual: CategoriaPreco | undefined = data.categorias.find(c => c.id === editCategoriaId);
 
   // ── Sabor preview para cálculo em tempo real ──────────────────────────────
   const saborPreview: Sabor = {
     ...sabor,
     nome: editNome,
     categoria: editCategoria,
-    precoVenda: parseFloat(editPrecoVenda.replace(',', '.')) || 0,
+    categoriaId: editCategoriaId || undefined,
+    precoVenda: categoriaAtual?.precoVenda ?? sabor.precoVenda ?? 0,
     itens,
   };
-  const product = calcularCMVSabor(saborPreview, data.ingredientes, data.receitas);
+  const product = calcularCMVSabor(saborPreview, data.ingredientes, data.receitas, data.categorias);
   const cmvColor = CMV_COLORS[product.status];
 
   // ── Helpers de nome / unidade de cada item ────────────────────────────────
@@ -78,6 +83,14 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
     return custo > 0 ? `${formatCurrency(custo)}${label}` : 'sem preço';
   };
 
+  // ── Lista unificada de opções (ingredientes + receitas agrupados) ─────────
+  // O tipo é resolvido internamente pelo ID — para o usuário, tudo é "ingrediente"
+  const toCompositeId = (tipo: SaborItemTipo, id: string) => `${tipo}::${id}`;
+  const fromCompositeId = (value: string): { tipo: SaborItemTipo; referenciaId: string } => {
+    const [tipo, ...rest] = value.split('::');
+    return { tipo: tipo as SaborItemTipo, referenciaId: rest.join('::') };
+  };
+
   // ── Itens CRUD ─────────────────────────────────────────────────────────────
   const addItem = () =>
     setItens(prev => [
@@ -88,15 +101,16 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
   const removeItem = (id: string) =>
     setItens(prev => prev.filter(it => it.id !== id));
 
-  const updateTipo = (id: string, tipo: SaborItemTipo) =>
+  const updateReferencia = (id: string, compositeValue: string) => {
+    if (!compositeValue) {
+      setItens(prev => prev.map(it => it.id === id ? { ...it, referenciaId: '' } : it));
+      return;
+    }
+    const { tipo, referenciaId } = fromCompositeId(compositeValue);
     setItens(prev =>
-      prev.map(it => (it.id === id ? { ...it, tipo, referenciaId: '' } : it)),
+      prev.map(it => (it.id === id ? { ...it, tipo, referenciaId } : it)),
     );
-
-  const updateReferencia = (id: string, referenciaId: string) =>
-    setItens(prev =>
-      prev.map(it => (it.id === id ? { ...it, referenciaId } : it)),
-    );
+  };
 
   const updateQuantidade = (id: string, valor: string) =>
     setItens(prev =>
@@ -107,7 +121,6 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
 
   // ── Salvar ────────────────────────────────────────────────────────────────
   const handleSave = () => {
-    const precoVenda = parseFloat(editPrecoVenda.replace(',', '.')) || sabor.precoVenda;
     const validItens = itens.filter(it => it.referenciaId && it.quantidade > 0);
 
     const newSabores = data.sabores.map(s =>
@@ -116,7 +129,8 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
             ...s,
             nome: editNome || s.nome,
             categoria: editCategoria,
-            precoVenda,
+            categoriaId: editCategoriaId || undefined,
+            precoVenda: categoriaAtual?.precoVenda ?? s.precoVenda ?? 0,
             itens: validItens,
           }
         : s,
@@ -188,21 +202,38 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
             />
           </div>
 
-          {/* Preço de venda + Categoria */}
+          {/* Categoria de preço + Grupo */}
           <div className="flex gap-3 mt-3">
             <div className="flex-1">
-              <label className="text-xs text-gray-400">Preço de Venda (R$)</label>
-              <input
-                type="number"
-                value={editPrecoVenda}
-                onChange={e => setEditPrecoVenda(e.target.value)}
-                className="w-full mt-1 bg-[#2a2a2e] border border-[#374151] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
-                step="0.01"
-                min="0"
-              />
+              <label className="text-xs text-gray-400">Categoria de Preço</label>
+              <div className="relative mt-1">
+                <select
+                  value={editCategoriaId}
+                  onChange={e => setEditCategoriaId(e.target.value)}
+                  className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
+                >
+                  <option value="">— Sem categoria —</option>
+                  {data.categorias.map(cat => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.nome} ({cat.precoVenda > 0
+                        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cat.precoVenda)
+                        : 'sem preço'})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+              </div>
+              {!editCategoriaId && (
+                <p className="text-xs text-amber-400 mt-1">⚠️ Sem categoria — preço de venda será 0</p>
+              )}
+              {categoriaAtual && (
+                <p className="text-xs text-green-400 mt-1">
+                  Preço: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(categoriaAtual.precoVenda)}
+                </p>
+              )}
             </div>
             <div className="flex-1">
-              <label className="text-xs text-gray-400">Categoria</label>
+              <label className="text-xs text-gray-400">Grupo</label>
               <div className="relative mt-1">
                 <select
                   value={editCategoria}
@@ -246,37 +277,33 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
                   key={item.id}
                   className="bg-[#141416] border border-[#2a2a2e] rounded-xl p-3"
                 >
-                  {/* Linha 1: tipo + selector */}
+                  {/* Linha 1: seletor unificado (ingredientes + receitas em grupos) */}
                   <div className="flex gap-2 items-center mb-2">
-                    {/* Tipo */}
-                    <div className="relative w-32 shrink-0">
-                      <select
-                        value={item.tipo}
-                        onChange={e => updateTipo(item.id, e.target.value as SaborItemTipo)}
-                        className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-green-500"
-                      >
-                        <option value="ingrediente">Ingrediente</option>
-                        <option value="receita">Receita</option>
-                      </select>
-                      <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
-                    </div>
-
-                    {/* Selector do item */}
                     <div className="flex-1 relative">
                       <select
-                        value={item.referenciaId}
+                        value={item.referenciaId ? toCompositeId(item.tipo, item.referenciaId) : ''}
                         onChange={e => updateReferencia(item.id, e.target.value)}
                         className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
                       >
-                        <option value="">Selecionar…</option>
-                        {item.tipo === 'ingrediente'
-                          ? data.ingredientes.map(i => (
-                              <option key={i.id} value={i.id}>{i.nome}</option>
-                            ))
-                          : data.receitas.map(r => (
-                              <option key={r.id} value={r.id}>{r.nome}</option>
-                            ))
-                        }
+                        <option value="">Selecionar ingrediente ou receita…</option>
+                        {data.ingredientes.length > 0 && (
+                          <optgroup label="── Ingredientes">
+                            {data.ingredientes.map(i => (
+                              <option key={i.id} value={toCompositeId('ingrediente', i.id)}>
+                                {i.nome}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {data.receitas.length > 0 && (
+                          <optgroup label="── Receitas">
+                            {data.receitas.map(r => (
+                              <option key={r.id} value={toCompositeId('receita', r.id)}>
+                                {r.nome}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                       <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
                     </div>
@@ -289,9 +316,19 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
                     </button>
                   </div>
 
-                  {/* Linha 2: quantidade + custo */}
+                  {/* Linha 2: badge de tipo + quantidade + custo */}
                   {item.referenciaId && (
                     <div className="flex items-center gap-2 mt-1">
+                      {/* Badge indicando se é receita ou ingrediente */}
+                      {item.tipo === 'receita' ? (
+                        <span className="text-xs bg-purple-500/15 text-purple-400 border border-purple-500/25 rounded-md px-1.5 py-0.5 shrink-0">
+                          receita
+                        </span>
+                      ) : (
+                        <span className="text-xs bg-[#2a2a2e] text-gray-500 rounded-md px-1.5 py-0.5 shrink-0">
+                          ingr.
+                        </span>
+                      )}
                       <div className="flex items-center gap-1 flex-1">
                         <input
                           type="number"
@@ -304,7 +341,7 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
                         />
                         <span className="text-xs text-gray-500 w-6 shrink-0">{unidade}</span>
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-500 shrink-0">
                         {precoLabel}
                       </div>
                       <div className="text-right min-w-[64px]">
