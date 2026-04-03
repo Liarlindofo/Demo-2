@@ -9,6 +9,8 @@ export { StoreTab } from './StoreTab';
 export { ComparisonTab } from './ComparisonTab';
 export { MetricCards } from './MetricCards';
 export { PizzaCard } from './PizzaCard';
+export { FlavorGroupCard } from './FlavorGroupCard';
+export { FlavorGroupModal } from './FlavorGroupModal';
 export { PizzaModal } from './PizzaModal';
 export { AddProductModal } from './AddProductModal';
 export { ImportPlanilhaModal } from './ImportPlanilhaModal';

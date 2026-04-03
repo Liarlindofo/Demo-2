@@ -195,6 +195,78 @@ export const formatCurrency = (value: number): string =>
 
 export const formatPercent = (value: number): string => `${value.toFixed(1)}%`;
 
+// ── Agrupamento de produtos por sabor ─────────────────────────────────────────
+
+/**
+ * Palavras que indicam tamanho/variação de produto.
+ * Se o produto terminar com uma dessas palavras, ela é removida para obter o nome do grupo.
+ */
+const SIZE_WORDS = new Set([
+  'BROTO', 'BROTA',
+  'PEQUENA', 'PEQUENO', 'P',
+  'MEDIA', 'MÉDIO', 'MÉDIA', 'MEDIO',
+  'GRANDE', 'G',
+  'GIGANTE', 'GG',
+  'CALZONE',
+  'EXTRA', 'XL', 'XXL',
+  'FAMILIA', 'FAMÍLIA', 'FAM',
+  'INDIVIDUAL', 'IND',
+  'KIDS',
+]);
+
+/** Extrai o nome do grupo removendo o sufixo de tamanho, se houver. */
+export const getFlavorGroupName = (productName: string): string => {
+  const parts = productName.trim().split(/\s+/);
+  if (parts.length <= 1) return productName;
+  const lastWord = parts[parts.length - 1].toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // remove acentos para comparar
+  if (SIZE_WORDS.has(lastWord)) {
+    return parts.slice(0, -1).join(' ');
+  }
+  return productName;
+};
+
+export interface FlavorGroup {
+  nome: string;           // Nome do grupo/sabor (ex: "AMERICANA")
+  produtos: ProductCMV[]; // Todos os tamanhos/variações
+  cmvMedio: number;
+  cmvMin: number;
+  cmvMax: number;
+  statusGeral: 'otimo' | 'atencao' | 'critico';
+}
+
+/** Agrupa produtos pelo sabor base, ordenando variações pelo CMV. */
+export const agruparPorSabor = (products: ProductCMV[]): FlavorGroup[] => {
+  const map = new Map<string, ProductCMV[]>();
+
+  products.forEach(p => {
+    const group = getFlavorGroupName(p.nome);
+    if (!map.has(group)) map.set(group, []);
+    map.get(group)!.push(p);
+  });
+
+  // Ordenação por tamanho padrão
+  const SIZE_ORDER = ['BROTO', 'BROTA', 'PEQUENA', 'PEQUENO', 'P', 'MEDIA', 'MÉDIO', 'MÉDIAS', 'MÉDIO', 'MEIO', 'M', 'GRANDE', 'G', 'GIGANTE', 'GG', 'CALZONE', 'EXTRA', 'XL', 'XXL', 'FAMILIA', 'FAMÍLIA', 'FAM'];
+  const sizeRank = (name: string) => {
+    const last = name.trim().split(/\s+/).pop()?.toUpperCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') ?? '';
+    const idx = SIZE_ORDER.indexOf(last);
+    return idx >= 0 ? idx : 999;
+  };
+
+  return Array.from(map.entries())
+    .map(([nome, produtos]) => {
+      const sorted = [...produtos].sort((a, b) => sizeRank(a.nome) - sizeRank(b.nome));
+      const cmvValues = sorted.map(p => p.cmvPercent);
+      const cmvMedio = cmvValues.reduce((s, v) => s + v, 0) / cmvValues.length;
+      const cmvMin = Math.min(...cmvValues);
+      const cmvMax = Math.max(...cmvValues);
+      const statusGeral = getCMVStatus(cmvMax); // pior caso do grupo
+      return { nome, produtos: sorted, cmvMedio, cmvMin, cmvMax, statusGeral };
+    })
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+};
+
 // ── Importação CSV (mantido) ───────────────────────────────────────────────────
 
 export const parseCSVReceitas = (content: string): Array<{
