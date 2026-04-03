@@ -13,6 +13,7 @@ import {
   formatPercent,
 } from '../utils';
 import { CMV_COLORS, CMV_META, getStatusLabel } from '../constants';
+import { SearchableSelect } from './SearchableSelect';
 
 interface PizzaModalProps {
   sabor: Sabor | null;
@@ -206,22 +207,20 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
           <div className="flex gap-3 mt-3">
             <div className="flex-1">
               <label className="text-xs text-gray-400">Categoria de Preço</label>
-              <div className="relative mt-1">
-                <select
+              <div className="mt-1">
+                <SearchableSelect
                   value={editCategoriaId}
-                  onChange={e => setEditCategoriaId(e.target.value)}
-                  className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
-                >
-                  <option value="">— Sem categoria —</option>
-                  {data.categorias.map(cat => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.nome} ({cat.precoVenda > 0
-                        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cat.precoVenda)
-                        : 'sem preço'})
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                  onChange={v => setEditCategoriaId(v)}
+                  options={data.categorias.map(cat => ({
+                    value: cat.id,
+                    label: cat.nome,
+                    sublabel: cat.precoVenda > 0
+                      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cat.precoVenda)
+                      : 'sem preço',
+                  }))}
+                  placeholder="— Sem categoria —"
+                  accentColor="green"
+                />
               </div>
               {!editCategoriaId && (
                 <p className="text-xs text-amber-400 mt-1">⚠️ Sem categoria — preço de venda será 0</p>
@@ -234,16 +233,17 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
             </div>
             <div className="flex-1">
               <label className="text-xs text-gray-400">Grupo</label>
-              <div className="relative mt-1">
-                <select
+              <div className="mt-1">
+                <SearchableSelect
                   value={editCategoria}
-                  onChange={e => setEditCategoria(e.target.value as Categoria)}
-                  className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
-                >
-                  <option value="tradicional">Tradicional</option>
-                  <option value="especial">Especial</option>
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                  onChange={v => { if (v) setEditCategoria(v as Categoria); }}
+                  options={[
+                    { value: 'tradicional', label: 'Tradicional' },
+                    { value: 'especial', label: 'Especial' },
+                  ]}
+                  placeholder="Selecionar grupo…"
+                  accentColor="green"
+                />
               </div>
             </div>
           </div>
@@ -272,40 +272,42 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
               const unidade = resolveItemUnidade(item);
               const precoLabel = resolvePrecoLabel(item);
 
+              // Opções unificadas para o seletor pesquisável
+              const itemOptions = [
+                ...data.ingredientes.map(i => ({
+                  value: toCompositeId('ingrediente', i.id),
+                  label: i.nome,
+                  group: 'Ingredientes',
+                  sublabel: i.precoPorKg > 0 ? `${formatCurrency(i.precoPorKg)}/kg` : 'sem preço',
+                })),
+                ...data.receitas.map(r => ({
+                  value: toCompositeId('receita', r.id),
+                  label: r.nome,
+                  group: 'Receitas',
+                  badge: 'receita',
+                  badgeClass: 'bg-purple-500/15 text-purple-400',
+                  sublabel: (() => {
+                    const c = calcularCustoPorKgReceita(r, data.ingredientes);
+                    return c > 0 ? `${formatCurrency(c)}/kg` : 'sem preço';
+                  })(),
+                })),
+              ];
+
               return (
                 <div
                   key={item.id}
                   className="bg-[#141416] border border-[#2a2a2e] rounded-xl p-3"
                 >
-                  {/* Linha 1: seletor unificado (ingredientes + receitas em grupos) */}
+                  {/* Linha 1: seletor pesquisável */}
                   <div className="flex gap-2 items-center mb-2">
-                    <div className="flex-1 relative">
-                      <select
+                    <div className="flex-1">
+                      <SearchableSelect
                         value={item.referenciaId ? toCompositeId(item.tipo, item.referenciaId) : ''}
-                        onChange={e => updateReferencia(item.id, e.target.value)}
-                        className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
-                      >
-                        <option value="">Selecionar ingrediente ou receita…</option>
-                        {data.ingredientes.length > 0 && (
-                          <optgroup label="── Ingredientes">
-                            {data.ingredientes.map(i => (
-                              <option key={i.id} value={toCompositeId('ingrediente', i.id)}>
-                                {i.nome}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {data.receitas.length > 0 && (
-                          <optgroup label="── Receitas">
-                            {data.receitas.map(r => (
-                              <option key={r.id} value={toCompositeId('receita', r.id)}>
-                                {r.nome}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                      <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+                        onChange={v => updateReferencia(item.id, v)}
+                        options={itemOptions}
+                        placeholder="Buscar ingrediente ou receita…"
+                        accentColor="green"
+                      />
                     </div>
 
                     <button
@@ -316,10 +318,9 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
                     </button>
                   </div>
 
-                  {/* Linha 2: badge de tipo + quantidade + custo */}
+                  {/* Linha 2: badge + quantidade + custo */}
                   {item.referenciaId && (
                     <div className="flex items-center gap-2 mt-1">
-                      {/* Badge indicando se é receita ou ingrediente */}
                       {item.tipo === 'receita' ? (
                         <span className="text-xs bg-purple-500/15 text-purple-400 border border-purple-500/25 rounded-md px-1.5 py-0.5 shrink-0">
                           receita
@@ -341,9 +342,7 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
                         />
                         <span className="text-xs text-gray-500 w-6 shrink-0">{unidade}</span>
                       </div>
-                      <div className="text-xs text-gray-500 shrink-0">
-                        {precoLabel}
-                      </div>
+                      <div className="text-xs text-gray-500 shrink-0">{precoLabel}</div>
                       <div className="text-right min-w-[64px]">
                         <p className="text-xs text-gray-500">custo</p>
                         <p className="text-sm font-semibold text-white">

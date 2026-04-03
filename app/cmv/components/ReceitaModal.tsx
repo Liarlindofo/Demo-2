@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Save, Plus, Trash2, ChevronDown } from 'lucide-react';
+import { X, Save, Plus, Trash2 } from 'lucide-react';
 import type { Receita, ReceitaItem, Ingrediente, Unidade } from '../types';
 import { calcularCustoPorKgReceita, formatCurrency } from '../utils';
+import { SearchableSelect } from './SearchableSelect';
 
 interface ReceitaModalProps {
   receita: Receita | null; // null = criar nova
@@ -174,18 +175,13 @@ export const ReceitaModal = ({
             </div>
             <div className="flex-[2]">
               <label className="text-xs text-gray-400 block mb-1">Unidade de rendimento</label>
-              <div className="relative">
-                <select
-                  value={unidade}
-                  onChange={e => setUnidade(e.target.value as Unidade)}
-                  className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
-                >
-                  {UNIDADE_OPTS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-              </div>
+              <SearchableSelect
+                value={unidade}
+                onChange={v => { if (v) setUnidade(v as Unidade); }}
+                options={UNIDADE_OPTS.map(o => ({ value: o.value, label: o.label }))}
+                placeholder="Selecionar unidade…"
+                accentColor="purple"
+              />
             </div>
           </div>
 
@@ -207,23 +203,26 @@ export const ReceitaModal = ({
                 const ing = ingredientes.find(i => i.id === item.ingredienteId);
                 const custo = custoItem(item);
 
+                // Opções para o seletor pesquisável
+                const ingOptions = ingredientes.map(i => ({
+                  value: i.id,
+                  label: i.nome,
+                  sublabel: i.precoPorKg > 0
+                    ? `${formatCurrency(i.precoPorKg)}${ING_PRECO_LABEL[i.unidade]}`
+                    : 'sem preço',
+                }));
+
                 return (
                   <div key={idx} className="bg-[#141416] border border-[#2a2a2e] rounded-xl p-3 flex gap-2 items-center">
-                    {/* Selector de ingrediente */}
-                    <div className="flex-1 relative">
-                      <select
+                    {/* Seletor pesquisável de ingrediente */}
+                    <div className="flex-1">
+                      <SearchableSelect
                         value={item.ingredienteId}
-                        onChange={e => updateItem(idx, 'ingredienteId', e.target.value)}
-                        className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-purple-500"
-                      >
-                        <option value="">Selecionar ingrediente…</option>
-                        {ingredientes.map(i => (
-                          <option key={i.id} value={i.id}>
-                            {i.nome} ({i.precoPorKg > 0 ? `${formatCurrency(i.precoPorKg)}${ING_PRECO_LABEL[i.unidade]}` : 'sem preço'})
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+                        onChange={v => updateItem(idx, 'ingredienteId', v)}
+                        options={ingOptions}
+                        placeholder="Buscar ingrediente…"
+                        accentColor="purple"
+                      />
                     </div>
 
                     {/* Quantidade */}

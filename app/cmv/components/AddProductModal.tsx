@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { X, Plus, ChevronDown, Trash2, Download, Upload } from 'lucide-react';
+import { X, Plus, Trash2, Download, Upload } from 'lucide-react';
 import type { StoreData, Sabor, Categoria, SaborItem, SaborItemTipo, CategoriaPreco } from '../types';
 // SaborItemTipo é resolvido via fromCompositeId (internamente)
-import { parseCSVReceitas } from '../utils';
+import { parseCSVReceitas, calcularCustoPorKgReceita, formatCurrency } from '../utils';
+import { SearchableSelect } from './SearchableSelect';
 
 interface AddProductModalProps {
   data: StoreData;
@@ -233,23 +234,19 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className="text-xs text-gray-400 block mb-1">Categoria de Preço</label>
-                  <div className="relative">
-                    <select
-                      value={categoriaId}
-                      onChange={e => setCategoriaId(e.target.value)}
-                      className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
-                    >
-                      <option value="">— Sem categoria —</option>
-                      {data.categorias.map(cat => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.nome} ({cat.precoVenda > 0
-                            ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cat.precoVenda)
-                            : 'sem preço'})
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-                  </div>
+                  <SearchableSelect
+                    value={categoriaId}
+                    onChange={v => setCategoriaId(v)}
+                    options={data.categorias.map(cat => ({
+                      value: cat.id,
+                      label: cat.nome,
+                      sublabel: cat.precoVenda > 0
+                        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cat.precoVenda)
+                        : 'sem preço',
+                    }))}
+                    placeholder="— Sem categoria —"
+                    accentColor="green"
+                  />
                   {data.categorias.length === 0 && (
                     <p className="text-xs text-amber-400 mt-1">
                       ⚠️ Crie categorias na aba "Categorias" para definir o preço de venda
@@ -263,17 +260,16 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                 </div>
                 <div className="flex-1">
                   <label className="text-xs text-gray-400 block mb-1">Grupo</label>
-                  <div className="relative">
-                    <select
-                      value={categoria}
-                      onChange={e => setCategoria(e.target.value as Categoria)}
-                      className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
-                    >
-                      <option value="tradicional">Tradicional</option>
-                      <option value="especial">Especial</option>
-                    </select>
-                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-                  </div>
+                  <SearchableSelect
+                    value={categoria}
+                    onChange={v => { if (v) setCategoria(v as Categoria); }}
+                    options={[
+                      { value: 'tradicional', label: 'Tradicional' },
+                      { value: 'especial', label: 'Especial' },
+                    ]}
+                    placeholder="Selecionar grupo…"
+                    accentColor="green"
+                  />
                 </div>
               </div>
 
@@ -301,59 +297,62 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {itens.map(item => (
-                      <div key={item.id} className="flex gap-2 items-center bg-[#141416] border border-[#2a2a2e] rounded-xl p-2">
-                        {/* Seletor unificado: ingredientes + receitas no mesmo lugar */}
-                        <div className="flex-1 relative">
-                          <select
-                            value={item.referenciaId ? toCompositeId(item.tipo, item.referenciaId) : ''}
-                            onChange={e => updateReferencia(item.id, e.target.value)}
-                            className="w-full appearance-none bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
-                          >
-                            <option value="">Selecionar ingrediente ou receita…</option>
-                            {hasIngredientes && (
-                              <optgroup label="── Ingredientes">
-                                {data.ingredientes.map(i => (
-                                  <option key={i.id} value={toCompositeId('ingrediente', i.id)}>
-                                    {i.nome}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            )}
-                            {hasReceitas && (
-                              <optgroup label="── Receitas">
-                                {data.receitas.map(r => (
-                                  <option key={r.id} value={toCompositeId('receita', r.id)}>
-                                    {r.nome}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            )}
-                          </select>
-                          <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+                    {itens.map(item => {
+                      // Opções unificadas pesquisáveis
+                      const itemOptions = [
+                        ...data.ingredientes.map(i => ({
+                          value: toCompositeId('ingrediente', i.id),
+                          label: i.nome,
+                          group: 'Ingredientes',
+                          sublabel: i.precoPorKg > 0 ? `${formatCurrency(i.precoPorKg)}/kg` : 'sem preço',
+                        })),
+                        ...data.receitas.map(r => ({
+                          value: toCompositeId('receita', r.id),
+                          label: r.nome,
+                          group: 'Receitas',
+                          badge: 'receita',
+                          badgeClass: 'bg-purple-500/15 text-purple-400',
+                          sublabel: (() => {
+                            const c = calcularCustoPorKgReceita(r, data.ingredientes);
+                            return c > 0 ? `${formatCurrency(c)}/kg` : 'sem preço';
+                          })(),
+                        })),
+                      ];
+
+                      return (
+                        <div key={item.id} className="flex gap-2 items-center bg-[#141416] border border-[#2a2a2e] rounded-xl p-2">
+                          <div className="flex-1">
+                            <SearchableSelect
+                              value={item.referenciaId ? toCompositeId(item.tipo, item.referenciaId) : ''}
+                              onChange={v => updateReferencia(item.id, v)}
+                              options={itemOptions}
+                              placeholder="Buscar ingrediente ou receita…"
+                              accentColor="green"
+                            />
+                          </div>
+
+                          {/* Quantidade */}
+                          <input
+                            type="number"
+                            value={item.quantidade || ''}
+                            onChange={e => updateQuantidade(item.id, e.target.value)}
+                            placeholder="Qtd"
+                            className="w-20 bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
+                            min="0"
+                            step="any"
+                          />
+
+                          {itens.length > 1 && (
+                            <button
+                              onClick={() => removeItem(item.id)}
+                              className="text-gray-600 hover:text-red-400 transition-colors p-1 shrink-0"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
-
-                        {/* Quantidade */}
-                        <input
-                          type="number"
-                          value={item.quantidade || ''}
-                          onChange={e => updateQuantidade(item.id, e.target.value)}
-                          placeholder="Qtd"
-                          className="w-20 bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
-                          min="0"
-                          step="any"
-                        />
-
-                        {itens.length > 1 && (
-                          <button
-                            onClick={() => removeItem(item.id)}
-                            className="text-gray-600 hover:text-red-400 transition-colors p-1 shrink-0"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

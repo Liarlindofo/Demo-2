@@ -3,6 +3,8 @@ export { IngredientsTab } from './IngredientsTab';
 export { ReceitasTab } from './ReceitasTab';
 export { ReceitaModal } from './ReceitaModal';
 export { CategoriasTab } from './CategoriasTab';
+export { SearchableSelect } from './SearchableSelect';
+export type { SelectOption } from './SearchableSelect';
 export { StoreTab } from './StoreTab';
 export { ComparisonTab } from './ComparisonTab';
 export { MetricCards } from './MetricCards';
