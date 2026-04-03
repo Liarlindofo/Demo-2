@@ -203,49 +203,32 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
             />
           </div>
 
-          {/* Categoria de preço + Grupo */}
-          <div className="flex gap-3 mt-3">
-            <div className="flex-1">
-              <label className="text-xs text-gray-400">Categoria de Preço</label>
-              <div className="mt-1">
-                <SearchableSelect
-                  value={editCategoriaId}
-                  onChange={v => setEditCategoriaId(v)}
-                  options={data.categorias.map(cat => ({
-                    value: cat.id,
-                    label: cat.nome,
-                    sublabel: cat.precoVenda > 0
-                      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cat.precoVenda)
-                      : 'sem preço',
-                  }))}
-                  placeholder="— Sem categoria —"
-                  accentColor="green"
-                />
-              </div>
-              {!editCategoriaId && (
-                <p className="text-xs text-amber-400 mt-1">⚠️ Sem categoria — preço de venda será 0</p>
-              )}
-              {categoriaAtual && (
-                <p className="text-xs text-green-400 mt-1">
-                  Preço: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(categoriaAtual.precoVenda)}
-                </p>
-              )}
+          {/* Categoria de preço */}
+          <div className="mt-3">
+            <label className="text-xs text-gray-400">Categoria de Preço</label>
+            <div className="mt-1">
+              <SearchableSelect
+                value={editCategoriaId}
+                onChange={v => setEditCategoriaId(v)}
+                options={data.categorias.map(cat => ({
+                  value: cat.id,
+                  label: cat.nome,
+                  sublabel: cat.precoVenda > 0
+                    ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cat.precoVenda)
+                    : 'sem preço',
+                }))}
+                placeholder="— Sem categoria —"
+                accentColor="green"
+              />
             </div>
-            <div className="flex-1">
-              <label className="text-xs text-gray-400">Grupo</label>
-              <div className="mt-1">
-                <SearchableSelect
-                  value={editCategoria}
-                  onChange={v => { if (v) setEditCategoria(v as Categoria); }}
-                  options={[
-                    { value: 'tradicional', label: 'Tradicional' },
-                    { value: 'especial', label: 'Especial' },
-                  ]}
-                  placeholder="Selecionar grupo…"
-                  accentColor="green"
-                />
-              </div>
-            </div>
+            {!editCategoriaId && (
+              <p className="text-xs text-amber-400 mt-1">⚠️ Sem categoria — preço de venda será 0</p>
+            )}
+            {categoriaAtual && (
+              <p className="text-xs text-green-400 mt-1">
+                Preço: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(categoriaAtual.precoVenda)}
+              </p>
+            )}
           </div>
         </div>
 

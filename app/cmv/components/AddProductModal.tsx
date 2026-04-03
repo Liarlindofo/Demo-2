@@ -230,47 +230,32 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                 />
               </div>
 
-              {/* Categoria de preço + Grupo */}
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="text-xs text-gray-400 block mb-1">Categoria de Preço</label>
-                  <SearchableSelect
-                    value={categoriaId}
-                    onChange={v => setCategoriaId(v)}
-                    options={data.categorias.map(cat => ({
-                      value: cat.id,
-                      label: cat.nome,
-                      sublabel: cat.precoVenda > 0
-                        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cat.precoVenda)
-                        : 'sem preço',
-                    }))}
-                    placeholder="— Sem categoria —"
-                    accentColor="green"
-                  />
-                  {data.categorias.length === 0 && (
-                    <p className="text-xs text-amber-400 mt-1">
-                      ⚠️ Crie categorias na aba "Categorias" para definir o preço de venda
-                    </p>
-                  )}
-                  {categoriaAtual && (
-                    <p className="text-xs text-green-400 mt-1">
-                      Preço: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(categoriaAtual.precoVenda)}
-                    </p>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <label className="text-xs text-gray-400 block mb-1">Grupo</label>
-                  <SearchableSelect
-                    value={categoria}
-                    onChange={v => { if (v) setCategoria(v as Categoria); }}
-                    options={[
-                      { value: 'tradicional', label: 'Tradicional' },
-                      { value: 'especial', label: 'Especial' },
-                    ]}
-                    placeholder="Selecionar grupo…"
-                    accentColor="green"
-                  />
-                </div>
+              {/* Categoria de preço */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Categoria de Preço</label>
+                <SearchableSelect
+                  value={categoriaId}
+                  onChange={v => setCategoriaId(v)}
+                  options={data.categorias.map(cat => ({
+                    value: cat.id,
+                    label: cat.nome,
+                    sublabel: cat.precoVenda > 0
+                      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cat.precoVenda)
+                      : 'sem preço',
+                  }))}
+                  placeholder="— Sem categoria —"
+                  accentColor="green"
+                />
+                {data.categorias.length === 0 && (
+                  <p className="text-xs text-amber-400 mt-1">
+                    ⚠️ Crie categorias na aba "Categorias" para definir o preço de venda
+                  </p>
+                )}
+                {categoriaAtual && (
+                  <p className="text-xs text-green-400 mt-1">
+                    Preço: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(categoriaAtual.precoVenda)}
+                  </p>
+                )}
               </div>
 
               {/* Ficha técnica */}
