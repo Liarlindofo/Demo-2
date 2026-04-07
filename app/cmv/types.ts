@@ -1,11 +1,31 @@
 export type Unidade = 'g' | 'ml' | 'un';
 export type Categoria = 'tradicional' | 'especial';
 
-// ── Categorias de preço (criadas pelo usuário) ────────────────────────────────
+// ── Tamanhos disponíveis ───────────────────────────────────────────────────────
+export type Tamanho = 'broto' | 'pequena' | 'media' | 'grande' | 'gigante' | 'calzone';
+
+export const TAMANHOS: readonly Tamanho[] = [
+  'broto', 'pequena', 'media', 'grande', 'gigante', 'calzone',
+] as const;
+
+export const TAMANHO_LABELS: Record<Tamanho, string> = {
+  broto: 'Broto',
+  pequena: 'Pequena',
+  media: 'Média',
+  grande: 'Grande',
+  gigante: 'Gigante',
+  calzone: 'Calzone',
+};
+
+// ── Categorias de preço (matriz: categoria × tamanho) ─────────────────────────
 export interface CategoriaPreco {
   id: string;
-  nome: string;        // Ex: "Pizza Grande", "Pizza Pequena", "Bordas"
-  precoVenda: number;  // Preço de venda de todos os produtos desta categoria
+  nome: string;    // Ex: "TRADICIONAL I", "ESPECIAL II", "DOCE"
+  grupo?: string;  // Agrupamento visual: "TRADICIONAL", "ESPECIAL", "DOCE", "BORDA"
+  /** Preço por tamanho — célula vazia = tamanho não disponível para esta categoria */
+  precos: Partial<Record<Tamanho, number>>;
+  /** @deprecated use precos[tamanho] — mantido para migração de dados antigos */
+  precoVenda?: number;
 }
 
 // ── Etapa 1: Ingredientes ─────────────────────────────────────────────────────
@@ -50,7 +70,7 @@ export interface Sabor {
   id: string;
   nome: string;
   categoria: Categoria;
-  /** ID da CategoriaPreco — o preço de venda vem dela (obrigatório para CMV) */
+  /** ID da CategoriaPreco — o preço de venda vem de categoria.precos[tamanho_detectado] */
   categoriaId?: string;
   /** @deprecated mantido para compatibilidade com dados antigos sem categoriaId */
   precoVenda: number;
@@ -63,15 +83,17 @@ export interface StoreData {
   ingredientes: Ingrediente[];
   receitas: Receita[];
   sabores: Sabor[];
-  categorias: CategoriaPreco[]; // Categorias de preço criadas pelo usuário
+  categorias: CategoriaPreco[];
 }
 
 export interface ProductCMV {
   id: string;
   nome: string;
-  categoria: Categoria;
+  categoria: string;        // nome da categoria (ex: "TRADICIONAL I")
+  categoriaGrupo?: string;  // grupo da categoria (ex: "TRADICIONAL")
+  tamanho?: Tamanho;        // tamanho detectado do nome do produto
   custo: number;
-  precoVenda: number;
+  precoVenda: number;       // resolvido de categoria.precos[tamanho]
   cmvPercent: number;
   margem: number;
   status: 'otimo' | 'atencao' | 'critico';

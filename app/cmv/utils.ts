@@ -7,6 +7,7 @@ import type {
   CategoriaPreco,
   ProductCMV,
   StoreMetrics,
+  Tamanho,
 } from './types';
 import { getCMVStatus, CMV_META } from './constants';
 
@@ -33,12 +34,22 @@ export const migrarSaborItens = (sabor: Sabor): SaborItem[] => {
 };
 
 /**
- * Migra o StoreData inteiro para o novo formato, convertendo sabores antigos.
+ * Migra uma CategoriaPreco do formato antigo (precoVenda único) para o novo (precos por tamanho).
+ */
+const migrarCategoria = (cat: CategoriaPreco): CategoriaPreco => {
+  // Se já tem precos (novo formato), retorna como está
+  if (cat.precos && typeof cat.precos === 'object') return cat;
+  // Formato antigo: tinha precoVenda mas não precos
+  return { ...cat, precos: {} };
+};
+
+/**
+ * Migra o StoreData inteiro para o novo formato, convertendo sabores e categorias antigas.
  */
 export const migrarStoreData = (data: Partial<StoreData>): StoreData => ({
   ingredientes: data.ingredientes ?? [],
   receitas: data.receitas ?? [],
-  categorias: data.categorias ?? [],
+  categorias: (data.categorias ?? []).map(migrarCategoria),
   sabores: (data.sabores ?? []).map(s => ({
     ...s,
     itens: migrarSaborItens(s),
@@ -122,6 +133,39 @@ export const calcularCustoSabor = (
   );
 };
 
+// ── Detecção de tamanho a partir do nome do produto ───────────────────────────
+
+/** Mapa de palavras (sem acento, maiúsculas) → Tamanho */
+const TAMANHO_MAP: Record<string, Tamanho> = {
+  BROTO: 'broto',
+  BROTA: 'broto',
+  PEQUENA: 'pequena',
+  PEQUENO: 'pequena',
+  MEDIA: 'media',
+  MEDIO: 'media',
+  MEDIAS: 'media',
+  MEIO: 'media',
+  GRANDE: 'grande',
+  GIGANTE: 'gigante',
+  GG: 'gigante',
+  CALZONE: 'calzone',
+};
+
+/**
+ * Detecta o tamanho de um produto a partir do último "token" do nome.
+ * Ex: "AMERICANA Grande" → 'grande'
+ * Ex: "AMERICANA BROTO" → 'broto'
+ */
+export const detectarTamanho = (nome: string): Tamanho | null => {
+  const parts = nome.trim().split(/\s+/);
+  if (parts.length === 0) return null;
+  const lastWord = parts[parts.length - 1]
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, ''); // remove acentos
+  return TAMANHO_MAP[lastWord] ?? null;
+};
+
 export const calcularCMVSabor = (
   sabor: Sabor,
   ingredientes: Ingrediente[],
@@ -130,10 +174,23 @@ export const calcularCMVSabor = (
 ): ProductCMV => {
   const custo = calcularCustoSabor(sabor, ingredientes, receitas);
 
-  // Resolve preço de venda: categoria (nova) > precoVenda legado
-  const precoVenda = sabor.categoriaId
-    ? (categorias.find(c => c.id === sabor.categoriaId)?.precoVenda ?? sabor.precoVenda ?? 0)
-    : (sabor.precoVenda ?? 0);
+  // Detecta o tamanho do produto pelo nome
+  const tamanho = detectarTamanho(sabor.nome);
+
+  // Resolve a categoria
+  const categoria = categorias.find(c => c.id === sabor.categoriaId);
+
+  // Resolve o preço de venda: categoria.precos[tamanho] → categoria.precoVenda legado → sabor.precoVenda legado
+  let precoVenda = 0;
+  if (categoria) {
+    if (tamanho && categoria.precos[tamanho] != null) {
+      precoVenda = categoria.precos[tamanho]!;
+    } else if (categoria.precoVenda) {
+      precoVenda = categoria.precoVenda; // fallback para categoria no formato antigo
+    }
+  } else {
+    precoVenda = sabor.precoVenda ?? 0; // fallback para sabor legado
+  }
 
   const cmvPercent = precoVenda > 0 ? (custo / precoVenda) * 100 : 0;
   const margem = 100 - cmvPercent;
@@ -143,7 +200,9 @@ export const calcularCMVSabor = (
   return {
     id: sabor.id,
     nome: sabor.nome,
-    categoria: sabor.categoria,
+    categoria: categoria?.nome || sabor.categoria || 'Sem Categoria',
+    categoriaGrupo: categoria?.grupo,
+    tamanho: tamanho ?? undefined,
     custo,
     precoVenda,
     cmvPercent,

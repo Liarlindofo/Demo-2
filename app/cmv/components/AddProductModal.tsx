@@ -3,8 +3,9 @@
 import { useState, useRef } from 'react';
 import { X, Plus, Trash2, Download, Upload } from 'lucide-react';
 import type { StoreData, Sabor, Categoria, SaborItem, SaborItemTipo, CategoriaPreco } from '../types';
+import { TAMANHO_LABELS } from '../types';
 // SaborItemTipo é resolvido via fromCompositeId (internamente)
-import { parseCSVReceitas, calcularCustoPorKgReceita, formatCurrency } from '../utils';
+import { parseCSVReceitas, calcularCustoPorKgReceita, detectarTamanho, formatCurrency } from '../utils';
 import { SearchableSelect } from './SearchableSelect';
 
 interface AddProductModalProps {
@@ -31,8 +32,12 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
   const [categoriaId, setCategoriaId] = useState('');
   const [itens, setItens] = useState<SaborItem[]>([makeItem()]);
 
-  // Categoria selecionada
+  // Categoria selecionada + tamanho detectado
   const categoriaAtual: CategoriaPreco | undefined = data.categorias.find(c => c.id === categoriaId);
+  const tamanhoDetectado = detectarTamanho(nome);
+  const precoResolvido = tamanhoDetectado && categoriaAtual?.precos[tamanhoDetectado]
+    ? categoriaAtual.precos[tamanhoDetectado]!
+    : (categoriaAtual?.precoVenda ?? 0);
 
   // Import state
   const [csvContent, setCsvContent] = useState('');
@@ -86,7 +91,7 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
       nome: nome.trim(),
       categoria,
       categoriaId: categoriaId || undefined,
-      precoVenda: categoriaAtual?.precoVenda ?? 0,
+      precoVenda: precoResolvido,
       itens: validItens,
     };
 
@@ -236,13 +241,17 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                 <SearchableSelect
                   value={categoriaId}
                   onChange={v => setCategoriaId(v)}
-                  options={data.categorias.map(cat => ({
-                    value: cat.id,
-                    label: cat.nome,
-                    sublabel: cat.precoVenda > 0
-                      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cat.precoVenda)
-                      : 'sem preço',
-                  }))}
+                  options={data.categorias.map(cat => {
+                    const precoParaTamanho = tamanhoDetectado && cat.precos[tamanhoDetectado];
+                    const sublabel = precoParaTamanho
+                      ? `${TAMANHO_LABELS[tamanhoDetectado!]}: ${formatCurrency(precoParaTamanho)}`
+                      : cat.precoVenda
+                      ? formatCurrency(cat.precoVenda)
+                      : Object.keys(cat.precos).length > 0
+                      ? `${Object.keys(cat.precos).length} tamanho(s)`
+                      : 'sem preço';
+                    return { value: cat.id, label: cat.nome, sublabel, group: cat.grupo || undefined };
+                  })}
                   placeholder="— Sem categoria —"
                   accentColor="green"
                 />
@@ -253,7 +262,12 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                 )}
                 {categoriaAtual && (
                   <p className="text-xs text-green-400 mt-1">
-                    Preço: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(categoriaAtual.precoVenda)}
+                    {tamanhoDetectado && categoriaAtual.precos[tamanhoDetectado] != null
+                      ? `Preço para ${TAMANHO_LABELS[tamanhoDetectado]}: ${formatCurrency(categoriaAtual.precos[tamanhoDetectado]!)}`
+                      : tamanhoDetectado
+                      ? `⚠️ Sem preço para ${TAMANHO_LABELS[tamanhoDetectado]} nesta categoria`
+                      : 'Tamanho não detectado no nome'
+                    }
                   </p>
                 )}
               </div>
