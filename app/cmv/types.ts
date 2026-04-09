@@ -105,7 +105,12 @@ export interface ComboCMV {
   nome: string;
   descricao?: string;
   custoTotal: number;
+  /** Soma dos preços de venda individuais (das categorias) × quantidade */
+  precoRegular: number;
+  /** Preço definido para o combo (pode ser menor para desconto) */
   precoVenda: number;
+  /** precoRegular - precoVenda (positivo = cliente economiza) */
+  economia: number;
   cmvPercent: number;
   margem: number;
   status: 'otimo' | 'atencao' | 'critico';

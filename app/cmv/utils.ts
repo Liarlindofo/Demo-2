@@ -395,15 +395,23 @@ export const calcularComboCMV = (combo: Combo, products: ProductCMV[]): ComboCMV
     .filter((i): i is NonNullable<typeof i> => i !== null);
 
   const custoTotal = itens.reduce((sum, i) => sum + i.custoItem, 0);
+  // Preço regular = soma dos preços de venda individuais (das categorias) × quantidade
+  const precoRegular = itens.reduce(
+    (sum, i) => sum + i.produto.precoVenda * i.quantidade,
+    0,
+  );
   const cmvPercent = combo.precoVenda > 0 ? (custoTotal / combo.precoVenda) * 100 : 0;
   const margem = 100 - cmvPercent;
+  const economia = precoRegular - combo.precoVenda;
 
   return {
     id: combo.id,
     nome: combo.nome,
     descricao: combo.descricao,
     custoTotal,
+    precoRegular,
     precoVenda: combo.precoVenda,
+    economia,
     cmvPercent,
     margem,
     status: getCMVStatus(cmvPercent),

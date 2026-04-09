@@ -88,12 +88,28 @@ export const ComboCard = ({ combo, onClick }: ComboCardProps) => {
           <span className="text-gray-400">Custo total</span>
           <span className="text-white font-medium">{formatCurrency(combo.custoTotal)}</span>
         </div>
+        {combo.precoRegular > 0 && (
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-400">Preço regular</span>
+            <span className={`font-medium ${combo.economia > 0.01 ? 'text-gray-400 line-through' : 'text-white'}`}>
+              {formatCurrency(combo.precoRegular)}
+            </span>
+          </div>
+        )}
         <div className="flex justify-between text-xs">
-          <span className="text-gray-400">Venda</span>
+          <span className="text-gray-400">Venda combo</span>
           <span className={`font-medium ${semPreco ? 'text-gray-600 italic' : 'text-white'}`}>
             {semPreco ? 'Não definido' : formatCurrency(combo.precoVenda)}
           </span>
         </div>
+        {!semPreco && combo.economia > 0.01 && (
+          <div className="flex justify-between text-xs">
+            <span className="text-green-400">Economia do cliente</span>
+            <span className="text-green-400 font-medium">
+              -{formatCurrency(combo.economia)} ({((combo.economia / combo.precoRegular) * 100).toFixed(0)}% off)
+            </span>
+          </div>
+        )}
         {!semPreco && (
           <div className="flex justify-between text-xs">
             <span className="text-gray-400">Margem</span>
