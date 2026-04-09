@@ -81,9 +81,14 @@ export interface Sabor {
 
 // ── Combos / Agrupamentos de produtos ─────────────────────────────────────────
 
+/**
+ * Um item do combo é definido por categoria + tamanho (não por produto individual).
+ * O custo é calculado como média dos produtos nessa categoria/tamanho.
+ */
 export interface ComboItem {
-  saborId: string;
-  quantidade: number; // quantas unidades deste produto no combo
+  categoriaId: string;
+  tamanho: Tamanho;
+  quantidade: number;
 }
 
 export interface Combo {
@@ -95,9 +100,20 @@ export interface Combo {
 }
 
 export interface ComboCMVItem {
-  produto: ProductCMV;
+  categoriaId: string;
+  categoria: CategoriaPreco;
+  tamanho: Tamanho;
   quantidade: number;
+  /** Preço de venda unitário (categoria.precos[tamanho]) */
+  precoUnitario: number;
+  /** Custo médio dos produtos nessa categoria+tamanho */
+  custoMedioUnitario: number;
+  /** custoMedioUnitario × quantidade */
   custoItem: number;
+  /** precoUnitario × quantidade */
+  precoItem: number;
+  /** Quantos produtos existem nessa categoria+tamanho */
+  numProdutos: number;
 }
 
 export interface ComboCMV {
@@ -105,7 +121,7 @@ export interface ComboCMV {
   nome: string;
   descricao?: string;
   custoTotal: number;
-  /** Soma dos preços de venda individuais (das categorias) × quantidade */
+  /** Soma dos preços de categoria × quantidade */
   precoRegular: number;
   /** Preço definido para o combo (pode ser menor para desconto) */
   precoVenda: number;

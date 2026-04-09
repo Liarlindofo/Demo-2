@@ -10,6 +10,7 @@ import type {
   Tamanho,
   Combo,
   ComboCMV,
+  ComboCMVItem,
 } from './types';
 import { getCMVStatus, CMV_META } from './constants';
 
@@ -381,25 +382,52 @@ export const parseCSVReceitas = (content: string): Array<{
  * Calcula o CMV de um combo a partir dos produtos (ProductCMV) já calculados.
  * Cascata automática: se o custo de um produto mudar, o combo é recalculado.
  */
-export const calcularComboCMV = (combo: Combo, products: ProductCMV[]): ComboCMV => {
+/**
+ * Calcula o CMV de um combo a partir de categoria + tamanho.
+ * O custo de cada item é a média dos custos dos produtos naquela categoria/tamanho.
+ */
+export const calcularComboCMV = (combo: Combo, data: StoreData): ComboCMV => {
+  const categorias = data.categorias ?? [];
+
   const itens = combo.itens
     .map(item => {
-      const produto = products.find(p => p.id === item.saborId);
-      if (!produto) return null;
+      const categoria = categorias.find(c => c.id === item.categoriaId);
+      if (!categoria) return null;
+
+      const precoUnitario = categoria.precos[item.tamanho] ?? 0;
+
+      // Produtos nesta categoria + tamanho detectado
+      const produtosCategoria = data.sabores.filter(s => {
+        if (s.categoriaId !== item.categoriaId) return false;
+        return detectarTamanho(s.nome) === item.tamanho;
+      });
+
+      // Custo médio dos produtos nessa categoria+tamanho
+      let custoMedioUnitario = 0;
+      if (produtosCategoria.length > 0) {
+        const somaCustom = produtosCategoria.reduce(
+          (sum, s) => sum + calcularCustoSabor(s, data.ingredientes, data.receitas),
+          0,
+        );
+        custoMedioUnitario = somaCustom / produtosCategoria.length;
+      }
+
       return {
-        produto,
+        categoriaId: item.categoriaId,
+        categoria,
+        tamanho: item.tamanho,
         quantidade: item.quantidade,
-        custoItem: produto.custo * item.quantidade,
+        precoUnitario,
+        custoMedioUnitario,
+        custoItem: custoMedioUnitario * item.quantidade,
+        precoItem: precoUnitario * item.quantidade,
+        numProdutos: produtosCategoria.length,
       };
     })
     .filter((i): i is NonNullable<typeof i> => i !== null);
 
   const custoTotal = itens.reduce((sum, i) => sum + i.custoItem, 0);
-  // Preço regular = soma dos preços de venda individuais (das categorias) × quantidade
-  const precoRegular = itens.reduce(
-    (sum, i) => sum + i.produto.precoVenda * i.quantidade,
-    0,
-  );
+  const precoRegular = itens.reduce((sum, i) => sum + i.precoItem, 0);
   const cmvPercent = combo.precoVenda > 0 ? (custoTotal / combo.precoVenda) * 100 : 0;
   const margem = 100 - cmvPercent;
   const economia = precoRegular - combo.precoVenda;
@@ -419,10 +447,8 @@ export const calcularComboCMV = (combo: Combo, products: ProductCMV[]): ComboCMV
   };
 };
 
-export const calcularTodosCombos = (data: StoreData): ComboCMV[] => {
-  const products = calcularTodosCMV(data);
-  return (data.combos ?? []).map(combo => calcularComboCMV(combo, products));
-};
+export const calcularTodosCombos = (data: StoreData): ComboCMV[] =>
+  (data.combos ?? []).map(combo => calcularComboCMV(combo, data));
 
 // CMV_META exportado para uso nos componentes
 export { CMV_META };
