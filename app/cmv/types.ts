@@ -82,13 +82,15 @@ export interface Sabor {
 // ── Combos / Agrupamentos de produtos ─────────────────────────────────────────
 
 /**
- * Um item do combo é definido por categoria + tamanho (não por produto individual).
- * O custo é calculado como média dos produtos nessa categoria/tamanho.
+ * Um slot de pizza no combo: definido por TAMANHO + quais CATEGORIAS são elegíveis.
+ * O preço e custo são calculados como MÉDIA entre as categorias elegíveis para aquele tamanho.
+ * categoriaIds vazio = usa TODAS as categorias.
  */
 export interface ComboItem {
-  categoriaId: string;
+  id: string;             // identificador único do slot dentro do combo
   tamanho: Tamanho;
   quantidade: number;
+  categoriaIds: string[]; // categorias elegíveis (vazio = todas)
 }
 
 export interface Combo {
@@ -100,19 +102,18 @@ export interface Combo {
 }
 
 export interface ComboCMVItem {
-  categoriaId: string;
-  categoria: CategoriaPreco;
+  id: string;
   tamanho: Tamanho;
   quantidade: number;
-  /** Preço de venda unitário (categoria.precos[tamanho]) */
-  precoUnitario: number;
-  /** Custo médio dos produtos nessa categoria+tamanho */
+  /** Categorias resolvidas usadas no cálculo */
+  categorias: CategoriaPreco[];
+  /** Média dos preços de venda entre as categorias elegíveis para este tamanho */
+  precoMedioUnitario: number;
+  /** Média dos custos médios entre as categorias elegíveis para este tamanho */
   custoMedioUnitario: number;
-  /** custoMedioUnitario × quantidade */
-  custoItem: number;
-  /** precoUnitario × quantidade */
   precoItem: number;
-  /** Quantos produtos existem nessa categoria+tamanho */
+  custoItem: number;
+  /** Total de produtos cadastrados nas categorias/tamanho */
   numProdutos: number;
 }
 
@@ -121,11 +122,11 @@ export interface ComboCMV {
   nome: string;
   descricao?: string;
   custoTotal: number;
-  /** Soma dos preços de categoria × quantidade */
+  /** Soma das médias de preço de categoria × quantidade */
   precoRegular: number;
-  /** Preço definido para o combo (pode ser menor para desconto) */
+  /** Preço definido para o combo */
   precoVenda: number;
-  /** precoRegular - precoVenda (positivo = cliente economiza) */
+  /** precoRegular - precoVenda (positivo = desconto para o cliente) */
   economia: number;
   cmvPercent: number;
   margem: number;

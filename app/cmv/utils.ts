@@ -383,48 +383,72 @@ export const parseCSVReceitas = (content: string): Array<{
  * Cascata automática: se o custo de um produto mudar, o combo é recalculado.
  */
 /**
- * Calcula o CMV de um combo a partir de categoria + tamanho.
- * O custo de cada item é a média dos custos dos produtos naquela categoria/tamanho.
+ * Calcula o CMV de um combo.
+ * Cada item é um TAMANHO de pizza com categorias elegíveis.
+ * Preço = média dos preços das categorias elegíveis para aquele tamanho.
+ * Custo = média dos custos médios dos produtos em cada categoria elegível para aquele tamanho.
  */
 export const calcularComboCMV = (combo: Combo, data: StoreData): ComboCMV => {
-  const categorias = data.categorias ?? [];
+  const todasCategorias = data.categorias ?? [];
 
-  const itens = combo.itens
-    .map(item => {
-      const categoria = categorias.find(c => c.id === item.categoriaId);
-      if (!categoria) return null;
+  const itens: ComboCMVItem[] = combo.itens.map(item => {
+    // Resolve quais categorias participam deste slot
+    const categoriasItem =
+      item.categoriaIds.length > 0
+        ? todasCategorias.filter(c => item.categoriaIds.includes(c.id))
+        : todasCategorias;
 
-      const precoUnitario = categoria.precos[item.tamanho] ?? 0;
+    // Categorias que têm preço definido para este tamanho
+    const categoriasComPreco = categoriasItem.filter(
+      c => c.precos[item.tamanho] != null,
+    );
 
-      // Produtos nesta categoria + tamanho detectado
-      const produtosCategoria = data.sabores.filter(s => {
-        if (s.categoriaId !== item.categoriaId) return false;
-        return detectarTamanho(s.nome) === item.tamanho;
-      });
+    // Média dos preços de venda entre as categorias elegíveis
+    const precoMedioUnitario =
+      categoriasComPreco.length > 0
+        ? categoriasComPreco.reduce(
+            (sum, c) => sum + (c.precos[item.tamanho] ?? 0),
+            0,
+          ) / categoriasComPreco.length
+        : 0;
 
-      // Custo médio dos produtos nessa categoria+tamanho
-      let custoMedioUnitario = 0;
-      if (produtosCategoria.length > 0) {
-        const somaCustom = produtosCategoria.reduce(
-          (sum, s) => sum + calcularCustoSabor(s, data.ingredientes, data.receitas),
-          0,
-        );
-        custoMedioUnitario = somaCustom / produtosCategoria.length;
+    // Para cada categoria elegível, calcula o custo médio dos produtos naquela categoria+tamanho
+    // Depois tira a média entre as categorias
+    let somaCustosCategorias = 0;
+    let numCategoriasCusto = 0;
+    let numProdutosTotal = 0;
+
+    for (const cat of categoriasItem) {
+      const produtosCat = data.sabores.filter(
+        s => s.categoriaId === cat.id && detectarTamanho(s.nome) === item.tamanho,
+      );
+      numProdutosTotal += produtosCat.length;
+      if (produtosCat.length > 0) {
+        const custoCat =
+          produtosCat.reduce(
+            (sum, s) => sum + calcularCustoSabor(s, data.ingredientes, data.receitas),
+            0,
+          ) / produtosCat.length;
+        somaCustosCategorias += custoCat;
+        numCategoriasCusto++;
       }
+    }
 
-      return {
-        categoriaId: item.categoriaId,
-        categoria,
-        tamanho: item.tamanho,
-        quantidade: item.quantidade,
-        precoUnitario,
-        custoMedioUnitario,
-        custoItem: custoMedioUnitario * item.quantidade,
-        precoItem: precoUnitario * item.quantidade,
-        numProdutos: produtosCategoria.length,
-      };
-    })
-    .filter((i): i is NonNullable<typeof i> => i !== null);
+    const custoMedioUnitario =
+      numCategoriasCusto > 0 ? somaCustosCategorias / numCategoriasCusto : 0;
+
+    return {
+      id: item.id,
+      tamanho: item.tamanho,
+      quantidade: item.quantidade,
+      categorias: categoriasItem,
+      precoMedioUnitario,
+      custoMedioUnitario,
+      precoItem: precoMedioUnitario * item.quantidade,
+      custoItem: custoMedioUnitario * item.quantidade,
+      numProdutos: numProdutosTotal,
+    };
+  });
 
   const custoTotal = itens.reduce((sum, i) => sum + i.custoItem, 0);
   const precoRegular = itens.reduce((sum, i) => sum + i.precoItem, 0);

@@ -23,6 +23,8 @@ export const ComboCard = ({ combo, onClick }: ComboCardProps) => {
   const metaBarWidth = 100 - CMV_META;
   const semPreco = combo.precoVenda === 0;
   const temDesconto = combo.economia > 0.01;
+  const totalPizzas = combo.itens.reduce((s, i) => s + i.quantidade, 0);
+  const semProdutos = combo.itens.some(i => i.numProdutos === 0);
 
   return (
     <div
@@ -48,27 +50,35 @@ export const ComboCard = ({ combo, onClick }: ComboCardProps) => {
         <p className="text-xs text-gray-500 mb-2 ml-8 truncate">{combo.descricao}</p>
       )}
 
-      {/* Itens (categoria + tamanho) */}
-      <div className="ml-8 mb-3 space-y-1">
-        {combo.itens.slice(0, 3).map(item => (
-          <div key={`${item.categoriaId}-${item.tamanho}`} className="flex items-center justify-between gap-2">
-            <span className="text-xs text-gray-400 truncate">
-              {item.quantidade > 1 && (
-                <span className="text-orange-400 font-medium mr-1">{item.quantidade}×</span>
+      {/* Slots do combo */}
+      <div className="ml-8 mb-3 space-y-1.5">
+        {combo.itens.slice(0, 3).map(item => {
+          const catsLabel =
+            item.categorias.length === 0
+              ? 'todas as categorias'
+              : item.categorias.length <= 2
+              ? item.categorias.map(c => c.nome).join(', ')
+              : `${item.categorias.slice(0, 2).map(c => c.nome).join(', ')} +${item.categorias.length - 2}`;
+
+          return (
+            <div key={item.id} className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-xs text-white">
+                  <span className="text-orange-400 font-medium mr-1">{item.quantidade}×</span>
+                  <span className="font-medium">{TAMANHO_LABELS[item.tamanho]}</span>
+                </span>
+                <p className="text-xs text-gray-600 truncate">{catsLabel}</p>
+              </div>
+              {item.precoMedioUnitario > 0 && (
+                <span className="text-xs text-gray-600 shrink-0 mt-0.5">
+                  ~{formatCurrency(item.precoItem)}
+                </span>
               )}
-              <span>{item.categoria.nome}</span>
-              <span className="text-gray-600 mx-1">—</span>
-              <span className="text-orange-300/80">{TAMANHO_LABELS[item.tamanho]}</span>
-            </span>
-            {item.precoUnitario > 0 && (
-              <span className="text-xs text-gray-600 shrink-0">
-                {formatCurrency(item.precoItem)}
-              </span>
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
         {combo.itens.length > 3 && (
-          <p className="text-xs text-gray-600">+{combo.itens.length - 3} item{combo.itens.length - 3 !== 1 ? 's' : ''}</p>
+          <p className="text-xs text-gray-600">+{combo.itens.length - 3} slot{combo.itens.length - 3 !== 1 ? 's' : ''}</p>
         )}
         {combo.itens.length === 0 && (
           <p className="text-xs text-gray-600 italic">Nenhum item adicionado</p>
@@ -97,7 +107,7 @@ export const ComboCard = ({ combo, onClick }: ComboCardProps) => {
         </div>
         {combo.precoRegular > 0 && (
           <div className="flex justify-between text-xs">
-            <span className="text-gray-400">Preço regular</span>
+            <span className="text-gray-400">Preço médio</span>
             <span className={`font-medium ${temDesconto ? 'text-gray-500 line-through' : 'text-white'}`}>
               {formatCurrency(combo.precoRegular)}
             </span>
@@ -125,7 +135,7 @@ export const ComboCard = ({ combo, onClick }: ComboCardProps) => {
         )}
       </div>
 
-      {/* CMV grande */}
+      {/* CMV + total de pizzas */}
       <div className="flex items-end justify-between">
         {semPreco ? (
           <span className="text-sm text-gray-600 italic">Defina um preço de venda</span>
@@ -135,17 +145,14 @@ export const ComboCard = ({ combo, onClick }: ComboCardProps) => {
           </span>
         )}
         <span className="text-xs text-gray-500">
-          {combo.itens.reduce((sum, i) => sum + i.quantidade, 0)} pizza{combo.itens.reduce((sum, i) => sum + i.quantidade, 0) !== 1 ? 's' : ''}
-          {combo.itens.some(i => i.numProdutos === 0) && (
-            <span className="text-yellow-600 ml-1">⚠</span>
-          )}
+          {totalPizzas} pizza{totalPizzas !== 1 ? 's' : ''}
+          {semProdutos && <span className="text-yellow-600 ml-1">⚠</span>}
         </span>
       </div>
 
-      {/* Aviso se algum item não tem produtos cadastrados */}
-      {combo.itens.some(i => i.numProdutos === 0) && (
+      {semProdutos && (
         <p className="text-xs text-yellow-600 mt-2">
-          ⚠ Alguns itens não têm produtos cadastrados (custo = R$ 0)
+          ⚠ Alguns tamanhos/categorias sem produtos cadastrados
         </p>
       )}
     </div>
