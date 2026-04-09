@@ -265,6 +265,7 @@ export const ImportPlanilhaModal = ({ data, onClose, onSave }: ImportPlanilhaMod
       ingredientes: data.ingredientes.map(i => ({ ...i })),
       receitas: (data.receitas ?? []).map(r => ({ ...r, itens: [...r.itens] })),
       categorias: (data.categorias ?? []).map(c => ({ ...c })),
+      combos: [...(data.combos ?? [])],
     };
 
     let ingNew = 0, ingUpdated = 0;
