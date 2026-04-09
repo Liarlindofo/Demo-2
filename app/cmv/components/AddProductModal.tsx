@@ -2,11 +2,20 @@
 
 import { useState, useRef } from 'react';
 import { X, Plus, Trash2, Download, Upload } from 'lucide-react';
-import type { StoreData, Sabor, Categoria, SaborItem, SaborItemTipo, CategoriaPreco } from '../types';
-import { TAMANHO_LABELS } from '../types';
-// SaborItemTipo é resolvido via fromCompositeId (internamente)
+import type { StoreData, Sabor, Categoria, SaborItem, SaborItemTipo, CategoriaPreco, Tamanho } from '../types';
+import { TAMANHO_LABELS, TAMANHOS } from '../types';
 import { parseCSVReceitas, calcularCustoPorKgReceita, detectarTamanho, formatCurrency } from '../utils';
 import { SearchableSelect } from './SearchableSelect';
+
+// Sufixo a ser adicionado ao nome base para cada tamanho
+const TAMANHO_SUFIXO: Record<Tamanho, string> = {
+  broto: 'Broto',
+  pequena: 'Pequena',
+  media: 'Média',
+  grande: 'Grande',
+  gigante: 'Gigante',
+  calzone: 'Calzone',
+};
 
 interface AddProductModalProps {
   data: StoreData;
@@ -32,12 +41,33 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
   const [categoriaId, setCategoriaId] = useState('');
   const [itens, setItens] = useState<SaborItem[]>([makeItem()]);
 
-  // Categoria selecionada + tamanho detectado
+  // Seleção de múltiplos tamanhos
+  const [selectedTamanhos, setSelectedTamanhos] = useState<Tamanho[]>([]);
+  const isMultiSize = selectedTamanhos.length > 0;
+
+  const toggleTamanho = (t: Tamanho) => {
+    setSelectedTamanhos(prev =>
+      prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t],
+    );
+  };
+
+  // Categoria selecionada + tamanho detectado (modo single)
   const categoriaAtual: CategoriaPreco | undefined = data.categorias.find(c => c.id === categoriaId);
-  const tamanhoDetectado = detectarTamanho(nome);
+  const tamanhoDetectado = isMultiSize ? null : detectarTamanho(nome);
   const precoResolvido = tamanhoDetectado && categoriaAtual?.precos[tamanhoDetectado]
     ? categoriaAtual.precos[tamanhoDetectado]!
     : (categoriaAtual?.precoVenda ?? 0);
+
+  // Preview dos nomes que serão criados
+  const nomesParaCriar: string[] = isMultiSize
+    ? selectedTamanhos.map(t => `${nome.trim()} ${TAMANHO_SUFIXO[t]}`)
+    : nome.trim()
+    ? [nome.trim()]
+    : [];
+
+  // Preço para um tamanho específico (modo multi-size)
+  const getPrecoParaTamanho = (t: Tamanho): number =>
+    categoriaAtual?.precos[t] ?? categoriaAtual?.precoVenda ?? 0;
 
   // Import state
   const [csvContent, setCsvContent] = useState('');
@@ -86,16 +116,26 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
 
     const validItens = itens.filter(it => it.referenciaId && it.quantidade > 0);
 
-    const novoSabor: Sabor = {
-      id: crypto.randomUUID(),
-      nome: nome.trim(),
-      categoria,
-      categoriaId: categoriaId || undefined,
-      precoVenda: precoResolvido,
-      itens: validItens,
-    };
+    const novosSabores: Sabor[] = isMultiSize
+      ? selectedTamanhos.map(t => ({
+          id: crypto.randomUUID(),
+          nome: `${nome.trim()} ${TAMANHO_SUFIXO[t]}`,
+          categoria,
+          categoriaId: categoriaId || undefined,
+          precoVenda: getPrecoParaTamanho(t),
+          // Cria cópias dos itens com IDs únicos para cada tamanho
+          itens: validItens.map(it => ({ ...it, id: crypto.randomUUID() })),
+        }))
+      : [{
+          id: crypto.randomUUID(),
+          nome: nome.trim(),
+          categoria,
+          categoriaId: categoriaId || undefined,
+          precoVenda: precoResolvido,
+          itens: validItens,
+        }];
 
-    onSave({ ...data, sabores: [...data.sabores, novoSabor] });
+    onSave({ ...data, sabores: [...data.sabores, ...novosSabores] });
   };
 
   // ── Importação CSV (legado, cria ingredientes se não existirem) ────────────
@@ -224,15 +264,68 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
         <div className="flex-1 overflow-y-auto p-5">
           {activeTab === 'manual' ? (
             <div className="space-y-4">
-              {/* Nome */}
+              {/* Nome base */}
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Nome do Sabor *</label>
+                <label className="text-xs text-gray-400 block mb-1">
+                  {isMultiSize ? 'Nome base (sem tamanho) *' : 'Nome do Sabor *'}
+                </label>
                 <input
                   value={nome}
                   onChange={e => setNome(e.target.value)}
-                  placeholder="Ex: Frango com Catupiry G"
+                  placeholder={isMultiSize ? 'Ex: Frango com Catupiry' : 'Ex: Frango com Catupiry G'}
                   className="w-full bg-[#2a2a2e] border border-[#374151] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
                 />
+              </div>
+
+              {/* Seletor de tamanhos */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-2">
+                  Tamanhos
+                  <span className="text-gray-600 ml-1">
+                    {isMultiSize
+                      ? `— ${selectedTamanhos.length} selecionado${selectedTamanhos.length !== 1 ? 's' : ''}, será criado${selectedTamanhos.length !== 1 ? 'm' : ''} ${selectedTamanhos.length} produto${selectedTamanhos.length !== 1 ? 's' : ''}`
+                      : '— selecione para criar vários de uma vez'}
+                  </span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {TAMANHOS.map(t => {
+                    const selected = selectedTamanhos.includes(t);
+                    const temPreco = categoriaAtual?.precos[t] != null;
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => toggleTamanho(t)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                          selected
+                            ? 'bg-green-600 border-green-600 text-white'
+                            : 'bg-transparent border-[#374151] text-gray-400 hover:border-green-500/50 hover:text-white'
+                        }`}
+                      >
+                        {TAMANHO_SUFIXO[t]}
+                        {categoriaAtual && temPreco && (
+                          <span className={`ml-1.5 ${selected ? 'text-green-200' : 'text-gray-600'}`}>
+                            {formatCurrency(categoriaAtual.precos[t]!)}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Preview dos nomes */}
+                {isMultiSize && nome.trim() && (
+                  <div className="mt-2 bg-[#141416] border border-[#2a2a2e] rounded-xl px-3 py-2.5">
+                    <p className="text-xs text-gray-500 mb-1">Produtos que serão criados:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {nomesParaCriar.map(n => (
+                        <span key={n} className="text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded-md px-2 py-0.5">
+                          {n}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Categoria de preço */}
@@ -260,7 +353,7 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                     ⚠️ Crie categorias na aba "Categorias" para definir o preço de venda
                   </p>
                 )}
-                {categoriaAtual && (
+                {categoriaAtual && !isMultiSize && (
                   <p className="text-xs text-green-400 mt-1">
                     {tamanhoDetectado && categoriaAtual.precos[tamanhoDetectado] != null
                       ? `Preço para ${TAMANHO_LABELS[tamanhoDetectado]}: ${formatCurrency(categoriaAtual.precos[tamanhoDetectado]!)}`
@@ -269,6 +362,17 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                       : 'Tamanho não detectado no nome'
                     }
                   </p>
+                )}
+                {categoriaAtual && isMultiSize && selectedTamanhos.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                    {selectedTamanhos.map(t => (
+                      <p key={t} className="text-xs text-green-400">
+                        {TAMANHO_SUFIXO[t]}: {categoriaAtual.precos[t] != null
+                          ? formatCurrency(categoriaAtual.precos[t]!)
+                          : <span className="text-yellow-500">sem preço nesta categoria</span>}
+                      </p>
+                    ))}
+                  </div>
                 )}
               </div>
 
@@ -432,7 +536,9 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
               className="flex items-center gap-2 px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors font-medium"
             >
               <Plus className="w-4 h-4" />
-              Adicionar
+              {isMultiSize && selectedTamanhos.length > 0
+                ? `Adicionar ${selectedTamanhos.length} produto${selectedTamanhos.length !== 1 ? 's' : ''}`
+                : 'Adicionar'}
             </button>
           ) : (
             <button

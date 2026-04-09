@@ -141,6 +141,7 @@ export const calcularCustoSabor = (
 
 /** Mapa de palavras (sem acento, maiúsculas) → Tamanho */
 const TAMANHO_MAP: Record<string, Tamanho> = {
+  // Nomes completos
   BROTO: 'broto',
   BROTA: 'broto',
   PEQUENA: 'pequena',
@@ -153,6 +154,11 @@ const TAMANHO_MAP: Record<string, Tamanho> = {
   GIGANTE: 'gigante',
   GG: 'gigante',
   CALZONE: 'calzone',
+  // Abreviações comuns
+  B: 'broto',
+  P: 'pequena',
+  M: 'media',
+  G: 'grande',
 };
 
 /**
