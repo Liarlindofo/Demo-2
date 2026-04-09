@@ -79,11 +79,45 @@ export interface Sabor {
   ingredientes?: IngredienteSabor[];
 }
 
+// ── Combos / Agrupamentos de produtos ─────────────────────────────────────────
+
+export interface ComboItem {
+  saborId: string;
+  quantidade: number; // quantas unidades deste produto no combo
+}
+
+export interface Combo {
+  id: string;
+  nome: string;
+  descricao?: string;
+  precoVenda: number;
+  itens: ComboItem[];
+}
+
+export interface ComboCMVItem {
+  produto: ProductCMV;
+  quantidade: number;
+  custoItem: number;
+}
+
+export interface ComboCMV {
+  id: string;
+  nome: string;
+  descricao?: string;
+  custoTotal: number;
+  precoVenda: number;
+  cmvPercent: number;
+  margem: number;
+  status: 'otimo' | 'atencao' | 'critico';
+  itens: ComboCMVItem[];
+}
+
 export interface StoreData {
   ingredientes: Ingrediente[];
   receitas: Receita[];
   sabores: Sabor[];
   categorias: CategoriaPreco[];
+  combos: Combo[];
 }
 
 export interface ProductCMV {

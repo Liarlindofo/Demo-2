@@ -8,6 +8,8 @@ import type {
   ProductCMV,
   StoreMetrics,
   Tamanho,
+  Combo,
+  ComboCMV,
 } from './types';
 import { getCMVStatus, CMV_META } from './constants';
 
@@ -54,6 +56,7 @@ export const migrarStoreData = (data: Partial<StoreData>): StoreData => ({
     ...s,
     itens: migrarSaborItens(s),
   })),
+  combos: data.combos ?? [],
 });
 
 // ── Etapa 2: Custo por kg de uma Receita ──────────────────────────────────────
@@ -370,6 +373,47 @@ export const parseCSVReceitas = (content: string): Array<{
   }
 
   return results;
+};
+
+// ── Combos ────────────────────────────────────────────────────────────────────
+
+/**
+ * Calcula o CMV de um combo a partir dos produtos (ProductCMV) já calculados.
+ * Cascata automática: se o custo de um produto mudar, o combo é recalculado.
+ */
+export const calcularComboCMV = (combo: Combo, products: ProductCMV[]): ComboCMV => {
+  const itens = combo.itens
+    .map(item => {
+      const produto = products.find(p => p.id === item.saborId);
+      if (!produto) return null;
+      return {
+        produto,
+        quantidade: item.quantidade,
+        custoItem: produto.custo * item.quantidade,
+      };
+    })
+    .filter((i): i is NonNullable<typeof i> => i !== null);
+
+  const custoTotal = itens.reduce((sum, i) => sum + i.custoItem, 0);
+  const cmvPercent = combo.precoVenda > 0 ? (custoTotal / combo.precoVenda) * 100 : 0;
+  const margem = 100 - cmvPercent;
+
+  return {
+    id: combo.id,
+    nome: combo.nome,
+    descricao: combo.descricao,
+    custoTotal,
+    precoVenda: combo.precoVenda,
+    cmvPercent,
+    margem,
+    status: getCMVStatus(cmvPercent),
+    itens,
+  };
+};
+
+export const calcularTodosCombos = (data: StoreData): ComboCMV[] => {
+  const products = calcularTodosCMV(data);
+  return (data.combos ?? []).map(combo => calcularComboCMV(combo, products));
 };
 
 // CMV_META exportado para uso nos componentes

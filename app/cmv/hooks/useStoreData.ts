@@ -10,6 +10,7 @@ const INITIAL_DATA: StoreData = {
   receitas: [],
   sabores: [],
   categorias: [],
+  combos: [],
 };
 
 const API_BASE = '/api/cmv';

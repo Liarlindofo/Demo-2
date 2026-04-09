@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { Search, Plus, Upload, CheckSquare, Square, Trash2, X, AlertTriangle, LayoutGrid, List } from 'lucide-react';
-import type { StoreId, ProductCMV, Sabor } from '../types';
+import { useState, useMemo } from 'react';
+import { Search, Plus, Upload, CheckSquare, Square, Trash2, X, AlertTriangle, LayoutGrid, List, Package2 } from 'lucide-react';
+import type { StoreId, ProductCMV, Sabor, Combo, ComboCMV } from '../types';
 import { useStoreData } from '../hooks/useStoreData';
-import { calcularTodosCMV, calcularMetricasLoja, agruparPorSabor, type FlavorGroup } from '../utils';
+import { calcularTodosCMV, calcularMetricasLoja, agruparPorSabor, calcularTodosCombos, type FlavorGroup } from '../utils';
 import { CMV_META, CMV_COLORS } from '../constants';
 import { MetricCards } from './MetricCards';
 import { PizzaCard } from './PizzaCard';
@@ -13,13 +13,15 @@ import { AddProductModal } from './AddProductModal';
 import { ImportPlanilhaModal } from './ImportPlanilhaModal';
 import { FlavorGroupCard } from './FlavorGroupCard';
 import { FlavorGroupModal } from './FlavorGroupModal';
+import { ComboCard } from './ComboCard';
+import { ComboModal } from './ComboModal';
 
 interface StoreTabProps {
   storeId: StoreId;
 }
 
 type FilterStatus = 'todos' | 'otimo' | 'atencao' | 'critico';
-type ViewMode = 'agrupado' | 'lista';
+type ViewMode = 'agrupado' | 'lista' | 'combos';
 
 const FILTER_LABELS: Record<FilterStatus, string> = {
   todos: 'Todos',
@@ -42,6 +44,29 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+
+  // ── Combos ─────────────────────────────────────────────────────────────────
+  const [selectedCombo, setSelectedCombo] = useState<Combo | null | undefined>(undefined);
+  // undefined = modal fechado, null = novo combo, Combo = editar
+
+  const combos = useMemo(() => calcularTodosCombos(data), [data]);
+  const filteredCombos = combos.filter(c =>
+    c.nome.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const handleSaveCombo = (combo: Combo) => {
+    const exists = (data.combos ?? []).some(c => c.id === combo.id);
+    const newCombos = exists
+      ? (data.combos ?? []).map(c => (c.id === combo.id ? combo : c))
+      : [...(data.combos ?? []), combo];
+    updateData({ ...data, combos: newCombos });
+    setSelectedCombo(undefined);
+  };
+
+  const handleDeleteCombo = (comboId: string) => {
+    updateData({ ...data, combos: (data.combos ?? []).filter(c => c.id !== comboId) });
+    setSelectedCombo(undefined);
+  };
 
   // ── Seleção múltipla (somente na vista lista) ──────────────────────────────
   const [selectMode, setSelectMode] = useState(false);
@@ -197,6 +222,25 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
             <List className="w-4 h-4" />
             <span className="hidden sm:inline">Todos</span>
           </button>
+          <button
+            onClick={() => handleSwitchView('combos')}
+            title="Combos de produtos"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              viewMode === 'combos'
+                ? 'bg-orange-500 text-white'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Package2 className="w-4 h-4" />
+            <span className="hidden sm:inline">Combos</span>
+            {(data.combos ?? []).length > 0 && (
+              <span className={`text-xs rounded-full px-1.5 py-0.5 font-bold ${
+                viewMode === 'combos' ? 'bg-white/20 text-white' : 'bg-[#2a2a2e] text-gray-400'
+              }`}>
+                {(data.combos ?? []).length}
+              </span>
+            )}
+          </button>
         </div>
 
         {viewMode === 'lista' && !selectMode ? (
@@ -248,7 +292,15 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
           </>
         ) : null}
 
-        {!selectMode && (
+        {viewMode === 'combos' ? (
+          <button
+            onClick={() => setSelectedCombo(null)}
+            className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4" />
+            Novo Combo
+          </button>
+        ) : !selectMode && (
           <>
             <button
               onClick={() => setShowImportModal(true)}
@@ -375,7 +427,64 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
         </>
       )}
 
+      {/* ── Vista Combos ─────────────────────────────────────────────────── */}
+      {viewMode === 'combos' && (
+        <>
+          {filteredCombos.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              {(data.combos ?? []).length === 0 ? (
+                <>
+                  <div className="w-16 h-16 rounded-2xl bg-orange-500/10 flex items-center justify-center mb-4">
+                    <Package2 className="w-8 h-8 text-orange-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white mb-2">Nenhum combo ainda</h3>
+                  <p className="text-sm text-gray-400 mb-6 max-w-sm">
+                    Agrupe produtos em combos para calcular o CMV do conjunto e definir um preço de venda.
+                  </p>
+                  <button
+                    onClick={() => setSelectedCombo(null)}
+                    className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl px-5 py-2.5 text-sm font-medium transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Criar primeiro combo
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="text-4xl mb-3">🔍</div>
+                  <p className="text-sm text-gray-400">Nenhum combo encontrado</p>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredCombos.map(combo => (
+                <ComboCard
+                  key={combo.id}
+                  combo={combo}
+                  onClick={() => {
+                    const raw = (data.combos ?? []).find(c => c.id === combo.id);
+                    if (raw) setSelectedCombo(raw);
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
       {/* ── Modais ─────────────────────────────────────────────────────────── */}
+
+      {/* Modal de combo */}
+      {selectedCombo !== undefined && (
+        <ComboModal
+          combo={selectedCombo}
+          data={data}
+          onClose={() => setSelectedCombo(undefined)}
+          onSave={handleSaveCombo}
+          onDelete={handleDeleteCombo}
+        />
+      )}
 
       {/* Modal de grupo */}
       {selectedGroup && (
