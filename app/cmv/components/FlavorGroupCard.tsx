@@ -24,6 +24,7 @@ const STATUS_LABEL: Record<FlavorGroup['statusGeral'], string> = {
 export const FlavorGroupCard = ({ group, onClick }: FlavorGroupCardProps) => {
   const cmvColor = CMV_COLORS[group.statusGeral];
   const metaBarWidth = 100 - CMV_META;
+  const categoriaLabel = [...new Set(group.produtos.map(p => p.categoria))].join(' · ');
 
   return (
     <div
@@ -31,8 +32,13 @@ export const FlavorGroupCard = ({ group, onClick }: FlavorGroupCardProps) => {
       className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 cursor-pointer hover:border-[#3a3a3e] hover:bg-[#202024] transition-all duration-200 select-none"
     >
       {/* Nome + badge */}
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <h3 className="font-semibold text-white text-sm leading-tight">{group.nome}</h3>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold text-white text-sm leading-tight">{group.nome}</h3>
+          <p className="text-xs text-gray-500 mt-1 truncate" title={categoriaLabel}>
+            {categoriaLabel}
+          </p>
+        </div>
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${STATUS_BADGE[group.statusGeral]}`}>
           {STATUS_LABEL[group.statusGeral]}
         </span>

@@ -60,6 +60,7 @@ export const FlavorGroupModal = ({
   const custoTotal = group.produtos.reduce((s, p) => s + p.custo, 0);
   const melhor = group.produtos.reduce((a, b) => a.cmvPercent < b.cmvPercent ? a : b);
   const pior = group.produtos.reduce((a, b) => a.cmvPercent > b.cmvPercent ? a : b);
+  const categoriaLabel = [...new Set(group.produtos.map(p => p.categoria))].join(' · ');
 
   return (
     <>
@@ -68,8 +69,11 @@ export const FlavorGroupModal = ({
 
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a2a2e]">
-            <div>
+            <div className="min-w-0">
               <h2 className="text-xl font-bold text-white">{group.nome}</h2>
+              <p className="text-xs text-gray-400 mt-0.5 truncate" title={categoriaLabel}>
+                {categoriaLabel}
+              </p>
               <p className="text-xs text-gray-500 mt-0.5">
                 {group.produtos.length} {group.produtos.length === 1 ? 'variação' : 'variações'} · CMV médio {formatPercent(group.cmvMedio)}
               </p>

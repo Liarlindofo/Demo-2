@@ -29,8 +29,13 @@ export const PizzaCard = ({ product, onClick }: PizzaCardProps) => {
     >
       {/* Cabeçalho: Nome + Status Badge */}
       <div className="flex items-start justify-between gap-2 mb-3">
-        <h3 className="font-semibold text-white text-sm leading-tight">{product.nome}</h3>
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_BADGE_COLORS[product.status]}`}>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold text-white text-sm leading-tight">{product.nome}</h3>
+          <p className="text-xs text-gray-500 mt-1 truncate" title={product.categoria}>
+            {product.categoria}
+          </p>
+        </div>
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${STATUS_BADGE_COLORS[product.status]}`}>
           {getStatusLabel(product.status)}
         </span>
       </div>
