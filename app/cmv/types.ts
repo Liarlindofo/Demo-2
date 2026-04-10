@@ -159,8 +159,9 @@ export interface ProductCMV {
 export interface StoreMetrics {
   cmvMedio: number;
   melhorSabor: { nome: string; cmv: number };
+  /** Sabor/combo com maior CMV médio (pior margem). */
+  piorSabor: { nome: string; cmv: number };
   totalProdutos: number;
-  totalAcimaMeta: number;
   totalCategorias: number;
 }
 

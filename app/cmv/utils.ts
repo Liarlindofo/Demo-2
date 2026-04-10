@@ -234,25 +234,28 @@ export const calcularMetricasLoja = (data: StoreData): StoreMetrics => {
     return {
       cmvMedio: 0,
       melhorSabor: { nome: '-', cmv: 0 },
+      piorSabor: { nome: '-', cmv: 0 },
       totalProdutos: 0,
-      totalAcimaMeta: 0,
       totalCategorias: 0,
     };
   }
 
   const cmvMedio =
     products.reduce((sum, p) => sum + p.cmvPercent, 0) / products.length;
-  const melhorSabor = products.reduce((best, cur) =>
-    cur.cmvPercent < best.cmvPercent ? cur : best,
+  const grupos = agruparPorSabor(products);
+  const melhorGrupo = grupos.reduce((best, g) =>
+    g.cmvMedio < best.cmvMedio ? g : best,
   );
-  const totalAcimaMeta = products.filter(p => p.status === 'critico').length;
+  const piorGrupo = grupos.reduce((worst, g) =>
+    g.cmvMedio > worst.cmvMedio ? g : worst,
+  );
   const categorias = new Set(data.sabores.map(s => s.categoria)).size;
 
   return {
     cmvMedio,
-    melhorSabor: { nome: melhorSabor.nome, cmv: melhorSabor.cmvPercent },
+    melhorSabor: { nome: melhorGrupo.nome, cmv: melhorGrupo.cmvMedio },
+    piorSabor: { nome: piorGrupo.nome, cmv: piorGrupo.cmvMedio },
     totalProdutos: products.length,
-    totalAcimaMeta,
     totalCategorias: categorias,
   };
 };
@@ -488,8 +491,8 @@ export const calcularMetricasCombos = (data: StoreData): StoreMetrics => {
     return {
       cmvMedio: 0,
       melhorSabor: { nome: '-', cmv: 0 },
+      piorSabor: { nome: '-', cmv: 0 },
       totalProdutos: 0,
-      totalAcimaMeta: 0,
       totalCategorias: 0,
     };
   }
@@ -499,13 +502,15 @@ export const calcularMetricasCombos = (data: StoreData): StoreMetrics => {
   const melhorCombo = combos.reduce((best, cur) =>
     cur.cmvPercent < best.cmvPercent ? cur : best,
   );
-  const totalAcimaMeta = combos.filter(c => c.status === 'critico').length;
+  const piorCombo = combos.reduce((worst, cur) =>
+    cur.cmvPercent > worst.cmvPercent ? cur : worst,
+  );
 
   return {
     cmvMedio,
     melhorSabor: { nome: melhorCombo.nome, cmv: melhorCombo.cmvPercent },
+    piorSabor: { nome: piorCombo.nome, cmv: piorCombo.cmvPercent },
     totalProdutos: combos.length,
-    totalAcimaMeta,
     totalCategorias: 0,
   };
 };
