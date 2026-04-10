@@ -480,5 +480,35 @@ export const calcularComboCMV = (combo: Combo, data: StoreData): ComboCMV => {
 export const calcularTodosCombos = (data: StoreData): ComboCMV[] =>
   (data.combos ?? []).map(combo => calcularComboCMV(combo, data));
 
+/** Métricas agregadas só dos combos (mesmo formato que StoreMetrics para reutilizar os cards). */
+export const calcularMetricasCombos = (data: StoreData): StoreMetrics => {
+  const combos = calcularTodosCombos(data);
+
+  if (combos.length === 0) {
+    return {
+      cmvMedio: 0,
+      melhorSabor: { nome: '-', cmv: 0 },
+      totalProdutos: 0,
+      totalAcimaMeta: 0,
+      totalCategorias: 0,
+    };
+  }
+
+  const cmvMedio =
+    combos.reduce((sum, c) => sum + c.cmvPercent, 0) / combos.length;
+  const melhorCombo = combos.reduce((best, cur) =>
+    cur.cmvPercent < best.cmvPercent ? cur : best,
+  );
+  const totalAcimaMeta = combos.filter(c => c.status === 'critico').length;
+
+  return {
+    cmvMedio,
+    melhorSabor: { nome: melhorCombo.nome, cmv: melhorCombo.cmvPercent },
+    totalProdutos: combos.length,
+    totalAcimaMeta,
+    totalCategorias: 0,
+  };
+};
+
 // CMV_META exportado para uso nos componentes
 export { CMV_META };

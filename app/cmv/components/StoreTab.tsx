@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { Search, Plus, Upload, CheckSquare, Square, Trash2, X, AlertTriangle, LayoutGrid, List, Package2 } from 'lucide-react';
 import type { StoreId, ProductCMV, Sabor, Combo, ComboCMV } from '../types';
 import { useStoreData } from '../hooks/useStoreData';
-import { calcularTodosCMV, calcularMetricasLoja, agruparPorSabor, calcularTodosCombos, type FlavorGroup } from '../utils';
+import { calcularTodosCMV, calcularMetricasLoja, calcularMetricasCombos, agruparPorSabor, calcularTodosCombos, type FlavorGroup } from '../utils';
 import { CMV_META, CMV_COLORS } from '../constants';
 import { MetricCards } from './MetricCards';
 import { PizzaCard } from './PizzaCard';
@@ -74,7 +74,9 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
   const products = calcularTodosCMV(data);
-  const metrics = calcularMetricasLoja(data);
+  const metricsProdutos = useMemo(() => calcularMetricasLoja(data), [data]);
+  const metricsCombos = useMemo(() => calcularMetricasCombos(data), [data]);
+  const metrics = viewMode === 'combos' ? metricsCombos : metricsProdutos;
 
   const filtered = products.filter(p => {
     const matchSearch = p.nome.toLowerCase().includes(search.toLowerCase());
@@ -182,7 +184,11 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
   return (
     <div className="flex flex-col gap-4">
       {/* Métricas */}
-      <MetricCards metrics={metrics} isLoading={isLoading} />
+      <MetricCards
+        metrics={metrics}
+        isLoading={isLoading}
+        variant={viewMode === 'combos' ? 'combos' : 'produtos'}
+      />
 
       {/* Controles */}
       <div className="flex items-center gap-3 flex-wrap">

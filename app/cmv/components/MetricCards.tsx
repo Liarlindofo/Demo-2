@@ -7,9 +7,11 @@ import { formatPercent } from '../utils';
 interface MetricCardsProps {
   metrics: StoreMetrics;
   isLoading?: boolean;
+  /** Define rótulos e contexto: produtos (Sabores/Todos) ou combos. */
+  variant?: 'produtos' | 'combos';
 }
 
-export const MetricCards = ({ metrics, isLoading }: MetricCardsProps) => {
+export const MetricCards = ({ metrics, isLoading, variant = 'produtos' }: MetricCardsProps) => {
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -37,18 +39,24 @@ export const MetricCards = ({ metrics, isLoading }: MetricCardsProps) => {
         <p className="text-xs text-gray-500 mt-1">Meta: {CMV_META}%</p>
       </div>
 
-      {/* Produtos cadastrados */}
+      {/* Produtos ou combos cadastrados */}
       <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-4">
-        <p className="text-xs text-gray-400 mb-1">Produtos cadastrados</p>
+        <p className="text-xs text-gray-400 mb-1">
+          {variant === 'combos' ? 'Combos cadastrados' : 'Produtos cadastrados'}
+        </p>
         <p className="text-2xl font-bold text-white">{metrics.totalProdutos}</p>
         <p className="text-xs text-gray-500 mt-1">
-          {metrics.totalCategorias} {metrics.totalCategorias === 1 ? 'categoria' : 'categorias'}
+          {variant === 'combos'
+            ? (metrics.totalProdutos === 1 ? 'combo no catálogo' : 'combos no catálogo')
+            : `${metrics.totalCategorias} ${metrics.totalCategorias === 1 ? 'categoria' : 'categorias'}`}
         </p>
       </div>
 
-      {/* Melhor margem */}
+      {/* Melhor margem (produto ou combo com menor CMV) */}
       <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-4">
-        <p className="text-xs text-gray-400 mb-1">Melhor margem</p>
+        <p className="text-xs text-gray-400 mb-1">
+          {variant === 'combos' ? 'Melhor combo' : 'Melhor margem'}
+        </p>
         <p className="text-sm font-semibold text-white truncate" title={metrics.melhorSabor.nome}>
           {metrics.melhorSabor.nome}
         </p>
@@ -64,7 +72,9 @@ export const MetricCards = ({ metrics, isLoading }: MetricCardsProps) => {
           {metrics.totalAcimaMeta}
         </p>
         <p className="text-xs text-gray-500 mt-1">
-          {metrics.totalAcimaMeta === 1 ? 'produto acima da meta' : 'produtos acima da meta'}
+          {variant === 'combos'
+            ? (metrics.totalAcimaMeta === 1 ? 'combo acima da meta' : 'combos acima da meta')
+            : (metrics.totalAcimaMeta === 1 ? 'produto acima da meta' : 'produtos acima da meta')}
         </p>
       </div>
     </div>
