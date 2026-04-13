@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { X, CheckCircle2, AlertTriangle, ChevronLeft } from 'lucide-react';
 import type { StockSession } from '../types';
-import { LOJA_LABELS } from '../types';
 import { ProgressBar } from '../components/ProgressBar';
 import { SessionAccordion } from '../components/SessionAccordion';
 
@@ -44,6 +43,7 @@ export function Contagem({
   );
 
   const dataFormatada = new Date(session.dataCriacao).toLocaleDateString('pt-BR', {
+    weekday: 'short',
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -77,7 +77,7 @@ export function Contagem({
           </button>
           <div>
             <h2 className="font-bold text-white">Revisão</h2>
-            <p className="text-xs text-gray-500">{LOJA_LABELS[session.lojaId]} · {dataFormatada}</p>
+            <p className="text-xs text-gray-500">{dataFormatada}</p>
           </div>
         </div>
 
@@ -156,7 +156,7 @@ export function Contagem({
       <div className="bg-[#1c1c1e] border-b border-[#2a2a2e] px-4 pt-12 pb-3 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-2">
           <div>
-            <h1 className="font-bold text-white text-base">{LOJA_LABELS[session.lojaId]}</h1>
+            <h1 className="font-bold text-white text-base">Contagem de Estoque</h1>
             <p className="text-xs text-gray-500">{dataFormatada}</p>
           </div>
           <button

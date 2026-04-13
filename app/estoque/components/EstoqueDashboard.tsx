@@ -2,10 +2,9 @@
 
 import { useState } from 'react';
 import { History, AlertTriangle, RefreshCw } from 'lucide-react';
-import type { LojaId } from '../types';
 import { useStockSession } from '../hooks/useStockSession';
 import { useProdutosEstoque } from '../hooks/useProdutosEstoque';
-import { StoreSelector } from './StoreSelector';
+import { HomeScreen } from './HomeScreen';
 import { AlertBadge } from './AlertBadge';
 import { Contagem } from '../pages/Contagem';
 import { Historico } from '../pages/Historico';
@@ -32,15 +31,19 @@ export function EstoqueDashboard() {
     calcularAlertasReposicao,
   } = useStockSession();
 
-  // Produtos reais da ferramenta Produtos → agrupados em sessões de estoque
-  const { sessoes: sessoesProdutos, isLoading: produtosLoading, error: produtosError, refetch } = useProdutosEstoque();
+  const {
+    sessoes: sessoesProdutos,
+    isLoading: produtosLoading,
+    error: produtosError,
+    refetch,
+  } = useProdutosEstoque();
 
   const totalAlertas = sessions
     .filter(s => s.status === 'concluida')
     .flatMap(s => calcularAlertasReposicao(s))
     .length;
 
-  // ── Loading inicial ────────────────────────────────────────────────────────
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (!hydrated || produtosLoading) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center gap-3">
@@ -52,9 +55,8 @@ export function EstoqueDashboard() {
     );
   }
 
-  const handleIniciar = (lojaId: LojaId) => {
-    // Passa as sessões montadas a partir dos produtos reais
-    iniciarContagem(lojaId, sessoesProdutos);
+  const handleIniciar = () => {
+    iniciarContagem(sessoesProdutos);
     setScreen('counting');
   };
 
@@ -110,39 +112,25 @@ export function EstoqueDashboard() {
     );
   }
 
-  // ── Home (seleção de loja) ──────────────────────────────────────────────────
+  // ── Home ────────────────────────────────────────────────────────────────────
   return (
     <div className="relative">
-      <StoreSelector
+      <HomeScreen
         sessions={sessions}
         onIniciar={handleIniciar}
         onRetomar={handleRetomar}
       />
 
-      {/* Aviso de erro (fallback para mock) */}
+      {/* Aviso de fallback para mock */}
       {produtosError && (
-        <div className="mx-4 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
-          <span className="text-amber-400 text-lg">⚠️</span>
+        <div className="mx-4 -mt-2 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
+          <span className="text-amber-400">⚠️</span>
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-amber-300 font-medium">Usando lista de insumos padrão</p>
+            <p className="text-xs text-amber-300 font-medium">Usando lista padrão de insumos</p>
             <p className="text-xs text-gray-500 truncate">Não foi possível carregar os produtos cadastrados</p>
           </div>
-          <button onClick={refetch} className="shrink-0 p-1.5 text-amber-400 hover:text-white transition-colors">
+          <button onClick={refetch} className="p-1.5 text-amber-400 hover:text-white transition-colors">
             <RefreshCw className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Info de quantos produtos foram carregados */}
-      {!produtosError && sessoesProdutos.length > 0 && (
-        <div className="mx-4 mb-4 bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-2.5 flex items-center justify-between">
-          <p className="text-xs text-green-400">
-            ✓ {sessoesProdutos.reduce((s, c) => s + c.itens.length, 0)} produtos em{' '}
-            {sessoesProdutos.length} grupo{sessoesProdutos.length !== 1 ? 's' : ''}
-          </p>
-          <button onClick={refetch} className="text-xs text-gray-600 hover:text-green-400 transition-colors flex items-center gap-1">
-            <RefreshCw className="w-3 h-3" />
-            Atualizar
           </button>
         </div>
       )}
@@ -158,7 +146,7 @@ export function EstoqueDashboard() {
         </button>
         <button
           onClick={() => setScreen('alerts')}
-          className="flex-1 flex flex-col items-center gap-1 py-3 text-gray-500 hover:text-white transition-colors relative"
+          className="flex-1 flex flex-col items-center gap-1 py-3 text-gray-500 hover:text-white transition-colors"
         >
           <div className="relative">
             <AlertTriangle className="w-5 h-5" />

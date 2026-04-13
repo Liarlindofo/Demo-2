@@ -1,8 +1,7 @@
 'use client';
 
 import { ChevronLeft, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import type { StockSession, LojaId } from '../types';
-import { LOJA_LABELS } from '../types';
+import type { StockSession } from '../types';
 
 interface AlertasProps {
   sessions: StockSession[];
@@ -10,8 +9,6 @@ interface AlertasProps {
 }
 
 interface AlertaItem {
-  lojaId: LojaId;
-  lojaNome: string;
   categoriaIcone: string;
   categoriaNome: string;
   insumoNome: string;
@@ -24,7 +21,7 @@ interface AlertaItem {
 
 export function Alertas({ sessions, onVoltar }: AlertasProps) {
   const alertas: AlertaItem[] = sessions
-    .filter(s => s.status !== 'em_andamento' || s.sessoes.some(c => c.status === 'concluida'))
+    .filter(s => s.sessoes.some(c => c.status === 'concluida' || c.itens.some(i => i.quantidadeContada !== null)))
     .flatMap(s =>
       s.sessoes.flatMap(cat =>
         cat.itens
@@ -35,8 +32,6 @@ export function Alertas({ sessions, onVoltar }: AlertasProps) {
               i.quantidadeContada < i.estoqueMinimo,
           )
           .map(i => ({
-            lojaId: s.lojaId,
-            lojaNome: LOJA_LABELS[s.lojaId],
             categoriaIcone: cat.icone,
             categoriaNome: cat.nome,
             insumoNome: i.nome,
@@ -49,12 +44,6 @@ export function Alertas({ sessions, onVoltar }: AlertasProps) {
       ),
     )
     .sort((a, b) => b.falta - a.falta);
-
-  const porLoja = alertas.reduce<Record<string, AlertaItem[]>>((acc, a) => {
-    if (!acc[a.lojaId]) acc[a.lojaId] = [];
-    acc[a.lojaId].push(a);
-    return acc;
-  }, {});
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
@@ -85,16 +74,9 @@ export function Alertas({ sessions, onVoltar }: AlertasProps) {
             <p className="text-sm text-gray-500 mt-1">Nenhum insumo abaixo do estoque mínimo</p>
           </div>
         ) : (
-          Object.entries(porLoja).map(([lojaId, items]) => (
-            <div key={lojaId}>
-              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">
-                {LOJA_LABELS[lojaId as LojaId]}
-                <span className="ml-2 text-gray-500 normal-case font-normal">
-                  ({items.length} alerta{items.length !== 1 ? 's' : ''})
-                </span>
-              </p>
-              <div className="space-y-2">
-                {items.map((a, idx) => {
+          <div>
+            <div className="space-y-2">
+              {alertas.map((a, idx) => {
                   const pct = Math.min(100, (a.quantidadeContada / a.estoqueMinimo) * 100);
                   const gravidade =
                     pct < 30 ? 'critico' : pct < 60 ? 'atencao' : 'baixo';
@@ -145,10 +127,9 @@ export function Alertas({ sessions, onVoltar }: AlertasProps) {
                       </div>
                     </div>
                   );
-                })}
-              </div>
+              })}
             </div>
-          ))
+          </div>
         )}
         <div className="h-6" />
       </div>
