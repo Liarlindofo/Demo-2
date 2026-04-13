@@ -4,6 +4,8 @@ import { useState, useCallback, useEffect } from 'react';
 import type { StockSession, StockCategory, StockItem, LojaId } from '../types';
 import { criarSessoesPadrao } from '../data/mockInsumos';
 
+export type { StockCategory };
+
 const STORAGE_KEY = 'plateful_estoque_sessions';
 const ACTIVE_KEY = 'plateful_estoque_active';
 
@@ -52,7 +54,7 @@ export function useStockSession() {
   const activeSession = sessions.find(s => s.id === activeSessionId) ?? null;
 
   // ── Criar nova contagem ────────────────────────────────────────────────────
-  const iniciarContagem = useCallback((lojaId: LojaId, gerente = 'Gerente') => {
+  const iniciarContagem = useCallback((lojaId: LojaId, sessoesIniciais?: StockCategory[], gerente = 'Gerente') => {
     const existente = sessions.find(
       s => s.lojaId === lojaId && s.status === 'em_andamento',
     );
@@ -67,7 +69,7 @@ export function useStockSession() {
       lojaId,
       dataCriacao: new Date().toISOString(),
       status: 'em_andamento',
-      sessoes: criarSessoesPadrao(),
+      sessoes: sessoesIniciais ?? criarSessoesPadrao(),
       criadoPor: gerente,
     };
 
