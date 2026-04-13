@@ -145,13 +145,50 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
     if (sabor) setSelectedSabor(sabor);
   };
 
+  const handleClickGroup = (group: FlavorGroup) => {
+    if (selectMode) {
+      const groupIds = group.produtos.map(p => p.id);
+      const allSelected = groupIds.every(id => selectedIds.has(id));
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        if (allSelected) {
+          groupIds.forEach(id => next.delete(id));
+        } else {
+          groupIds.forEach(id => next.add(id));
+        }
+        return next;
+      });
+      return;
+    }
+    setSelectedGroup(group);
+  };
+
   const handleDeleteSabor = (saborId: string) => {
     updateData({ ...data, sabores: data.sabores.filter(s => s.id !== saborId) });
   };
 
+  const handleCloneSabor = (saborId: string) => {
+    const original = data.sabores.find(s => s.id === saborId);
+    if (!original) return;
+    const clone = {
+      ...original,
+      id: crypto.randomUUID(),
+      nome: `${original.nome} (cópia)`,
+      itens: original.itens ? original.itens.map(i => ({ ...i, id: crypto.randomUUID() })) : [],
+    };
+    updateData({ ...data, sabores: [...data.sabores, clone] });
+  };
+
+  const handleRenameSabor = (saborId: string, newName: string) => {
+    updateData({
+      ...data,
+      sabores: data.sabores.map(s => s.id === saborId ? { ...s, nome: newName } : s),
+    });
+  };
+
   const handleSwitchView = (mode: ViewMode) => {
     setViewMode(mode);
-    if (mode === 'agrupado') exitSelectMode();
+    if (mode === 'combos') exitSelectMode();
   };
 
   // Quando salva de dentro do FlavorGroupModal, precisamos atualizar o grupo aberto
@@ -249,7 +286,7 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
           </button>
         </div>
 
-        {viewMode === 'lista' && !selectMode ? (
+        {(viewMode === 'lista' || viewMode === 'agrupado') && !selectMode ? (
           <>
             {products.length > 0 && (
               <button
@@ -261,7 +298,7 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
               </button>
             )}
           </>
-        ) : viewMode === 'lista' && selectMode ? (
+        ) : (viewMode === 'lista' || viewMode === 'agrupado') && selectMode ? (
           <>
             <button
               onClick={toggleSelectAll}
@@ -306,7 +343,7 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
             <Plus className="w-4 h-4" />
             Novo Combo
           </button>
-        ) : !selectMode && (
+        ) : !selectMode && (viewMode === 'lista' || viewMode === 'agrupado') && (
           <>
             <button
               onClick={() => setShowImportModal(true)}
@@ -374,13 +411,18 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
             <EmptyState hasData={data.sabores.length > 0} onAdd={() => setShowAddModal(true)} />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredGroups.map(group => (
-                <FlavorGroupCard
-                  key={group.nome}
-                  group={group}
-                  onClick={() => setSelectedGroup(group)}
-                />
-              ))}
+              {filteredGroups.map(group => {
+                const selectedCount = group.produtos.filter(p => selectedIds.has(p.id)).length;
+                return (
+                  <FlavorGroupCard
+                    key={group.nome}
+                    group={group}
+                    onClick={() => handleClickGroup(group)}
+                    selectMode={selectMode}
+                    selectedCount={selectedCount}
+                  />
+                );
+              })}
             </div>
           )}
         </>
@@ -406,28 +448,17 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
             <EmptyState hasData={data.sabores.length > 0} onAdd={() => setShowAddModal(true)} />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filtered.map(product => {
-                const isSelected = selectedIds.has(product.id);
-                return (
-                  <div key={product.id} className="relative">
-                    {selectMode && (
-                      <div className="absolute top-3 right-3 z-10 pointer-events-none">
-                        {isSelected ? (
-                          <CheckSquare className="w-5 h-5 text-red-400 drop-shadow" />
-                        ) : (
-                          <Square className="w-5 h-5 text-gray-400 drop-shadow" />
-                        )}
-                      </div>
-                    )}
-                    <div className={selectMode && isSelected ? 'ring-2 ring-red-500/60 rounded-2xl' : ''}>
-                      <PizzaCard
-                        product={product}
-                        onClick={() => handleClickCard(product)}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+              {filtered.map(product => (
+                <PizzaCard
+                  key={product.id}
+                  product={product}
+                  onClick={() => handleClickCard(product)}
+                  selectMode={selectMode}
+                  selected={selectedIds.has(product.id)}
+                  onClone={!selectMode ? () => handleCloneSabor(product.id) : undefined}
+                  onRename={!selectMode ? (name) => handleRenameSabor(product.id, name) : undefined}
+                />
+              ))}
             </div>
           )}
         </>

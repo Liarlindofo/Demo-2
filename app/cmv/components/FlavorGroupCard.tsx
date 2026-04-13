@@ -1,12 +1,15 @@
 'use client';
 
+import { CheckSquare, Square } from 'lucide-react';
 import type { FlavorGroup } from '../utils';
-import { formatCurrency, formatPercent } from '../utils';
+import { formatPercent } from '../utils';
 import { CMV_COLORS, CMV_META } from '../constants';
 
 interface FlavorGroupCardProps {
   group: FlavorGroup;
   onClick: () => void;
+  selectMode?: boolean;
+  selectedCount?: number;
 }
 
 const STATUS_BADGE: Record<FlavorGroup['statusGeral'], string> = {
@@ -21,16 +24,41 @@ const STATUS_LABEL: Record<FlavorGroup['statusGeral'], string> = {
   critico: 'Acima da meta',
 };
 
-export const FlavorGroupCard = ({ group, onClick }: FlavorGroupCardProps) => {
+export const FlavorGroupCard = ({ group, onClick, selectMode, selectedCount = 0 }: FlavorGroupCardProps) => {
   const cmvColor = CMV_COLORS[group.statusGeral];
   const metaBarWidth = 100 - CMV_META;
   const categoriaLabel = [...new Set(group.produtos.map(p => p.categoria))].join(' · ');
+  const allSelected = selectedCount === group.produtos.length;
+  const someSelected = selectedCount > 0 && !allSelected;
 
   return (
     <div
       onClick={onClick}
-      className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 cursor-pointer hover:border-[#3a3a3e] hover:bg-[#202024] transition-all duration-200 select-none"
+      className={`relative bg-[#1c1c1e] border rounded-2xl p-5 cursor-pointer transition-all duration-200 select-none ${
+        selectMode
+          ? allSelected
+            ? 'border-red-500/60 bg-red-500/5 hover:border-red-500/80'
+            : someSelected
+            ? 'border-red-500/30 hover:border-red-500/50'
+            : 'border-[#2a2a2e] hover:border-red-500/30'
+          : 'border-[#2a2a2e] hover:border-[#3a3a3e] hover:bg-[#202024]'
+      }`}
     >
+      {/* Checkbox em modo seleção */}
+      {selectMode && (
+        <div className="absolute top-3 right-3 z-10 pointer-events-none">
+          {allSelected ? (
+            <CheckSquare className="w-5 h-5 text-red-400 drop-shadow" />
+          ) : someSelected ? (
+            <div className="w-5 h-5 rounded border-2 border-red-400 bg-red-400/20 flex items-center justify-center">
+              <div className="w-2.5 h-0.5 bg-red-400 rounded" />
+            </div>
+          ) : (
+            <Square className="w-5 h-5 text-gray-400 drop-shadow" />
+          )}
+        </div>
+      )}
+
       {/* Nome + badge */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0 flex-1">
@@ -39,9 +67,16 @@ export const FlavorGroupCard = ({ group, onClick }: FlavorGroupCardProps) => {
             {categoriaLabel}
           </p>
         </div>
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${STATUS_BADGE[group.statusGeral]}`}>
-          {STATUS_LABEL[group.statusGeral]}
-        </span>
+        {!selectMode && (
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${STATUS_BADGE[group.statusGeral]}`}>
+            {STATUS_LABEL[group.statusGeral]}
+          </span>
+        )}
+        {selectMode && someSelected && !allSelected && (
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 bg-red-500/15 text-red-400 border border-red-500/30">
+            {selectedCount}/{group.produtos.length}
+          </span>
+        )}
       </div>
 
       {/* Barra de margem média */}
