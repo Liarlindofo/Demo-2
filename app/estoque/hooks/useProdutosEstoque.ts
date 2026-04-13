@@ -59,8 +59,15 @@ function resolverSessao(produto: ProdutoAPI): { id: string; nome: string; icone:
   return { id: 'outros', nome: 'Outros', icone: '📋' };
 }
 
-export function construirSessoesFromProdutos(produtos: ProdutoAPI[]): StockCategory[] {
-  const ativos = produtos.filter(p => p.isAtivo === 1);
+export function construirSessoesFromProdutos(
+  produtos: ProdutoAPI[],
+  config: import('./useEstoqueConfig').EstoqueConfigMap = {},
+): StockCategory[] {
+  const ativos = produtos.filter(p => {
+    if (p.isAtivo !== 1) return false;
+    const cfg = config[p.id];
+    return cfg === undefined || cfg.ativo !== false; // padrão = ativo
+  });
 
   // Agrupar por sessão
   const sessoesMap = new Map<string, { config: { id: string; nome: string; icone: string }; itens: StockItem[] }>();
@@ -73,12 +80,13 @@ export function construirSessoesFromProdutos(produtos: ProdutoAPI[]): StockCateg
       sessoesMap.set(key, { config: sessaoConfig, itens: [] });
     }
 
+    const cfg = config[produto.id];
     sessoesMap.get(key)!.itens.push({
       insumoId: produto.id,
       nome: produto.nome,
       unidade: produto.unidadeMedida ?? 'un',
       quantidadeContada: null,
-      estoqueMinimo: undefined,
+      estoqueMinimo: cfg?.estoqueMinimo,
       observacao: undefined,
     });
   });
@@ -110,13 +118,17 @@ export function construirSessoesFromProdutos(produtos: ProdutoAPI[]): StockCateg
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export interface ProdutosEstoqueState {
+  produtos: ProdutoAPI[];
   sessoes: StockCategory[];
   isLoading: boolean;
   error: string | null;
   refetch: () => void;
 }
 
-export function useProdutosEstoque(): ProdutosEstoqueState {
+export function useProdutosEstoque(
+  config: import('./useEstoqueConfig').EstoqueConfigMap = {},
+): ProdutosEstoqueState {
+  const [produtos, setProdutos] = useState<ProdutoAPI[]>([]);
   const [sessoes, setSessoes] = useState<StockCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -135,15 +147,17 @@ export function useProdutosEstoque(): ProdutosEstoqueState {
         }
         return res.json() as Promise<ProdutoAPI[]>;
       })
-      .then(produtos => {
+      .then(prods => {
         if (cancelled) return;
-        const built = construirSessoesFromProdutos(produtos);
+        setProdutos(prods);
+        const built = construirSessoesFromProdutos(prods, config);
         setSessoes(built.length > 0 ? built : criarSessoesPadrao());
       })
       .catch(err => {
         if (cancelled) return;
         console.warn('[Estoque] Falha ao carregar produtos, usando mock:', err.message);
         setError(err.message);
+        setProdutos([]);
         setSessoes(criarSessoesPadrao());
       })
       .finally(() => {
@@ -153,5 +167,5 @@ export function useProdutosEstoque(): ProdutosEstoqueState {
     return () => { cancelled = true; };
   }, [tick]);
 
-  return { sessoes, isLoading, error, refetch: () => setTick(t => t + 1) };
+  return { produtos, sessoes, isLoading, error, refetch: () => setTick(t => t + 1) };
 }

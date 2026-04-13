@@ -1,19 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import { History, AlertTriangle, RefreshCw } from 'lucide-react';
+import { History, AlertTriangle, RefreshCw, Package } from 'lucide-react';
 import { useStockSession } from '../hooks/useStockSession';
 import { useProdutosEstoque } from '../hooks/useProdutosEstoque';
+import { useEstoqueConfig } from '../hooks/useEstoqueConfig';
 import { HomeScreen } from './HomeScreen';
 import { AlertBadge } from './AlertBadge';
 import { Contagem } from '../pages/Contagem';
 import { Historico } from '../pages/Historico';
 import { Alertas } from '../pages/Alertas';
+import { GerenciarProdutos } from '../pages/GerenciarProdutos';
 
-type Screen = 'home' | 'counting' | 'history' | 'alerts';
+type Screen = 'home' | 'counting' | 'history' | 'alerts' | 'products';
 
 export function EstoqueDashboard() {
   const [screen, setScreen] = useState<Screen>('home');
+
+  const { config, hydrated: configHydrated, getConfig, setAtivo, setMinimo } = useEstoqueConfig();
 
   const {
     sessions,
@@ -32,11 +36,12 @@ export function EstoqueDashboard() {
   } = useStockSession();
 
   const {
+    produtos,
     sessoes: sessoesProdutos,
     isLoading: produtosLoading,
     error: produtosError,
     refetch,
-  } = useProdutosEstoque();
+  } = useProdutosEstoque(config);
 
   const totalAlertas = sessions
     .filter(s => s.status === 'concluida')
@@ -44,13 +49,11 @@ export function EstoqueDashboard() {
     .length;
 
   // ── Loading ────────────────────────────────────────────────────────────────
-  if (!hydrated || produtosLoading) {
+  if (!hydrated || !configHydrated || produtosLoading) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center gap-3">
         <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-xs text-gray-500">
-          {!hydrated ? 'Carregando dados salvos…' : 'Carregando produtos…'}
-        </p>
+        <p className="text-xs text-gray-500">Carregando…</p>
       </div>
     );
   }
@@ -65,32 +68,21 @@ export function EstoqueDashboard() {
     setScreen('counting');
   };
 
-  const handleFecharContagem = () => {
-    fecharContagem();
-    setScreen('home');
-  };
-
-  const handleFinalizar = () => {
-    finalizarContagem();
-    setScreen('home');
-  };
-
-  // ── Tela de contagem ────────────────────────────────────────────────────────
+  // ── Telas sem bottom nav ───────────────────────────────────────────────────
   if (screen === 'counting' && activeSession) {
     return (
       <Contagem
         session={activeSession}
-        onFechar={handleFecharContagem}
+        onFechar={() => { fecharContagem(); setScreen('home'); }}
         onQuantidade={atualizarQuantidade}
         onObservacao={atualizarObservacao}
         onConcluirCategoria={concluirCategoria}
         onReabrirCategoria={reabrirCategoria}
-        onFinalizar={handleFinalizar}
+        onFinalizar={() => { finalizarContagem(); setScreen('home'); }}
       />
     );
   }
 
-  // ── Histórico ───────────────────────────────────────────────────────────────
   if (screen === 'history') {
     return (
       <Historico
@@ -102,7 +94,6 @@ export function EstoqueDashboard() {
     );
   }
 
-  // ── Alertas ─────────────────────────────────────────────────────────────────
   if (screen === 'alerts') {
     return (
       <Alertas
@@ -112,7 +103,19 @@ export function EstoqueDashboard() {
     );
   }
 
-  // ── Home ────────────────────────────────────────────────────────────────────
+  if (screen === 'products') {
+    return (
+      <GerenciarProdutos
+        produtos={produtos}
+        config={config}
+        onVoltar={() => setScreen('home')}
+        onSetAtivo={setAtivo}
+        onSetMinimo={setMinimo}
+      />
+    );
+  }
+
+  // ── Home + bottom nav ──────────────────────────────────────────────────────
   return (
     <div className="relative">
       <HomeScreen
@@ -121,13 +124,12 @@ export function EstoqueDashboard() {
         onRetomar={handleRetomar}
       />
 
-      {/* Aviso de fallback para mock */}
       {produtosError && (
         <div className="mx-4 -mt-2 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
           <span className="text-amber-400">⚠️</span>
           <div className="flex-1 min-w-0">
             <p className="text-xs text-amber-300 font-medium">Usando lista padrão de insumos</p>
-            <p className="text-xs text-gray-500 truncate">Não foi possível carregar os produtos cadastrados</p>
+            <p className="text-xs text-gray-500 truncate">Não foi possível carregar os produtos</p>
           </div>
           <button onClick={refetch} className="p-1.5 text-amber-400 hover:text-white transition-colors">
             <RefreshCw className="w-4 h-4" />
@@ -143,6 +145,13 @@ export function EstoqueDashboard() {
         >
           <History className="w-5 h-5" />
           <span className="text-xs">Histórico</span>
+        </button>
+        <button
+          onClick={() => setScreen('products')}
+          className="flex-1 flex flex-col items-center gap-1 py-3 text-gray-500 hover:text-white transition-colors"
+        >
+          <Package className="w-5 h-5" />
+          <span className="text-xs">Produtos</span>
         </button>
         <button
           onClick={() => setScreen('alerts')}
