@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { X, Plus, Minus, Trash2, Package2, AlertTriangle, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
-import type { Combo, ComboItem, StoreData, Tamanho } from '../types';
+import { X, Plus, Minus, Trash2, Package2, AlertTriangle, Sparkles, ChevronDown, ChevronUp, GlassWater, Pizza } from 'lucide-react';
+import type { Combo, ComboItem, ComboItemIngrediente, ComboItemPizza, StoreData, Tamanho } from '../types';
 import { TAMANHO_LABELS, TAMANHOS } from '../types';
 import {
   calcularComboCMV,
@@ -58,6 +58,8 @@ function calcularMediaCategorias(
   return { precoMedio, custoMedio, numProdutos };
 }
 
+type AddMode = 'pizza' | 'ingrediente' | null;
+
 export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModalProps) => {
   const [nome, setNome] = useState(combo?.nome ?? '');
   const [descricao, setDescricao] = useState(combo?.descricao ?? '');
@@ -67,18 +69,31 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
   const [itens, setItens] = useState<ComboItem[]>(combo?.itens ?? []);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
-  // ── Estado do formulário de adição de slot ─────────────────────────────────
-  const [addOpen, setAddOpen] = useState(false);
+  // ── Estado do formulário de adição de slot de pizza ────────────────────────
+  const [addMode, setAddMode] = useState<AddMode>(null);
   const [selTamanho, setSelTamanho] = useState<Tamanho>('grande');
   const [selCatIds, setSelCatIds] = useState<string[]>([]); // vazio = todas
   const [selQtd, setSelQtd] = useState(1);
 
+  // ── Estado do formulário de adição de ingrediente (bebida) ─────────────────
+  const [selIngId, setSelIngId] = useState('');
+  const [selIngQtd, setSelIngQtd] = useState(1);
+  const [selIngPreco, setSelIngPreco] = useState('');
+  const [ingBusca, setIngBusca] = useState('');
+
   const categorias = data.categorias ?? [];
+  const ingredientes = data.ingredientes ?? [];
 
   // Para o seletor: mostrar apenas tamanhos que pelo menos uma categoria tem preço
   const tamanhosDisponiveis = TAMANHOS.filter(t =>
     categorias.some(c => c.precos[t] != null),
   );
+
+  // Ingredientes filtrados pela busca
+  const ingredientesFiltrados = useMemo(() => {
+    const q = ingBusca.trim().toLowerCase();
+    return q ? ingredientes.filter(i => i.nome.toLowerCase().includes(q)) : ingredientes;
+  }, [ingredientes, ingBusca]);
 
   // Quando nenhuma categoria está marcada = "todas"
   const todasSelecionadas = selCatIds.length === 0;
@@ -92,22 +107,50 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
 
   const toggleTodas = () => setSelCatIds([]);
 
-  // Preview do slot sendo montado
+  const openMode = (mode: AddMode) => {
+    setAddMode(prev => prev === mode ? null : mode);
+    setSelQtd(1);
+    setSelCatIds([]);
+    setSelIngId('');
+    setSelIngQtd(1);
+    setSelIngPreco('');
+    setIngBusca('');
+  };
+
+  // Preview do slot de pizza sendo montado
   const previewSlot = useMemo(
     () => calcularMediaCategorias(selCatIds, selTamanho, data),
     [selCatIds, selTamanho, data],
   );
 
-  const addSlot = () => {
-    const novoItem: ComboItem = {
+  const addSlotPizza = () => {
+    const novoItem: ComboItemPizza = {
       id: crypto.randomUUID(),
+      tipo: 'pizza',
       tamanho: selTamanho,
       quantidade: selQtd,
       categoriaIds: [...selCatIds],
     };
     setItens(prev => [...prev, novoItem]);
     setSelQtd(1);
-    setAddOpen(false);
+    setAddMode(null);
+  };
+
+  const addSlotIngrediente = () => {
+    if (!selIngId) return;
+    const novoItem: ComboItemIngrediente = {
+      id: crypto.randomUUID(),
+      tipo: 'ingrediente',
+      ingredienteId: selIngId,
+      quantidade: selIngQtd,
+      precoVenda: parseFloat(selIngPreco.replace(',', '.')) || 0,
+    };
+    setItens(prev => [...prev, novoItem]);
+    setSelIngId('');
+    setSelIngQtd(1);
+    setSelIngPreco('');
+    setIngBusca('');
+    setAddMode(null);
   };
 
   const removeItem = (id: string) => setItens(prev => prev.filter(i => i.id !== id));
@@ -157,6 +200,8 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
   const economia = precoRegularCalculado - precoInput;
   const temDesconto = economia > 0.01 && precoInput > 0;
   const temSobretaxa = economia < -0.01 && precoInput > 0;
+
+  const ingSelecionado = ingredientes.find(i => i.id === selIngId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -240,19 +285,33 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
           <div>
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs text-gray-400">
-                Pizzas do combo{itens.length > 0 && ` (${itens.length} slot${itens.length !== 1 ? 's' : ''})`}
+                Itens do combo{itens.length > 0 && ` (${itens.length})`}
               </p>
-              <button
-                onClick={() => setAddOpen(v => !v)}
-                className="flex items-center gap-1.5 text-xs text-orange-400 hover:text-orange-300 transition-colors font-medium"
-              >
-                {addOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                {addOpen ? 'Fechar' : 'Adicionar pizza'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => openMode('pizza')}
+                  className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${
+                    addMode === 'pizza' ? 'text-orange-300' : 'text-orange-400 hover:text-orange-300'
+                  }`}
+                >
+                  {addMode === 'pizza' ? <ChevronUp className="w-3.5 h-3.5" /> : <Pizza className="w-3.5 h-3.5" />}
+                  {addMode === 'pizza' ? 'Fechar' : 'Pizza'}
+                </button>
+                <span className="text-gray-700">|</span>
+                <button
+                  onClick={() => openMode('ingrediente')}
+                  className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${
+                    addMode === 'ingrediente' ? 'text-blue-300' : 'text-blue-400 hover:text-blue-300'
+                  }`}
+                >
+                  {addMode === 'ingrediente' ? <ChevronUp className="w-3.5 h-3.5" /> : <GlassWater className="w-3.5 h-3.5" />}
+                  {addMode === 'ingrediente' ? 'Fechar' : 'Bebida/Outro'}
+                </button>
+              </div>
             </div>
 
-            {/* Formulário de adição de slot */}
-            {addOpen && (
+            {/* ── Formulário de adição de pizza ── */}
+            {addMode === 'pizza' && (
               <div className="bg-[#141416] border border-orange-500/20 rounded-xl p-4 mb-3 space-y-4">
 
                 {/* Tamanho + quantidade */}
@@ -377,7 +436,7 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                   )}
                 </div>
 
-                {/* Preview do slot */}
+                {/* Preview do slot de pizza */}
                 {previewSlot.precoMedio > 0 || previewSlot.custoMedio > 0 ? (
                   <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl p-3 text-xs space-y-1">
                     <p className="text-gray-400 font-medium mb-1">
@@ -405,7 +464,7 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                 ) : null}
 
                 <button
-                  onClick={addSlot}
+                  onClick={addSlotPizza}
                   disabled={categorias.length === 0}
                   className="w-full py-2.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-40 text-white rounded-xl text-sm font-semibold transition-colors"
                 >
@@ -414,29 +473,209 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
               </div>
             )}
 
+            {/* ── Formulário de adição de ingrediente (bebida/outro) ── */}
+            {addMode === 'ingrediente' && (
+              <div className="bg-[#141416] border border-blue-500/20 rounded-xl p-4 mb-3 space-y-4">
+
+                {/* Busca de ingrediente */}
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Buscar ingrediente</label>
+                  <input
+                    value={ingBusca}
+                    onChange={e => setIngBusca(e.target.value)}
+                    placeholder="Ex: Coca-Cola, Suco de Laranja..."
+                    className="w-full bg-[#1c1c1e] border border-[#374151] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/60"
+                  />
+                </div>
+
+                {/* Lista de ingredientes */}
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {ingredientesFiltrados.length === 0 ? (
+                    <p className="text-xs text-gray-500 text-center py-3">
+                      {ingredientes.length === 0
+                        ? 'Nenhum ingrediente cadastrado. Cadastre na aba de Ingredientes.'
+                        : 'Nenhum ingrediente encontrado.'}
+                    </p>
+                  ) : (
+                    ingredientesFiltrados.map(ing => (
+                      <button
+                        key={ing.id}
+                        onClick={() => {
+                          setSelIngId(ing.id);
+                          setIngBusca(ing.nome);
+                          if (!selIngPreco) setSelIngPreco(ing.precoPorKg.toFixed(2));
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left ${
+                          selIngId === ing.id
+                            ? 'bg-blue-500/20 border border-blue-500/40 text-white'
+                            : 'bg-[#1c1c1e] hover:bg-[#252528] text-gray-300'
+                        }`}
+                      >
+                        <span className="font-medium truncate">{ing.nome}</span>
+                        <span className="text-xs text-gray-500 shrink-0 ml-2">
+                          custo {formatCurrency(ing.precoPorKg)}/{ing.unidade}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {/* Quantidade + preço de venda */}
+                {selIngId && (
+                  <>
+                    <div className="flex gap-3">
+                      <div className="w-32">
+                        <label className="text-xs text-gray-500 block mb-1">Quantidade</label>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setSelIngQtd(q => Math.max(1, q - 1))}
+                            className="w-8 h-9 rounded-lg bg-[#2a2a2e] hover:bg-[#333] text-white flex items-center justify-center"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="flex-1 text-center text-sm text-white font-medium">{selIngQtd}</span>
+                          <button
+                            onClick={() => setSelIngQtd(q => q + 1)}
+                            className="w-8 h-9 rounded-lg bg-[#2a2a2e] hover:bg-[#333] text-white flex items-center justify-center"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs text-gray-500 block mb-1">Preço de venda (R$)</label>
+                        <input
+                          type="number"
+                          value={selIngPreco}
+                          onChange={e => setSelIngPreco(e.target.value)}
+                          placeholder="0,00"
+                          min="0"
+                          step="0.01"
+                          className="w-full bg-[#1c1c1e] border border-[#374151] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/60"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Preview do slot de ingrediente */}
+                    {ingSelecionado && (
+                      <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl p-3 text-xs space-y-1">
+                        <p className="text-gray-400 font-medium mb-1">
+                          Preview — {ingSelecionado.nome} × {selIngQtd}
+                        </p>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Custo unitário</span>
+                          <span className="text-white font-semibold">{formatCurrency(ingSelecionado.precoPorKg)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Custo total</span>
+                          <span className="text-white font-semibold">{formatCurrency(ingSelecionado.precoPorKg * selIngQtd)}</span>
+                        </div>
+                        {parseFloat(selIngPreco.replace(',', '.')) > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Preço de venda total</span>
+                            <span className="text-green-400 font-semibold">
+                              {formatCurrency(parseFloat(selIngPreco.replace(',', '.')) * selIngQtd)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <button
+                  onClick={addSlotIngrediente}
+                  disabled={!selIngId}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl text-sm font-semibold transition-colors"
+                >
+                  {selIngId && ingSelecionado
+                    ? `Adicionar ${selIngQtd}× ${ingSelecionado.nome} ao combo`
+                    : 'Selecione um ingrediente acima'}
+                </button>
+              </div>
+            )}
+
             {/* Lista de itens já adicionados */}
             {itens.length === 0 ? (
               <div className="bg-[#141416] border border-dashed border-[#2a2a2e] rounded-xl p-5 text-center">
                 <Package2 className="w-7 h-7 text-gray-600 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">Adicione pizzas ao combo acima</p>
+                <p className="text-sm text-gray-500">Adicione pizzas ou bebidas ao combo acima</p>
               </div>
             ) : (
               <div className="space-y-2">
                 {itens.map(item => {
+                  if (item.tipo === 'ingrediente') {
+                    const ing = ingredientes.find(i => i.id === item.ingredienteId);
+                    return (
+                      <div key={item.id} className="bg-[#141416] border border-[#2a2a2e] rounded-xl px-4 py-3 flex items-start gap-3">
+                        <div className="w-5 h-5 rounded bg-blue-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                          <GlassWater className="w-3 h-3 text-blue-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white font-medium">
+                            <span className="text-blue-400 mr-1">{item.quantidade}×</span>
+                            {ing?.nome ?? '—'}
+                          </p>
+                          <div className="flex gap-3 mt-0.5 flex-wrap">
+                            {item.precoVenda > 0 && (
+                              <span className="text-xs text-gray-500">
+                                venda{' '}
+                                <span className="text-green-400">{formatCurrency(item.precoVenda * item.quantidade)}</span>
+                              </span>
+                            )}
+                            {ing && (
+                              <span className="text-xs text-gray-500">
+                                custo{' '}
+                                <span className="text-gray-300">{formatCurrency(ing.precoPorKg * item.quantidade)}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                          <button
+                            onClick={() => changeQty(item.id, -1)}
+                            className="w-6 h-6 rounded-md bg-[#2a2a2e] hover:bg-[#333] text-white flex items-center justify-center"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="w-6 text-center text-xs text-white">{item.quantidade}</span>
+                          <button
+                            onClick={() => changeQty(item.id, 1)}
+                            className="w-6 h-6 rounded-md bg-[#2a2a2e] hover:bg-[#333] text-white flex items-center justify-center"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => removeItem(item.id)}
+                          className="p-1 text-gray-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors shrink-0 mt-0.5"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  // Pizza item
                   const { precoMedio, custoMedio, numProdutos } = calcularMediaCategorias(
-                    item.categoriaIds,
+                    item.categoriaIds ?? [],
                     item.tamanho,
                     data,
                   );
                   const catsNomes =
-                    item.categoriaIds.length === 0
+                    (item.categoriaIds ?? []).length === 0
                       ? 'todas as categorias'
-                      : item.categoriaIds
+                      : (item.categoriaIds ?? [])
                           .map(id => categorias.find(c => c.id === id)?.nome ?? id)
                           .join(', ');
 
                   return (
                     <div key={item.id} className="bg-[#141416] border border-[#2a2a2e] rounded-xl px-4 py-3 flex items-start gap-3">
+                      <div className="w-5 h-5 rounded bg-orange-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                        <Pizza className="w-3 h-3 text-orange-400" />
+                      </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-white font-medium">
                           <span className="text-orange-400 mr-1">{item.quantidade}×</span>
@@ -587,7 +826,7 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
           </div>
           {!canSave && (
             <p className="text-xs text-gray-600 text-center mt-2">
-              {!nome.trim() ? 'Dê um nome ao combo' : 'Adicione pelo menos 1 pizza'}
+              {!nome.trim() ? 'Dê um nome ao combo' : 'Adicione pelo menos 1 item'}
             </p>
           )}
         </div>

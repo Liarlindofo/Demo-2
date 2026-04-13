@@ -85,13 +85,29 @@ export interface Sabor {
  * Um slot de pizza no combo: definido por TAMANHO + quais CATEGORIAS são elegíveis.
  * O preço e custo são calculados como MÉDIA entre as categorias elegíveis para aquele tamanho.
  * categoriaIds vazio = usa TODAS as categorias.
+ * `tipo` é opcional para compatibilidade com dados existentes (undefined = 'pizza').
  */
-export interface ComboItem {
-  id: string;             // identificador único do slot dentro do combo
+export interface ComboItemPizza {
+  id: string;
+  tipo?: 'pizza';
   tamanho: Tamanho;
   quantidade: number;
   categoriaIds: string[]; // categorias elegíveis (vazio = todas)
 }
+
+/**
+ * Um slot de ingrediente no combo (ex: refrigerante, suco, sobremesa).
+ * O custo vem do cadastro do ingrediente; o preço de venda é definido manualmente.
+ */
+export interface ComboItemIngrediente {
+  id: string;
+  tipo: 'ingrediente';
+  ingredienteId: string;
+  quantidade: number;    // quantidade de unidades incluídas no combo
+  precoVenda: number;   // preço de venda por unidade no combo
+}
+
+export type ComboItem = ComboItemPizza | ComboItemIngrediente;
 
 export interface Combo {
   id: string;
@@ -101,8 +117,9 @@ export interface Combo {
   itens: ComboItem[];
 }
 
-export interface ComboCMVItem {
+export interface ComboCMVItemPizza {
   id: string;
+  tipo: 'pizza';
   tamanho: Tamanho;
   quantidade: number;
   /** Categorias resolvidas usadas no cálculo */
@@ -116,6 +133,20 @@ export interface ComboCMVItem {
   /** Total de produtos cadastrados nas categorias/tamanho */
   numProdutos: number;
 }
+
+export interface ComboCMVItemIngrediente {
+  id: string;
+  tipo: 'ingrediente';
+  ingredienteId: string;
+  nomeIngrediente: string;
+  quantidade: number;
+  precoUnitario: number;
+  custoUnitario: number;
+  precoItem: number;
+  custoItem: number;
+}
+
+export type ComboCMVItem = ComboCMVItemPizza | ComboCMVItemIngrediente;
 
 export interface ComboCMV {
   id: string;

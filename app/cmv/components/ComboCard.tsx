@@ -1,6 +1,6 @@
 'use client';
 
-import { Package2 } from 'lucide-react';
+import { GlassWater, Package2, Pizza } from 'lucide-react';
 import type { ComboCMV } from '../types';
 import { TAMANHO_LABELS } from '../types';
 import { CMV_COLORS, CMV_META, getStatusLabel } from '../constants';
@@ -23,8 +23,14 @@ export const ComboCard = ({ combo, onClick }: ComboCardProps) => {
   const metaBarWidth = 100 - CMV_META;
   const semPreco = combo.precoVenda === 0;
   const temDesconto = combo.economia > 0.01;
-  const totalPizzas = combo.itens.reduce((s, i) => s + i.quantidade, 0);
-  const semProdutos = combo.itens.some(i => i.numProdutos === 0);
+  const totalItens = combo.itens.reduce((s, i) => s + i.quantidade, 0);
+  const totalPizzas = combo.itens
+    .filter(i => i.tipo === 'pizza')
+    .reduce((s, i) => s + i.quantidade, 0);
+  const totalBebidas = combo.itens
+    .filter(i => i.tipo === 'ingrediente')
+    .reduce((s, i) => s + i.quantidade, 0);
+  const semProdutos = combo.itens.some(i => i.tipo === 'pizza' && i.numProdutos === 0);
 
   return (
     <div
@@ -53,6 +59,26 @@ export const ComboCard = ({ combo, onClick }: ComboCardProps) => {
       {/* Slots do combo */}
       <div className="ml-8 mb-3 space-y-1.5">
         {combo.itens.slice(0, 3).map(item => {
+          if (item.tipo === 'ingrediente') {
+            return (
+              <div key={item.id} className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex items-center gap-1.5">
+                  <GlassWater className="w-3 h-3 text-blue-400 shrink-0" />
+                  <span className="text-xs text-white">
+                    <span className="text-blue-400 font-medium mr-1">{item.quantidade}×</span>
+                    <span className="font-medium">{item.nomeIngrediente}</span>
+                  </span>
+                </div>
+                {item.precoItem > 0 && (
+                  <span className="text-xs text-gray-600 shrink-0 mt-0.5">
+                    ~{formatCurrency(item.precoItem)}
+                  </span>
+                )}
+              </div>
+            );
+          }
+
+          // Pizza item
           const catsLabel =
             item.categorias.length === 0
               ? 'todas as categorias'
@@ -62,12 +88,15 @@ export const ComboCard = ({ combo, onClick }: ComboCardProps) => {
 
           return (
             <div key={item.id} className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <span className="text-xs text-white">
-                  <span className="text-orange-400 font-medium mr-1">{item.quantidade}×</span>
-                  <span className="font-medium">{TAMANHO_LABELS[item.tamanho]}</span>
-                </span>
-                <p className="text-xs text-gray-600 truncate">{catsLabel}</p>
+              <div className="min-w-0 flex items-start gap-1.5">
+                <Pizza className="w-3 h-3 text-orange-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-xs text-white">
+                    <span className="text-orange-400 font-medium mr-1">{item.quantidade}×</span>
+                    <span className="font-medium">{TAMANHO_LABELS[item.tamanho]}</span>
+                  </span>
+                  <p className="text-xs text-gray-600 truncate">{catsLabel}</p>
+                </div>
               </div>
               {item.precoMedioUnitario > 0 && (
                 <span className="text-xs text-gray-600 shrink-0 mt-0.5">
@@ -78,7 +107,7 @@ export const ComboCard = ({ combo, onClick }: ComboCardProps) => {
           );
         })}
         {combo.itens.length > 3 && (
-          <p className="text-xs text-gray-600">+{combo.itens.length - 3} slot{combo.itens.length - 3 !== 1 ? 's' : ''}</p>
+          <p className="text-xs text-gray-600">+{combo.itens.length - 3} item{combo.itens.length - 3 !== 1 ? 's' : ''}</p>
         )}
         {combo.itens.length === 0 && (
           <p className="text-xs text-gray-600 italic">Nenhum item adicionado</p>
@@ -135,7 +164,7 @@ export const ComboCard = ({ combo, onClick }: ComboCardProps) => {
         )}
       </div>
 
-      {/* CMV + total de pizzas */}
+      {/* CMV + resumo de itens */}
       <div className="flex items-end justify-between">
         {semPreco ? (
           <span className="text-sm text-gray-600 italic">Defina um preço de venda</span>
@@ -144,8 +173,15 @@ export const ComboCard = ({ combo, onClick }: ComboCardProps) => {
             {formatPercent(combo.cmvPercent)}
           </span>
         )}
-        <span className="text-xs text-gray-500">
-          {totalPizzas} pizza{totalPizzas !== 1 ? 's' : ''}
+        <span className="text-xs text-gray-500 text-right">
+          {totalPizzas > 0 && (
+            <span>{totalPizzas} pizza{totalPizzas !== 1 ? 's' : ''}</span>
+          )}
+          {totalPizzas > 0 && totalBebidas > 0 && <span className="mx-1">·</span>}
+          {totalBebidas > 0 && (
+            <span>{totalBebidas} bebida{totalBebidas !== 1 ? 's' : ''}</span>
+          )}
+          {totalItens === 0 && <span>—</span>}
           {semProdutos && <span className="text-yellow-600 ml-1">⚠</span>}
         </span>
       </div>

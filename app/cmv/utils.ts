@@ -9,8 +9,11 @@ import type {
   StoreMetrics,
   Tamanho,
   Combo,
+  ComboItemPizza,
   ComboCMV,
   ComboCMVItem,
+  ComboCMVItemPizza,
+  ComboCMVItemIngrediente,
 } from './types';
 import { getCMVStatus, CMV_META } from './constants';
 
@@ -401,22 +404,45 @@ export const calcularComboCMV = (combo: Combo, data: StoreData): ComboCMV => {
   const todasCategorias = data.categorias ?? [];
 
   const itens: ComboCMVItem[] = combo.itens.map(item => {
+    // Slot de ingrediente (bebida, sobremesa, etc.)
+    if (item.tipo === 'ingrediente') {
+      const ing = (data.ingredientes ?? []).find(i => i.id === item.ingredienteId);
+      // Custo por unidade: precoPorKg é o custo unitário quando unidade='un',
+      // ou custo/kg quando 'g'/'ml' — para bebidas/un é sempre o custo por peça.
+      const custoUnitario = ing ? ing.precoPorKg : 0;
+      const resultado: ComboCMVItemIngrediente = {
+        id: item.id,
+        tipo: 'ingrediente',
+        ingredienteId: item.ingredienteId,
+        nomeIngrediente: ing?.nome ?? '—',
+        quantidade: item.quantidade,
+        precoUnitario: item.precoVenda,
+        custoUnitario,
+        precoItem: item.precoVenda * item.quantidade,
+        custoItem: custoUnitario * item.quantidade,
+      };
+      return resultado;
+    }
+
+    // Slot de pizza (tipo === 'pizza' ou undefined — compat com dados antigos)
+    const pizzaItem = item as ComboItemPizza;
+
     // Resolve quais categorias participam deste slot
     const categoriasItem =
-      item.categoriaIds.length > 0
-        ? todasCategorias.filter(c => item.categoriaIds.includes(c.id))
+      (pizzaItem.categoriaIds ?? []).length > 0
+        ? todasCategorias.filter(c => (pizzaItem.categoriaIds ?? []).includes(c.id))
         : todasCategorias;
 
     // Categorias que têm preço definido para este tamanho
     const categoriasComPreco = categoriasItem.filter(
-      c => c.precos[item.tamanho] != null,
+      c => c.precos[pizzaItem.tamanho] != null,
     );
 
     // Média dos preços de venda entre as categorias elegíveis
     const precoMedioUnitario =
       categoriasComPreco.length > 0
         ? categoriasComPreco.reduce(
-            (sum, c) => sum + (c.precos[item.tamanho] ?? 0),
+            (sum, c) => sum + (c.precos[pizzaItem.tamanho] ?? 0),
             0,
           ) / categoriasComPreco.length
         : 0;
@@ -429,7 +455,7 @@ export const calcularComboCMV = (combo: Combo, data: StoreData): ComboCMV => {
 
     for (const cat of categoriasItem) {
       const produtosCat = data.sabores.filter(
-        s => s.categoriaId === cat.id && detectarTamanho(s.nome) === item.tamanho,
+        s => s.categoriaId === cat.id && detectarTamanho(s.nome) === pizzaItem.tamanho,
       );
       numProdutosTotal += produtosCat.length;
       if (produtosCat.length > 0) {
@@ -446,17 +472,19 @@ export const calcularComboCMV = (combo: Combo, data: StoreData): ComboCMV => {
     const custoMedioUnitario =
       numCategoriasCusto > 0 ? somaCustosCategorias / numCategoriasCusto : 0;
 
-    return {
-      id: item.id,
-      tamanho: item.tamanho,
-      quantidade: item.quantidade,
+    const resultado: ComboCMVItemPizza = {
+      id: pizzaItem.id,
+      tipo: 'pizza',
+      tamanho: pizzaItem.tamanho,
+      quantidade: pizzaItem.quantidade,
       categorias: categoriasItem,
       precoMedioUnitario,
       custoMedioUnitario,
-      precoItem: precoMedioUnitario * item.quantidade,
-      custoItem: custoMedioUnitario * item.quantidade,
+      precoItem: precoMedioUnitario * pizzaItem.quantidade,
+      custoItem: custoMedioUnitario * pizzaItem.quantidade,
       numProdutos: numProdutosTotal,
     };
+    return resultado;
   });
 
   const custoTotal = itens.reduce((sum, i) => sum + i.custoItem, 0);
