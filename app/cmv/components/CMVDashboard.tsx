@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Layers, ChefHat, Pizza, BarChart2, FileSpreadsheet, Tag } from 'lucide-react';
+import { Layers, ChefHat, Pizza, BarChart2, FileSpreadsheet, Tag, ArrowLeftRight } from 'lucide-react';
 import type { StoreId } from '../types';
 import { STORE_IDS, STORES } from '../constants';
 import { useStoreData } from '../hooks/useStoreData';
@@ -11,6 +11,7 @@ import { CategoriasTab } from './CategoriasTab';
 import { StoreTab } from './StoreTab';
 import { ComparisonTab } from './ComparisonTab';
 import { ImportPlanilhaModal } from './ImportPlanilhaModal';
+import { CopiarDadosModal } from './CopiarDadosModal';
 
 type Section = 'ingredientes' | 'receitas' | 'categorias' | 'produtos' | 'comparativo';
 
@@ -51,6 +52,7 @@ export const CMVDashboard = () => {
   const [section, setSection] = useState<Section>('ingredientes');
   const [activeStore, setActiveStore] = useState<StoreId>('ahu');
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showCopiarModal, setShowCopiarModal] = useState(false);
 
   const { data, updateData } = useStoreData(activeStore);
 
@@ -68,13 +70,23 @@ export const CMVDashboard = () => {
             </p>
           </div>
           {showStoreTabs && (
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="flex items-center gap-2 shrink-0 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-green-500/50 hover:bg-green-500/5 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-green-400" />
-              Importar Planilha
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setShowCopiarModal(true)}
+                title="Transferir dados desta loja para outra"
+                className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-purple-500/50 hover:bg-purple-500/5 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors"
+              >
+                <ArrowLeftRight className="w-4 h-4 text-purple-400" />
+                <span className="hidden sm:inline">Transferir dados</span>
+              </button>
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="flex items-center gap-2 bg-[#1c1c1e] border border-[#2a2a2e] hover:border-green-500/50 hover:bg-green-500/5 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-green-400" />
+                <span className="hidden sm:inline">Importar Planilha</span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -195,6 +207,14 @@ export const CMVDashboard = () => {
             updateData(newData);
             setShowImportModal(false);
           }}
+        />
+      )}
+
+      {showCopiarModal && (
+        <CopiarDadosModal
+          sourceStoreId={activeStore}
+          sourceData={data}
+          onClose={() => setShowCopiarModal(false)}
         />
       )}
     </div>
