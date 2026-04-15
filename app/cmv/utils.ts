@@ -240,6 +240,7 @@ export const calcularCMVSabor = (
     nome: sabor.nome,
     categoria: categoria?.nome || sabor.categoria || 'Sem Categoria',
     categoriaGrupo: categoria?.grupo,
+    tipoPrecificacao: categoria?.tipoPrecificacao ?? 'pizza',
     tamanho: tamanhoExibir,
     custo,
     precoVenda,

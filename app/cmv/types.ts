@@ -201,6 +201,7 @@ export interface ProductCMV {
   nome: string;
   categoria: string;        // nome da categoria (ex: "TRADICIONAL I")
   categoriaGrupo?: string;  // grupo da categoria (ex: "TRADICIONAL")
+  tipoPrecificacao?: 'pizza' | 'bebidas'; // tipo da categoria de preço
   tamanho?: Tamanho;        // tamanho detectado do nome do produto
   custo: number;
   precoVenda: number;       // resolvido de categoria.precos[tamanho]

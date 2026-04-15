@@ -48,6 +48,8 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
   const precoResolvido = categoriaAtual
     ? resolverPrecoVendaCategoria(categoriaAtual, editNome)
     : 0;
+  const isBebida = categoriaAtual?.tipoPrecificacao === 'bebidas';
+  const BEBIDA_COLOR = '#06b6d4';
 
   // ── Sabor preview para cálculo em tempo real ──────────────────────────────
   const saborPreview: Sabor = {
@@ -59,7 +61,7 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
     itens,
   };
   const product = calcularCMVSabor(saborPreview, data.ingredientes, data.receitas, data.categorias);
-  const cmvColor = CMV_COLORS[product.status];
+  const cmvColor = isBebida ? BEBIDA_COLOR : CMV_COLORS[product.status];
 
   // ── Helpers de nome / unidade de cada item ────────────────────────────────
   const resolveItemNome = (item: SaborItem): string => {
@@ -179,13 +181,17 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
         <div className="px-5 py-4 bg-[#141416] border-b border-[#2a2a2e]">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-400 mb-1">CMV</p>
+              <p className="text-xs text-gray-400 mb-1">CMV Médio</p>
               <p className="text-3xl font-bold" style={{ color: cmvColor }}>
                 {formatPercent(product.cmvPercent)}
               </p>
-              <p className="text-xs mt-1" style={{ color: cmvColor }}>
-                {getStatusLabel(product.status)}
-              </p>
+              {isBebida ? (
+                <span className="text-xs mt-1 text-cyan-400">Bebida</span>
+              ) : (
+                <p className="text-xs mt-1" style={{ color: cmvColor }}>
+                  {getStatusLabel(product.status)}
+                </p>
+              )}
             </div>
             <div className="text-right space-y-1">
               <div className="text-xs text-gray-400">
@@ -194,9 +200,11 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
               <div className="text-xs text-gray-400">
                 Margem: <span className="text-white font-medium">{formatPercent(product.margem)}</span>
               </div>
-              <div className="text-xs text-gray-400 mt-1">
-                Meta: <span className="text-red-400 font-medium">{CMV_META}%</span>
-              </div>
+              {!isBebida && (
+                <div className="text-xs text-gray-400 mt-1">
+                  Meta: <span className="text-red-400 font-medium">{CMV_META}%</span>
+                </div>
+              )}
             </div>
           </div>
 

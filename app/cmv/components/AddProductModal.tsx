@@ -45,10 +45,25 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
   const [selectedTamanhos, setSelectedTamanhos] = useState<PizzaTamanho[]>([]);
   const isMultiSize = selectedTamanhos.length > 0;
 
+  // Filtro rápido de bebidas: limita o seletor de categoria às de tipo bebidas
+  const [filtroBebidas, setFiltroBebidas] = useState(false);
+
   const toggleTamanho = (t: PizzaTamanho) => {
+    // Ao selecionar tamanho de pizza, desativa filtro de bebidas
+    if (filtroBebidas) setFiltroBebidas(false);
     setSelectedTamanhos(prev =>
       prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t],
     );
+  };
+
+  const handleFiltroBebidas = () => {
+    if (!filtroBebidas) {
+      // Ativar modo bebidas: limpar tamanhos e pré-selecionar 1ª categoria bebidas
+      setSelectedTamanhos([]);
+      const primeiraBebida = data.categorias.find(c => c.tipoPrecificacao === 'bebidas');
+      if (primeiraBebida) setCategoriaId(primeiraBebida.id);
+    }
+    setFiltroBebidas(v => !v);
   };
 
   // Categoria selecionada + tamanho detectado (modo single)
@@ -289,62 +304,85 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                 />
               </div>
 
-              {/* Seletor de tamanhos (somente categorias de pizza) */}
-              {categoriaAtual?.tipoPrecificacao !== 'bebidas' && (
-                <div>
-                  <label className="text-xs text-gray-400 block mb-2">
-                    Tamanhos
-                    <span className="text-gray-600 ml-1">
-                      {isMultiSize
-                        ? `— ${selectedTamanhos.length} selecionado${selectedTamanhos.length !== 1 ? 's' : ''}, será criado${selectedTamanhos.length !== 1 ? 'm' : ''} ${selectedTamanhos.length} produto${selectedTamanhos.length !== 1 ? 's' : ''}`
-                        : '— selecione para criar vários de uma vez'}
-                    </span>
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {TAMANHOS_PIZZA.map(t => {
-                      const selected = selectedTamanhos.includes(t);
-                      const temPreco = categoriaAtual?.precos[t] != null;
-                      return (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => toggleTamanho(t)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                            selected
-                              ? 'bg-green-600 border-green-600 text-white'
-                              : 'bg-transparent border-[#374151] text-gray-400 hover:border-green-500/50 hover:text-white'
-                          }`}
-                        >
-                          {TAMANHO_SUFIXO[t]}
-                          {categoriaAtual && temPreco && (
-                            <span className={`ml-1.5 ${selected ? 'text-green-200' : 'text-gray-600'}`}>
-                              {formatCurrency(categoriaAtual.precos[t]!)}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Preview dos nomes */}
-                  {isMultiSize && nome.trim() && (
-                    <div className="mt-2 bg-[#141416] border border-[#2a2a2e] rounded-xl px-3 py-2.5">
-                      <p className="text-xs text-gray-500 mb-1">Produtos que serão criados:</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {nomesParaCriar.map(n => (
-                          <span key={n} className="text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded-md px-2 py-0.5">
-                            {n}
+              {/* Seletor de tamanhos */}
+              <div>
+                <label className="text-xs text-gray-400 block mb-2">
+                  Tamanhos
+                  <span className="text-gray-600 ml-1">
+                    {filtroBebidas || categoriaAtual?.tipoPrecificacao === 'bebidas'
+                      ? '— modo bebidas (preço único)'
+                      : isMultiSize
+                      ? `— ${selectedTamanhos.length} selecionado${selectedTamanhos.length !== 1 ? 's' : ''}, será criado${selectedTamanhos.length !== 1 ? 'm' : ''} ${selectedTamanhos.length} produto${selectedTamanhos.length !== 1 ? 's' : ''}`
+                      : '— selecione para criar vários de uma vez'}
+                  </span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {/* Botões de tamanho de pizza (ocultam no modo bebidas) */}
+                  {!filtroBebidas && categoriaAtual?.tipoPrecificacao !== 'bebidas' && TAMANHOS_PIZZA.map(t => {
+                    const selected = selectedTamanhos.includes(t);
+                    const temPreco = categoriaAtual?.precos[t] != null;
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => toggleTamanho(t)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                          selected
+                            ? 'bg-green-600 border-green-600 text-white'
+                            : 'bg-transparent border-[#374151] text-gray-400 hover:border-green-500/50 hover:text-white'
+                        }`}
+                      >
+                        {TAMANHO_SUFIXO[t]}
+                        {categoriaAtual && temPreco && (
+                          <span className={`ml-1.5 ${selected ? 'text-green-200' : 'text-gray-600'}`}>
+                            {formatCurrency(categoriaAtual.precos[t]!)}
                           </span>
-                        ))}
-                      </div>
-                    </div>
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  {/* Botão Bebidas — atalho rápido */}
+                  {categoriaAtual?.tipoPrecificacao !== 'bebidas' && (
+                    <button
+                      type="button"
+                      onClick={handleFiltroBebidas}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                        filtroBebidas
+                          ? 'bg-cyan-600 border-cyan-600 text-white'
+                          : 'bg-transparent border-[#374151] text-cyan-500/70 hover:border-cyan-500/50 hover:text-cyan-400'
+                      }`}
+                    >
+                      🥤 Bebidas
+                    </button>
                   )}
                 </div>
-              )}
+
+                {/* Aviso modo bebidas ativo sem categoria bebidas cadastrada */}
+                {filtroBebidas && data.categorias.filter(c => c.tipoPrecificacao === 'bebidas').length === 0 && (
+                  <p className="text-xs text-amber-400 mt-1.5">
+                    ⚠️ Crie uma categoria do tipo Bebidas na aba Categorias primeiro.
+                  </p>
+                )}
+
+                {/* Preview dos nomes no modo multi-tamanho */}
+                {isMultiSize && nome.trim() && !filtroBebidas && categoriaAtual?.tipoPrecificacao !== 'bebidas' && (
+                  <div className="mt-2 bg-[#141416] border border-[#2a2a2e] rounded-xl px-3 py-2.5">
+                    <p className="text-xs text-gray-500 mb-1">Produtos que serão criados:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {nomesParaCriar.map(n => (
+                        <span key={n} className="text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded-md px-2 py-0.5">
+                          {n}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {categoriaAtual?.tipoPrecificacao === 'bebidas' && (
-                <p className="text-xs text-gray-500 bg-[#141416] border border-[#2a2a2e] rounded-xl px-3 py-2">
-                  Categoria de bebidas: um único preço por linha (sem criar Broto/Média/Grande).
+                <p className="text-xs text-cyan-400/70 bg-cyan-500/5 border border-cyan-500/15 rounded-xl px-3 py-2">
+                  Categoria de bebidas: preço único — nenhum tamanho será criado.
                 </p>
               )}
 
@@ -354,7 +392,10 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                 <SearchableSelect
                   value={categoriaId}
                   onChange={v => setCategoriaId(v)}
-                  options={data.categorias.map(cat => {
+                  options={(filtroBebidas
+                    ? data.categorias.filter(c => c.tipoPrecificacao === 'bebidas')
+                    : data.categorias
+                  ).map(cat => {
                     const modoBebidas = cat.tipoPrecificacao === 'bebidas';
                     const precoUnico = cat.precos.bebidas ?? cat.precoVenda;
                     const precoParaTamanho =

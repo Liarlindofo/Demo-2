@@ -21,8 +21,11 @@ const STATUS_BADGE_COLORS = {
   critico: 'bg-red-500/20 text-red-400 border border-red-500/30',
 };
 
+const BEBIDA_COLOR = '#06b6d4'; // cyan-500
+
 export const PizzaCard = ({ product, onClick, selectMode, selected, onClone, onRename }: PizzaCardProps) => {
-  const cmvColor = CMV_COLORS[product.status];
+  const isBebida = product.tipoPrecificacao === 'bebidas';
+  const cmvColor = isBebida ? BEBIDA_COLOR : CMV_COLORS[product.status];
   const barWidth = Math.min(100, Math.max(0, product.margem));
   const metaBarWidth = 100 - CMV_META;
 
@@ -105,9 +108,15 @@ export const PizzaCard = ({ product, onClick, selectMode, selected, onClone, onR
             {product.categoria}
           </p>
         </div>
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${STATUS_BADGE_COLORS[product.status]}`}>
-          {getStatusLabel(product.status)}
-        </span>
+        {isBebida ? (
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 bg-cyan-500/15 text-cyan-400 border border-cyan-500/25">
+            Bebida
+          </span>
+        ) : (
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${STATUS_BADGE_COLORS[product.status]}`}>
+            {getStatusLabel(product.status)}
+          </span>
+        )}
       </div>
 
       {/* Barra de margem */}
@@ -116,10 +125,12 @@ export const PizzaCard = ({ product, onClick, selectMode, selected, onClone, onR
           className="h-full rounded-full transition-all duration-300"
           style={{ width: `${barWidth}%`, backgroundColor: cmvColor }}
         />
-        <div
-          className="absolute top-0 bottom-0 w-px bg-red-500/60"
-          style={{ left: `${metaBarWidth}%` }}
-        />
+        {!isBebida && (
+          <div
+            className="absolute top-0 bottom-0 w-px bg-red-500/60"
+            style={{ left: `${metaBarWidth}%` }}
+          />
+        )}
       </div>
 
       {/* Detalhes */}

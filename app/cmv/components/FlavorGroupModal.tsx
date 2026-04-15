@@ -20,12 +20,14 @@ const STATUS_BADGE: Record<string, string> = {
   otimo: 'bg-green-500/15 text-green-400 border-green-500/25',
   atencao: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/25',
   critico: 'bg-red-500/15 text-red-400 border-red-500/25',
+  bebida: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/25',
 };
 
 const STATUS_LABEL: Record<string, string> = {
   otimo: 'Ótimo',
   atencao: 'Atenção',
   critico: 'Acima da meta',
+  bebida: 'Bebida',
 };
 
 export const FlavorGroupModal = ({
@@ -38,6 +40,10 @@ export const FlavorGroupModal = ({
   const [selectedSabor, setSelectedSabor] = useState<Sabor | null>(null);
 
   const metaBarWidth = 100 - CMV_META;
+
+  // Grupo é de bebidas se todos os produtos são bebidas
+  const isGrupoBebidas = group.produtos.every(p => p.tipoPrecificacao === 'bebidas');
+  const BEBIDA_COLOR = '#06b6d4';
 
   const handleClickProduct = (product: ProductCMV) => {
     const sabor = data.sabores.find(s => s.id === product.id);
@@ -120,7 +126,9 @@ export const FlavorGroupModal = ({
             </div>
 
             {group.produtos.map((product, idx) => {
-              const cmvColor = CMV_COLORS[product.status];
+              const isBebida = product.tipoPrecificacao === 'bebidas';
+              const cmvColor = isBebida ? BEBIDA_COLOR : CMV_COLORS[product.status];
+              const badgeKey = isBebida ? 'bebida' : product.status;
               const varName = product.nome.replace(group.nome, '').trim() || product.nome;
               const barWidth = Math.min(100, Math.max(0, 100 - product.cmvPercent));
 
@@ -140,10 +148,12 @@ export const FlavorGroupModal = ({
                         className="h-full rounded-full"
                         style={{ width: `${barWidth}%`, backgroundColor: cmvColor }}
                       />
-                      <div
-                        className="absolute top-0 bottom-0 w-px bg-red-500/50"
-                        style={{ left: `${metaBarWidth}%` }}
-                      />
+                      {!isBebida && (
+                        <div
+                          className="absolute top-0 bottom-0 w-px bg-red-500/50"
+                          style={{ left: `${metaBarWidth}%` }}
+                        />
+                      )}
                     </div>
                   </div>
 
@@ -152,8 +162,8 @@ export const FlavorGroupModal = ({
                   <span className="text-sm font-bold text-right" style={{ color: cmvColor }}>
                     {formatPercent(product.cmvPercent)}
                   </span>
-                  <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full border text-center ${STATUS_BADGE[product.status]}`}>
-                    {STATUS_LABEL[product.status]}
+                  <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full border text-center ${STATUS_BADGE[badgeKey]}`}>
+                    {STATUS_LABEL[badgeKey]}
                   </span>
                   <ChevronRight className="w-4 h-4 text-gray-600" />
                 </div>
@@ -164,7 +174,9 @@ export const FlavorGroupModal = ({
           {/* Footer */}
           <div className="px-6 py-3 border-t border-[#2a2a2e] flex items-center justify-between text-xs text-gray-500 bg-[#141416]">
             <span>Clique em uma variação para editar</span>
-            <span>Meta CMV: <span className="text-red-400 font-medium">{CMV_META}%</span></span>
+            {!isGrupoBebidas && (
+              <span>Meta CMV: <span className="text-red-400 font-medium">{CMV_META}%</span></span>
+            )}
           </div>
         </div>
       </div>
