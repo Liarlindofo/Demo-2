@@ -1,3 +1,4 @@
+import { isCategoriaPrecoPizza } from './types';
 import type {
   StoreData,
   Sabor,
@@ -5,7 +6,6 @@ import type {
   Ingrediente,
   Receita,
   CategoriaPreco,
-  isCategoriaPrecoPizza,
   ProductCMV,
   StoreMetrics,
   Tamanho,
