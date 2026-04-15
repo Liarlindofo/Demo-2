@@ -5,6 +5,7 @@ import type {
   Ingrediente,
   Receita,
   CategoriaPreco,
+  isCategoriaPrecoPizza,
   ProductCMV,
   StoreMetrics,
   Tamanho,
@@ -43,10 +44,13 @@ export const migrarSaborItens = (sabor: Sabor): SaborItem[] => {
  * Migra uma CategoriaPreco do formato antigo (precoVenda único) para o novo (precos por tamanho).
  */
 const migrarCategoria = (cat: CategoriaPreco): CategoriaPreco => {
-  // Se já tem precos (novo formato), retorna como está
-  if (cat.precos && typeof cat.precos === 'object') return cat;
-  // Formato antigo: tinha precoVenda mas não precos
-  return { ...cat, precos: {} };
+  const precos =
+    cat.precos && typeof cat.precos === 'object' ? cat.precos : {};
+  return {
+    ...cat,
+    precos,
+    tipoPrecificacao: cat.tipoPrecificacao ?? 'pizza',
+  };
 };
 
 /**
@@ -179,6 +183,30 @@ export const detectarTamanho = (nome: string): Tamanho | null => {
   return TAMANHO_MAP[lastWord] ?? null;
 };
 
+/**
+ * Preço de venda resolvido a partir da categoria e do nome do produto (tamanho no sufixo).
+ */
+export const resolverPrecoVendaCategoria = (
+  categoria: CategoriaPreco,
+  nomeProduto: string,
+): number => {
+  const tipo = categoria.tipoPrecificacao ?? 'pizza';
+  if (tipo === 'bebidas') {
+    if (categoria.precos.bebidas != null) return categoria.precos.bebidas;
+    if (categoria.precoVenda) return categoria.precoVenda;
+    return 0;
+  }
+  const tamanho = detectarTamanho(nomeProduto);
+  if (tamanho && categoria.precos[tamanho] != null) {
+    return categoria.precos[tamanho]!;
+  }
+  if (!tamanho && categoria.precos.bebidas != null) {
+    return categoria.precos.bebidas;
+  }
+  if (categoria.precoVenda) return categoria.precoVenda;
+  return 0;
+};
+
 export const calcularCMVSabor = (
   sabor: Sabor,
   ingredientes: Ingrediente[],
@@ -187,25 +215,14 @@ export const calcularCMVSabor = (
 ): ProductCMV => {
   const custo = calcularCustoSabor(sabor, ingredientes, receitas);
 
-  // Detecta o tamanho do produto pelo nome
-  const tamanho = detectarTamanho(sabor.nome);
-
-  // Resolve a categoria
+  const tamanhoNome = detectarTamanho(sabor.nome);
   const categoria = categorias.find(c => c.id === sabor.categoriaId);
 
-  // Resolve o preço de venda: categoria.precos[tamanho] → categoria.precoVenda legado → sabor.precoVenda legado
   let precoVenda = 0;
   if (categoria) {
-    if (tamanho && categoria.precos[tamanho] != null) {
-      precoVenda = categoria.precos[tamanho]!;
-    } else if (!tamanho && categoria.precos.bebidas != null) {
-      // Produtos sem tamanho detectável (ex.: bebidas) usam a coluna "Bebidas".
-      precoVenda = categoria.precos.bebidas;
-    } else if (categoria.precoVenda) {
-      precoVenda = categoria.precoVenda; // fallback para categoria no formato antigo
-    }
+    precoVenda = resolverPrecoVendaCategoria(categoria, sabor.nome);
   } else {
-    precoVenda = sabor.precoVenda ?? 0; // fallback para sabor legado
+    precoVenda = sabor.precoVenda ?? 0;
   }
 
   const cmvPercent = precoVenda > 0 ? (custo / precoVenda) * 100 : 0;
@@ -213,12 +230,17 @@ export const calcularCMVSabor = (
   const status = getCMVStatus(cmvPercent);
   const numIngredientes = migrarSaborItens(sabor).length;
 
+  const tamanhoExibir =
+    categoria?.tipoPrecificacao === 'bebidas'
+      ? undefined
+      : (tamanhoNome ?? undefined);
+
   return {
     id: sabor.id,
     nome: sabor.nome,
     categoria: categoria?.nome || sabor.categoria || 'Sem Categoria',
     categoriaGrupo: categoria?.grupo,
-    tamanho: tamanho ?? undefined,
+    tamanho: tamanhoExibir,
     custo,
     precoVenda,
     cmvPercent,
@@ -455,11 +477,17 @@ export const calcularComboCMV = (combo: Combo, data: StoreData): ComboCMV => {
     // Slot de pizza (tipo === 'pizza' ou undefined — compat com dados antigos)
     const pizzaItem = item as ComboItemPizza;
 
-    // Resolve quais categorias participam deste slot
+    const categoriasPizza = todasCategorias.filter(isCategoriaPrecoPizza);
+
+    // Resolve quais categorias participam deste slot (apenas categorias de pizza)
     const categoriasItem =
       (pizzaItem.categoriaIds ?? []).length > 0
-        ? todasCategorias.filter(c => (pizzaItem.categoriaIds ?? []).includes(c.id))
-        : todasCategorias;
+        ? todasCategorias.filter(
+            c =>
+              (pizzaItem.categoriaIds ?? []).includes(c.id) &&
+              isCategoriaPrecoPizza(c),
+          )
+        : categoriasPizza;
 
     // Categorias que têm preço definido para este tamanho
     const categoriasComPreco = categoriasItem.filter(

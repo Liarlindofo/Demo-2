@@ -28,11 +28,20 @@ export interface CategoriaPreco {
   id: string;
   nome: string;    // Ex: "TRADICIONAL I", "ESPECIAL II", "DOCE"
   grupo?: string;  // Agrupamento visual: "TRADICIONAL", "ESPECIAL", "DOCE", "BORDA"
+  /**
+   * `pizza` (padrão): matriz com tamanhos de pizza (broto…calzone).
+   * `bebidas`: um único preço em `precos.bebidas`, sem colunas de tamanho de pizza.
+   */
+  tipoPrecificacao?: 'pizza' | 'bebidas';
   /** Preço por tamanho — célula vazia = tamanho não disponível para esta categoria */
   precos: Partial<Record<Tamanho, number>>;
   /** @deprecated use precos[tamanho] — mantido para migração de dados antigos */
   precoVenda?: number;
 }
+
+/** Categorias da matriz de pizza (exclui modo bebidas). */
+export const isCategoriaPrecoPizza = (c: CategoriaPreco): boolean =>
+  (c.tipoPrecificacao ?? 'pizza') === 'pizza';
 
 // ── Etapa 1: Ingredientes ─────────────────────────────────────────────────────
 export interface Ingrediente {

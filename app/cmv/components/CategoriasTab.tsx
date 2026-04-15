@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react';
 import { Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Tag, Info } from 'lucide-react';
 import type { StoreId, CategoriaPreco, Tamanho } from '../types';
-import { TAMANHOS, TAMANHO_LABELS } from '../types';
+import { TAMANHOS_PIZZA, TAMANHO_LABELS, isCategoriaPrecoPizza } from '../types';
 import { useStoreData } from '../hooks/useStoreData';
 import { formatCurrency } from '../utils';
 
@@ -85,24 +85,28 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newNome, setNewNome] = useState('');
   const [newGrupo, setNewGrupo] = useState('');
+  const [newTipoPrecificacao, setNewTipoPrecificacao] = useState<'pizza' | 'bebidas'>('pizza');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
-  // Agrupa categorias por grupo (categorias sem grupo ficam em grupo vazio)
-  const gruposOrdenados = (() => {
+  const gruposOrdenadosDe = (lista: CategoriaPreco[]) => {
     const map = new Map<string, CategoriaPreco[]>();
-    data.categorias.forEach(cat => {
+    lista.forEach(cat => {
       const g = cat.grupo?.trim() || '';
       if (!map.has(g)) map.set(g, []);
       map.get(g)!.push(cat);
     });
-    // Grupos com nome primeiro, depois sem nome
     return Array.from(map.entries()).sort(([a], [b]) => {
       if (a === '' && b !== '') return 1;
       if (a !== '' && b === '') return -1;
       return a.localeCompare(b, 'pt-BR');
     });
-  })();
+  };
+
+  const catsPizza = data.categorias.filter(isCategoriaPrecoPizza);
+  const catsBebidas = data.categorias.filter(c => c.tipoPrecificacao === 'bebidas');
+  const gruposPizza = gruposOrdenadosDe(catsPizza);
+  const gruposBebidas = gruposOrdenadosDe(catsBebidas);
 
   const toggleGroup = (g: string) => {
     setCollapsedGroups(prev => {
@@ -141,6 +145,13 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
     updateData({ ...data, categorias: newCats });
   };
 
+  const updateTipoPrecificacao = (catId: string, tipo: 'pizza' | 'bebidas') => {
+    const newCats = data.categorias.map(c =>
+      c.id === catId ? { ...c, tipoPrecificacao: tipo } : c,
+    );
+    updateData({ ...data, categorias: newCats });
+  };
+
   // ── Adicionar nova categoria ───────────────────────────────────────────────
   const handleAdd = () => {
     if (!newNome.trim()) return;
@@ -148,11 +159,13 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
       id: crypto.randomUUID(),
       nome: newNome.trim().toUpperCase(),
       grupo: newGrupo.trim().toUpperCase() || undefined,
+      tipoPrecificacao: newTipoPrecificacao,
       precos: {},
     };
     updateData({ ...data, categorias: [...data.categorias, nova] });
     setNewNome('');
     setNewGrupo('');
+    setNewTipoPrecificacao('pizza');
     setShowAddForm(false);
   };
 
@@ -195,7 +208,8 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
           <h2 className="text-lg font-bold text-white">Categorias de Preço</h2>
           <p className="text-xs text-gray-400 mt-0.5">
             {data.categorias.length} categoria{data.categorias.length !== 1 ? 's' : ''}
-            {' · '}Preço varia por tamanho — edite cada célula clicando nela
+            {' · '}
+            {catsPizza.length} pizza · {catsBebidas.length} bebida{catsBebidas.length !== 1 ? 's' : ''}
           </p>
         </div>
         <button
@@ -235,6 +249,17 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
               {gruposExistentes.map(g => <option key={g} value={g} />)}
             </datalist>
           </div>
+          <div className="w-44">
+            <label className="text-xs text-gray-400 block mb-1">Tipo</label>
+            <select
+              value={newTipoPrecificacao}
+              onChange={e => setNewTipoPrecificacao(e.target.value as 'pizza' | 'bebidas')}
+              className="w-full bg-[#2a2a2e] border border-[#374151] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
+            >
+              <option value="pizza">Pizza (tamanhos)</option>
+              <option value="bebidas">Bebidas (preço único)</option>
+            </select>
+          </div>
           <div className="flex gap-2">
             <button
               onClick={handleAdd}
@@ -244,7 +269,7 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
               Adicionar
             </button>
             <button
-              onClick={() => { setShowAddForm(false); setNewNome(''); setNewGrupo(''); }}
+              onClick={() => { setShowAddForm(false); setNewNome(''); setNewGrupo(''); setNewTipoPrecificacao('pizza'); }}
               className="text-gray-400 hover:text-white px-3 py-2 rounded-lg transition-colors text-sm"
             >
               Cancelar
@@ -257,9 +282,9 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
       <div className="flex items-start gap-3 bg-blue-500/5 border border-blue-500/20 rounded-xl px-4 py-3">
         <Info className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
         <p className="text-xs text-blue-300 leading-relaxed">
-          Cada célula é o preço de venda daquela categoria naquele tamanho.
-          Deixe <span className="text-white font-medium">—</span> (vazio) quando o tamanho não está disponível.
-          O sistema detecta o tamanho do produto pelo nome (ex: "Americana <strong>Grande</strong>") e busca o preço automaticamente.
+          <span className="text-white font-medium">Pizza:</span> matriz por tamanho (Broto… Calzone); o sistema lê o tamanho no fim do nome do produto.
+          {' '}
+          <span className="text-white font-medium">Bebidas:</span> uma coluna de preço único — sem Broto/Média/Grande.
         </p>
       </div>
 
@@ -269,7 +294,8 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
           <div className="text-4xl mb-3">🏷️</div>
           <h3 className="text-base font-semibold text-white mb-1">Nenhuma categoria ainda</h3>
           <p className="text-sm text-gray-400 mb-4 max-w-sm">
-            Crie categorias com preços por tamanho (ex: TRADICIONAL I com preços diferentes para Broto, Média, Grande...).
+            Crie uma categoria <span className="text-gray-300 font-medium">Pizza</span> (matriz por tamanho) e outra{' '}
+            <span className="text-gray-300 font-medium">Bebidas</span> (preço único), para não misturar com Broto/Média/Grande.
           </p>
           <button
             onClick={() => setShowAddForm(true)}
@@ -280,117 +306,260 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
           </button>
         </div>
       ) : (
-        /* ── Tabela matricial ─────────────────────────────────────────────── */
-        <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl overflow-hidden overflow-x-auto">
-          <table className="w-full min-w-[780px] border-collapse">
-            <thead>
-              <tr className="bg-[#141416] border-b border-[#2a2a2e]">
-                <th className="text-left text-xs font-semibold text-yellow-400 uppercase tracking-wider px-4 py-3 w-52">
-                  Categoria
-                </th>
-                {TAMANHOS.map(t => (
-                  <th key={t} className="text-center text-xs font-semibold text-red-400 uppercase tracking-wider px-2 py-3 w-28">
-                    {TAMANHO_LABELS[t]}
-                  </th>
-                ))}
-                <th className="w-16 px-2 py-3" />
-              </tr>
-            </thead>
-
-            <tbody>
-              {gruposOrdenados.map(([grupo, cats]) => {
-                const isCollapsed = collapsedGroups.has(grupo);
-                return (
-                  <>
-                    {/* Cabeçalho do grupo */}
-                    {grupo ? (
-                      <tr
-                        key={`grp-${grupo}`}
-                        onClick={() => toggleGroup(grupo)}
-                        className="bg-[#1a1a1c] border-t border-[#2a2a2e] cursor-pointer hover:bg-[#1e1e21] transition-colors select-none"
-                      >
-                        <td colSpan={TAMANHOS.length + 2} className="px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            {isCollapsed
-                              ? <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
-                              : <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
-                            }
-                            <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">
-                              {grupo}
-                            </span>
-                            <span className="text-xs text-gray-600">
-                              {cats.length} categori{cats.length === 1 ? 'a' : 'as'}
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      /* Separador para categorias sem grupo */
-                      data.categorias.some(c => c.grupo) && (
-                        <tr key="grp-sem-grupo" className="bg-[#1a1a1c] border-t border-[#2a2a2e]">
-                          <td colSpan={TAMANHOS.length + 2} className="px-4 py-1.5">
-                            <span className="text-xs text-gray-600 uppercase tracking-widest">Sem grupo</span>
-                          </td>
-                        </tr>
-                      )
-                    )}
-
-                    {/* Linhas de categorias do grupo */}
-                    {!isCollapsed && cats.map((cat, rowIdx) => {
-                      const usos = contarUsos(cat.id);
-                      return (
-                        <tr
-                          key={cat.id}
-                          className={`border-t border-[#2a2a2e] group transition-colors hover:bg-[#1e1e21]
-                            ${rowIdx % 2 === 0 ? 'bg-transparent' : 'bg-[#141416]'}
-                          `}
-                        >
-                          {/* Nome da categoria */}
-                          <td className="px-4 py-2">
-                            <div className="flex items-center gap-2">
-                              <Tag className="w-3 h-3 text-gray-600 shrink-0" />
-                              <input
-                                value={cat.nome}
-                                onChange={e => updateCampo(cat.id, 'nome', e.target.value.toUpperCase())}
-                                className="flex-1 bg-transparent text-sm font-medium text-white focus:outline-none focus:bg-white/5 rounded px-1 -ml-1"
-                                placeholder="Nome..."
-                              />
-                              {usos > 0 && (
-                                <span className="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full px-1.5 py-0.5 shrink-0">
-                                  {usos}
+        <div className="space-y-6">
+          {/* ── Pizza: matriz por tamanho ───────────────────────────────────── */}
+          <div>
+            <h3 className="text-sm font-semibold text-red-300 mb-2 flex items-center gap-2">
+              Pizza — preço por tamanho
+              <span className="text-xs font-normal text-gray-500">({catsPizza.length})</span>
+            </h3>
+            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl overflow-hidden overflow-x-auto">
+              <table className="w-full min-w-[800px] border-collapse">
+                <thead>
+                  <tr className="bg-[#141416] border-b border-[#2a2a2e]">
+                    <th className="text-left text-xs font-semibold text-yellow-400 uppercase tracking-wider px-4 py-3 w-56">
+                      Categoria
+                    </th>
+                    {TAMANHOS_PIZZA.map(t => (
+                      <th key={t} className="text-center text-xs font-semibold text-red-400 uppercase tracking-wider px-2 py-3 w-28">
+                        {TAMANHO_LABELS[t]}
+                      </th>
+                    ))}
+                    <th
+                      className="text-center text-xs font-semibold text-amber-400/90 uppercase tracking-wider px-2 py-3 w-24"
+                      title="Preço quando o nome do produto não tem tamanho (fallback legado)"
+                    >
+                      S/tam.
+                    </th>
+                    <th className="w-16 px-2 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {gruposPizza.map(([grupo, cats]) => {
+                    const isCollapsed = collapsedGroups.has(`pizza:${grupo}`);
+                    return (
+                      <>
+                        {grupo ? (
+                          <tr
+                            key={`pizza-grp-${grupo}`}
+                            onClick={() => toggleGroup(`pizza:${grupo}`)}
+                            className="bg-[#1a1a1c] border-t border-[#2a2a2e] cursor-pointer hover:bg-[#1e1e21] transition-colors select-none"
+                          >
+                            <td colSpan={TAMANHOS_PIZZA.length + 3} className="px-4 py-2">
+                              <div className="flex items-center gap-2">
+                                {isCollapsed
+                                  ? <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
+                                  : <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+                                }
+                                <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">
+                                  {grupo}
                                 </span>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* Células de preço por tamanho */}
-                          {TAMANHOS.map(tamanho => (
-                            <td key={tamanho} className="px-1 py-1">
-                              <PriceCell
-                                value={cat.precos[tamanho]}
-                                onChange={v => updatePreco(cat.id, tamanho, v)}
-                              />
+                                <span className="text-xs text-gray-600">
+                                  {cats.length} categori{cats.length === 1 ? 'a' : 'as'}
+                                </span>
+                              </div>
                             </td>
-                          ))}
-
-                          {/* Botão excluir */}
-                          <td className="px-2 py-2 text-center">
-                            <button
-                              onClick={() => handleDelete(cat.id)}
-                              className="p-1 text-gray-700 hover:text-red-400 hover:bg-red-500/10 rounded opacity-0 group-hover:opacity-100 transition-all"
-                              title="Excluir categoria"
+                          </tr>
+                        ) : (
+                          catsPizza.some(c => c.grupo) && (
+                            <tr key="pizza-sem-grupo" className="bg-[#1a1a1c] border-t border-[#2a2a2e]">
+                              <td colSpan={TAMANHOS_PIZZA.length + 3} className="px-4 py-1.5">
+                                <span className="text-xs text-gray-600 uppercase tracking-widest">Sem grupo</span>
+                              </td>
+                            </tr>
+                          )
+                        )}
+                        {!isCollapsed && cats.map((cat, rowIdx) => {
+                          const usos = contarUsos(cat.id);
+                          return (
+                            <tr
+                              key={cat.id}
+                              className={`border-t border-[#2a2a2e] group transition-colors hover:bg-[#1e1e21]
+                                ${rowIdx % 2 === 0 ? 'bg-transparent' : 'bg-[#141416]'}
+                              `}
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </>
-                );
-              })}
-            </tbody>
-          </table>
+                              <td className="px-4 py-2 align-top">
+                                <div className="flex flex-col gap-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <Tag className="w-3 h-3 text-gray-600 shrink-0 mt-0.5" />
+                                    <input
+                                      value={cat.nome}
+                                      onChange={e => updateCampo(cat.id, 'nome', e.target.value.toUpperCase())}
+                                      className="flex-1 bg-transparent text-sm font-medium text-white focus:outline-none focus:bg-white/5 rounded px-1 -ml-1 min-w-0"
+                                      placeholder="Nome..."
+                                    />
+                                    {usos > 0 && (
+                                      <span className="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full px-1.5 py-0.5 shrink-0">
+                                        {usos}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <select
+                                    value={cat.tipoPrecificacao ?? 'pizza'}
+                                    onChange={e => updateTipoPrecificacao(cat.id, e.target.value as 'pizza' | 'bebidas')}
+                                    onClick={e => e.stopPropagation()}
+                                    className="w-max max-w-full text-[10px] bg-[#2a2a2e] border border-[#374151] rounded px-1.5 py-0.5 text-gray-300"
+                                  >
+                                    <option value="pizza">Modo pizza</option>
+                                    <option value="bebidas">Modo bebidas</option>
+                                  </select>
+                                </div>
+                              </td>
+                              {TAMANHOS_PIZZA.map(tamanho => (
+                                <td key={tamanho} className="px-1 py-1">
+                                  <PriceCell
+                                    value={cat.precos[tamanho]}
+                                    onChange={v => updatePreco(cat.id, tamanho, v)}
+                                  />
+                                </td>
+                              ))}
+                              <td className="px-1 py-1">
+                                <PriceCell
+                                  value={cat.precos.bebidas}
+                                  onChange={v => updatePreco(cat.id, 'bebidas', v)}
+                                />
+                              </td>
+                              <td className="px-2 py-2 text-center">
+                                <button
+                                  onClick={() => handleDelete(cat.id)}
+                                  className="p-1 text-gray-700 hover:text-red-400 hover:bg-red-500/10 rounded opacity-0 group-hover:opacity-100 transition-all"
+                                  title="Excluir categoria"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {catsPizza.length === 0 && (
+              <p className="text-xs text-gray-500 mt-2">Nenhuma categoria no modo pizza. Crie com &quot;Nova categoria&quot; → tipo Pizza.</p>
+            )}
+          </div>
+
+          {/* ── Bebidas: preço único ────────────────────────────────────────── */}
+          <div>
+            <h3 className="text-sm font-semibold text-cyan-300 mb-2 flex items-center gap-2">
+              Bebidas — preço único
+              <span className="text-xs font-normal text-gray-500">({catsBebidas.length})</span>
+            </h3>
+            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl overflow-hidden overflow-x-auto">
+              <table className="w-full min-w-[360px] border-collapse">
+                <thead>
+                  <tr className="bg-[#141416] border-b border-[#2a2a2e]">
+                    <th className="text-left text-xs font-semibold text-yellow-400 uppercase tracking-wider px-4 py-3 w-56">
+                      Categoria
+                    </th>
+                    <th className="text-center text-xs font-semibold text-cyan-400 uppercase tracking-wider px-2 py-3 w-36">
+                      Preço
+                    </th>
+                    <th className="w-16 px-2 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {gruposBebidas.map(([grupo, cats]) => {
+                    const isCollapsed = collapsedGroups.has(`beb:${grupo}`);
+                    return (
+                      <>
+                        {grupo ? (
+                          <tr
+                            key={`beb-grp-${grupo}`}
+                            onClick={() => toggleGroup(`beb:${grupo}`)}
+                            className="bg-[#1a1a1c] border-t border-[#2a2a2e] cursor-pointer hover:bg-[#1e1e21] transition-colors select-none"
+                          >
+                            <td colSpan={3} className="px-4 py-2">
+                              <div className="flex items-center gap-2">
+                                {isCollapsed
+                                  ? <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
+                                  : <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+                                }
+                                <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">
+                                  {grupo}
+                                </span>
+                                <span className="text-xs text-gray-600">
+                                  {cats.length} categori{cats.length === 1 ? 'a' : 'as'}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          catsBebidas.some(c => c.grupo) && (
+                            <tr key="beb-sem-grupo" className="bg-[#1a1a1c] border-t border-[#2a2a2e]">
+                              <td colSpan={3} className="px-4 py-1.5">
+                                <span className="text-xs text-gray-600 uppercase tracking-widest">Sem grupo</span>
+                              </td>
+                            </tr>
+                          )
+                        )}
+                        {!isCollapsed && cats.map((cat, rowIdx) => {
+                          const usos = contarUsos(cat.id);
+                          return (
+                            <tr
+                              key={cat.id}
+                              className={`border-t border-[#2a2a2e] group transition-colors hover:bg-[#1e1e21]
+                                ${rowIdx % 2 === 0 ? 'bg-transparent' : 'bg-[#141416]'}
+                              `}
+                            >
+                              <td className="px-4 py-2 align-top">
+                                <div className="flex flex-col gap-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <Tag className="w-3 h-3 text-gray-600 shrink-0 mt-0.5" />
+                                    <input
+                                      value={cat.nome}
+                                      onChange={e => updateCampo(cat.id, 'nome', e.target.value.toUpperCase())}
+                                      className="flex-1 bg-transparent text-sm font-medium text-white focus:outline-none focus:bg-white/5 rounded px-1 -ml-1 min-w-0"
+                                      placeholder="Nome..."
+                                    />
+                                    {usos > 0 && (
+                                      <span className="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full px-1.5 py-0.5 shrink-0">
+                                        {usos}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <select
+                                    value={cat.tipoPrecificacao ?? 'pizza'}
+                                    onChange={e => updateTipoPrecificacao(cat.id, e.target.value as 'pizza' | 'bebidas')}
+                                    onClick={e => e.stopPropagation()}
+                                    className="w-max max-w-full text-[10px] bg-[#2a2a2e] border border-[#374151] rounded px-1.5 py-0.5 text-gray-300"
+                                  >
+                                    <option value="pizza">Modo pizza</option>
+                                    <option value="bebidas">Modo bebidas</option>
+                                  </select>
+                                </div>
+                              </td>
+                              <td className="px-1 py-1">
+                                <PriceCell
+                                  value={cat.precos.bebidas}
+                                  onChange={v => updatePreco(cat.id, 'bebidas', v)}
+                                />
+                              </td>
+                              <td className="px-2 py-2 text-center">
+                                <button
+                                  onClick={() => handleDelete(cat.id)}
+                                  className="p-1 text-gray-700 hover:text-red-400 hover:bg-red-500/10 rounded opacity-0 group-hover:opacity-100 transition-all"
+                                  title="Excluir categoria"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {catsBebidas.length === 0 && (
+              <p className="text-xs text-gray-500 mt-2">Nenhuma categoria no modo bebidas. Crie com &quot;Nova categoria&quot; → tipo Bebidas.</p>
+            )}
+          </div>
         </div>
       )}
 

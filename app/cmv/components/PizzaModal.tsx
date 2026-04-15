@@ -11,6 +11,7 @@ import {
   migrarSaborItens,
   calcularCustoPorKgReceita,
   detectarTamanho,
+  resolverPrecoVendaCategoria,
   formatCurrency,
   formatPercent,
 } from '../utils';
@@ -44,9 +45,9 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
   // Categoria selecionada e tamanho detectado (para mostrar preço em tempo real)
   const categoriaAtual: CategoriaPreco | undefined = data.categorias.find(c => c.id === editCategoriaId);
   const tamanhoDetectado = detectarTamanho(editNome);
-  const precoResolvido = tamanhoDetectado && categoriaAtual?.precos[tamanhoDetectado]
-    ? categoriaAtual.precos[tamanhoDetectado]!
-    : (categoriaAtual?.precoVenda ?? 0);
+  const precoResolvido = categoriaAtual
+    ? resolverPrecoVendaCategoria(categoriaAtual, editNome)
+    : 0;
 
   // ── Sabor preview para cálculo em tempo real ──────────────────────────────
   const saborPreview: Sabor = {
@@ -217,10 +218,16 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
                 value={editCategoriaId}
                 onChange={v => setEditCategoriaId(v)}
                 options={data.categorias.map(cat => {
-                  // Mostra o preço do tamanho detectado para esta categoria
-                  const precoParaTamanho = tamanhoDetectado && cat.precos[tamanhoDetectado];
-                  const sublabel = precoParaTamanho
-                    ? `${tamanhoDetectado ? TAMANHO_LABELS[tamanhoDetectado] : ''}: ${formatCurrency(precoParaTamanho)}`
+                  const modoBebidas = cat.tipoPrecificacao === 'bebidas';
+                  const precoUnico = cat.precos.bebidas ?? cat.precoVenda;
+                  const precoParaTamanho =
+                    !modoBebidas && tamanhoDetectado && cat.precos[tamanhoDetectado];
+                  const sublabel = modoBebidas
+                    ? (precoUnico != null && precoUnico > 0
+                      ? `Preço: ${formatCurrency(precoUnico)}`
+                      : 'sem preço')
+                    : precoParaTamanho
+                    ? `${TAMANHO_LABELS[tamanhoDetectado!]}: ${formatCurrency(precoParaTamanho)}`
                     : cat.precoVenda
                     ? formatCurrency(cat.precoVenda)
                     : Object.keys(cat.precos).length > 0
@@ -230,7 +237,7 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
                     value: cat.id,
                     label: cat.nome,
                     sublabel,
-                    group: cat.grupo || undefined,
+                    group: modoBebidas ? (cat.grupo || 'Bebidas') : (cat.grupo || undefined),
                   };
                 })}
                 placeholder="— Sem categoria —"
@@ -242,7 +249,11 @@ export const PizzaModal = ({ sabor, data, onClose, onSave, onDelete }: PizzaModa
             )}
             {categoriaAtual && (
               <p className="text-xs text-green-400 mt-1">
-                {tamanhoDetectado && categoriaAtual.precos[tamanhoDetectado] != null
+                {categoriaAtual.tipoPrecificacao === 'bebidas'
+                  ? (categoriaAtual.precos.bebidas != null || categoriaAtual.precoVenda
+                    ? `Preço de venda: ${formatCurrency(resolverPrecoVendaCategoria(categoriaAtual, editNome))}`
+                    : '⚠️ Defina o preço na aba Categorias (modo Bebidas)')
+                  : tamanhoDetectado && categoriaAtual.precos[tamanhoDetectado] != null
                   ? `Preço para ${TAMANHO_LABELS[tamanhoDetectado]}: ${formatCurrency(categoriaAtual.precos[tamanhoDetectado]!)}`
                   : tamanhoDetectado
                   ? `⚠️ Sem preço cadastrado para ${TAMANHO_LABELS[tamanhoDetectado]} nesta categoria`

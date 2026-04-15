@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { X, Plus, Trash2, Download, Upload } from 'lucide-react';
 import type { StoreData, Sabor, Categoria, SaborItem, SaborItemTipo, CategoriaPreco, PizzaTamanho, Tamanho } from '../types';
 import { TAMANHO_LABELS, TAMANHOS_PIZZA } from '../types';
-import { parseCSVReceitas, calcularCustoPorKgReceita, detectarTamanho, formatCurrency } from '../utils';
+import { parseCSVReceitas, calcularCustoPorKgReceita, detectarTamanho, resolverPrecoVendaCategoria, formatCurrency } from '../utils';
 import { SearchableSelect } from './SearchableSelect';
 
 // Sufixo a ser adicionado ao nome base para cada tamanho
@@ -54,9 +54,16 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
   // Categoria selecionada + tamanho detectado (modo single)
   const categoriaAtual: CategoriaPreco | undefined = data.categorias.find(c => c.id === categoriaId);
   const tamanhoDetectado = isMultiSize ? null : detectarTamanho(nome);
-  const precoResolvido = tamanhoDetectado && categoriaAtual?.precos[tamanhoDetectado]
-    ? categoriaAtual.precos[tamanhoDetectado]!
-    : (categoriaAtual?.precoVenda ?? 0);
+  const precoResolvido =
+    !isMultiSize && categoriaAtual
+      ? resolverPrecoVendaCategoria(categoriaAtual, nome)
+      : 0;
+
+  useEffect(() => {
+    if (categoriaAtual?.tipoPrecificacao === 'bebidas') {
+      setSelectedTamanhos([]);
+    }
+  }, [categoriaId, categoriaAtual?.tipoPrecificacao]);
 
   // Preview dos nomes que serão criados
   const nomesParaCriar: string[] = isMultiSize
@@ -66,8 +73,13 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
     : [];
 
   // Preço para um tamanho específico (modo multi-size)
-  const getPrecoParaTamanho = (t: Tamanho): number =>
-    categoriaAtual?.precos[t] ?? categoriaAtual?.precoVenda ?? 0;
+  const getPrecoParaTamanho = (t: Tamanho): number => {
+    if (!categoriaAtual) return 0;
+    if (categoriaAtual.tipoPrecificacao === 'bebidas') {
+      return categoriaAtual.precos.bebidas ?? categoriaAtual.precoVenda ?? 0;
+    }
+    return categoriaAtual.precos[t] ?? categoriaAtual.precoVenda ?? 0;
+  };
 
   // Import state
   const [csvContent, setCsvContent] = useState('');
@@ -277,56 +289,64 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                 />
               </div>
 
-              {/* Seletor de tamanhos */}
-              <div>
-                <label className="text-xs text-gray-400 block mb-2">
-                  Tamanhos
-                  <span className="text-gray-600 ml-1">
-                    {isMultiSize
-                      ? `— ${selectedTamanhos.length} selecionado${selectedTamanhos.length !== 1 ? 's' : ''}, será criado${selectedTamanhos.length !== 1 ? 'm' : ''} ${selectedTamanhos.length} produto${selectedTamanhos.length !== 1 ? 's' : ''}`
-                      : '— selecione para criar vários de uma vez'}
-                  </span>
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {TAMANHOS_PIZZA.map(t => {
-                    const selected = selectedTamanhos.includes(t);
-                    const temPreco = categoriaAtual?.precos[t] != null;
-                    return (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => toggleTamanho(t)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                          selected
-                            ? 'bg-green-600 border-green-600 text-white'
-                            : 'bg-transparent border-[#374151] text-gray-400 hover:border-green-500/50 hover:text-white'
-                        }`}
-                      >
-                        {TAMANHO_SUFIXO[t]}
-                        {categoriaAtual && temPreco && (
-                          <span className={`ml-1.5 ${selected ? 'text-green-200' : 'text-gray-600'}`}>
-                            {formatCurrency(categoriaAtual.precos[t]!)}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Preview dos nomes */}
-                {isMultiSize && nome.trim() && (
-                  <div className="mt-2 bg-[#141416] border border-[#2a2a2e] rounded-xl px-3 py-2.5">
-                    <p className="text-xs text-gray-500 mb-1">Produtos que serão criados:</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {nomesParaCriar.map(n => (
-                        <span key={n} className="text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded-md px-2 py-0.5">
-                          {n}
-                        </span>
-                      ))}
-                    </div>
+              {/* Seletor de tamanhos (somente categorias de pizza) */}
+              {categoriaAtual?.tipoPrecificacao !== 'bebidas' && (
+                <div>
+                  <label className="text-xs text-gray-400 block mb-2">
+                    Tamanhos
+                    <span className="text-gray-600 ml-1">
+                      {isMultiSize
+                        ? `— ${selectedTamanhos.length} selecionado${selectedTamanhos.length !== 1 ? 's' : ''}, será criado${selectedTamanhos.length !== 1 ? 'm' : ''} ${selectedTamanhos.length} produto${selectedTamanhos.length !== 1 ? 's' : ''}`
+                        : '— selecione para criar vários de uma vez'}
+                    </span>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {TAMANHOS_PIZZA.map(t => {
+                      const selected = selectedTamanhos.includes(t);
+                      const temPreco = categoriaAtual?.precos[t] != null;
+                      return (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => toggleTamanho(t)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                            selected
+                              ? 'bg-green-600 border-green-600 text-white'
+                              : 'bg-transparent border-[#374151] text-gray-400 hover:border-green-500/50 hover:text-white'
+                          }`}
+                        >
+                          {TAMANHO_SUFIXO[t]}
+                          {categoriaAtual && temPreco && (
+                            <span className={`ml-1.5 ${selected ? 'text-green-200' : 'text-gray-600'}`}>
+                              {formatCurrency(categoriaAtual.precos[t]!)}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
+
+                  {/* Preview dos nomes */}
+                  {isMultiSize && nome.trim() && (
+                    <div className="mt-2 bg-[#141416] border border-[#2a2a2e] rounded-xl px-3 py-2.5">
+                      <p className="text-xs text-gray-500 mb-1">Produtos que serão criados:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {nomesParaCriar.map(n => (
+                          <span key={n} className="text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded-md px-2 py-0.5">
+                            {n}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {categoriaAtual?.tipoPrecificacao === 'bebidas' && (
+                <p className="text-xs text-gray-500 bg-[#141416] border border-[#2a2a2e] rounded-xl px-3 py-2">
+                  Categoria de bebidas: um único preço por linha (sem criar Broto/Média/Grande).
+                </p>
+              )}
 
               {/* Categoria de preço */}
               <div>
@@ -335,15 +355,27 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                   value={categoriaId}
                   onChange={v => setCategoriaId(v)}
                   options={data.categorias.map(cat => {
-                    const precoParaTamanho = tamanhoDetectado && cat.precos[tamanhoDetectado];
-                    const sublabel = precoParaTamanho
+                    const modoBebidas = cat.tipoPrecificacao === 'bebidas';
+                    const precoUnico = cat.precos.bebidas ?? cat.precoVenda;
+                    const precoParaTamanho =
+                      !modoBebidas && tamanhoDetectado && cat.precos[tamanhoDetectado];
+                    const sublabel = modoBebidas
+                      ? (precoUnico != null && precoUnico > 0
+                        ? `Preço: ${formatCurrency(precoUnico)}`
+                        : 'sem preço')
+                      : precoParaTamanho
                       ? `${TAMANHO_LABELS[tamanhoDetectado!]}: ${formatCurrency(precoParaTamanho)}`
                       : cat.precoVenda
                       ? formatCurrency(cat.precoVenda)
                       : Object.keys(cat.precos).length > 0
                       ? `${Object.keys(cat.precos).length} tamanho(s)`
                       : 'sem preço';
-                    return { value: cat.id, label: cat.nome, sublabel, group: cat.grupo || undefined };
+                    return {
+                      value: cat.id,
+                      label: cat.nome,
+                      sublabel,
+                      group: modoBebidas ? (cat.grupo || 'Bebidas') : (cat.grupo || undefined),
+                    };
                   })}
                   placeholder="— Sem categoria —"
                   accentColor="green"
@@ -355,7 +387,11 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                 )}
                 {categoriaAtual && !isMultiSize && (
                   <p className="text-xs text-green-400 mt-1">
-                    {tamanhoDetectado && categoriaAtual.precos[tamanhoDetectado] != null
+                    {categoriaAtual.tipoPrecificacao === 'bebidas'
+                      ? (categoriaAtual.precos.bebidas != null || categoriaAtual.precoVenda
+                        ? `Preço: ${formatCurrency(resolverPrecoVendaCategoria(categoriaAtual, nome))}`
+                        : '⚠️ Defina o preço na aba Categorias (modo Bebidas)')
+                      : tamanhoDetectado && categoriaAtual.precos[tamanhoDetectado] != null
                       ? `Preço para ${TAMANHO_LABELS[tamanhoDetectado]}: ${formatCurrency(categoriaAtual.precos[tamanhoDetectado]!)}`
                       : tamanhoDetectado
                       ? `⚠️ Sem preço para ${TAMANHO_LABELS[tamanhoDetectado]} nesta categoria`

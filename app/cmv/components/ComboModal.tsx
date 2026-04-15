@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { X, Plus, Minus, Trash2, Package2, AlertTriangle, Sparkles, ChevronDown, ChevronUp, GlassWater, Pizza } from 'lucide-react';
 import type { Combo, ComboItem, ComboItemIngrediente, ComboItemPizza, PizzaTamanho, StoreData } from '../types';
-import { TAMANHO_LABELS, TAMANHOS_PIZZA } from '../types';
+import { TAMANHO_LABELS, TAMANHOS_PIZZA, isCategoriaPrecoPizza } from '../types';
 import {
   calcularComboCMV,
   calcularCMVSabor,
@@ -30,8 +30,8 @@ function calcularMediaCategorias(
 ): { precoMedio: number; custoMedio: number; numProdutos: number } {
   const todasCats = data.categorias ?? [];
   const cats = categoriaIds.length > 0
-    ? todasCats.filter(c => categoriaIds.includes(c.id))
-    : todasCats;
+    ? todasCats.filter(c => categoriaIds.includes(c.id) && isCategoriaPrecoPizza(c))
+    : todasCats.filter(isCategoriaPrecoPizza);
 
   const catsComPreco = cats.filter(c => c.precos[tamanho] != null);
   const precoMedio = catsComPreco.length > 0
@@ -82,11 +82,12 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
   const [ingBusca, setIngBusca] = useState('');
 
   const categorias = data.categorias ?? [];
+  const categoriasPizza = categorias.filter(isCategoriaPrecoPizza);
   const produtos = data.sabores ?? [];
 
-  // Para o seletor: mostrar apenas tamanhos que pelo menos uma categoria tem preço
+  // Para o seletor: mostrar apenas tamanhos que pelo menos uma categoria de pizza tem preço
   const tamanhosDisponiveis = TAMANHOS_PIZZA.filter(t =>
-    categorias.some(c => c.precos[t] != null),
+    categoriasPizza.some(c => c.precos[t] != null),
   );
 
   // Produtos filtrados pela busca
@@ -361,8 +362,12 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                     <span className="text-gray-600 ml-1">(sem seleção = usa todas)</span>
                   </label>
 
-                  {categorias.length === 0 ? (
-                    <p className="text-xs text-yellow-600">Nenhuma categoria cadastrada ainda.</p>
+                  {categoriasPizza.length === 0 ? (
+                    <p className="text-xs text-yellow-600">
+                      {categorias.length === 0
+                        ? 'Nenhuma categoria cadastrada ainda.'
+                        : 'Nenhuma categoria de pizza — crie uma categoria do tipo Pizza na aba Categorias.'}
+                    </p>
                   ) : (
                     <div className="space-y-1.5">
                       {/* Opção "Todas" */}
@@ -382,7 +387,7 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                           )}
                         </div>
                         <span className="text-sm text-white font-medium group-hover:text-orange-300 transition-colors">
-                          Todas as categorias
+                          Todas as categorias de pizza
                         </span>
                         {todasSelecionadas && previewSlot.precoMedio > 0 && (
                           <span className="text-xs text-gray-500 ml-auto">
@@ -399,7 +404,7 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                       </div>
 
                       {/* Lista de categorias */}
-                      {categorias.map(cat => {
+                      {categoriasPizza.map(cat => {
                         const preco = cat.precos[selTamanho];
                         const checked = selCatIds.includes(cat.id);
                         const semPrecoNesseT = preco == null;
@@ -446,7 +451,7 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                       Preview — {TAMANHO_LABELS[selTamanho]} × {selQtd}
                       {selCatIds.length > 0
                         ? ` (${selCatIds.length} categoria${selCatIds.length !== 1 ? 's' : ''})`
-                        : ' (todas as categorias)'}
+                        : ' (todas as categorias de pizza)'}
                     </p>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Preço médio unitário</span>
@@ -660,7 +665,7 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                   );
                   const catsNomes =
                     (item.categoriaIds ?? []).length === 0
-                      ? 'todas as categorias'
+                      ? 'todas as categorias de pizza'
                       : (item.categoriaIds ?? [])
                           .map(id => categorias.find(c => c.id === id)?.nome ?? id)
                           .join(', ');
