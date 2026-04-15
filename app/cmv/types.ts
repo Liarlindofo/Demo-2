@@ -96,15 +96,23 @@ export interface ComboItemPizza {
 }
 
 /**
- * Um slot de ingrediente no combo (ex: refrigerante, suco, sobremesa).
- * O custo vem do cadastro do ingrediente; o preço de venda é definido manualmente.
+ * Um slot de bebida/outro no combo.
+ * Fluxo atual: preferencialmente aponta para produto (sabor) para resolver custo e venda.
+ * Fluxo legado: ainda pode apontar para ingrediente com preço manual.
  */
 export interface ComboItemIngrediente {
   id: string;
   tipo: 'ingrediente';
+  /**
+   * Mantido por compatibilidade.
+   * Agora pode apontar para ID de produto (sabor) quando o item vem de "Bebida/Outro".
+   */
   ingredienteId: string;
+  /** Novo campo preferencial para itens vindos de produtos (opcional para compatibilidade). */
+  produtoId?: string;
   quantidade: number;    // quantidade de unidades incluídas no combo
-  precoVenda: number;   // preço de venda por unidade no combo
+  /** fallback legado quando não há produto resolvido */
+  precoVenda: number;
 }
 
 export type ComboItem = ComboItemPizza | ComboItemIngrediente;

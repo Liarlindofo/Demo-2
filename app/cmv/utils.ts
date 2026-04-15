@@ -406,14 +406,39 @@ export const calcularComboCMV = (combo: Combo, data: StoreData): ComboCMV => {
   const itens: ComboCMVItem[] = combo.itens.map(item => {
     // Slot de ingrediente (bebida, sobremesa, etc.)
     if (item.tipo === 'ingrediente') {
-      const ing = (data.ingredientes ?? []).find(i => i.id === item.ingredienteId);
-      // Custo por unidade: precoPorKg é o custo unitário quando unidade='un',
-      // ou custo/kg quando 'g'/'ml' — para bebidas/un é sempre o custo por peça.
+      const referenciaId = item.produtoId ?? item.ingredienteId;
+      const produto = (data.sabores ?? []).find(s => s.id === referenciaId);
+
+      // Novo fluxo: busca bebida/outro em produtos (sabores), com custo e venda calculados.
+      if (produto) {
+        const cmvProduto = calcularCMVSabor(
+          produto,
+          data.ingredientes,
+          data.receitas,
+          data.categorias,
+        );
+
+        const resultadoProduto: ComboCMVItemIngrediente = {
+          id: item.id,
+          tipo: 'ingrediente',
+          ingredienteId: referenciaId,
+          nomeIngrediente: produto.nome,
+          quantidade: item.quantidade,
+          precoUnitario: cmvProduto.precoVenda,
+          custoUnitario: cmvProduto.custo,
+          precoItem: cmvProduto.precoVenda * item.quantidade,
+          custoItem: cmvProduto.custo * item.quantidade,
+        };
+        return resultadoProduto;
+      }
+
+      // Fallback legado: item antigo que ainda aponta para ingrediente.
+      const ing = (data.ingredientes ?? []).find(i => i.id === referenciaId);
       const custoUnitario = ing ? ing.precoPorKg : 0;
       const resultado: ComboCMVItemIngrediente = {
         id: item.id,
         tipo: 'ingrediente',
-        ingredienteId: item.ingredienteId,
+        ingredienteId: referenciaId,
         nomeIngrediente: ing?.nome ?? '—',
         quantidade: item.quantidade,
         precoUnitario: item.precoVenda,

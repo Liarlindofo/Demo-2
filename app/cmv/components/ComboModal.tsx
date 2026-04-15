@@ -6,6 +6,7 @@ import type { Combo, ComboItem, ComboItemIngrediente, ComboItemPizza, StoreData,
 import { TAMANHO_LABELS, TAMANHOS } from '../types';
 import {
   calcularComboCMV,
+  calcularCMVSabor,
   calcularCustoSabor,
   detectarTamanho,
   formatCurrency,
@@ -75,25 +76,24 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
   const [selCatIds, setSelCatIds] = useState<string[]>([]); // vazio = todas
   const [selQtd, setSelQtd] = useState(1);
 
-  // ── Estado do formulário de adição de ingrediente (bebida) ─────────────────
+  // ── Estado do formulário de adição de bebida/outro (produto) ────────────────
   const [selIngId, setSelIngId] = useState('');
   const [selIngQtd, setSelIngQtd] = useState(1);
-  const [selIngPreco, setSelIngPreco] = useState('');
   const [ingBusca, setIngBusca] = useState('');
 
   const categorias = data.categorias ?? [];
-  const ingredientes = data.ingredientes ?? [];
+  const produtos = data.sabores ?? [];
 
   // Para o seletor: mostrar apenas tamanhos que pelo menos uma categoria tem preço
   const tamanhosDisponiveis = TAMANHOS.filter(t =>
     categorias.some(c => c.precos[t] != null),
   );
 
-  // Ingredientes filtrados pela busca
+  // Produtos filtrados pela busca
   const ingredientesFiltrados = useMemo(() => {
     const q = ingBusca.trim().toLowerCase();
-    return q ? ingredientes.filter(i => i.nome.toLowerCase().includes(q)) : ingredientes;
-  }, [ingredientes, ingBusca]);
+    return q ? produtos.filter(i => i.nome.toLowerCase().includes(q)) : produtos;
+  }, [produtos, ingBusca]);
 
   // Quando nenhuma categoria está marcada = "todas"
   const todasSelecionadas = selCatIds.length === 0;
@@ -113,7 +113,6 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
     setSelCatIds([]);
     setSelIngId('');
     setSelIngQtd(1);
-    setSelIngPreco('');
     setIngBusca('');
   };
 
@@ -142,13 +141,13 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
       id: crypto.randomUUID(),
       tipo: 'ingrediente',
       ingredienteId: selIngId,
+      produtoId: selIngId,
       quantidade: selIngQtd,
-      precoVenda: parseFloat(selIngPreco.replace(',', '.')) || 0,
+      precoVenda: 0,
     };
     setItens(prev => [...prev, novoItem]);
     setSelIngId('');
     setSelIngQtd(1);
-    setSelIngPreco('');
     setIngBusca('');
     setAddMode(null);
   };
@@ -201,7 +200,11 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
   const temDesconto = economia > 0.01 && precoInput > 0;
   const temSobretaxa = economia < -0.01 && precoInput > 0;
 
-  const ingSelecionado = ingredientes.find(i => i.id === selIngId);
+  const ingSelecionado = produtos.find(i => i.id === selIngId);
+  const previewProdutoSelecionado = useMemo(() => {
+    if (!ingSelecionado) return null;
+    return calcularCMVSabor(ingSelecionado, data.ingredientes, data.receitas, data.categorias);
+  }, [ingSelecionado, data]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -477,9 +480,9 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
             {addMode === 'ingrediente' && (
               <div className="bg-[#141416] border border-blue-500/20 rounded-xl p-4 mb-3 space-y-4">
 
-                {/* Busca de ingrediente */}
+                {/* Busca de produto */}
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">Buscar ingrediente</label>
+                  <label className="text-xs text-gray-500 block mb-1">Buscar produto</label>
                   <input
                     value={ingBusca}
                     onChange={e => setIngBusca(e.target.value)}
@@ -488,13 +491,13 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                   />
                 </div>
 
-                {/* Lista de ingredientes */}
+                {/* Lista de produtos */}
                 <div className="max-h-40 overflow-y-auto space-y-1">
                   {ingredientesFiltrados.length === 0 ? (
                     <p className="text-xs text-gray-500 text-center py-3">
-                      {ingredientes.length === 0
-                        ? 'Nenhum ingrediente cadastrado. Cadastre na aba de Ingredientes.'
-                        : 'Nenhum ingrediente encontrado.'}
+                      {produtos.length === 0
+                        ? 'Nenhum produto cadastrado. Cadastre na aba de Sabores/Produtos.'
+                        : 'Nenhum produto encontrado.'}
                     </p>
                   ) : (
                     ingredientesFiltrados.map(ing => (
@@ -503,7 +506,6 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                         onClick={() => {
                           setSelIngId(ing.id);
                           setIngBusca(ing.nome);
-                          if (!selIngPreco) setSelIngPreco(ing.precoPorKg.toFixed(2));
                         }}
                         className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors text-left ${
                           selIngId === ing.id
@@ -513,46 +515,32 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                       >
                         <span className="font-medium truncate">{ing.nome}</span>
                         <span className="text-xs text-gray-500 shrink-0 ml-2">
-                          custo {formatCurrency(ing.precoPorKg)}/{ing.unidade}
+                          produto
                         </span>
                       </button>
                     ))
                   )}
                 </div>
 
-                {/* Quantidade + preço de venda */}
+                {/* Quantidade */}
                 {selIngId && (
                   <>
-                    <div className="flex gap-3">
-                      <div className="w-32">
-                        <label className="text-xs text-gray-500 block mb-1">Quantidade</label>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => setSelIngQtd(q => Math.max(1, q - 1))}
-                            className="w-8 h-9 rounded-lg bg-[#2a2a2e] hover:bg-[#333] text-white flex items-center justify-center"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="flex-1 text-center text-sm text-white font-medium">{selIngQtd}</span>
-                          <button
-                            onClick={() => setSelIngQtd(q => q + 1)}
-                            className="w-8 h-9 rounded-lg bg-[#2a2a2e] hover:bg-[#333] text-white flex items-center justify-center"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <label className="text-xs text-gray-500 block mb-1">Preço de venda (R$)</label>
-                        <input
-                          type="number"
-                          value={selIngPreco}
-                          onChange={e => setSelIngPreco(e.target.value)}
-                          placeholder="0,00"
-                          min="0"
-                          step="0.01"
-                          className="w-full bg-[#1c1c1e] border border-[#374151] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/60"
-                        />
+                    <div className="w-32">
+                      <label className="text-xs text-gray-500 block mb-1">Quantidade</label>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setSelIngQtd(q => Math.max(1, q - 1))}
+                          className="w-8 h-9 rounded-lg bg-[#2a2a2e] hover:bg-[#333] text-white flex items-center justify-center"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="flex-1 text-center text-sm text-white font-medium">{selIngQtd}</span>
+                        <button
+                          onClick={() => setSelIngQtd(q => q + 1)}
+                          className="w-8 h-9 rounded-lg bg-[#2a2a2e] hover:bg-[#333] text-white flex items-center justify-center"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
                       </div>
                     </div>
 
@@ -564,20 +552,22 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                         </p>
                         <div className="flex justify-between">
                           <span className="text-gray-500">Custo unitário</span>
-                          <span className="text-white font-semibold">{formatCurrency(ingSelecionado.precoPorKg)}</span>
+                          <span className="text-white font-semibold">
+                            {previewProdutoSelecionado ? formatCurrency(previewProdutoSelecionado.custo) : '—'}
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-500">Custo total</span>
-                          <span className="text-white font-semibold">{formatCurrency(ingSelecionado.precoPorKg * selIngQtd)}</span>
+                          <span className="text-white font-semibold">
+                            {previewProdutoSelecionado ? formatCurrency(previewProdutoSelecionado.custo * selIngQtd) : '—'}
+                          </span>
                         </div>
-                        {parseFloat(selIngPreco.replace(',', '.')) > 0 && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Preço de venda total</span>
-                            <span className="text-green-400 font-semibold">
-                              {formatCurrency(parseFloat(selIngPreco.replace(',', '.')) * selIngQtd)}
-                            </span>
-                          </div>
-                        )}
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Preço de venda total</span>
+                          <span className="text-green-400 font-semibold">
+                            {previewProdutoSelecionado ? formatCurrency(previewProdutoSelecionado.precoVenda * selIngQtd) : '—'}
+                          </span>
+                        </div>
                       </div>
                     )}
                   </>
@@ -590,7 +580,7 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                 >
                   {selIngId && ingSelecionado
                     ? `Adicionar ${selIngQtd}× ${ingSelecionado.nome} ao combo`
-                    : 'Selecione um ingrediente acima'}
+                    : 'Selecione um produto acima'}
                 </button>
               </div>
             )}
@@ -605,7 +595,11 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
               <div className="space-y-2">
                 {itens.map(item => {
                   if (item.tipo === 'ingrediente') {
-                    const ing = ingredientes.find(i => i.id === item.ingredienteId);
+                    const produtoId = item.produtoId ?? item.ingredienteId;
+                    const produto = produtos.find(i => i.id === produtoId);
+                    const produtoCMV = produto
+                      ? calcularCMVSabor(produto, data.ingredientes, data.receitas, data.categorias)
+                      : null;
                     return (
                       <div key={item.id} className="bg-[#141416] border border-[#2a2a2e] rounded-xl px-4 py-3 flex items-start gap-3">
                         <div className="w-5 h-5 rounded bg-blue-500/15 flex items-center justify-center shrink-0 mt-0.5">
@@ -614,19 +608,19 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-white font-medium">
                             <span className="text-blue-400 mr-1">{item.quantidade}×</span>
-                            {ing?.nome ?? '—'}
+                            {produto?.nome ?? '—'}
                           </p>
                           <div className="flex gap-3 mt-0.5 flex-wrap">
-                            {item.precoVenda > 0 && (
+                            {produtoCMV && produtoCMV.precoVenda > 0 && (
                               <span className="text-xs text-gray-500">
                                 venda{' '}
-                                <span className="text-green-400">{formatCurrency(item.precoVenda * item.quantidade)}</span>
+                                <span className="text-green-400">{formatCurrency(produtoCMV.precoVenda * item.quantidade)}</span>
                               </span>
                             )}
-                            {ing && (
+                            {produtoCMV && (
                               <span className="text-xs text-gray-500">
                                 custo{' '}
-                                <span className="text-gray-300">{formatCurrency(ing.precoPorKg * item.quantidade)}</span>
+                                <span className="text-gray-300">{formatCurrency(produtoCMV.custo * item.quantidade)}</span>
                               </span>
                             )}
                           </div>
