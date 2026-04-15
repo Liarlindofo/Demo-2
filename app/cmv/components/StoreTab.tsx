@@ -30,11 +30,15 @@ const FILTER_LABELS: Record<FilterStatus, string> = {
   critico: 'Acima da meta',
 };
 
+/** Filtro de categoria: '' = todas, 'bebidas' = só bebidas, ou id da CategoriaPreco de pizza */
+type FilterCategoria = string;
+
 export const StoreTab = ({ storeId }: StoreTabProps) => {
   const { data, updateData, isLoading } = useStoreData(storeId);
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterStatus>('todos');
+  const [filterCategoria, setFilterCategoria] = useState<FilterCategoria>('');
   const [viewMode, setViewMode] = useState<ViewMode>('agrupado');
 
   // Vista lista — produto individual selecionado
@@ -81,13 +85,35 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
   const filtered = products.filter(p => {
     const matchSearch = p.nome.toLowerCase().includes(search.toLowerCase());
     if (!matchSearch) return false;
-    switch (filter) {
-      case 'otimo': return p.status === 'otimo';
-      case 'atencao': return p.status === 'atencao';
-      case 'critico': return p.status === 'critico';
-      default: return true;
+
+    // Filtro de status
+    if (filter === 'otimo' && p.status !== 'otimo') return false;
+    if (filter === 'atencao' && p.status !== 'atencao') return false;
+    if (filter === 'critico' && p.status !== 'critico') return false;
+
+    // Filtro de categoria
+    if (filterCategoria === 'bebidas') return p.tipoPrecificacao === 'bebidas';
+    if (filterCategoria) {
+      const sabor = data.sabores.find(s => s.id === p.id);
+      return sabor?.categoriaId === filterCategoria;
     }
+
+    return true;
   });
+
+  // Categorias de pizza ordenadas para os filtros de categoria
+  const categoriasPizzaFiltro = useMemo(() => {
+    return [...data.categorias]
+      .filter(c => (c.tipoPrecificacao ?? 'pizza') === 'pizza')
+      .sort((a, b) => {
+        const ga = a.grupo ?? '';
+        const gb = b.grupo ?? '';
+        if (ga !== gb) return ga.localeCompare(gb, 'pt-BR');
+        return a.nome.localeCompare(b.nome, 'pt-BR');
+      });
+  }, [data.categorias]);
+
+  const temBebidas = data.categorias.some(c => c.tipoPrecificacao === 'bebidas');
 
   const groups = agruparPorSabor(filtered);
 
@@ -188,7 +214,10 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
 
   const handleSwitchView = (mode: ViewMode) => {
     setViewMode(mode);
-    if (mode === 'combos') exitSelectMode();
+    if (mode === 'combos') {
+      exitSelectMode();
+      setFilterCategoria('');
+    }
   };
 
   // Quando salva de dentro do FlavorGroupModal, precisamos atualizar o grupo aberto
@@ -363,7 +392,7 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
         )}
       </div>
 
-      {/* Filtros */}
+      {/* Filtros de status */}
       <div className="flex flex-wrap gap-2">
         {(Object.keys(FILTER_LABELS) as FilterStatus[]).map(f => (
           <button
@@ -379,6 +408,52 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
           </button>
         ))}
       </div>
+
+      {/* Filtros de categoria (só aparece se houver categorias cadastradas) */}
+      {(categoriasPizzaFiltro.length > 0 || temBebidas) && viewMode !== 'combos' && (
+        <div className="flex flex-wrap gap-2">
+          {/* Todas as categorias */}
+          <button
+            onClick={() => setFilterCategoria('')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+              filterCategoria === ''
+                ? 'bg-[#374151] text-white border-[#374151]'
+                : 'bg-transparent text-gray-500 border-[#2a2a2e] hover:border-[#374151] hover:text-gray-300'
+            }`}
+          >
+            Todas as categorias
+          </button>
+
+          {/* Uma por categoria de pizza */}
+          {categoriasPizzaFiltro.map(cat => (
+            <button
+              key={cat.id}
+              onClick={() => setFilterCategoria(cat.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                filterCategoria === cat.id
+                  ? 'bg-red-500/20 text-red-300 border-red-500/50'
+                  : 'bg-transparent text-gray-500 border-[#2a2a2e] hover:border-red-500/30 hover:text-gray-300'
+              }`}
+            >
+              {cat.nome}
+            </button>
+          ))}
+
+          {/* Bebidas */}
+          {temBebidas && (
+            <button
+              onClick={() => setFilterCategoria('bebidas')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                filterCategoria === 'bebidas'
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
+                  : 'bg-transparent text-gray-500 border-[#2a2a2e] hover:border-cyan-500/30 hover:text-gray-300'
+              }`}
+            >
+              🥤 Bebidas
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Linha de meta */}
       <div className="flex items-center gap-2 text-xs text-gray-500">
