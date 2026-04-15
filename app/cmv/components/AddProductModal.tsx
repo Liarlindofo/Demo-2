@@ -2,13 +2,13 @@
 
 import { useState, useRef } from 'react';
 import { X, Plus, Trash2, Download, Upload } from 'lucide-react';
-import type { StoreData, Sabor, Categoria, SaborItem, SaborItemTipo, CategoriaPreco, Tamanho } from '../types';
-import { TAMANHO_LABELS, TAMANHOS } from '../types';
+import type { StoreData, Sabor, Categoria, SaborItem, SaborItemTipo, CategoriaPreco, PizzaTamanho, Tamanho } from '../types';
+import { TAMANHO_LABELS, TAMANHOS_PIZZA } from '../types';
 import { parseCSVReceitas, calcularCustoPorKgReceita, detectarTamanho, formatCurrency } from '../utils';
 import { SearchableSelect } from './SearchableSelect';
 
 // Sufixo a ser adicionado ao nome base para cada tamanho
-const TAMANHO_SUFIXO: Record<Tamanho, string> = {
+const TAMANHO_SUFIXO: Record<PizzaTamanho, string> = {
   broto: 'Broto',
   pequena: 'Pequena',
   media: 'Média',
@@ -42,10 +42,10 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
   const [itens, setItens] = useState<SaborItem[]>([makeItem()]);
 
   // Seleção de múltiplos tamanhos
-  const [selectedTamanhos, setSelectedTamanhos] = useState<Tamanho[]>([]);
+  const [selectedTamanhos, setSelectedTamanhos] = useState<PizzaTamanho[]>([]);
   const isMultiSize = selectedTamanhos.length > 0;
 
-  const toggleTamanho = (t: Tamanho) => {
+  const toggleTamanho = (t: PizzaTamanho) => {
     setSelectedTamanhos(prev =>
       prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t],
     );
@@ -288,7 +288,7 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                   </span>
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {TAMANHOS.map(t => {
+                  {TAMANHOS_PIZZA.map(t => {
                     const selected = selectedTamanhos.includes(t);
                     const temPreco = categoriaAtual?.precos[t] != null;
                     return (

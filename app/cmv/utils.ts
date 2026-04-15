@@ -49,29 +49,13 @@ const migrarCategoria = (cat: CategoriaPreco): CategoriaPreco => {
   return { ...cat, precos: {} };
 };
 
-const categoriaEhBebida = (cat: CategoriaPreco): boolean =>
-  cat.nome.trim().toUpperCase() === 'BEBIDA';
-
-const garantirCategoriaBebida = (categorias: CategoriaPreco[]): CategoriaPreco[] => {
-  if (categorias.some(categoriaEhBebida)) return categorias;
-  return [
-    ...categorias,
-    {
-      id: 'cat-bebida',
-      nome: 'BEBIDA',
-      grupo: 'BEBIDA',
-      precos: {},
-    },
-  ];
-};
-
 /**
  * Migra o StoreData inteiro para o novo formato, convertendo sabores e categorias antigas.
  */
 export const migrarStoreData = (data: Partial<StoreData>): StoreData => ({
   ingredientes: data.ingredientes ?? [],
   receitas: data.receitas ?? [],
-  categorias: garantirCategoriaBebida((data.categorias ?? []).map(migrarCategoria)),
+  categorias: (data.categorias ?? []).map(migrarCategoria),
   sabores: (data.sabores ?? []).map(s => ({
     ...s,
     itens: migrarSaborItens(s),
@@ -214,6 +198,9 @@ export const calcularCMVSabor = (
   if (categoria) {
     if (tamanho && categoria.precos[tamanho] != null) {
       precoVenda = categoria.precos[tamanho]!;
+    } else if (!tamanho && categoria.precos.bebidas != null) {
+      // Produtos sem tamanho detectável (ex.: bebidas) usam a coluna "Bebidas".
+      precoVenda = categoria.precos.bebidas;
     } else if (categoria.precoVenda) {
       precoVenda = categoria.precoVenda; // fallback para categoria no formato antigo
     }

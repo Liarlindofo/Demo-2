@@ -2,9 +2,14 @@ export type Unidade = 'g' | 'ml' | 'un';
 export type Categoria = 'tradicional' | 'especial';
 
 // ── Tamanhos disponíveis ───────────────────────────────────────────────────────
-export type Tamanho = 'broto' | 'pequena' | 'media' | 'grande' | 'gigante' | 'calzone';
+export type Tamanho = 'broto' | 'pequena' | 'media' | 'grande' | 'gigante' | 'calzone' | 'bebidas';
+export type PizzaTamanho = Exclude<Tamanho, 'bebidas'>;
 
 export const TAMANHOS: readonly Tamanho[] = [
+  'broto', 'pequena', 'media', 'grande', 'gigante', 'calzone', 'bebidas',
+] as const;
+
+export const TAMANHOS_PIZZA: readonly PizzaTamanho[] = [
   'broto', 'pequena', 'media', 'grande', 'gigante', 'calzone',
 ] as const;
 
@@ -15,6 +20,7 @@ export const TAMANHO_LABELS: Record<Tamanho, string> = {
   grande: 'Grande',
   gigante: 'Gigante',
   calzone: 'Calzone',
+  bebidas: 'Bebidas',
 };
 
 // ── Categorias de preço (matriz: categoria × tamanho) ─────────────────────────
@@ -90,7 +96,7 @@ export interface Sabor {
 export interface ComboItemPizza {
   id: string;
   tipo?: 'pizza';
-  tamanho: Tamanho;
+  tamanho: PizzaTamanho;
   quantidade: number;
   categoriaIds: string[]; // categorias elegíveis (vazio = todas)
 }

@@ -2,8 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import { X, Plus, Minus, Trash2, Package2, AlertTriangle, Sparkles, ChevronDown, ChevronUp, GlassWater, Pizza } from 'lucide-react';
-import type { Combo, ComboItem, ComboItemIngrediente, ComboItemPizza, StoreData, Tamanho } from '../types';
-import { TAMANHO_LABELS, TAMANHOS } from '../types';
+import type { Combo, ComboItem, ComboItemIngrediente, ComboItemPizza, PizzaTamanho, StoreData } from '../types';
+import { TAMANHO_LABELS, TAMANHOS_PIZZA } from '../types';
 import {
   calcularComboCMV,
   calcularCMVSabor,
@@ -25,7 +25,7 @@ interface ComboModalProps {
 // Calcula média de preço e custo para um conjunto de categorias num tamanho
 function calcularMediaCategorias(
   categoriaIds: string[],
-  tamanho: Tamanho,
+  tamanho: PizzaTamanho,
   data: StoreData,
 ): { precoMedio: number; custoMedio: number; numProdutos: number } {
   const todasCats = data.categorias ?? [];
@@ -72,7 +72,7 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
 
   // ── Estado do formulário de adição de slot de pizza ────────────────────────
   const [addMode, setAddMode] = useState<AddMode>(null);
-  const [selTamanho, setSelTamanho] = useState<Tamanho>('grande');
+  const [selTamanho, setSelTamanho] = useState<PizzaTamanho>('grande');
   const [selCatIds, setSelCatIds] = useState<string[]>([]); // vazio = todas
   const [selQtd, setSelQtd] = useState(1);
 
@@ -85,7 +85,7 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
   const produtos = data.sabores ?? [];
 
   // Para o seletor: mostrar apenas tamanhos que pelo menos uma categoria tem preço
-  const tamanhosDisponiveis = TAMANHOS.filter(t =>
+  const tamanhosDisponiveis = TAMANHOS_PIZZA.filter(t =>
     categorias.some(c => c.precos[t] != null),
   );
 
@@ -324,7 +324,7 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
                     <div className="relative">
                       <select
                         value={selTamanho}
-                        onChange={e => setSelTamanho(e.target.value as Tamanho)}
+                        onChange={e => setSelTamanho(e.target.value as PizzaTamanho)}
                         className="w-full appearance-none bg-[#1c1c1e] border border-[#374151] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500/60 pr-8"
                       >
                         {tamanhosDisponiveis.map(t => (
