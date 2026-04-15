@@ -12,6 +12,8 @@ interface FlavorGroupCardProps {
   selectedCount?: number;
 }
 
+const BEBIDA_COLOR = '#06b6d4'; // cyan-500
+
 const STATUS_BADGE: Record<FlavorGroup['statusGeral'], string> = {
   otimo: 'bg-green-500/20 text-green-400 border border-green-500/30',
   atencao: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30',
@@ -25,7 +27,10 @@ const STATUS_LABEL: Record<FlavorGroup['statusGeral'], string> = {
 };
 
 export const FlavorGroupCard = ({ group, onClick, selectMode, selectedCount = 0 }: FlavorGroupCardProps) => {
-  const cmvColor = CMV_COLORS[group.statusGeral];
+  // Grupo é de bebidas se todos os produtos pertencem a categoria de bebidas
+  const isGrupoBebidas = group.produtos.every(p => p.tipoPrecificacao === 'bebidas');
+
+  const cmvColor = isGrupoBebidas ? BEBIDA_COLOR : CMV_COLORS[group.statusGeral];
   const metaBarWidth = 100 - CMV_META;
   const categoriaLabel = [...new Set(group.produtos.map(p => p.categoria))].join(' · ');
   const allSelected = selectedCount === group.produtos.length;
@@ -68,9 +73,15 @@ export const FlavorGroupCard = ({ group, onClick, selectMode, selectedCount = 0 
           </p>
         </div>
         {!selectMode && (
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${STATUS_BADGE[group.statusGeral]}`}>
-            {STATUS_LABEL[group.statusGeral]}
-          </span>
+          isGrupoBebidas ? (
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 bg-cyan-500/15 text-cyan-400 border border-cyan-500/25">
+              Bebida
+            </span>
+          ) : (
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${STATUS_BADGE[group.statusGeral]}`}>
+              {STATUS_LABEL[group.statusGeral]}
+            </span>
+          )
         )}
         {selectMode && someSelected && !allSelected && (
           <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 bg-red-500/15 text-red-400 border border-red-500/30">
@@ -88,16 +99,19 @@ export const FlavorGroupCard = ({ group, onClick, selectMode, selectedCount = 0 
             backgroundColor: cmvColor,
           }}
         />
-        <div
-          className="absolute top-0 bottom-0 w-px bg-red-500/60"
-          style={{ left: `${metaBarWidth}%` }}
-        />
+        {!isGrupoBebidas && (
+          <div
+            className="absolute top-0 bottom-0 w-px bg-red-500/60"
+            style={{ left: `${metaBarWidth}%` }}
+          />
+        )}
       </div>
 
       {/* Mini badges de variações */}
       <div className="flex flex-wrap gap-1 mb-3">
         {group.produtos.map(p => {
-          const varColor = CMV_COLORS[p.status];
+          const isBebidaProd = p.tipoPrecificacao === 'bebidas';
+          const varColor = isBebidaProd ? BEBIDA_COLOR : CMV_COLORS[p.status];
           const sizeLabel = p.nome.replace(group.nome, '').trim() || p.nome;
           return (
             <span

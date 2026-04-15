@@ -271,13 +271,23 @@ export const calcularMetricasLoja = (data: StoreData): StoreMetrics => {
 
   const cmvMedio =
     products.reduce((sum, p) => sum + p.cmvPercent, 0) / products.length;
+
   const grupos = agruparPorSabor(products);
-  const melhorGrupo = grupos.reduce((best, g) =>
+
+  // Melhor/pior margem só considera grupos que NÃO são de bebidas
+  const gruposPizza = grupos.filter(g =>
+    g.produtos.some(p => p.tipoPrecificacao !== 'bebidas'),
+  );
+
+  const gruposParaMelhorPior = gruposPizza.length > 0 ? gruposPizza : grupos;
+
+  const melhorGrupo = gruposParaMelhorPior.reduce((best, g) =>
     g.cmvMedio < best.cmvMedio ? g : best,
   );
-  const piorGrupo = grupos.reduce((worst, g) =>
+  const piorGrupo = gruposParaMelhorPior.reduce((worst, g) =>
     g.cmvMedio > worst.cmvMedio ? g : worst,
   );
+
   const categorias = new Set(data.sabores.map(s => s.categoria)).size;
 
   return {
