@@ -45,25 +45,27 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
   const [selectedTamanhos, setSelectedTamanhos] = useState<PizzaTamanho[]>([]);
   const isMultiSize = selectedTamanhos.length > 0;
 
-  // Filtro rápido de bebidas: limita o seletor de categoria às de tipo bebidas
-  const [filtroBebidas, setFiltroBebidas] = useState(false);
+  // Filtro rápido de tipo preço único: 'bebidas' | 'entradas' | null
+  const [filtroTipo, setFiltroTipo] = useState<'bebidas' | 'entradas' | null>(null);
 
   const toggleTamanho = (t: PizzaTamanho) => {
-    // Ao selecionar tamanho de pizza, desativa filtro de bebidas
-    if (filtroBebidas) setFiltroBebidas(false);
+    // Ao selecionar tamanho de pizza, desativa filtro especial
+    if (filtroTipo) setFiltroTipo(null);
     setSelectedTamanhos(prev =>
       prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t],
     );
   };
 
-  const handleFiltroBebidas = () => {
-    if (!filtroBebidas) {
-      // Ativar modo bebidas: limpar tamanhos e pré-selecionar 1ª categoria bebidas
+  const handleFiltroTipo = (tipo: 'bebidas' | 'entradas') => {
+    if (filtroTipo === tipo) {
+      setFiltroTipo(null);
+    } else {
+      // Ativar modo: limpar tamanhos e pré-selecionar 1ª categoria do tipo
       setSelectedTamanhos([]);
-      const primeiraBebida = data.categorias.find(c => c.tipoPrecificacao === 'bebidas');
-      if (primeiraBebida) setCategoriaId(primeiraBebida.id);
+      const primeiraCategoria = data.categorias.find(c => c.tipoPrecificacao === tipo);
+      if (primeiraCategoria) setCategoriaId(primeiraCategoria.id);
+      setFiltroTipo(tipo);
     }
-    setFiltroBebidas(v => !v);
   };
 
   // Categoria selecionada + tamanho detectado (modo single)
@@ -74,8 +76,16 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
       ? resolverPrecoVendaCategoria(categoriaAtual, nome)
       : 0;
 
+  const isPrecounico =
+    filtroTipo !== null ||
+    categoriaAtual?.tipoPrecificacao === 'bebidas' ||
+    categoriaAtual?.tipoPrecificacao === 'entradas';
+
   useEffect(() => {
-    if (categoriaAtual?.tipoPrecificacao === 'bebidas') {
+    if (
+      categoriaAtual?.tipoPrecificacao === 'bebidas' ||
+      categoriaAtual?.tipoPrecificacao === 'entradas'
+    ) {
       setSelectedTamanhos([]);
     }
   }, [categoriaId, categoriaAtual?.tipoPrecificacao]);
@@ -92,6 +102,9 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
     if (!categoriaAtual) return 0;
     if (categoriaAtual.tipoPrecificacao === 'bebidas') {
       return categoriaAtual.precos.bebidas ?? categoriaAtual.precoVenda ?? 0;
+    }
+    if (categoriaAtual.tipoPrecificacao === 'entradas') {
+      return categoriaAtual.precos.entradas ?? categoriaAtual.precoVenda ?? 0;
     }
     return categoriaAtual.precos[t] ?? categoriaAtual.precoVenda ?? 0;
   };
@@ -309,16 +322,18 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                 <label className="text-xs text-gray-400 block mb-2">
                   Tamanhos
                   <span className="text-gray-600 ml-1">
-                    {filtroBebidas || categoriaAtual?.tipoPrecificacao === 'bebidas'
-                      ? '— modo bebidas (preço único)'
+                    {isPrecounico
+                      ? categoriaAtual?.tipoPrecificacao === 'entradas' || filtroTipo === 'entradas'
+                        ? '— modo entradas (preço único)'
+                        : '— modo bebidas (preço único)'
                       : isMultiSize
                       ? `— ${selectedTamanhos.length} selecionado${selectedTamanhos.length !== 1 ? 's' : ''}, será criado${selectedTamanhos.length !== 1 ? 'm' : ''} ${selectedTamanhos.length} produto${selectedTamanhos.length !== 1 ? 's' : ''}`
                       : '— selecione para criar vários de uma vez'}
                   </span>
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {/* Botões de tamanho de pizza (ocultam no modo bebidas) */}
-                  {!filtroBebidas && categoriaAtual?.tipoPrecificacao !== 'bebidas' && TAMANHOS_PIZZA.map(t => {
+                  {/* Botões de tamanho de pizza (ocultam no modo preço único) */}
+                  {!isPrecounico && TAMANHOS_PIZZA.map(t => {
                     const selected = selectedTamanhos.includes(t);
                     const temPreco = categoriaAtual?.precos[t] != null;
                     return (
@@ -343,12 +358,12 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                   })}
 
                   {/* Botão Bebidas — atalho rápido */}
-                  {categoriaAtual?.tipoPrecificacao !== 'bebidas' && (
+                  {categoriaAtual?.tipoPrecificacao !== 'bebidas' && categoriaAtual?.tipoPrecificacao !== 'entradas' && (
                     <button
                       type="button"
-                      onClick={handleFiltroBebidas}
+                      onClick={() => handleFiltroTipo('bebidas')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                        filtroBebidas
+                        filtroTipo === 'bebidas'
                           ? 'bg-cyan-600 border-cyan-600 text-white'
                           : 'bg-transparent border-[#374151] text-cyan-500/70 hover:border-cyan-500/50 hover:text-cyan-400'
                       }`}
@@ -356,17 +371,37 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                       🥤 Bebidas
                     </button>
                   )}
+
+                  {/* Botão Entradas — atalho rápido */}
+                  {categoriaAtual?.tipoPrecificacao !== 'bebidas' && categoriaAtual?.tipoPrecificacao !== 'entradas' && (
+                    <button
+                      type="button"
+                      onClick={() => handleFiltroTipo('entradas')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                        filtroTipo === 'entradas'
+                          ? 'bg-amber-600 border-amber-600 text-white'
+                          : 'bg-transparent border-[#374151] text-amber-500/70 hover:border-amber-500/50 hover:text-amber-400'
+                      }`}
+                    >
+                      🍽️ Entradas
+                    </button>
+                  )}
                 </div>
 
-                {/* Aviso modo bebidas ativo sem categoria bebidas cadastrada */}
-                {filtroBebidas && data.categorias.filter(c => c.tipoPrecificacao === 'bebidas').length === 0 && (
+                {/* Aviso modo especial ativo sem categoria cadastrada */}
+                {filtroTipo === 'bebidas' && data.categorias.filter(c => c.tipoPrecificacao === 'bebidas').length === 0 && (
                   <p className="text-xs text-amber-400 mt-1.5">
                     ⚠️ Crie uma categoria do tipo Bebidas na aba Categorias primeiro.
                   </p>
                 )}
+                {filtroTipo === 'entradas' && data.categorias.filter(c => c.tipoPrecificacao === 'entradas').length === 0 && (
+                  <p className="text-xs text-amber-400 mt-1.5">
+                    ⚠️ Crie uma categoria do tipo Entradas na aba Categorias primeiro.
+                  </p>
+                )}
 
                 {/* Preview dos nomes no modo multi-tamanho */}
-                {isMultiSize && nome.trim() && !filtroBebidas && categoriaAtual?.tipoPrecificacao !== 'bebidas' && (
+                {isMultiSize && nome.trim() && !isPrecounico && (
                   <div className="mt-2 bg-[#141416] border border-[#2a2a2e] rounded-xl px-3 py-2.5">
                     <p className="text-xs text-gray-500 mb-1">Produtos que serão criados:</p>
                     <div className="flex flex-wrap gap-1.5">
@@ -385,6 +420,11 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                   Categoria de bebidas: preço único — nenhum tamanho será criado.
                 </p>
               )}
+              {categoriaAtual?.tipoPrecificacao === 'entradas' && (
+                <p className="text-xs text-amber-400/70 bg-amber-500/5 border border-amber-500/15 rounded-xl px-3 py-2">
+                  Categoria de entradas: preço único — nenhum tamanho será criado.
+                </p>
+              )}
 
               {/* Categoria de preço */}
               <div>
@@ -392,17 +432,23 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                 <SearchableSelect
                   value={categoriaId}
                   onChange={v => setCategoriaId(v)}
-                  options={(filtroBebidas
-                    ? data.categorias.filter(c => c.tipoPrecificacao === 'bebidas')
+                  options={(filtroTipo
+                    ? data.categorias.filter(c => c.tipoPrecificacao === filtroTipo)
                     : data.categorias
                   ).map(cat => {
                     const modoBebidas = cat.tipoPrecificacao === 'bebidas';
-                    const precoUnico = cat.precos.bebidas ?? cat.precoVenda;
+                    const modoEntradas = cat.tipoPrecificacao === 'entradas';
+                    const precoUnicoBebidas = cat.precos.bebidas ?? cat.precoVenda;
+                    const precoUnicoEntradas = cat.precos.entradas ?? cat.precoVenda;
                     const precoParaTamanho =
-                      !modoBebidas && tamanhoDetectado && cat.precos[tamanhoDetectado];
+                      !modoBebidas && !modoEntradas && tamanhoDetectado && cat.precos[tamanhoDetectado];
                     const sublabel = modoBebidas
-                      ? (precoUnico != null && precoUnico > 0
-                        ? `Preço: ${formatCurrency(precoUnico)}`
+                      ? (precoUnicoBebidas != null && precoUnicoBebidas > 0
+                        ? `Preço: ${formatCurrency(precoUnicoBebidas)}`
+                        : 'sem preço')
+                      : modoEntradas
+                      ? (precoUnicoEntradas != null && precoUnicoEntradas > 0
+                        ? `Preço: ${formatCurrency(precoUnicoEntradas)}`
                         : 'sem preço')
                       : precoParaTamanho
                       ? `${TAMANHO_LABELS[tamanhoDetectado!]}: ${formatCurrency(precoParaTamanho)}`
@@ -415,7 +461,11 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                       value: cat.id,
                       label: cat.nome,
                       sublabel,
-                      group: modoBebidas ? (cat.grupo || 'Bebidas') : (cat.grupo || undefined),
+                      group: modoBebidas
+                        ? (cat.grupo || 'Bebidas')
+                        : modoEntradas
+                        ? (cat.grupo || 'Entradas')
+                        : (cat.grupo || undefined),
                     };
                   })}
                   placeholder="— Sem categoria —"
@@ -432,6 +482,10 @@ export const AddProductModal = ({ data, onClose, onSave }: AddProductModalProps)
                       ? (categoriaAtual.precos.bebidas != null || categoriaAtual.precoVenda
                         ? `Preço: ${formatCurrency(resolverPrecoVendaCategoria(categoriaAtual, nome))}`
                         : '⚠️ Defina o preço na aba Categorias (modo Bebidas)')
+                      : categoriaAtual.tipoPrecificacao === 'entradas'
+                      ? (categoriaAtual.precos.entradas != null || categoriaAtual.precoVenda
+                        ? `Preço: ${formatCurrency(resolverPrecoVendaCategoria(categoriaAtual, nome))}`
+                        : '⚠️ Defina o preço na aba Categorias (modo Entradas)')
                       : tamanhoDetectado && categoriaAtual.precos[tamanhoDetectado] != null
                       ? `Preço para ${TAMANHO_LABELS[tamanhoDetectado]}: ${formatCurrency(categoriaAtual.precos[tamanhoDetectado]!)}`
                       : tamanhoDetectado
