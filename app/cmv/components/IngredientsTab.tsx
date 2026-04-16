@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Pencil, Check, X, Trash2, Search, ChevronDown, CheckSquare, Square, AlertTriangle } from 'lucide-react';
+import { Plus, Pencil, Check, X, Trash2, Search, ChevronDown, CheckSquare, Square, AlertTriangle, GripVertical } from 'lucide-react';
 import type { StoreId, Ingrediente, Unidade } from '../types';
 import { useStoreData } from '../hooks/useStoreData';
 import { formatCurrency } from '../utils';
@@ -38,6 +38,34 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
   const [editNome, setEditNome] = useState('');
   const [editPreco, setEditPreco] = useState('');
   const [editUnidade, setEditUnidade] = useState<Unidade>('g');
+
+  // ── Drag-and-drop ──────────────────────────────────────────────────────────
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  const canDrag = !search && !selectMode;
+
+  const handleDragStart = (id: string) => setDragId(id);
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    if (id !== dragId) setDragOverId(id);
+  };
+
+  const handleDrop = (targetId: string) => {
+    if (!dragId || dragId === targetId) { setDragId(null); setDragOverId(null); return; }
+    const items = [...data.ingredientes];
+    const fromIdx = items.findIndex(i => i.id === dragId);
+    const toIdx = items.findIndex(i => i.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const [moved] = items.splice(fromIdx, 1);
+    items.splice(toIdx, 0, moved);
+    updateData({ ...data, ingredientes: items });
+    setDragId(null);
+    setDragOverId(null);
+  };
+
+  const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
 
   // ── Seleção múltipla ───────────────────────────────────────────────────────
   const [selectMode, setSelectMode] = useState(false);
@@ -169,8 +197,8 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
   }
 
   const gridCols = selectMode
-    ? 'grid-cols-[32px_1fr_120px_160px_100px_80px]'
-    : 'grid-cols-[1fr_120px_160px_100px_80px]';
+    ? 'grid-cols-[20px_32px_1fr_120px_160px_100px_80px]'
+    : 'grid-cols-[20px_1fr_120px_160px_100px_80px]';
 
   return (
     <div className="flex flex-col gap-4">
@@ -333,6 +361,8 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
         <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl overflow-hidden">
           {/* Header da tabela */}
           <div className={`grid ${gridCols} gap-3 px-4 py-2.5 border-b border-[#2a2a2e]`}>
+            {/* coluna alça */}
+            <div />
             {selectMode && (
               <button
                 onClick={toggleSelectAll}
@@ -360,17 +390,37 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
             const usos = contarUsos(ing.id);
             const totalUsos = usos.receitas + usos.sabores;
 
+            const isDragging = dragId === ing.id;
+            const isDragOver = dragOverId === ing.id;
+
             return (
               <div
                 key={ing.id}
+                draggable={canDrag}
+                onDragStart={canDrag ? () => handleDragStart(ing.id) : undefined}
+                onDragOver={canDrag ? e => handleDragOver(e, ing.id) : undefined}
+                onDrop={canDrag ? () => handleDrop(ing.id) : undefined}
+                onDragEnd={canDrag ? handleDragEnd : undefined}
                 onClick={selectMode && !isEditing ? () => toggleSelect(ing.id) : undefined}
                 className={`grid ${gridCols} gap-3 px-4 py-3 items-center transition-colors
                   ${idx % 2 === 0 ? 'bg-transparent' : 'bg-[#141416]'}
                   ${isEditing ? 'bg-green-500/5 border-l-2 border-green-500' : ''}
                   ${selectMode && isSelected ? 'bg-red-500/8 border-l-2 border-red-500/60' : ''}
                   ${selectMode ? 'cursor-pointer hover:bg-white/5' : ''}
+                  ${isDragging ? 'opacity-40' : ''}
+                  ${isDragOver && !isDragging ? 'border-t-2 border-t-white/40' : ''}
                 `}
               >
+                {/* Alça de drag */}
+                <div
+                  className={`flex items-center justify-center ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                  onClick={e => e.stopPropagation()}
+                >
+                  {canDrag && (
+                    <GripVertical className="w-3.5 h-3.5 text-gray-600 hover:text-gray-400 transition-colors" />
+                  )}
+                </div>
+
                 {/* Checkbox */}
                 {selectMode && (
                   <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
