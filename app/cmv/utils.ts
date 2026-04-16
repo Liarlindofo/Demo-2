@@ -196,6 +196,11 @@ export const resolverPrecoVendaCategoria = (
     if (categoria.precoVenda) return categoria.precoVenda;
     return 0;
   }
+  if (tipo === 'entradas') {
+    if (categoria.precos.entradas != null) return categoria.precos.entradas;
+    if (categoria.precoVenda) return categoria.precoVenda;
+    return 0;
+  }
   const tamanho = detectarTamanho(nomeProduto);
   if (tamanho && categoria.precos[tamanho] != null) {
     return categoria.precos[tamanho]!;
@@ -231,7 +236,7 @@ export const calcularCMVSabor = (
   const numIngredientes = migrarSaborItens(sabor).length;
 
   const tamanhoExibir =
-    categoria?.tipoPrecificacao === 'bebidas'
+    (categoria?.tipoPrecificacao === 'bebidas' || categoria?.tipoPrecificacao === 'entradas')
       ? undefined
       : (tamanhoNome ?? undefined);
 
@@ -274,9 +279,9 @@ export const calcularMetricasLoja = (data: StoreData): StoreMetrics => {
 
   const grupos = agruparPorSabor(products);
 
-  // Melhor/pior margem só considera grupos que NÃO são de bebidas
+  // Melhor/pior margem só considera grupos que NÃO são de bebidas nem entradas
   const gruposPizza = grupos.filter(g =>
-    g.produtos.some(p => p.tipoPrecificacao !== 'bebidas'),
+    g.produtos.some(p => p.tipoPrecificacao !== 'bebidas' && p.tipoPrecificacao !== 'entradas'),
   );
 
   const gruposParaMelhorPior = gruposPizza.length > 0 ? gruposPizza : grupos;

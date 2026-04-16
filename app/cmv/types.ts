@@ -2,11 +2,11 @@ export type Unidade = 'g' | 'ml' | 'un';
 export type Categoria = 'tradicional' | 'especial';
 
 // ── Tamanhos disponíveis ───────────────────────────────────────────────────────
-export type Tamanho = 'broto' | 'pequena' | 'media' | 'grande' | 'gigante' | 'calzone' | 'bebidas';
-export type PizzaTamanho = Exclude<Tamanho, 'bebidas'>;
+export type Tamanho = 'broto' | 'pequena' | 'media' | 'grande' | 'gigante' | 'calzone' | 'bebidas' | 'entradas';
+export type PizzaTamanho = Exclude<Tamanho, 'bebidas' | 'entradas'>;
 
 export const TAMANHOS: readonly Tamanho[] = [
-  'broto', 'pequena', 'media', 'grande', 'gigante', 'calzone', 'bebidas',
+  'broto', 'pequena', 'media', 'grande', 'gigante', 'calzone', 'bebidas', 'entradas',
 ] as const;
 
 export const TAMANHOS_PIZZA: readonly PizzaTamanho[] = [
@@ -21,6 +21,7 @@ export const TAMANHO_LABELS: Record<Tamanho, string> = {
   gigante: 'Gigante',
   calzone: 'Calzone',
   bebidas: 'Bebidas',
+  entradas: 'Entradas',
 };
 
 // ── Categorias de preço (matriz: categoria × tamanho) ─────────────────────────
@@ -31,15 +32,16 @@ export interface CategoriaPreco {
   /**
    * `pizza` (padrão): matriz com tamanhos de pizza (broto…calzone).
    * `bebidas`: um único preço em `precos.bebidas`, sem colunas de tamanho de pizza.
+   * `entradas`: um único preço em `precos.entradas`, sem colunas de tamanho de pizza.
    */
-  tipoPrecificacao?: 'pizza' | 'bebidas';
+  tipoPrecificacao?: 'pizza' | 'bebidas' | 'entradas';
   /** Preço por tamanho — célula vazia = tamanho não disponível para esta categoria */
   precos: Partial<Record<Tamanho, number>>;
   /** @deprecated use precos[tamanho] — mantido para migração de dados antigos */
   precoVenda?: number;
 }
 
-/** Categorias da matriz de pizza (exclui modo bebidas). */
+/** Categorias da matriz de pizza (exclui modo bebidas e entradas). */
 export const isCategoriaPrecoPizza = (c: CategoriaPreco): boolean =>
   (c.tipoPrecificacao ?? 'pizza') === 'pizza';
 
@@ -201,7 +203,7 @@ export interface ProductCMV {
   nome: string;
   categoria: string;        // nome da categoria (ex: "TRADICIONAL I")
   categoriaGrupo?: string;  // grupo da categoria (ex: "TRADICIONAL")
-  tipoPrecificacao?: 'pizza' | 'bebidas'; // tipo da categoria de preço
+  tipoPrecificacao?: 'pizza' | 'bebidas' | 'entradas'; // tipo da categoria de preço
   tamanho?: Tamanho;        // tamanho detectado do nome do produto
   custo: number;
   precoVenda: number;       // resolvido de categoria.precos[tamanho]

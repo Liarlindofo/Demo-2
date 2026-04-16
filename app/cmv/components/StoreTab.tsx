@@ -93,6 +93,7 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
 
     // Filtro de categoria
     if (filterCategoria === 'bebidas') return p.tipoPrecificacao === 'bebidas';
+    if (filterCategoria === 'entradas') return p.tipoPrecificacao === 'entradas';
     if (filterCategoria) {
       const sabor = data.sabores.find(s => s.id === p.id);
       return sabor?.categoriaId === filterCategoria;
@@ -114,6 +115,7 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
   }, [data.categorias]);
 
   const temBebidas = data.categorias.some(c => c.tipoPrecificacao === 'bebidas');
+  const temEntradas = data.categorias.some(c => c.tipoPrecificacao === 'entradas');
 
   const groups = agruparPorSabor(filtered);
 
@@ -410,7 +412,7 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
       </div>
 
       {/* Filtros de categoria (só aparece se houver categorias cadastradas) */}
-      {(categoriasPizzaFiltro.length > 0 || temBebidas) && viewMode !== 'combos' && (
+      {(categoriasPizzaFiltro.length > 0 || temBebidas || temEntradas) && viewMode !== 'combos' && (
         <div className="flex flex-wrap gap-2">
           {/* Todas as categorias */}
           <button
@@ -450,6 +452,20 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
               }`}
             >
               🥤 Bebidas
+            </button>
+          )}
+
+          {/* Entradas */}
+          {temEntradas && (
+            <button
+              onClick={() => setFilterCategoria('entradas')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                filterCategoria === 'entradas'
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                  : 'bg-transparent text-gray-500 border-[#2a2a2e] hover:border-amber-500/30 hover:text-gray-300'
+              }`}
+            >
+              🍽️ Entradas
             </button>
           )}
         </div>

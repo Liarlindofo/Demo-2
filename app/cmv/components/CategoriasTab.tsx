@@ -85,7 +85,7 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newNome, setNewNome] = useState('');
   const [newGrupo, setNewGrupo] = useState('');
-  const [newTipoPrecificacao, setNewTipoPrecificacao] = useState<'pizza' | 'bebidas'>('pizza');
+  const [newTipoPrecificacao, setNewTipoPrecificacao] = useState<'pizza' | 'bebidas' | 'entradas'>('pizza');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -105,8 +105,10 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
 
   const catsPizza = data.categorias.filter(isCategoriaPrecoPizza);
   const catsBebidas = data.categorias.filter(c => c.tipoPrecificacao === 'bebidas');
+  const catsEntradas = data.categorias.filter(c => c.tipoPrecificacao === 'entradas');
   const gruposPizza = gruposOrdenadosDe(catsPizza);
   const gruposBebidas = gruposOrdenadosDe(catsBebidas);
+  const gruposEntradas = gruposOrdenadosDe(catsEntradas);
 
   const toggleGroup = (g: string) => {
     setCollapsedGroups(prev => {
@@ -145,7 +147,7 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
     updateData({ ...data, categorias: newCats });
   };
 
-  const updateTipoPrecificacao = (catId: string, tipo: 'pizza' | 'bebidas') => {
+  const updateTipoPrecificacao = (catId: string, tipo: 'pizza' | 'bebidas' | 'entradas') => {
     const newCats = data.categorias.map(c =>
       c.id === catId ? { ...c, tipoPrecificacao: tipo } : c,
     );
@@ -165,7 +167,7 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
     updateData({ ...data, categorias: [...data.categorias, nova] });
     setNewNome('');
     setNewGrupo('');
-    setNewTipoPrecificacao('pizza');
+    setNewTipoPrecificacao('pizza' as const);
     setShowAddForm(false);
   };
 
@@ -209,7 +211,7 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
           <p className="text-xs text-gray-400 mt-0.5">
             {data.categorias.length} categoria{data.categorias.length !== 1 ? 's' : ''}
             {' · '}
-            {catsPizza.length} pizza · {catsBebidas.length} bebida{catsBebidas.length !== 1 ? 's' : ''}
+            {catsPizza.length} pizza · {catsBebidas.length} bebida{catsBebidas.length !== 1 ? 's' : ''} · {catsEntradas.length} entrada{catsEntradas.length !== 1 ? 's' : ''}
           </p>
         </div>
         <button
@@ -253,11 +255,12 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
             <label className="text-xs text-gray-400 block mb-1">Tipo</label>
             <select
               value={newTipoPrecificacao}
-              onChange={e => setNewTipoPrecificacao(e.target.value as 'pizza' | 'bebidas')}
+              onChange={e => setNewTipoPrecificacao(e.target.value as 'pizza' | 'bebidas' | 'entradas')}
               className="w-full bg-[#2a2a2e] border border-[#374151] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
             >
               <option value="pizza">Pizza (tamanhos)</option>
               <option value="bebidas">Bebidas (preço único)</option>
+              <option value="entradas">Entradas (preço único)</option>
             </select>
           </div>
           <div className="flex gap-2">
@@ -269,7 +272,7 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
               Adicionar
             </button>
             <button
-              onClick={() => { setShowAddForm(false); setNewNome(''); setNewGrupo(''); setNewTipoPrecificacao('pizza'); }}
+              onClick={() => { setShowAddForm(false); setNewNome(''); setNewGrupo(''); setNewTipoPrecificacao('pizza' as const); }}
               className="text-gray-400 hover:text-white px-3 py-2 rounded-lg transition-colors text-sm"
             >
               Cancelar
@@ -285,6 +288,8 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
           <span className="text-white font-medium">Pizza:</span> matriz por tamanho (Broto… Calzone); o sistema lê o tamanho no fim do nome do produto.
           {' '}
           <span className="text-white font-medium">Bebidas:</span> uma coluna de preço único — sem Broto/Média/Grande.
+          {' '}
+          <span className="text-white font-medium">Entradas:</span> uma coluna de preço único, ideal para petiscos e entradas.
         </p>
       </div>
 
@@ -396,12 +401,13 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
                                   </div>
                                   <select
                                     value={cat.tipoPrecificacao ?? 'pizza'}
-                                    onChange={e => updateTipoPrecificacao(cat.id, e.target.value as 'pizza' | 'bebidas')}
+                                    onChange={e => updateTipoPrecificacao(cat.id, e.target.value as 'pizza' | 'bebidas' | 'entradas')}
                                     onClick={e => e.stopPropagation()}
                                     className="w-max max-w-full text-[10px] bg-[#2a2a2e] border border-[#374151] rounded px-1.5 py-0.5 text-gray-300"
                                   >
                                     <option value="pizza">Modo pizza</option>
                                     <option value="bebidas">Modo bebidas</option>
+                                    <option value="entradas">Modo entradas</option>
                                   </select>
                                 </div>
                               </td>
@@ -523,12 +529,13 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
                                   </div>
                                   <select
                                     value={cat.tipoPrecificacao ?? 'pizza'}
-                                    onChange={e => updateTipoPrecificacao(cat.id, e.target.value as 'pizza' | 'bebidas')}
+                                    onChange={e => updateTipoPrecificacao(cat.id, e.target.value as 'pizza' | 'bebidas' | 'entradas')}
                                     onClick={e => e.stopPropagation()}
                                     className="w-max max-w-full text-[10px] bg-[#2a2a2e] border border-[#374151] rounded px-1.5 py-0.5 text-gray-300"
                                   >
                                     <option value="pizza">Modo pizza</option>
                                     <option value="bebidas">Modo bebidas</option>
+                                    <option value="entradas">Modo entradas</option>
                                   </select>
                                 </div>
                               </td>
@@ -558,6 +565,126 @@ export const CategoriasTab = ({ storeId }: CategoriasTabProps) => {
             </div>
             {catsBebidas.length === 0 && (
               <p className="text-xs text-gray-500 mt-2">Nenhuma categoria no modo bebidas. Crie com &quot;Nova categoria&quot; → tipo Bebidas.</p>
+            )}
+          </div>
+
+          {/* ── Entradas: preço único ───────────────────────────────────────── */}
+          <div>
+            <h3 className="text-sm font-semibold text-amber-300 mb-2 flex items-center gap-2">
+              Entradas — preço único
+              <span className="text-xs font-normal text-gray-500">({catsEntradas.length})</span>
+            </h3>
+            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl overflow-hidden overflow-x-auto">
+              <table className="w-full min-w-[360px] border-collapse">
+                <thead>
+                  <tr className="bg-[#141416] border-b border-[#2a2a2e]">
+                    <th className="text-left text-xs font-semibold text-yellow-400 uppercase tracking-wider px-4 py-3 w-56">
+                      Categoria
+                    </th>
+                    <th className="text-center text-xs font-semibold text-amber-400 uppercase tracking-wider px-2 py-3 w-36">
+                      Preço
+                    </th>
+                    <th className="w-16 px-2 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {gruposEntradas.map(([grupo, cats]) => {
+                    const isCollapsed = collapsedGroups.has(`ent:${grupo}`);
+                    return (
+                      <>
+                        {grupo ? (
+                          <tr
+                            key={`ent-grp-${grupo}`}
+                            onClick={() => toggleGroup(`ent:${grupo}`)}
+                            className="bg-[#1a1a1c] border-t border-[#2a2a2e] cursor-pointer hover:bg-[#1e1e21] transition-colors select-none"
+                          >
+                            <td colSpan={3} className="px-4 py-2">
+                              <div className="flex items-center gap-2">
+                                {isCollapsed
+                                  ? <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
+                                  : <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+                                }
+                                <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">
+                                  {grupo}
+                                </span>
+                                <span className="text-xs text-gray-600">
+                                  {cats.length} categori{cats.length === 1 ? 'a' : 'as'}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          catsEntradas.some(c => c.grupo) && (
+                            <tr key="ent-sem-grupo" className="bg-[#1a1a1c] border-t border-[#2a2a2e]">
+                              <td colSpan={3} className="px-4 py-1.5">
+                                <span className="text-xs text-gray-600 uppercase tracking-widest">Sem grupo</span>
+                              </td>
+                            </tr>
+                          )
+                        )}
+                        {!isCollapsed && cats.map((cat, rowIdx) => {
+                          const usos = contarUsos(cat.id);
+                          return (
+                            <tr
+                              key={cat.id}
+                              className={`border-t border-[#2a2a2e] group transition-colors hover:bg-[#1e1e21]
+                                ${rowIdx % 2 === 0 ? 'bg-transparent' : 'bg-[#141416]'}
+                              `}
+                            >
+                              <td className="px-4 py-2 align-top">
+                                <div className="flex flex-col gap-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <Tag className="w-3 h-3 text-gray-600 shrink-0 mt-0.5" />
+                                    <input
+                                      value={cat.nome}
+                                      onChange={e => updateCampo(cat.id, 'nome', e.target.value.toUpperCase())}
+                                      className="flex-1 bg-transparent text-sm font-medium text-white focus:outline-none focus:bg-white/5 rounded px-1 -ml-1 min-w-0"
+                                      placeholder="Nome..."
+                                    />
+                                    {usos > 0 && (
+                                      <span className="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full px-1.5 py-0.5 shrink-0">
+                                        {usos}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <select
+                                    value={cat.tipoPrecificacao ?? 'pizza'}
+                                    onChange={e => updateTipoPrecificacao(cat.id, e.target.value as 'pizza' | 'bebidas' | 'entradas')}
+                                    onClick={e => e.stopPropagation()}
+                                    className="w-max max-w-full text-[10px] bg-[#2a2a2e] border border-[#374151] rounded px-1.5 py-0.5 text-gray-300"
+                                  >
+                                    <option value="pizza">Modo pizza</option>
+                                    <option value="bebidas">Modo bebidas</option>
+                                    <option value="entradas">Modo entradas</option>
+                                  </select>
+                                </div>
+                              </td>
+                              <td className="px-1 py-1">
+                                <PriceCell
+                                  value={cat.precos.entradas}
+                                  onChange={v => updatePreco(cat.id, 'entradas', v)}
+                                />
+                              </td>
+                              <td className="px-2 py-2 text-center">
+                                <button
+                                  onClick={() => handleDelete(cat.id)}
+                                  className="p-1 text-gray-700 hover:text-red-400 hover:bg-red-500/10 rounded opacity-0 group-hover:opacity-100 transition-all"
+                                  title="Excluir categoria"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {catsEntradas.length === 0 && (
+              <p className="text-xs text-gray-500 mt-2">Nenhuma categoria no modo entradas. Crie com &quot;Nova categoria&quot; → tipo Entradas.</p>
             )}
           </div>
         </div>
