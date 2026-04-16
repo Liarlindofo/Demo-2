@@ -39,6 +39,11 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
   const [editPreco, setEditPreco] = useState('');
   const [editUnidade, setEditUnidade] = useState<Unidade>('g');
 
+  // ── Seleção múltipla ───────────────────────────────────────────────────────
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+
   // ── Drag-and-drop ──────────────────────────────────────────────────────────
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -66,11 +71,6 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
   };
 
   const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
-
-  // ── Seleção múltipla ───────────────────────────────────────────────────────
-  const [selectMode, setSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
   const filtered = data.ingredientes.filter(i =>
     i.nome.toLowerCase().includes(search.toLowerCase()),
