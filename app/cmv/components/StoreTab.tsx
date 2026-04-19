@@ -82,6 +82,30 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
   const metricsCombos = useMemo(() => calcularMetricasCombos(data), [data]);
   const metrics = viewMode === 'combos' ? metricsCombos : metricsProdutos;
 
+  // Categorias de pizza ordenadas para os filtros de categoria
+  const categoriasPizzaFiltro = useMemo(() => {
+    return [...data.categorias]
+      .filter(c => (c.tipoPrecificacao ?? 'pizza') === 'pizza')
+      .sort((a, b) => {
+        const ga = a.grupo ?? '';
+        const gb = b.grupo ?? '';
+        if (ga !== gb) return ga.localeCompare(gb, 'pt-BR');
+        return a.nome.localeCompare(b.nome, 'pt-BR');
+      });
+  }, [data.categorias]);
+
+  // Grupos de pizza com 2+ categorias → ganham botão de filtro de grupo
+  const gruposDePizzaFiltro = useMemo(() => {
+    const contagem = new Map<string, number>();
+    categoriasPizzaFiltro.forEach(cat => {
+      if (cat.grupo) contagem.set(cat.grupo, (contagem.get(cat.grupo) ?? 0) + 1);
+    });
+    return [...contagem.entries()]
+      .filter(([, total]) => total >= 2)
+      .map(([grupo]) => grupo)
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [categoriasPizzaFiltro]);
+
   const filtered = products.filter(p => {
     const matchSearch = p.nome.toLowerCase().includes(search.toLowerCase());
     if (!matchSearch) return false;
@@ -94,6 +118,12 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
     // Filtro de categoria
     if (filterCategoria === 'bebidas') return p.tipoPrecificacao === 'bebidas';
     if (filterCategoria === 'entradas') return p.tipoPrecificacao === 'entradas';
+    if (filterCategoria.startsWith('grupo:')) {
+      const grupo = filterCategoria.slice(6);
+      const sabor = data.sabores.find(s => s.id === p.id);
+      const cat = data.categorias.find(c => c.id === sabor?.categoriaId);
+      return cat?.grupo === grupo;
+    }
     if (filterCategoria) {
       const sabor = data.sabores.find(s => s.id === p.id);
       return sabor?.categoriaId === filterCategoria;
@@ -101,18 +131,6 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
 
     return true;
   });
-
-  // Categorias de pizza ordenadas para os filtros de categoria
-  const categoriasPizzaFiltro = useMemo(() => {
-    return [...data.categorias]
-      .filter(c => (c.tipoPrecificacao ?? 'pizza') === 'pizza')
-      .sort((a, b) => {
-        const ga = a.grupo ?? '';
-        const gb = b.grupo ?? '';
-        if (ga !== gb) return ga.localeCompare(gb, 'pt-BR');
-        return a.nome.localeCompare(b.nome, 'pt-BR');
-      });
-  }, [data.categorias]);
 
   const temBebidas = data.categorias.some(c => c.tipoPrecificacao === 'bebidas');
   const temEntradas = data.categorias.some(c => c.tipoPrecificacao === 'entradas');
@@ -425,6 +443,21 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
           >
             Todas as categorias
           </button>
+
+          {/* Botões de grupo (ex: TRADICIONAL agrupa TRADICIONAL I, II...) */}
+          {gruposDePizzaFiltro.map(grupo => (
+            <button
+              key={`grupo:${grupo}`}
+              onClick={() => setFilterCategoria(`grupo:${grupo}`)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                filterCategoria === `grupo:${grupo}`
+                  ? 'bg-orange-500/20 text-orange-300 border-orange-500/50'
+                  : 'bg-transparent text-gray-500 border-[#2a2a2e] hover:border-orange-500/30 hover:text-gray-300'
+              }`}
+            >
+              🍕 {grupo}
+            </button>
+          ))}
 
           {/* Uma por categoria de pizza */}
           {categoriasPizzaFiltro.map(cat => (
