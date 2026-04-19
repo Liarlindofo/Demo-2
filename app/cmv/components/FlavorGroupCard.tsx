@@ -2,7 +2,7 @@
 
 import { CheckSquare, Square } from 'lucide-react';
 import type { FlavorGroup } from '../utils';
-import { formatPercent } from '../utils';
+import { formatPercent, getSugestaoPreco } from '../utils';
 import { CMV_COLORS, CMV_META } from '../constants';
 
 interface FlavorGroupCardProps {
@@ -35,6 +35,11 @@ export const FlavorGroupCard = ({ group, onClick, selectMode, selectedCount = 0 
   const categoriaLabel = [...new Set(group.produtos.map(p => p.categoria))].join(' · ');
   const allSelected = selectedCount === group.produtos.length;
   const someSelected = selectedCount > 0 && !allSelected;
+
+  // Produtos do grupo que têm sugestão de preço
+  const produtosComSugestao = group.produtos
+    .map(p => ({ product: p, sugestao: getSugestaoPreco(p) }))
+    .filter(({ sugestao }) => sugestao !== null) as { product: (typeof group.produtos)[0]; sugestao: NonNullable<ReturnType<typeof getSugestaoPreco>> }[];
 
   return (
     <div
@@ -141,6 +146,28 @@ export const FlavorGroupCard = ({ group, onClick, selectMode, selectedCount = 0 
           {group.produtos.length} {group.produtos.length === 1 ? 'tamanho' : 'tamanhos'}
         </span>
       </div>
+
+      {/* Sugestões de preço por tamanho */}
+      {!selectMode && produtosComSugestao.length > 0 && (
+        <div className="mt-3 bg-amber-500/10 border border-amber-500/25 rounded-lg px-2.5 py-2 space-y-1">
+          <div className="flex items-center gap-1 mb-1">
+            <span className="text-xs">💡</span>
+            <span className="text-xs text-amber-300 font-medium">Sugestão de venda</span>
+          </div>
+          {produtosComSugestao.map(({ product, sugestao }) => {
+            const sizeLabel = product.nome.replace(group.nome, '').trim() || product.nome;
+            return (
+              <div key={product.id} className="flex items-center justify-between gap-2">
+                <span className="text-xs text-amber-400/70 truncate">{sizeLabel || product.nome}</span>
+                <span className="text-xs font-bold text-amber-300 shrink-0">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sugestao.precoSugerido)}
+                  <span className="text-amber-500/60 font-normal ml-1">({sugestao.targetCMV}%)</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

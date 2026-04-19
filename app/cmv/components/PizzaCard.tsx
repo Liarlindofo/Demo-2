@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Copy, Pencil, Check, X } from 'lucide-react';
 import type { ProductCMV } from '../types';
 import { CMV_COLORS, CMV_META, getStatusLabel } from '../constants';
-import { formatCurrency, formatPercent } from '../utils';
+import { formatCurrency, formatPercent, getSugestaoPreco } from '../utils';
 
 interface PizzaCardProps {
   product: ProductCMV;
@@ -28,6 +28,7 @@ export const PizzaCard = ({ product, onClick, selectMode, selected, onClone, onR
   const cmvColor = isBebida ? BEBIDA_COLOR : CMV_COLORS[product.status];
   const barWidth = Math.min(100, Math.max(0, product.margem));
   const metaBarWidth = 100 - CMV_META;
+  const sugestao = getSugestaoPreco(product);
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(product.nome);
@@ -148,6 +149,20 @@ export const PizzaCard = ({ product, onClick, selectMode, selected, onClone, onR
           <span className="text-white font-medium">{formatPercent(product.margem)}</span>
         </div>
       </div>
+
+      {/* Sugestão de preço */}
+      {sugestao && (
+        <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/25 rounded-lg px-2.5 py-1.5 mb-3">
+          <span className="text-amber-400 text-xs">💡</span>
+          <div className="min-w-0 flex-1">
+            <span className="text-xs text-amber-300 font-medium">Sugestão de venda</span>
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-xs text-amber-400/70">para {sugestao.targetCMV}% CMV</span>
+              <span className="text-xs font-bold text-amber-300">{formatCurrency(sugestao.precoSugerido)}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CMV e ingredientes */}
       <div className="flex items-end justify-between">

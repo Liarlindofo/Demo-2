@@ -311,6 +311,38 @@ export const formatCurrency = (value: number): string =>
 
 export const formatPercent = (value: number): string => `${value.toFixed(1)}%`;
 
+// ── Sugestão de preço de venda ─────────────────────────────────────────────────
+
+/**
+ * CMV alvo por tipo de produto:
+ * - Pizzas: 28%  (alta margem)
+ * - Bebidas / Entradas: 50%  (custo proporcional maior)
+ */
+const CMV_ALVO: Record<string, number> = {
+  pizza: 28,
+  bebidas: 50,
+  entradas: 50,
+};
+
+export interface SugestaoPreco {
+  precoSugerido: number;
+  targetCMV: number;
+}
+
+/**
+ * Retorna sugestão de preço de venda quando o CMV >= 30% E o preço sugerido
+ * é maior que o preço atual (i.e., a ação é sempre aumentar o preço de venda).
+ */
+export const getSugestaoPreco = (product: ProductCMV): SugestaoPreco | null => {
+  if (product.cmvPercent < 30) return null;
+  if (product.custo <= 0) return null;
+  const tipo = product.tipoPrecificacao ?? 'pizza';
+  const targetCMV = CMV_ALVO[tipo] ?? 28;
+  const precoSugerido = product.custo / (targetCMV / 100);
+  if (precoSugerido <= product.precoVenda) return null;
+  return { precoSugerido, targetCMV };
+};
+
 // ── Agrupamento de produtos por sabor ─────────────────────────────────────────
 
 /**
