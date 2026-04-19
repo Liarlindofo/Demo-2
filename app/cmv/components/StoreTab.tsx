@@ -30,7 +30,7 @@ const FILTER_LABELS: Record<FilterStatus, string> = {
   critico: 'Acima da meta',
 };
 
-/** Filtro de categoria: '' = todas, 'bebidas' = só bebidas, ou id da CategoriaPreco de pizza */
+/** Valores possíveis: 'pizzas' = todas as pizzas, 'bebidas', 'entradas', ou id da CategoriaPreco */
 type FilterCategoria = string;
 
 export const StoreTab = ({ storeId }: StoreTabProps) => {
@@ -38,8 +38,19 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterStatus>('todos');
-  const [filterCategoria, setFilterCategoria] = useState<FilterCategoria>('');
+  const [filterCategorias, setFilterCategorias] = useState<Set<FilterCategoria>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>('agrupado');
+
+  const toggleFilterCategoria = (value: FilterCategoria) => {
+    setFilterCategorias(prev => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  };
+
+  const clearFilterCategorias = () => setFilterCategorias(new Set());
 
   // Vista lista — produto individual selecionado
   const [selectedSabor, setSelectedSabor] = useState<Sabor | null>(null);
@@ -94,17 +105,8 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
       });
   }, [data.categorias]);
 
-  // Grupos de pizza com 2+ categorias → ganham botão de filtro de grupo
-  const gruposDePizzaFiltro = useMemo(() => {
-    const contagem = new Map<string, number>();
-    categoriasPizzaFiltro.forEach(cat => {
-      if (cat.grupo) contagem.set(cat.grupo, (contagem.get(cat.grupo) ?? 0) + 1);
-    });
-    return [...contagem.entries()]
-      .filter(([, total]) => total >= 2)
-      .map(([grupo]) => grupo)
-      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [categoriasPizzaFiltro]);
+  const temBebidas = data.categorias.some(c => c.tipoPrecificacao === 'bebidas');
+  const temEntradas = data.categorias.some(c => c.tipoPrecificacao === 'entradas');
 
   const filtered = products.filter(p => {
     const matchSearch = p.nome.toLowerCase().includes(search.toLowerCase());
@@ -115,25 +117,21 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
     if (filter === 'atencao' && p.status !== 'atencao') return false;
     if (filter === 'critico' && p.status !== 'critico') return false;
 
-    // Filtro de categoria
-    if (filterCategoria === 'bebidas') return p.tipoPrecificacao === 'bebidas';
-    if (filterCategoria === 'entradas') return p.tipoPrecificacao === 'entradas';
-    if (filterCategoria.startsWith('grupo:')) {
-      const grupo = filterCategoria.slice(6);
+    // Filtro de categoria (multi-seleção — produto precisa bater com ao menos um filtro ativo)
+    if (filterCategorias.size > 0) {
       const sabor = data.sabores.find(s => s.id === p.id);
-      const cat = data.categorias.find(c => c.id === sabor?.categoriaId);
-      return cat?.grupo === grupo;
-    }
-    if (filterCategoria) {
-      const sabor = data.sabores.find(s => s.id === p.id);
-      return sabor?.categoriaId === filterCategoria;
+      const isPizza = (p.tipoPrecificacao ?? 'pizza') === 'pizza';
+      const matches = [...filterCategorias].some(fc => {
+        if (fc === 'pizzas') return isPizza;
+        if (fc === 'bebidas') return p.tipoPrecificacao === 'bebidas';
+        if (fc === 'entradas') return p.tipoPrecificacao === 'entradas';
+        return sabor?.categoriaId === fc;
+      });
+      if (!matches) return false;
     }
 
     return true;
   });
-
-  const temBebidas = data.categorias.some(c => c.tipoPrecificacao === 'bebidas');
-  const temEntradas = data.categorias.some(c => c.tipoPrecificacao === 'entradas');
 
   const groups = agruparPorSabor(filtered);
 
@@ -236,7 +234,7 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
     setViewMode(mode);
     if (mode === 'combos') {
       exitSelectMode();
-      setFilterCategoria('');
+      clearFilterCategorias();
     }
   };
 
@@ -432,11 +430,11 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
       {/* Filtros de categoria (só aparece se houver categorias cadastradas) */}
       {(categoriasPizzaFiltro.length > 0 || temBebidas || temEntradas) && viewMode !== 'combos' && (
         <div className="flex flex-wrap gap-2">
-          {/* Todas as categorias */}
+          {/* Todas as categorias — limpa todos os filtros */}
           <button
-            onClick={() => setFilterCategoria('')}
+            onClick={clearFilterCategorias}
             className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
-              filterCategoria === ''
+              filterCategorias.size === 0
                 ? 'bg-[#374151] text-white border-[#374151]'
                 : 'bg-transparent text-gray-500 border-[#2a2a2e] hover:border-[#374151] hover:text-gray-300'
             }`}
@@ -444,28 +442,27 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
             Todas as categorias
           </button>
 
-          {/* Botões de grupo (ex: TRADICIONAL agrupa TRADICIONAL I, II...) */}
-          {gruposDePizzaFiltro.map(grupo => (
+          {/* Pizzas — seleciona/deseleciona todas as categorias de pizza de uma vez */}
+          {categoriasPizzaFiltro.length > 0 && (
             <button
-              key={`grupo:${grupo}`}
-              onClick={() => setFilterCategoria(`grupo:${grupo}`)}
+              onClick={() => toggleFilterCategoria('pizzas')}
               className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
-                filterCategoria === `grupo:${grupo}`
+                filterCategorias.has('pizzas')
                   ? 'bg-orange-500/20 text-orange-300 border-orange-500/50'
                   : 'bg-transparent text-gray-500 border-[#2a2a2e] hover:border-orange-500/30 hover:text-gray-300'
               }`}
             >
-              🍕 {grupo}
+              🍕 Pizzas
             </button>
-          ))}
+          )}
 
           {/* Uma por categoria de pizza */}
           {categoriasPizzaFiltro.map(cat => (
             <button
               key={cat.id}
-              onClick={() => setFilterCategoria(cat.id)}
+              onClick={() => toggleFilterCategoria(cat.id)}
               className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
-                filterCategoria === cat.id
+                filterCategorias.has(cat.id)
                   ? 'bg-red-500/20 text-red-300 border-red-500/50'
                   : 'bg-transparent text-gray-500 border-[#2a2a2e] hover:border-red-500/30 hover:text-gray-300'
               }`}
@@ -477,9 +474,9 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
           {/* Bebidas */}
           {temBebidas && (
             <button
-              onClick={() => setFilterCategoria('bebidas')}
+              onClick={() => toggleFilterCategoria('bebidas')}
               className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
-                filterCategoria === 'bebidas'
+                filterCategorias.has('bebidas')
                   ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
                   : 'bg-transparent text-gray-500 border-[#2a2a2e] hover:border-cyan-500/30 hover:text-gray-300'
               }`}
@@ -491,9 +488,9 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
           {/* Entradas */}
           {temEntradas && (
             <button
-              onClick={() => setFilterCategoria('entradas')}
+              onClick={() => toggleFilterCategoria('entradas')}
               className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
-                filterCategoria === 'entradas'
+                filterCategorias.has('entradas')
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
                   : 'bg-transparent text-gray-500 border-[#2a2a2e] hover:border-amber-500/30 hover:text-gray-300'
               }`}
