@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { X, ChevronRight, TrendingUp, TrendingDown } from 'lucide-react';
+import { X, ChevronRight, TrendingUp, TrendingDown, Plus } from 'lucide-react';
 import type { FlavorGroup } from '../utils';
-import type { ProductCMV, Sabor, StoreData } from '../types';
-import { formatCurrency, formatPercent } from '../utils';
+import type { ProductCMV, Sabor, StoreData, PizzaTamanho } from '../types';
+import { formatCurrency, formatPercent, detectarTamanho } from '../utils';
 import { CMV_COLORS, CMV_META } from '../constants';
 import { PizzaModal } from './PizzaModal';
+import { AddSizeModal } from './AddSizeModal';
 
 interface FlavorGroupModalProps {
   group: FlavorGroup;
@@ -38,6 +39,7 @@ export const FlavorGroupModal = ({
   onDelete,
 }: FlavorGroupModalProps) => {
   const [selectedSabor, setSelectedSabor] = useState<Sabor | null>(null);
+  const [showAddSize, setShowAddSize] = useState(false);
 
   const metaBarWidth = 100 - CMV_META;
 
@@ -61,6 +63,18 @@ export const FlavorGroupModal = ({
     // Se era o último produto do grupo, fechar o modal do grupo
     if (group.produtos.length <= 1) onClose();
   };
+
+  const handleAddSize = (newData: StoreData) => {
+    onSave(newData);
+    setShowAddSize(false);
+  };
+
+  // Tamanhos já existentes no grupo (para o AddSizeModal)
+  const existingSizes = group.produtos
+    .map(p => detectarTamanho(p.nome))
+    .filter((t): t is PizzaTamanho =>
+      t !== null && t !== 'bebidas' && t !== 'entradas',
+    );
 
   // Estatísticas do grupo
   const custoTotal = group.produtos.reduce((s, p) => s + p.custo, 0);
@@ -172,11 +186,22 @@ export const FlavorGroupModal = ({
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-3 border-t border-[#2a2a2e] flex items-center justify-between text-xs text-gray-500 bg-[#141416]">
-            <span>Clique em uma variação para editar</span>
-            {!isGrupoBebidas && (
-              <span>Meta CMV: <span className="text-red-400 font-medium">{CMV_META}%</span></span>
-            )}
+          <div className="px-6 py-3 border-t border-[#2a2a2e] flex items-center justify-between bg-[#141416]">
+            <span className="text-xs text-gray-500">Clique em uma variação para editar</span>
+            <div className="flex items-center gap-3">
+              {!isGrupoBebidas && (
+                <span className="text-xs text-gray-500">Meta CMV: <span className="text-red-400 font-medium">{CMV_META}%</span></span>
+              )}
+              {!isGrupoBebidas && (
+                <button
+                  onClick={() => setShowAddSize(true)}
+                  className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Adicionar tamanho
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -189,6 +214,17 @@ export const FlavorGroupModal = ({
           onClose={() => setSelectedSabor(null)}
           onSave={handleSave}
           onDelete={handleDelete}
+        />
+      )}
+
+      {/* Modal para adicionar novo tamanho ao grupo */}
+      {showAddSize && (
+        <AddSizeModal
+          groupName={group.nome}
+          existingSizes={existingSizes}
+          data={data}
+          onClose={() => setShowAddSize(false)}
+          onSave={handleAddSize}
         />
       )}
     </>
