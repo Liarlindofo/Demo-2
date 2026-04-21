@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
-import type { StockSession } from '@/app/estoque/types';
+import type { StockSession } from '../../../estoque/types';
 
 export const dynamic = 'force-dynamic';
 
