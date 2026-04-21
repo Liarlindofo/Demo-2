@@ -314,14 +314,14 @@ export const formatPercent = (value: number): string => `${value.toFixed(1)}%`;
 // ── Sugestão de preço de venda ─────────────────────────────────────────────────
 
 /**
- * CMV alvo por tipo de produto:
- * - Pizzas: 28%  (alta margem)
- * - Bebidas / Entradas: 50%  (custo proporcional maior)
+ * Targets de CMV por tipo de produto:
+ * - Pizzas: [28%, 31%]  — dois cenários: meta ideal e meta conservadora
+ * - Bebidas / Entradas: [50%]
  */
-const CMV_ALVO: Record<string, number> = {
-  pizza: 28,
-  bebidas: 50,
-  entradas: 50,
+const CMV_ALVO_TARGETS: Record<string, number[]> = {
+  pizza: [28, 31],
+  bebidas: [50],
+  entradas: [50],
 };
 
 export interface SugestaoPreco {
@@ -330,17 +330,27 @@ export interface SugestaoPreco {
 }
 
 /**
- * Retorna sugestão de preço de venda quando o CMV >= 30% E o preço sugerido
- * é maior que o preço atual (i.e., a ação é sempre aumentar o preço de venda).
+ * Retorna todas as sugestões de preço de venda para um produto.
+ * Cada sugestão corresponde a um target de CMV menor que o CMV atual,
+ * e apenas quando o preço sugerido é maior que o preço atual.
  */
-export const getSugestaoPreco = (product: ProductCMV): SugestaoPreco | null => {
-  if (product.cmvPercent < 30) return null;
-  if (product.custo <= 0) return null;
+export const getSugestoesPreco = (product: ProductCMV): SugestaoPreco[] => {
+  if (product.custo <= 0) return [];
   const tipo = product.tipoPrecificacao ?? 'pizza';
-  const targetCMV = CMV_ALVO[tipo] ?? 28;
-  const precoSugerido = product.custo / (targetCMV / 100);
-  if (precoSugerido <= product.precoVenda) return null;
-  return { precoSugerido, targetCMV };
+  const targets = CMV_ALVO_TARGETS[tipo] ?? [28];
+  return targets
+    .filter(targetCMV => product.cmvPercent > targetCMV)
+    .map(targetCMV => ({
+      precoSugerido: product.custo / (targetCMV / 100),
+      targetCMV,
+    }))
+    .filter(s => s.precoSugerido > product.precoVenda);
+};
+
+/** @deprecated Use getSugestoesPreco */
+export const getSugestaoPreco = (product: ProductCMV): SugestaoPreco | null => {
+  const sugestoes = getSugestoesPreco(product);
+  return sugestoes.length > 0 ? sugestoes[0] : null;
 };
 
 // ── Agrupamento de produtos por sabor ─────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 import { CheckSquare, Square } from 'lucide-react';
 import type { FlavorGroup } from '../utils';
-import { formatPercent, getSugestaoPreco } from '../utils';
+import { formatCurrency, formatPercent, getSugestoesPreco } from '../utils';
 import { CMV_COLORS, CMV_META } from '../constants';
 
 interface FlavorGroupCardProps {
@@ -36,10 +36,10 @@ export const FlavorGroupCard = ({ group, onClick, selectMode, selectedCount = 0 
   const allSelected = selectedCount === group.produtos.length;
   const someSelected = selectedCount > 0 && !allSelected;
 
-  // Produtos do grupo que têm sugestão de preço
-  const produtosComSugestao = group.produtos
-    .map(p => ({ product: p, sugestao: getSugestaoPreco(p) }))
-    .filter(({ sugestao }) => sugestao !== null) as { product: (typeof group.produtos)[0]; sugestao: NonNullable<ReturnType<typeof getSugestaoPreco>> }[];
+  // Produtos do grupo que têm sugestões de preço
+  const produtosComSugestoes = group.produtos
+    .map(p => ({ product: p, sugestoes: getSugestoesPreco(p) }))
+    .filter(({ sugestoes }) => sugestoes.length > 0);
 
   return (
     <div
@@ -148,23 +148,27 @@ export const FlavorGroupCard = ({ group, onClick, selectMode, selectedCount = 0 
       </div>
 
       {/* Sugestões de preço por tamanho */}
-      {!selectMode && produtosComSugestao.length > 0 && (
+      {!selectMode && produtosComSugestoes.length > 0 && (
         <div className="mt-3 bg-amber-500/10 border border-amber-500/25 rounded-lg px-2.5 py-2 space-y-1">
           <div className="flex items-center gap-1 mb-1">
             <span className="text-xs">💡</span>
             <span className="text-xs text-amber-300 font-medium">Sugestão de venda</span>
           </div>
-          {produtosComSugestao.map(({ product, sugestao }) => {
+          {produtosComSugestoes.map(({ product, sugestoes }) => {
             const sizeLabel = product.nome.replace(group.nome, '').trim() || product.nome;
-            return (
-              <div key={product.id} className="flex items-center justify-between gap-2">
-                <span className="text-xs text-amber-400/70 truncate">{sizeLabel || product.nome}</span>
-                <span className="text-xs font-bold text-amber-300 shrink-0">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sugestao.precoSugerido)}
-                  <span className="text-amber-500/60 font-normal ml-1">({sugestao.targetCMV}%)</span>
+            return sugestoes.map(s => (
+              <div key={`${product.id}-${s.targetCMV}`} className="flex items-center justify-between gap-2">
+                <span className="text-xs text-amber-400/70 truncate">
+                  {sizeLabel || product.nome}
+                  <span className="text-amber-500/50 ml-1">({s.targetCMV}%)</span>
+                </span>
+                <span className="text-xs font-bold text-amber-300 shrink-0 tabular-nums">
+                  {formatCurrency(product.precoVenda)}{' '}
+                  <span className="text-amber-500/80">→</span>{' '}
+                  {formatCurrency(s.precoSugerido)}
                 </span>
               </div>
-            );
+            ));
           })}
         </div>
       )}
