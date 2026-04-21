@@ -6,8 +6,8 @@ import { criarSessoesPadrao } from '../data/mockInsumos';
 
 export type { StockCategory };
 
-const STORAGE_KEY = 'plateful_estoque_sessions_v2';
-const ACTIVE_KEY  = 'plateful_estoque_active_v2';
+const STORAGE_KEY = 'plateful_estoque_sessions_v3';
+const ACTIVE_KEY  = 'plateful_estoque_active_v3';
 
 function gerarId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
