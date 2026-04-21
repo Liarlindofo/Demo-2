@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { AlertTriangle, MessageSquare, X, Check } from 'lucide-react';
+import { AlertTriangle, MessageSquare, X, Check, Plus } from 'lucide-react';
 import type { StockItem } from '../types';
 
 interface StockItemRowProps {
@@ -14,28 +14,35 @@ interface StockItemRowProps {
 export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: StockItemRowProps) {
   const [showObs, setShowObs] = useState(!!item.observacao);
   const [obsLocal, setObsLocal] = useState(item.observacao ?? '');
+  const [addValue, setAddValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const abaixoMinimo =
-    item.quantidadeContada !== null &&
-    item.estoqueMinimo !== undefined &&
-    item.quantidadeContada < item.estoqueMinimo;
-
   const contado = item.quantidadeContada !== null;
+  const abaixoMinimo =
+    contado &&
+    item.estoqueMinimo !== undefined &&
+    item.quantidadeContada! < item.estoqueMinimo;
 
-  const handleQtdChange = (raw: string) => {
-    if (raw === '' || raw === null) {
-      onQuantidade(categoriaId, item.insumoId, null);
-      return;
-    }
-    const num = parseFloat(raw.replace(',', '.'));
-    if (!isNaN(num) && num >= 0) {
-      onQuantidade(categoriaId, item.insumoId, num);
-    }
+  const handleAdicionar = () => {
+    const num = parseFloat(addValue.replace(',', '.'));
+    if (isNaN(num) || num < 0) return;
+    const novoTotal = (item.quantidadeContada ?? 0) + num;
+    onQuantidade(categoriaId, item.insumoId, novoTotal);
+    setAddValue('');
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') handleAdicionar();
   };
 
   const handleObsBlur = () => {
     onObservacao(categoriaId, item.insumoId, obsLocal);
+  };
+
+  const handleReset = () => {
+    onQuantidade(categoriaId, item.insumoId, null);
+    setAddValue('');
   };
 
   return (
@@ -44,19 +51,16 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
         abaixoMinimo
           ? 'bg-amber-500/8 border border-amber-500/30'
           : contado
-          ? 'bg-[#1c1c1e] border border-[#2a2a2e]'
+          ? 'bg-[#1c1c1e] border border-green-500/20'
           : 'bg-[#141416] border border-[#2a2a2e]'
       }`}
     >
-      <div className="flex items-center gap-3 p-3">
+      {/* ── Linha principal ───────────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 px-3 pt-3 pb-2">
         {/* Status dot */}
         <div
           className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-            abaixoMinimo
-              ? 'bg-amber-400'
-              : contado
-              ? 'bg-green-500'
-              : 'bg-[#374151]'
+            abaixoMinimo ? 'bg-amber-400' : contado ? 'bg-green-500' : 'bg-[#374151]'
           }`}
         />
 
@@ -72,56 +76,75 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
         </div>
 
         {/* Alerta */}
-        {abaixoMinimo && (
-          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+        {abaixoMinimo && <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />}
+
+        {/* Total acumulado */}
+        {contado && (
+          <div className="text-right shrink-0">
+            <span
+              className={`text-xl font-bold ${
+                abaixoMinimo ? 'text-amber-300' : 'text-green-300'
+              }`}
+            >
+              {item.quantidadeContada}
+            </span>
+            <span className="text-xs text-gray-500 ml-1">{item.unidade}</span>
+          </div>
+        )}
+
+        {/* Botão reset */}
+        {contado && (
+          <button
+            onClick={handleReset}
+            title="Zerar contagem"
+            className="w-7 h-7 rounded-lg bg-[#2a2a2e] text-gray-500 flex items-center justify-center hover:bg-red-500/20 hover:text-red-400 transition-colors shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         )}
 
         {/* Botão de observação */}
         <button
           onClick={() => setShowObs(v => !v)}
-          className={`p-2 rounded-lg transition-colors shrink-0 ${
+          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
             item.observacao
               ? 'text-amber-400 bg-amber-500/10'
               : 'text-gray-600 hover:text-gray-400 hover:bg-white/5'
           }`}
         >
-          <MessageSquare className="w-4 h-4" />
+          <MessageSquare className="w-3.5 h-3.5" />
         </button>
-
-        {/* Campo de quantidade — grande e touch-friendly */}
-        <div className="relative shrink-0">
-          <input
-            ref={inputRef}
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="0.1"
-            value={item.quantidadeContada === null ? '' : item.quantidadeContada}
-            onChange={e => handleQtdChange(e.target.value)}
-            placeholder="—"
-            className={`w-24 text-right text-2xl font-bold rounded-xl px-3 py-2 focus:outline-none transition-all
-              placeholder:text-[#374151] placeholder:text-xl
-              ${
-                abaixoMinimo
-                  ? 'bg-amber-500/15 border border-amber-500/50 text-amber-300 focus:border-amber-400'
-                  : contado
-                  ? 'bg-green-500/10 border border-green-500/30 text-green-300 focus:border-green-400'
-                  : 'bg-[#2a2a2e] border border-[#374151] text-white focus:border-amber-500/60'
-              }`}
-          />
-          {/* Botão para limpar (voltar para null) */}
-          {contado && (
-            <button
-              onClick={() => onQuantidade(categoriaId, item.insumoId, null)}
-              className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-[#374151] text-gray-400 flex items-center justify-center hover:bg-red-500/30 hover:text-red-400 transition-colors"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          )}
-        </div>
       </div>
 
-      {/* Observação inline */}
+      {/* ── Campo de adição ───────────────────────────────────────────────── */}
+      <div className="flex gap-2 px-3 pb-3">
+        <input
+          ref={inputRef}
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="0.1"
+          value={addValue}
+          onChange={e => setAddValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={contado ? `+ adicionar ${item.unidade}` : `quantidade em ${item.unidade}`}
+          className="flex-1 bg-[#2a2a2e] border border-[#374151] rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/60 transition-colors"
+        />
+        <button
+          onClick={handleAdicionar}
+          disabled={addValue === ''}
+          className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors shrink-0 ${
+            addValue !== ''
+              ? 'bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-black'
+              : 'bg-[#2a2a2e] text-gray-600 cursor-not-allowed'
+          }`}
+        >
+          <Plus className="w-4 h-4" />
+          {contado ? 'Somar' : 'Adicionar'}
+        </button>
+      </div>
+
+      {/* ── Observação inline ─────────────────────────────────────────────── */}
       {showObs && (
         <div className="px-3 pb-3 pt-0">
           <div className="flex gap-2">
@@ -134,10 +157,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
               className="flex-1 bg-[#2a2a2e] border border-[#374151] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/60"
             />
             <button
-              onClick={() => {
-                handleObsBlur();
-                setShowObs(false);
-              }}
+              onClick={() => { handleObsBlur(); setShowObs(false); }}
               className="p-2 text-gray-500 hover:text-white transition-colors"
             >
               <Check className="w-4 h-4" />
@@ -146,7 +166,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
         </div>
       )}
 
-      {/* Alerta de mínimo */}
+      {/* ── Alerta de mínimo ──────────────────────────────────────────────── */}
       {abaixoMinimo && (
         <div className="px-3 pb-3">
           <p className="text-xs text-amber-400 flex items-center gap-1.5">
