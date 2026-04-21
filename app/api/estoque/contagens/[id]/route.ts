@@ -47,7 +47,7 @@ export async function PATCH(
       id: updated.id,
       dataCriacao: updated.dataCriacao.toISOString(),
       status: updated.status as 'em_andamento' | 'concluida',
-      sessoes: updated.sessoes as StockSession['sessoes'],
+      sessoes: updated.sessoes as unknown as StockSession['sessoes'],
       criadoPor: updated.criadoPor,
     };
 

@@ -31,7 +31,7 @@ export async function GET() {
       id: c.id,
       dataCriacao: c.dataCriacao.toISOString(),
       status: c.status as 'em_andamento' | 'concluida',
-      sessoes: c.sessoes as StockSession['sessoes'],
+      sessoes: c.sessoes as unknown as StockSession['sessoes'],
       criadoPor: c.criadoPor,
     }));
 
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       id: contagem.id,
       dataCriacao: contagem.dataCriacao.toISOString(),
       status: 'em_andamento',
-      sessoes: contagem.sessoes as StockSession['sessoes'],
+      sessoes: contagem.sessoes as unknown as StockSession['sessoes'],
       criadoPor: contagem.criadoPor,
     };
 
