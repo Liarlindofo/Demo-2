@@ -52,6 +52,7 @@ model User {
   etiquetagemNomes     EtiquetagemNomeResponsavel[]
   etiquetagemEtiquetas EtiquetagemEtiqueta[]
   cmvStoreData         CmvStoreData[]
+  estoqueContagens     EstoqueContagem[]
 
   @@map("users")
 }
@@ -553,6 +554,26 @@ model CmvStoreData {
   @@unique([userId, storeSlug])
   @@index([userId])
   @@map("cmv_store_data")
+}
+
+// ============================================
+// ESTOQUE - Contagem de Estoque
+// ============================================
+
+model EstoqueContagem {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      String   @default("em_andamento") // "em_andamento" | "concluida"
+  criadoPor   String   @default("Gerente")
+  sessoes     Json     // StockCategory[] JSON
+  dataCriacao DateTime @default(now()) @map("data_criacao")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([status])
+  @@index([userId, status])
+  @@map("estoque_contagens")
 }
 
 // Permissões de ferramentas para usuários do sistema (stack_users)

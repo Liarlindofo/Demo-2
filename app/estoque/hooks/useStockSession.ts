@@ -6,72 +6,72 @@ import { criarSessoesPadrao } from '../data/mockInsumos';
 
 export type { StockCategory };
 
-const STORAGE_KEY = 'plateful_estoque_sessions_v3';
-const ACTIVE_KEY  = 'plateful_estoque_active_v3';
+// ── Helpers de API ─────────────────────────────────────────────────────────────
 
-function gerarId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+async function apiGet(): Promise<StockSession[]> {
+  const res = await fetch('/api/estoque/contagens');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
 
-function carregarSessions(): StockSession[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+async function apiPost(sessoes: StockCategory[], criadoPor: string): Promise<StockSession> {
+  const res = await fetch('/api/estoque/contagens', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessoes, criadoPor }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
 
-function salvarSessions(sessions: StockSession[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
-  } catch { /* quota exceeded */ }
+async function apiPatch(id: string, patch: { sessoes?: StockCategory[]; status?: string }): Promise<void> {
+  await fetch(`/api/estoque/contagens/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
 }
+
+async function apiDelete(id: string): Promise<void> {
+  await fetch(`/api/estoque/contagens/${id}`, { method: 'DELETE' });
+}
+
+// ── Hook ───────────────────────────────────────────────────────────────────────
 
 export function useStockSession() {
   const [sessions, setSessions] = useState<StockSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
+  // Carrega sessões do banco ao montar
   useEffect(() => {
-    const stored = carregarSessions();
-    setSessions(stored);
-    const activeId = localStorage.getItem(ACTIVE_KEY);
-    if (activeId && stored.some(s => s.id === activeId)) {
-      setActiveSessionId(activeId);
-    }
-    setHydrated(true);
+    apiGet()
+      .then(data => {
+        setSessions(data);
+        // Retoma automaticamente se havia uma sessão em andamento
+        const emAndamento = data.find(s => s.status === 'em_andamento');
+        if (emAndamento) setActiveSessionId(emAndamento.id);
+      })
+      .catch(err => console.error('[Estoque] Falha ao carregar contagens:', err))
+      .finally(() => setHydrated(true));
   }, []);
-
-  useEffect(() => {
-    if (hydrated) salvarSessions(sessions);
-  }, [sessions, hydrated]);
 
   const activeSession = sessions.find(s => s.id === activeSessionId) ?? null;
 
   // ── Criar nova contagem ────────────────────────────────────────────────────
   const iniciarContagem = useCallback(
-    (sessoesIniciais?: StockCategory[], gerente = 'Gerente') => {
+    async (sessoesIniciais?: StockCategory[], gerente = 'Gerente'): Promise<StockSession> => {
       // Se já existe uma em andamento, retoma
       const existente = sessions.find(s => s.status === 'em_andamento');
       if (existente) {
         setActiveSessionId(existente.id);
-        localStorage.setItem(ACTIVE_KEY, existente.id);
         return existente;
       }
 
-      const novaSession: StockSession = {
-        id: gerarId(),
-        dataCriacao: new Date().toISOString(),
-        status: 'em_andamento',
-        sessoes: sessoesIniciais ?? criarSessoesPadrao(),
-        criadoPor: gerente,
-      };
-
-      setSessions(prev => [...prev, novaSession]);
-      setActiveSessionId(novaSession.id);
-      localStorage.setItem(ACTIVE_KEY, novaSession.id);
-      return novaSession;
+      const nova = await apiPost(sessoesIniciais ?? criarSessoesPadrao(), gerente);
+      setSessions(prev => [nova, ...prev]);
+      setActiveSessionId(nova.id);
+      return nova;
     },
     [sessions],
   );
@@ -79,106 +79,113 @@ export function useStockSession() {
   // ── Retomar contagem existente ─────────────────────────────────────────────
   const retomarContagem = useCallback((sessionId: string) => {
     setActiveSessionId(sessionId);
-    localStorage.setItem(ACTIVE_KEY, sessionId);
   }, []);
 
-  // ── Fechar sessão ativa sem concluir ──────────────────────────────────────
+  // ── Fechar sessão ativa (sem concluir) ────────────────────────────────────
   const fecharContagem = useCallback(() => {
     setActiveSessionId(null);
-    localStorage.removeItem(ACTIVE_KEY);
   }, []);
 
-  // ── Atualizar quantidade ───────────────────────────────────────────────────
-  const atualizarQuantidade = useCallback(
-    (categoriaId: string, insumoId: string, quantidade: number | null) => {
-      setSessions(prev =>
-        prev.map(s =>
-          s.id !== activeSessionId ? s : {
-            ...s,
-            sessoes: s.sessoes.map(cat =>
-              cat.id !== categoriaId ? cat : {
-                ...cat,
-                itens: cat.itens.map(item =>
-                  item.insumoId !== insumoId ? item : { ...item, quantidadeContada: quantidade },
-                ),
-              },
-            ),
-          },
-        ),
-      );
+  // ── Função interna para aplicar uma mutação e salvar ──────────────────────
+  const mutarSessaoAtiva = useCallback(
+    (mutate: (s: StockSession) => StockSession) => {
+      setSessions(prev => {
+        const session = prev.find(s => s.id === activeSessionId);
+        if (!session) return prev;
+        const updated = mutate(session);
+        // Salva no banco (fire and forget)
+        apiPatch(updated.id, { sessoes: updated.sessoes, status: updated.status }).catch(console.error);
+        return prev.map(s => (s.id === activeSessionId ? updated : s));
+      });
     },
     [activeSessionId],
   );
 
-  // ── Atualizar observação ───────────────────────────────────────────────────
-  const atualizarObservacao = useCallback(
-    (categoriaId: string, insumoId: string, observacao: string) => {
-      setSessions(prev =>
-        prev.map(s =>
-          s.id !== activeSessionId ? s : {
-            ...s,
-            sessoes: s.sessoes.map(cat =>
-              cat.id !== categoriaId ? cat : {
-                ...cat,
-                itens: cat.itens.map(item =>
-                  item.insumoId !== insumoId ? item : { ...item, observacao },
-                ),
-              },
+  // ── Atualizar quantidade de um item ───────────────────────────────────────
+  const atualizarQuantidade = useCallback(
+    (categoriaId: string, insumoId: string, quantidade: number | null) => {
+      mutarSessaoAtiva(s => ({
+        ...s,
+        sessoes: s.sessoes.map(cat =>
+          cat.id !== categoriaId ? cat : {
+            ...cat,
+            itens: cat.itens.map((item: StockItem) =>
+              item.insumoId !== insumoId ? item : { ...item, quantidadeContada: quantidade },
             ),
           },
         ),
-      );
+      }));
     },
-    [activeSessionId],
+    [mutarSessaoAtiva],
+  );
+
+  // ── Atualizar observação de um item ──────────────────────────────────────
+  const atualizarObservacao = useCallback(
+    (categoriaId: string, insumoId: string, observacao: string) => {
+      mutarSessaoAtiva(s => ({
+        ...s,
+        sessoes: s.sessoes.map(cat =>
+          cat.id !== categoriaId ? cat : {
+            ...cat,
+            itens: cat.itens.map((item: StockItem) =>
+              item.insumoId !== insumoId ? item : { ...item, observacao },
+            ),
+          },
+        ),
+      }));
+    },
+    [mutarSessaoAtiva],
   );
 
   // ── Concluir categoria ────────────────────────────────────────────────────
-  const concluirCategoria = useCallback((categoriaId: string) => {
-    setSessions(prev =>
-      prev.map(s =>
-        s.id !== activeSessionId ? s : {
-          ...s,
-          sessoes: s.sessoes.map(cat =>
-            cat.id !== categoriaId ? cat : { ...cat, status: 'concluida' },
-          ),
-        },
-      ),
-    );
-  }, [activeSessionId]);
+  const concluirCategoria = useCallback(
+    (categoriaId: string) => {
+      mutarSessaoAtiva(s => ({
+        ...s,
+        sessoes: s.sessoes.map(cat =>
+          cat.id !== categoriaId ? cat : { ...cat, status: 'concluida' as const },
+        ),
+      }));
+    },
+    [mutarSessaoAtiva],
+  );
 
   // ── Reabrir categoria ─────────────────────────────────────────────────────
-  const reabrirCategoria = useCallback((categoriaId: string) => {
-    setSessions(prev =>
-      prev.map(s =>
-        s.id !== activeSessionId ? s : {
-          ...s,
-          sessoes: s.sessoes.map(cat =>
-            cat.id !== categoriaId ? cat : { ...cat, status: 'pendente' },
-          ),
-        },
-      ),
-    );
-  }, [activeSessionId]);
+  const reabrirCategoria = useCallback(
+    (categoriaId: string) => {
+      mutarSessaoAtiva(s => ({
+        ...s,
+        sessoes: s.sessoes.map(cat =>
+          cat.id !== categoriaId ? cat : { ...cat, status: 'pendente' as const },
+        ),
+      }));
+    },
+    [mutarSessaoAtiva],
+  );
 
   // ── Finalizar toda a contagem ─────────────────────────────────────────────
   const finalizarContagem = useCallback(() => {
+    if (!activeSessionId) return;
     setSessions(prev =>
-      prev.map(s =>
-        s.id !== activeSessionId ? s : { ...s, status: 'concluida' },
-      ),
+      prev.map(s => {
+        if (s.id !== activeSessionId) return s;
+        const updated = { ...s, status: 'concluida' as const };
+        apiPatch(updated.id, { status: 'concluida' }).catch(console.error);
+        return updated;
+      }),
     );
     setActiveSessionId(null);
-    localStorage.removeItem(ACTIVE_KEY);
   }, [activeSessionId]);
 
   // ── Excluir contagem ──────────────────────────────────────────────────────
-  const excluirContagem = useCallback((sessionId: string) => {
-    setSessions(prev => prev.filter(s => s.id !== sessionId));
-    if (activeSessionId === sessionId) {
-      setActiveSessionId(null);
-      localStorage.removeItem(ACTIVE_KEY);
-    }
-  }, [activeSessionId]);
+  const excluirContagem = useCallback(
+    (sessionId: string) => {
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      if (activeSessionId === sessionId) setActiveSessionId(null);
+      apiDelete(sessionId).catch(console.error);
+    },
+    [activeSessionId],
+  );
 
   // ── Estatísticas ──────────────────────────────────────────────────────────
   const calcularProgresso = (session: StockSession) => {

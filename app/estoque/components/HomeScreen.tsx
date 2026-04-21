@@ -147,7 +147,7 @@ export function HomeScreen({ sessions, onIniciar, onRetomar }: HomeScreenProps) 
         )}
 
         <p className="text-xs text-gray-700 text-center pb-4">
-          Dados salvos localmente neste dispositivo
+          Dados salvos no banco de dados
         </p>
       </div>
     </div>

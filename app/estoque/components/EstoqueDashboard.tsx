@@ -5,6 +5,7 @@ import { History, AlertTriangle, RefreshCw, Package } from 'lucide-react';
 import { useStockSession } from '../hooks/useStockSession';
 import { useProdutosEstoque } from '../hooks/useProdutosEstoque';
 import { useEstoqueConfig } from '../hooks/useEstoqueConfig';
+import { criarSessoesPadrao } from '../data/mockInsumos';
 import { HomeScreen } from './HomeScreen';
 import { AlertBadge } from './AlertBadge';
 import { Contagem } from '../pages/Contagem';
@@ -58,8 +59,8 @@ export function EstoqueDashboard() {
     );
   }
 
-  const handleIniciar = () => {
-    iniciarContagem(sessoesProdutos);
+  const handleIniciar = async () => {
+    await iniciarContagem(criarSessoesPadrao());
     setScreen('counting');
   };
 
