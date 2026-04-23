@@ -33,7 +33,36 @@ const TOOL_LABELS: Record<SystemTool, string> = {
   [SystemTool.AGENDAMENTO_RELATORIOS]: "Agendamento de Relatórios",
   [SystemTool.CMV]: "CMV",
   [SystemTool.ANALYTICS]: "Analytics",
+  [SystemTool.ESTOQUE]: "Estoque",
+  [SystemTool.IFOOD]: "iFood",
 };
+
+// Grupos visuais de ferramentas para organizar a UI
+const TOOL_GROUPS: { label: string; tools: SystemTool[] }[] = [
+  {
+    label: "Operacional",
+    tools: [
+      SystemTool.PRODUTOS,
+      SystemTool.CHECKLIST,
+      SystemTool.ETIQUETAGEM,
+      SystemTool.CMV,
+      SystemTool.ESTOQUE,
+    ],
+  },
+  {
+    label: "Integrações",
+    tools: [
+      SystemTool.CONEXOES,
+      SystemTool.WHATSAPP_CHAT,
+      SystemTool.AGENDAMENTO_RELATORIOS,
+      SystemTool.IFOOD,
+    ],
+  },
+  {
+    label: "Outros",
+    tools: [SystemTool.ANALYTICS],
+  },
+];
 
 export default function UsuariosPage() {
   const router = useRouter();
@@ -342,33 +371,41 @@ export default function UsuariosPage() {
                         </p>
                       </div>
 
-                      {/* Permissões de ferramentas */}
-                      <div className="mt-4">
-                        <p className="text-sm font-medium mb-2">Permissões de Ferramentas:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {Object.values(SystemTool).map((tool) => {
-                            const hasPermission = getToolPermission(user, tool);
-                            return (
-                              <button
-                                key={tool}
-                                onClick={() => toggleToolPermission(user, tool)}
-                                disabled={saving}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                                  hasPermission
-                                    ? "bg-green-900/30 text-green-400 border border-green-700 hover:bg-green-900/50"
-                                    : "bg-gray-800 text-gray-500 border border-gray-700 hover:bg-gray-700"
-                                } ${saving ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-                              >
-                                {hasPermission ? (
-                                  <CheckCircle2 className="h-4 w-4" />
-                                ) : (
-                                  <LockIcon className="h-4 w-4" />
-                                )}
-                                {TOOL_LABELS[tool]}
-                              </button>
-                            );
-                          })}
-                        </div>
+                      {/* Permissões de ferramentas — agrupadas */}
+                      <div className="mt-4 space-y-3">
+                        <p className="text-sm font-medium">Permissões de Ferramentas:</p>
+                        {TOOL_GROUPS.map((group) => (
+                          <div key={group.label}>
+                            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1.5">
+                              {group.label}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {group.tools.map((tool) => {
+                                const hasPermission = getToolPermission(user, tool);
+                                return (
+                                  <button
+                                    key={tool}
+                                    onClick={() => toggleToolPermission(user, tool)}
+                                    disabled={saving}
+                                    title={hasPermission ? "Clique para revogar" : "Clique para conceder"}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                      hasPermission
+                                        ? "bg-green-900/30 text-green-400 border border-green-700 hover:bg-green-900/50"
+                                        : "bg-gray-800 text-gray-500 border border-gray-700 hover:bg-gray-700"
+                                    } ${saving ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                                  >
+                                    {hasPermission ? (
+                                      <CheckCircle2 className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <LockIcon className="h-3.5 w-3.5" />
+                                    )}
+                                    {TOOL_LABELS[tool]}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
 

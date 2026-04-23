@@ -33,6 +33,8 @@ export enum SystemTool {
   AGENDAMENTO_RELATORIOS = 'agendamento_relatorios',
   CMV = 'cmv',
   ANALYTICS = 'analytics',
+  ESTOQUE = 'estoque',
+  IFOOD = 'ifood',
 }
 
 export interface StackUser {

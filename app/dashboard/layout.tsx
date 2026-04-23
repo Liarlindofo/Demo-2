@@ -218,62 +218,76 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           )}
 
                           {/* Estoque */}
-                          <Link
-                            href="/estoque"
-                            onClick={() => setIsSidebarOpen(false)}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                              pathname?.startsWith('/estoque')
-                                ? 'bg-amber-500/15 text-amber-400'
-                                : 'text-gray-300 hover:bg-[#374151] hover:text-white'
-                            }`}
-                          >
-                            <Warehouse className="h-5 w-5" />
-                            <span className="font-medium">Estoque</span>
-                          </Link>
-
-                          {/* iFood */}
-                          <div>
-                            <button
-                              onClick={() => setIfoodOpen((o) => !o)}
-                              className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg transition-colors ${
-                                pathname?.startsWith('/ifood')
-                                  ? 'bg-red-900/20 text-red-400'
+                          {permissions[SystemTool.ESTOQUE] ? (
+                            <Link
+                              href="/estoque"
+                              onClick={() => setIsSidebarOpen(false)}
+                              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                                pathname?.startsWith('/estoque')
+                                  ? 'bg-amber-500/15 text-amber-400'
                                   : 'text-gray-300 hover:bg-[#374151] hover:text-white'
                               }`}
                             >
-                              <span className="flex items-center gap-3">
-                                <ShoppingBag className="h-5 w-5" />
-                                <span className="font-medium">iFood</span>
-                              </span>
-                              {ifoodOpen
-                                ? <ChevronDown className="h-4 w-4" />
-                                : <ChevronRight className="h-4 w-4" />}
-                            </button>
+                              <Warehouse className="h-5 w-5" />
+                              <span className="font-medium">Estoque</span>
+                            </Link>
+                          ) : (
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 cursor-not-allowed">
+                              <Lock className="h-5 w-5" />
+                              <span className="font-medium">Estoque</span>
+                            </div>
+                          )}
 
-                            {ifoodOpen && (
-                              <div className="mt-1 ml-4 pl-4 border-l border-[#374151] space-y-1">
-                                {[
-                                  { label: 'Configurações', href: '/ifood/configuracoes' },
-                                  { label: 'Operacional', href: '/ifood/operacional' },
-                                  { label: 'Financeiro', href: '/ifood/financeiro' },
-                                  { label: 'Cardápio', href: '/ifood/cardapio' },
-                                ].map((sub) => (
-                                  <Link
-                                    key={sub.href}
-                                    href={sub.href}
-                                    onClick={() => setIsSidebarOpen(false)}
-                                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                                      pathname === sub.href
-                                        ? 'bg-red-900/20 text-red-400'
-                                        : 'text-gray-400 hover:bg-[#374151] hover:text-white'
-                                    }`}
-                                  >
-                                    {sub.label}
-                                  </Link>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                          {/* iFood */}
+                          {permissions[SystemTool.IFOOD] ? (
+                            <div>
+                              <button
+                                onClick={() => setIfoodOpen((o) => !o)}
+                                className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg transition-colors ${
+                                  pathname?.startsWith('/ifood')
+                                    ? 'bg-red-900/20 text-red-400'
+                                    : 'text-gray-300 hover:bg-[#374151] hover:text-white'
+                                }`}
+                              >
+                                <span className="flex items-center gap-3">
+                                  <ShoppingBag className="h-5 w-5" />
+                                  <span className="font-medium">iFood</span>
+                                </span>
+                                {ifoodOpen
+                                  ? <ChevronDown className="h-4 w-4" />
+                                  : <ChevronRight className="h-4 w-4" />}
+                              </button>
+
+                              {ifoodOpen && (
+                                <div className="mt-1 ml-4 pl-4 border-l border-[#374151] space-y-1">
+                                  {[
+                                    { label: 'Configurações', href: '/ifood/configuracoes' },
+                                    { label: 'Operacional', href: '/ifood/operacional' },
+                                    { label: 'Financeiro', href: '/ifood/financeiro' },
+                                    { label: 'Cardápio', href: '/ifood/cardapio' },
+                                  ].map((sub) => (
+                                    <Link
+                                      key={sub.href}
+                                      href={sub.href}
+                                      onClick={() => setIsSidebarOpen(false)}
+                                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                                        pathname === sub.href
+                                          ? 'bg-red-900/20 text-red-400'
+                                          : 'text-gray-400 hover:bg-[#374151] hover:text-white'
+                                      }`}
+                                    >
+                                      {sub.label}
+                                    </Link>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 cursor-not-allowed">
+                              <Lock className="h-5 w-5" />
+                              <span className="font-medium">iFood</span>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>

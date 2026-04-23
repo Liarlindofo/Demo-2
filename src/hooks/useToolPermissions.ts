@@ -20,6 +20,8 @@ export function useToolPermissions() {
     [SystemTool.AGENDAMENTO_RELATORIOS]: false,
     [SystemTool.CMV]: false,
     [SystemTool.ANALYTICS]: false,
+    [SystemTool.ESTOQUE]: false,
+    [SystemTool.IFOOD]: false,
   });
   const [loading, setLoading] = useState(true);
 
@@ -69,6 +71,8 @@ export function useToolPermissions() {
         [SystemTool.AGENDAMENTO_RELATORIOS]: false,
         [SystemTool.CMV]: false,
         [SystemTool.ANALYTICS]: false,
+        [SystemTool.ESTOQUE]: false,
+        [SystemTool.IFOOD]: false,
       };
 
       permissionChecks.forEach(({ tool, hasPermission }) => {
