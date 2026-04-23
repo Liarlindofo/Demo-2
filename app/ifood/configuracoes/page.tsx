@@ -17,16 +17,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
   Loader2,
   Plus,
   Trash2,
@@ -588,31 +578,40 @@ export default function IfoodConfiguracoesPage() {
       </Dialog>
 
       {/* ------------------------------------------------------------------ */}
-      {/* AlertDialog: Confirmar exclusão                                     */}
+      {/* Dialog: Confirmar exclusão                                          */}
       {/* ------------------------------------------------------------------ */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
-        <AlertDialogContent className="bg-[#141415] border-[#374151] text-white">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remover loja iFood?</AlertDialogTitle>
-            <AlertDialogDescription className="text-gray-400">
-              A loja <strong className="text-white">{deleteTarget?.merchantName}</strong> será desvinculada
-              da sua conta. Os dados relacionados (pedidos, relatórios) serão desvinculados e não
-              poderão ser recuperados. Tem certeza?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="border-[#374151] text-white hover:bg-[#374151]">
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
+        <DialogContent className="bg-[#141415] border-[#374151] text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-400">
+              <Trash2 className="h-5 w-5" />
+              Remover loja iFood?
+            </DialogTitle>
+          </DialogHeader>
+
+          <p className="text-gray-400 text-sm leading-relaxed">
+            A loja <strong className="text-white">{deleteTarget?.merchantName}</strong> será
+            desvinculada da sua conta. Os dados relacionados (pedidos, relatórios) serão
+            desvinculados e não poderão ser recuperados. Tem certeza?
+          </p>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              className="border-[#374151] text-white hover:bg-[#374151]"
+            >
               Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction
+            </Button>
+            <Button
               onClick={() => deleteTarget && handleDelete(deleteTarget)}
               className="bg-red-600 hover:bg-red-700 text-white"
             >
               Sim, remover
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
