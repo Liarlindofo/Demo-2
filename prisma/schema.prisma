@@ -55,8 +55,10 @@ model User {
   estoqueContagens     EstoqueContagem[]
   ifoodConnections     IfoodConnection[]
   ifoodOrders          IfoodOrder[]
-  ifoodFinancialEvents IfoodFinancialEvent[]
-  ifoodSettlements     IfoodSettlement[]
+  ifoodFinancialEvents   IfoodFinancialEvent[]
+  ifoodSettlements       IfoodSettlement[]
+  ifoodCatalogItems      IfoodCatalogItem[]
+  ifoodCatalogChangeLogs IfoodCatalogChangeLog[]
 
   @@map("users")
 }
@@ -674,6 +676,50 @@ model IfoodSettlement {
   @@index([merchantId])
   @@index([settlementDate])
   @@map("ifood_settlements")
+}
+
+model IfoodCatalogItem {
+  id            String   @id @default(cuid())
+  itemId        String
+  merchantId    String
+  userId        String
+  name          String
+  description   String?
+  price         Float
+  originalPrice Float?
+  status        String   // AVAILABLE | UNAVAILABLE
+  category      String?
+  categoryId    String?
+  imageUrl      String?
+  rawData       Json
+  syncedAt      DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@unique([itemId, merchantId])
+  @@index([userId])
+  @@index([merchantId])
+  @@index([status])
+  @@map("ifood_catalog_items")
+}
+
+model IfoodCatalogChangeLog {
+  id         String   @id @default(cuid())
+  itemId     String
+  itemName   String
+  merchantId String
+  userId     String
+  changeType String   // STATUS | PRICE
+  oldValue   String
+  newValue   String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([merchantId])
+  @@index([itemId])
+  @@map("ifood_catalog_change_logs")
 }
 
 // Permissões de ferramentas para usuários do sistema (stack_users)
