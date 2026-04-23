@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Settings, User, Moon, Sun, LogOut, Menu, Link2, Calendar, MessageSquare, ClipboardCheck, Tag, Lock, Package, BarChart2, Warehouse } from 'lucide-react';
+import { Settings, User, Moon, Sun, LogOut, Menu, Link2, Calendar, MessageSquare, ClipboardCheck, Tag, Lock, Package, BarChart2, Warehouse, ShoppingBag, ChevronDown, ChevronRight } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import { AppProvider } from '@/contexts/app-context';
 import { useRouter } from 'next/navigation';
@@ -18,6 +18,7 @@ import { SystemTool } from '@/types/admin';
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [ifoodOpen, setIfoodOpen] = useState(false);
   const pathname = usePathname();
   
   // Usar Stack Auth real - redireciona para login se não autenticado
@@ -229,6 +230,50 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             <Warehouse className="h-5 w-5" />
                             <span className="font-medium">Estoque</span>
                           </Link>
+
+                          {/* iFood */}
+                          <div>
+                            <button
+                              onClick={() => setIfoodOpen((o) => !o)}
+                              className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg transition-colors ${
+                                pathname?.startsWith('/ifood')
+                                  ? 'bg-red-900/20 text-red-400'
+                                  : 'text-gray-300 hover:bg-[#374151] hover:text-white'
+                              }`}
+                            >
+                              <span className="flex items-center gap-3">
+                                <ShoppingBag className="h-5 w-5" />
+                                <span className="font-medium">iFood</span>
+                              </span>
+                              {ifoodOpen
+                                ? <ChevronDown className="h-4 w-4" />
+                                : <ChevronRight className="h-4 w-4" />}
+                            </button>
+
+                            {ifoodOpen && (
+                              <div className="mt-1 ml-4 pl-4 border-l border-[#374151] space-y-1">
+                                {[
+                                  { label: 'Configurações', href: '/ifood/configuracoes' },
+                                  { label: 'Operacional', href: '/ifood/operacional' },
+                                  { label: 'Financeiro', href: '/ifood/financeiro' },
+                                  { label: 'Cardápio', href: '/ifood/cardapio' },
+                                ].map((sub) => (
+                                  <Link
+                                    key={sub.href}
+                                    href={sub.href}
+                                    onClick={() => setIsSidebarOpen(false)}
+                                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                                      pathname === sub.href
+                                        ? 'bg-red-900/20 text-red-400'
+                                        : 'text-gray-400 hover:bg-[#374151] hover:text-white'
+                                    }`}
+                                  >
+                                    {sub.label}
+                                  </Link>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </>
                       )}
                     </div>

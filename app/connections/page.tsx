@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useUser } from "@stackframe/stack";
 import Image from "next/image";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import ToolProtection from "@/components/auth/ToolProtection";
 import { SystemTool } from "@/types/admin";
@@ -14,16 +14,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2,
   QrCode,
   Power,
   RefreshCw,
-  Plus,
-  Store,
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -56,15 +51,6 @@ interface UserAPI {
   status?: string;
 }
 
-interface SaiposStore {
-  id: string;
-  name: string;
-  type: string;
-  storeId: string;
-  apiKey: string;
-  status: string;
-}
-
 // URL da API WhatsApp
 const API_URL =
   process.env.NEXT_PUBLIC_WHATSAPP_API_URL || "https://api.platefull.com.br";
@@ -75,7 +61,6 @@ function ConnectionsPageContent() {
   const [whatsappConnections, setWhatsappConnections] = useState<
     WhatsAppConnection[]
   >([]);
-  const [saiposStores, setSaiposStores] = useState<SaiposStore[]>([]);
   const [loading, setLoading] = useState(true);
   const [qrModal, setQrModal] = useState<{
     open: boolean;
@@ -85,10 +70,6 @@ function ConnectionsPageContent() {
   }>({
     open: false,
   });
-  const [addConnectionModal, setAddConnectionModal] = useState(false);
-  const [connectionType, setConnectionType] = useState<"saipos" | "whatsapp">(
-    "saipos",
-  );
   const [actionLoading, setActionLoading] = useState<{
     [key: string]: boolean;
   }>({});
@@ -97,14 +78,6 @@ function ConnectionsPageContent() {
   const [isStarting, setIsStarting] = useState<{ [key: string]: boolean }>({});
   const [hasStarted, setHasStarted] = useState<{ [key: string]: boolean }>({});
 
-  // Formulário para adicionar conexão
-  const [formData, setFormData] = useState({
-    name: "",
-    apiKey: "",
-    storeId: "",
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // --------------------------------------------------------------
   // 1. CARREGAR CONEXÕES WHATSAPP E LOJAS SAIPOS
@@ -119,11 +92,8 @@ function ConnectionsPageContent() {
         const result = await response.json();
         const data: UserAPI[] = result.apis || [];
 
-        // Separar APIs WhatsApp e Saipos
+        // Apenas APIs WhatsApp
         const whatsappAPIs = data.filter((api) => api.type === "whatsapp");
-        const saiposAPIs = data
-          .filter((api) => api.type === "saipos")
-          .slice(0, 4);
 
         // Carregar status das conexões WhatsApp (APENAS STATUS, NUNCA START)
         let connectionsWithStatus: WhatsAppConnection[] = [];
@@ -166,18 +136,6 @@ function ConnectionsPageContent() {
         }
 
         setWhatsappConnections(connectionsWithStatus);
-
-        // Carregar lojas Saipos
-        const stores: SaiposStore[] = saiposAPIs.map((api) => ({
-          id: api.id,
-          name: api.name,
-          type: api.type,
-          storeId: api.storeId,
-          apiKey: api.apiKey,
-          status: api.status || "disconnected",
-        }));
-
-        setSaiposStores(stores);
       }
     } catch (error) {
       console.error("Erro ao carregar conexões:", error);
@@ -239,56 +197,6 @@ function ConnectionsPageContent() {
 
     return () => clearInterval(interval);
   }, [hasStarted, user?.id, qrModal.open]);
-
-  // --------------------------------------------------------------
-  // 2. ADICIONAR NOVA CONEXÃO
-  // --------------------------------------------------------------
-  const handleAddConnection = async () => {
-    if (!formData.name || !formData.apiKey) {
-      setErrorMsg("Preencha todos os campos obrigatórios");
-      return;
-    }
-
-    if (connectionType === "saipos" && saiposStores.length >= 4) {
-      setErrorMsg("Você já possui 4 lojas Saipos cadastradas (limite máximo)");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setErrorMsg(null);
-
-    try {
-      const response = await fetch("/api/user-apis", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: formData.name,
-          type: connectionType,
-          apiKey: formData.apiKey,
-          storeId:
-            formData.storeId ||
-            formData.name.toLowerCase().replace(/\s+/g, "-"),
-        }),
-      });
-
-      if (response.ok) {
-        setFormData({ name: "", apiKey: "", storeId: "" });
-        setAddConnectionModal(false);
-        setErrorMsg(null);
-        await loadConnections();
-      } else {
-        const error = await response.json();
-        setErrorMsg(error.error || "Erro ao adicionar conexão");
-      }
-    } catch (error) {
-      console.error("Erro ao adicionar conexão:", error);
-      setErrorMsg("Erro ao adicionar conexão. Tente novamente.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   // --------------------------------------------------------------
   // 3. DELETAR CONEXÃO
@@ -497,46 +405,15 @@ function ConnectionsPageContent() {
     <div className="min-h-screen bg-black p-6">
       <div className="max-w-7xl mx-auto">
         {/* HEADER */}
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Conexões</h1>
-            <p className="text-gray-400">
-              Gerencie suas conexões WhatsApp e lojas Saipos
-            </p>
-          </div>
-          <Button
-            onClick={() => {
-              setAddConnectionModal(true);
-              setConnectionType("whatsapp");
-            }}
-            className="bg-[#001F05] hover:bg-[#003308] text-white"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Adicionar Conexão
-          </Button>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Conexões</h1>
+          <p className="text-gray-400">
+            Gerencie suas conexões WhatsApp
+          </p>
         </div>
 
-        {/* TABS */}
-        <Tabs defaultValue="whatsapp" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-[#374151] mb-6">
-            <TabsTrigger
-              value="whatsapp"
-              className="data-[state=active]:bg-[#001F05] text-white"
-            >
-              <MessageSquare className="h-4 w-4 mr-2" />
-              WhatsApp
-            </TabsTrigger>
-            <TabsTrigger
-              value="saipos"
-              className="data-[state=active]:bg-[#001F05] text-white"
-            >
-              <Store className="h-4 w-4 mr-2" />
-              Saipos ({saiposStores.length}/4)
-            </TabsTrigger>
-          </TabsList>
-
-          {/* ABA WHATSAPP */}
-          <TabsContent value="whatsapp" className="space-y-6">
+        {/* WHATSAPP */}
+        <div className="space-y-6">
             {whatsappConnections.length === 0 ? (
               <Card className="bg-[#141415] border-[#374151] rounded-2xl p-12 text-center">
                 <h3 className="text-xl font-semibold text-white mb-4">
@@ -716,261 +593,8 @@ function ConnectionsPageContent() {
                 <li>4. Aponte a câmera para o QR Code</li>
               </ol>
             </Card>
-          </TabsContent>
-
-          {/* ABA SAIPOS */}
-          <TabsContent value="saipos" className="space-y-6">
-            <div className="flex justify-between items-center mb-4">
-              <p className="text-gray-400">
-                Conecte até 4 lojas Saipos usando Bearer Token
-              </p>
-              {saiposStores.length < 4 && (
-                <Button
-                  onClick={() => {
-                    setAddConnectionModal(true);
-                    setConnectionType("saipos");
-                  }}
-                  className="bg-[#001F05] hover:bg-[#003308] text-white"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Loja
-                </Button>
-              )}
-            </div>
-
-            {saiposStores.length === 0 ? (
-              <Card className="bg-[#141415] border-[#374151] rounded-2xl p-12 text-center">
-                <h3 className="text-xl font-semibold text-white mb-4">
-                  Nenhuma loja Saipos cadastrada
-                </h3>
-                <p className="text-gray-400 mb-6">
-                  Adicione uma loja para começar
-                </p>
-                <Button
-                  onClick={() => {
-                    setAddConnectionModal(true);
-                    setConnectionType("saipos");
-                  }}
-                  className="bg-[#001F05] hover:bg-[#003308] text-white"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Primeira Loja
-                </Button>
-              </Card>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {saiposStores.map((store) => (
-                  <Card
-                    key={store.id}
-                    className="bg-[#141415] border-[#374151] rounded-2xl hover:border-[#001F05] transition-all"
-                  >
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-white flex items-center gap-2">
-                          <Store className="h-5 w-5" />
-                          {store.name}
-                        </CardTitle>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            handleDeleteConnection(store.id, "Saipos")
-                          }
-                          className="text-red-400 hover:text-red-500 hover:bg-red-500/10"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-sm text-gray-400 mb-1">
-                            Store ID:
-                          </p>
-                          <p className="text-sm text-white font-mono bg-[#0f0f10] p-2 rounded">
-                            {store.storeId}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-400">Status:</span>
-                          <div className="flex items-center gap-2">
-                            {getStatusIcon(store.status)}
-                            <span
-                              className={`text-sm font-semibold ${
-                                store.status === "connected"
-                                  ? "text-green-400"
-                                  : "text-red-400"
-                              }`}
-                            >
-                              {store.status === "connected"
-                                ? "Conectado"
-                                : "Desconectado"}
-                            </span>
-                          </div>
-                        </div>
-                        <Button
-                          onClick={async () => {
-                            const key = `test-${store.id}`;
-                            setActionLoading({ ...actionLoading, [key]: true });
-                            try {
-                              const response = await fetch(`/api/user-apis/test?id=${store.id}`, {
-                                method: 'POST',
-                              });
-                              if (response.ok) {
-                                const data = await response.json();
-                                if (data.api?.status === 'connected') {
-                                  addToast('✅ Conexão estabelecida com sucesso!', 'success');
-                                } else {
-                                  addToast('❌ Falha na conexão. Verifique o token.', 'error');
-                                }
-                                await loadConnections();
-                              } else {
-                                const errorData = await response.json().catch(() => ({}));
-                                addToast(errorData?.error || 'Erro ao testar conexão', 'error');
-                              }
-                            } catch (error) {
-                              console.error('Erro ao testar conexão:', error);
-                              addToast('Erro ao testar conexão', 'error');
-                            } finally {
-                              setActionLoading({ ...actionLoading, [key]: false });
-                            }
-                          }}
-                          disabled={actionLoading[`test-${store.id}`]}
-                          className="w-full bg-[#001F05] hover:bg-[#003308] text-white mt-2"
-                          size="sm"
-                        >
-                          {actionLoading[`test-${store.id}`] ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                              Testando...
-                            </>
-                          ) : (
-                            <>
-                              <RefreshCw className="h-4 w-4 mr-2" />
-                              Testar Conexão
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+        </div>
       </div>
-
-      {/* MODAL ADICIONAR CONEXÃO */}
-      <Dialog open={addConnectionModal} onOpenChange={setAddConnectionModal}>
-        <DialogContent className="bg-[#141415] border-[#374151] text-white max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              Adicionar Conexão{" "}
-              {connectionType === "saipos" ? "Saipos" : "WhatsApp"}
-            </DialogTitle>
-          </DialogHeader>
-
-          {errorMsg && (
-            <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded">
-              {errorMsg}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="name" className="text-gray-300">
-                Nome da {connectionType === "saipos" ? "Loja" : "Conexão"}
-              </Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                placeholder={
-                  connectionType === "saipos"
-                    ? "Ex: Loja Centro"
-                    : "Ex: WhatsApp Principal"
-                }
-                className="bg-[#0f0f10] border-[#374151] text-white mt-1"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="apiKey" className="text-gray-300">
-                {connectionType === "saipos" ? "Bearer Token" : "API Key"}
-              </Label>
-              <Input
-                id="apiKey"
-                type="password"
-                value={formData.apiKey}
-                onChange={(e) =>
-                  setFormData({ ...formData, apiKey: e.target.value })
-                }
-                placeholder="Cole sua chave de API aqui"
-                className="bg-[#0f0f10] border-[#374151] text-white mt-1"
-              />
-            </div>
-
-            {connectionType === "saipos" && (
-              <div>
-                <Label htmlFor="storeId" className="text-gray-300">
-                  Store ID (opcional)
-                </Label>
-                <Input
-                  id="storeId"
-                  value={formData.storeId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, storeId: e.target.value })
-                  }
-                  placeholder="Será gerado automaticamente se vazio"
-                  className="bg-[#0f0f10] border-[#374151] text-white mt-1"
-                />
-              </div>
-            )}
-
-            {connectionType === "saipos" && (
-              <p className="text-sm text-gray-400">
-                Você pode adicionar até 4 lojas Saipos. Atualmente:{" "}
-                {saiposStores.length}/4
-              </p>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setAddConnectionModal(false);
-                setFormData({ name: "", apiKey: "", storeId: "" });
-                setErrorMsg(null);
-              }}
-              className="border-[#374151] text-white hover:bg-[#374151]"
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleAddConnection}
-              disabled={isSubmitting}
-              className="bg-[#001F05] hover:bg-[#003308] text-white"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Adicionando...
-                </>
-              ) : (
-                <>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar
-                </>
-              )}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* MODAL DO QR CODE */}
       <Dialog open={qrModal.open} onOpenChange={(open) => setQrModal({ open })}>

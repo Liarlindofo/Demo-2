@@ -53,6 +53,7 @@ model User {
   etiquetagemEtiquetas EtiquetagemEtiqueta[]
   cmvStoreData         CmvStoreData[]
   estoqueContagens     EstoqueContagem[]
+  ifoodConnections     IfoodConnection[]
 
   @@map("users")
 }
@@ -574,6 +575,35 @@ model EstoqueContagem {
   @@index([status])
   @@index([userId, status])
   @@map("estoque_contagens")
+}
+
+// ============================================
+// IFOOD - Integração iFood
+// ============================================
+
+model IfoodConnection {
+  id           String   @id @default(cuid())
+  userId       String
+  merchantId   String
+  merchantName String
+  status       String   @default("active") // active | inactive | error
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, merchantId])
+  @@index([userId])
+  @@map("ifood_connections")
+}
+
+model IfoodToken {
+  id          String   @id @default(cuid())
+  accessToken String   @db.Text
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("ifood_tokens")
 }
 
 // Permissões de ferramentas para usuários do sistema (stack_users)
