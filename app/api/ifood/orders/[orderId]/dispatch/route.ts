@@ -10,7 +10,7 @@ export async function POST(
   try {
     const { orderId } = await params;
     const resolved = await resolveOrderAction(orderId);
-    if (!resolved.ok) return resolved.response;
+    if (resolved.ok === false) return resolved.response;
 
     await dispatchOrder(orderId);
 
