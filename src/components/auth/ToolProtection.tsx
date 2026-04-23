@@ -21,6 +21,8 @@ const TOOL_LABELS: Record<SystemTool, string> = {
   [SystemTool.AGENDAMENTO_RELATORIOS]: "Agendamento de Relatórios",
   [SystemTool.CMV]: "CMV",
   [SystemTool.ANALYTICS]: "Analytics",
+  [SystemTool.ESTOQUE]: "Estoque",
+  [SystemTool.IFOOD]: "iFood",
 };
 
 export default function ToolProtection({ tool, toolName, children }: ToolProtectionProps) {
