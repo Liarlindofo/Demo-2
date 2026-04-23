@@ -55,6 +55,8 @@ model User {
   estoqueContagens     EstoqueContagem[]
   ifoodConnections     IfoodConnection[]
   ifoodOrders          IfoodOrder[]
+  ifoodFinancialEvents IfoodFinancialEvent[]
+  ifoodSettlements     IfoodSettlement[]
 
   @@map("users")
 }
@@ -634,6 +636,44 @@ model IfoodToken {
   updatedAt   DateTime @updatedAt
 
   @@map("ifood_tokens")
+}
+
+model IfoodFinancialEvent {
+  id            String   @id @default(cuid())
+  merchantId    String
+  userId        String
+  eventType     String   // SALE | REFUND | COMMISSION | FEE | SETTLEMENT
+  amount        Float
+  description   String?
+  referenceDate DateTime
+  orderId       String?
+  rawData       Json
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([merchantId])
+  @@index([referenceDate])
+  @@map("ifood_financial_events")
+}
+
+model IfoodSettlement {
+  id             String   @id @default(cuid())
+  merchantId     String
+  userId         String
+  settlementDate DateTime
+  grossAmount    Float
+  netAmount      Float
+  commission     Float
+  fees           Float
+  rawData        Json
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([merchantId])
+  @@index([settlementDate])
+  @@map("ifood_settlements")
 }
 
 // Permissões de ferramentas para usuários do sistema (stack_users)
