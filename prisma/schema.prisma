@@ -54,6 +54,7 @@ model User {
   cmvStoreData         CmvStoreData[]
   estoqueContagens     EstoqueContagem[]
   ifoodConnections     IfoodConnection[]
+  ifoodOrders          IfoodOrder[]
 
   @@map("users")
 }
@@ -594,6 +595,35 @@ model IfoodConnection {
   @@unique([userId, merchantId])
   @@index([userId])
   @@map("ifood_connections")
+}
+
+model IfoodOrder {
+  id              String   @id @default(cuid())
+  orderId         String   @unique
+  displayId       String
+  merchantId      String
+  userId          String
+  status          String   // PLACED | CONFIRMED | PREPARING | DISPATCHED | READY_TO_PICKUP | CONCLUDED | CANCELLED
+  orderType       String   // DELIVERY | TAKEOUT | INDOOR | DINE_IN
+  orderTiming     String   // IMMEDIATE | SCHEDULED
+  customerName    String?
+  customerPhone   String?
+  deliveryAddress Json?
+  items           Json
+  payments        Json
+  totalAmount     Float
+  deliveryFee     Float?
+  isTest          Boolean  @default(false)
+  rawPayload      Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([merchantId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("ifood_orders")
 }
 
 model IfoodToken {
