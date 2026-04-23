@@ -17,7 +17,7 @@
     },
     {
       "path": "/api/cron/ifood-polling",
-      "schedule": "* * * * *"
+      "schedule": "0 * * * *"
     }
   ]
 }
