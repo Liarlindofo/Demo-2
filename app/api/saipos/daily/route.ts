@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server'
 import { stackServerApp } from '@/stack'
 import { syncStackAuthUser } from '@/lib/stack-auth-sync'

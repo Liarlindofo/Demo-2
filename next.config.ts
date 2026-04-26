@@ -1,6 +1,7 @@
 ﻿import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   reactStrictMode: true,
   env: {
     STACK_AUTH_DOMAIN: 'https://platefull.com.br',

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server'
 import { UserAPIService, CreateUserAPIRequest, UpdateUserAPIRequest } from '@/lib/user-api-service'
 import { stackServerApp } from '@/stack'

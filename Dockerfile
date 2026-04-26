@@ -1,54 +1,63 @@
-# Dockerfile para Platefull WhatsApp Bot
-# Opcional - Use se preferir Docker ao invés de PM2
+# Dockerfile para drin-platform (Next.js)
+FROM node:20-alpine AS base
 
-FROM node:18-slim
-
-# Instala dependências do Puppeteer/Chrome
-RUN apt-get update && apt-get install -y \
-    wget \
-    ca-certificates \
-    fonts-liberation \
-    libappindicator3-1 \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libgdk-pixbuf2.0-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    xdg-utils \
-    libgbm1 \
-    libxss1 \
-    --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
-
-# Cria diretório da aplicação
+# ─── Estágio de dependências ───────────────────────────────────────────────────
+FROM base AS deps
+RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
-# Copia arquivos de dependências
 COPY package*.json ./
 COPY prisma ./prisma/
-
-# Instala dependências
-RUN npm ci --only=production
-
-# Gera cliente Prisma
+RUN npm ci
 RUN npx prisma generate
 
-# Copia código fonte
+# ─── Estágio de build ──────────────────────────────────────────────────────────
+FROM base AS builder
+RUN apk add --no-cache openssl
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/node_modules/.prisma ./node_modules/.prisma
 COPY . .
 
-# Cria diretório para logs
-RUN mkdir -p logs
+# Variáveis públicas do Next.js precisam estar disponíveis no BUILD
+ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_STACK_PROJECT_ID
+ARG NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY
 
-# Expõe porta
-EXPOSE 3001
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_STACK_PROJECT_ID=$NEXT_PUBLIC_STACK_PROJECT_ID
+ENV NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY=$NEXT_PUBLIC_STACK_PUBLISHABLE_CLIENT_KEY
 
-# Comando de inicialização
-CMD ["node", "index.js"]
+# Variáveis de build necessárias (valores fictícios para o build não quebrar)
+# Os valores reais são injetados em runtime via variáveis de ambiente do container
+ENV DATABASE_URL="postgresql://placeholder:placeholder@placeholder/placeholder"
+ENV STACK_SECRET_SERVER_KEY="placeholder"
+ENV NEXT_TELEMETRY_DISABLED=1
 
+RUN npm run build
+
+# ─── Estágio de produção ───────────────────────────────────────────────────────
+FROM base AS runner
+RUN apk add --no-cache openssl
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+
+# standalone output (configurado no next.config.ts)
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "server.js"]
