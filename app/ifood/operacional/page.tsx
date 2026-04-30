@@ -25,6 +25,8 @@ import {
   WifiOff,
   RefreshCw,
   User,
+  CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -216,19 +218,24 @@ function ElapsedBadge({ createdAt }: { createdAt: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Order Card — somente leitura, sem botões de ação
+// Order Card
 // ---------------------------------------------------------------------------
 function OrderCard({
   order,
   onCardClick,
+  onConfirm,
+  confirmLoading,
 }: {
   order: IfoodOrder;
   onCardClick: (o: IfoodOrder) => void;
+  onConfirm: (o: IfoodOrder) => void;
+  confirmLoading: Record<string, boolean>;
 }) {
   const isDelivery = order.orderType === 'DELIVERY';
   const isPlaced = order.status === 'PLACED';
   const isConcluded = order.status === 'CONCLUDED';
   const isCancelled = order.status === 'CANCELLED';
+  const loading = confirmLoading[order.orderId];
   const primaryPayment = order.payments?.methods?.[0];
 
   return (
@@ -304,6 +311,27 @@ function OrderCard({
             {isDelivery ? 'Delivery' : 'Retirada'}
           </Badge>
         </div>
+
+        {/* Botão confirmar — apenas para pedidos PLACED */}
+        {isPlaced && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <Button
+              size="sm"
+              disabled={loading}
+              onClick={() => onConfirm(order)}
+              className="w-full bg-green-700/30 hover:bg-green-700/50 text-green-400 border border-green-700/40 text-xs h-8"
+            >
+              {loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <>
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                  Confirmar
+                </>
+              )}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -495,6 +523,7 @@ export default function IfoodOperacionalPage() {
   const [lastPoll, setLastPoll] = useState<Date | null>(null);
 
   const [detailOrder, setDetailOrder] = useState<IfoodOrder | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState<Record<string, boolean>>({});
 
   const prevOrderIdsRef = useRef<Set<string>>(new Set());
 
@@ -574,6 +603,28 @@ export default function IfoodOperacionalPage() {
     const id = setInterval(() => fetchOrders(true), 15_000);
     return () => clearInterval(id);
   }, [selectedMerchant, fetchOrders]);
+
+  // -----------------------------------------------------------------------
+  // Confirm action
+  // -----------------------------------------------------------------------
+  async function handleConfirm(order: IfoodOrder) {
+    setConfirmLoading((prev) => ({ ...prev, [order.orderId]: true }));
+    setOrders((prev) =>
+      prev.map((o) => (o.orderId === order.orderId ? { ...o, status: 'CONFIRMED' } : o)),
+    );
+    try {
+      const res = await fetch(`/api/ifood/orders/${order.orderId}/confirm`, { method: 'POST' });
+      if (!res.ok) throw new Error('Falha ao confirmar');
+      addToast(`✅ Pedido #${order.displayId} confirmado!`, 'success');
+    } catch {
+      setOrders((prev) =>
+        prev.map((o) => (o.orderId === order.orderId ? { ...o, status: 'PLACED' } : o)),
+      );
+      addToast(`❌ Erro ao confirmar pedido #${order.displayId}`, 'error');
+    } finally {
+      setConfirmLoading((prev) => ({ ...prev, [order.orderId]: false }));
+    }
+  }
 
   // -----------------------------------------------------------------------
   // Columns
@@ -753,6 +804,8 @@ export default function IfoodOperacionalPage() {
                           key={order.orderId}
                           order={order}
                           onCardClick={(o) => setDetailOrder(o)}
+                          onConfirm={handleConfirm}
+                          confirmLoading={confirmLoading}
                         />
                       ))
                     )}
