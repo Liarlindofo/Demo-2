@@ -5,7 +5,7 @@ const ALGORITHM = 'aes-256-cbc';
 const BUFFER_MS = 5 * 60 * 1000; // renova 5 min antes de expirar
 
 function getDerivedKey(): Buffer {
-  const secret = process.env.ADMIN_SECRET ?? 'ifood-fallback-key-change-in-prod';
+  const secret = process.env.ADMIN_JWT_SECRET ?? process.env.ADMIN_SECRET ?? 'ifood-fallback-key-change-in-prod';
   return crypto.createHash('sha256').update(secret).digest();
 }
 
