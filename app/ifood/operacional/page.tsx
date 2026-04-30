@@ -10,23 +10,17 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useApp } from '@/contexts/app-context';
 import {
   ChevronLeft,
   ShoppingBag,
-  Loader2,
-  CheckCircle2,
-  XCircle,
   Bike,
   Package,
   Clock,
   Phone,
   MapPin,
-  AlertTriangle,
   Wifi,
   WifiOff,
   RefreshCw,
@@ -78,11 +72,6 @@ interface IfoodOrder {
   createdAt: string;
 }
 
-interface CancellationReason {
-  cancelCodeId: string;
-  description: string;
-}
-
 // ---------------------------------------------------------------------------
 // Kanban columns config
 // ---------------------------------------------------------------------------
@@ -118,6 +107,14 @@ const COLUMNS = [
     color: 'border-purple-500',
     headerColor: 'bg-purple-500/10 text-purple-400',
     dot: 'bg-purple-500',
+  },
+  {
+    id: 'CONCLUIDOS',
+    label: 'Concluídos',
+    statuses: ['CONCLUDED', 'CANCELLED'],
+    color: 'border-gray-600',
+    headerColor: 'bg-gray-600/10 text-gray-400',
+    dot: 'bg-gray-500',
   },
 ] as const;
 
@@ -195,7 +192,7 @@ function summarizeItems(items: OrderItem[]): string {
 // ---------------------------------------------------------------------------
 function CountdownBadge({ createdAt }: { createdAt: string }) {
   const elapsed = useElapsedSeconds(createdAt);
-  const LIMIT = 3 * 60; // 3 minutes
+  const LIMIT = 3 * 60;
   const remaining = LIMIT - elapsed;
   if (remaining <= 0) {
     return <span className="text-xs text-red-400 font-bold animate-pulse">⚠ EXPIRADO</span>;
@@ -219,28 +216,19 @@ function ElapsedBadge({ createdAt }: { createdAt: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Order Card
+// Order Card — somente leitura, sem botões de ação
 // ---------------------------------------------------------------------------
 function OrderCard({
   order,
-  onConfirm,
-  onDispatch,
-  onReject,
   onCardClick,
-  actionLoading,
 }: {
   order: IfoodOrder;
-  onConfirm: (o: IfoodOrder) => void;
-  onDispatch: (o: IfoodOrder) => void;
-  onReject: (o: IfoodOrder) => void;
   onCardClick: (o: IfoodOrder) => void;
-  actionLoading: Record<string, boolean>;
 }) {
   const isDelivery = order.orderType === 'DELIVERY';
   const isPlaced = order.status === 'PLACED';
-  const isPreparing = order.status === 'CONFIRMED' || order.status === 'PREPARING';
-  const loading = actionLoading[order.orderId];
-
+  const isConcluded = order.status === 'CONCLUDED';
+  const isCancelled = order.status === 'CANCELLED';
   const primaryPayment = order.payments?.methods?.[0];
 
   return (
@@ -252,7 +240,9 @@ function OrderCard({
         {/* Header row */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-white font-bold text-lg">#{order.displayId}</span>
+            <span className={`font-bold text-lg ${isCancelled ? 'text-gray-500 line-through' : 'text-white'}`}>
+              #{order.displayId}
+            </span>
             {order.isTest && (
               <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-[10px] px-1.5 py-0">
                 TESTE
@@ -261,6 +251,16 @@ function OrderCard({
             {order.orderTiming === 'SCHEDULED' && (
               <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px] px-1.5 py-0">
                 AGENDADO
+              </Badge>
+            )}
+            {isCancelled && (
+              <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[10px] px-1.5 py-0">
+                CANCELADO
+              </Badge>
+            )}
+            {isConcluded && (
+              <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px] px-1.5 py-0">
+                CONCLUÍDO
               </Badge>
             )}
           </div>
@@ -304,85 +304,27 @@ function OrderCard({
             {isDelivery ? 'Delivery' : 'Retirada'}
           </Badge>
         </div>
-
-        {/* Action buttons */}
-        {(isPlaced || isPreparing) && (
-          <div
-            className="flex gap-2 pt-1"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {isPlaced && (
-              <>
-                <Button
-                  size="sm"
-                  disabled={loading}
-                  onClick={() => onConfirm(order)}
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs h-8"
-                >
-                  {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (
-                    <><CheckCircle2 className="h-3.5 w-3.5 mr-1" />Confirmar</>
-                  )}
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={loading}
-                  onClick={() => onReject(order)}
-                  className="flex-1 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/30 text-xs h-8"
-                >
-                  <XCircle className="h-3.5 w-3.5 mr-1" />Recusar
-                </Button>
-              </>
-            )}
-
-            {isPreparing && (
-              <Button
-                size="sm"
-                disabled={loading}
-                onClick={() => onDispatch(order)}
-                className="w-full bg-green-600 hover:bg-green-700 text-white text-xs h-8"
-              >
-                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (
-                  isDelivery
-                    ? <><Bike className="h-3.5 w-3.5 mr-1" />Pronto / Despachar</>
-                    : <><Package className="h-3.5 w-3.5 mr-1" />Pronto p/ Retirada</>
-                )}
-              </Button>
-            )}
-          </div>
-        )}
       </CardContent>
     </Card>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Order Detail Modal
+// Order Detail Modal — somente leitura
 // ---------------------------------------------------------------------------
 function OrderDetailModal({
   order,
   onClose,
-  onConfirm,
-  onDispatch,
-  onReject,
-  actionLoading,
 }: {
   order: IfoodOrder | null;
   onClose: () => void;
-  onConfirm: (o: IfoodOrder) => void;
-  onDispatch: (o: IfoodOrder) => void;
-  onReject: (o: IfoodOrder) => void;
-  actionLoading: Record<string, boolean>;
 }) {
   if (!order) return null;
 
   const isDelivery = order.orderType === 'DELIVERY';
-  const isPlaced = order.status === 'PLACED';
-  const isPreparing = order.status === 'CONFIRMED' || order.status === 'PREPARING';
-  const loading = actionLoading[order.orderId];
   const primaryPayment = order.payments?.methods?.[0];
   const changeFor = primaryPayment?.cash?.changeFor;
   const addr = order.deliveryAddress;
-
   const itemsTotal = order.items.reduce((sum, i) => sum + i.totalPrice, 0);
 
   return (
@@ -505,9 +447,16 @@ function OrderDetailModal({
               </div>
             </div>
           )}
+
+          {/* Status info */}
+          <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3">
+            <p className="text-blue-400 text-xs text-center">
+              As ações deste pedido são realizadas diretamente pelo app do iFood.
+            </p>
+          </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0 flex-col sm:flex-row">
+        <div className="flex justify-end pt-2">
           <Button
             variant="outline"
             onClick={onClose}
@@ -515,165 +464,7 @@ function OrderDetailModal({
           >
             Fechar
           </Button>
-
-          {isPlaced && (
-            <>
-              <Button
-                disabled={loading}
-                onClick={() => { onReject(order); onClose(); }}
-                className="bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/30"
-              >
-                <XCircle className="h-4 w-4 mr-1.5" />
-                Recusar
-              </Button>
-              <Button
-                disabled={loading}
-                onClick={() => { onConfirm(order); onClose(); }}
-                className="bg-green-600 hover:bg-green-700 text-white"
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : (
-                  <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                )}
-                Confirmar Pedido
-              </Button>
-            </>
-          )}
-
-          {isPreparing && (
-            <Button
-              disabled={loading}
-              onClick={() => { onDispatch(order); onClose(); }}
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : (
-                isDelivery
-                  ? <Bike className="h-4 w-4 mr-1.5" />
-                  : <Package className="h-4 w-4 mr-1.5" />
-              )}
-              {isDelivery ? 'Pronto / Despachar' : 'Pronto p/ Retirada'}
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Cancel Modal
-// ---------------------------------------------------------------------------
-function CancelModal({
-  order,
-  onClose,
-  onCancel,
-}: {
-  order: IfoodOrder | null;
-  onClose: () => void;
-  onCancel: (orderId: string, code: string) => Promise<void>;
-}) {
-  const [reasons, setReasons] = useState<CancellationReason[]>([]);
-  const [selected, setSelected] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(false);
-
-  useEffect(() => {
-    if (!order) return;
-    setFetching(true);
-    fetch(`/api/ifood/cancellation-reasons/${order.orderId}`)
-      .then((r) => r.json())
-      .then((d: { reasons?: CancellationReason[] }) => {
-        setReasons(d.reasons ?? []);
-        if (d.reasons?.[0]) setSelected(d.reasons[0].cancelCodeId);
-      })
-      .catch(() => {
-        // Fallback: razões padrão
-        setReasons([
-          { cancelCodeId: '501', description: 'Restaurante sem capacidade' },
-          { cancelCodeId: '502', description: 'Item indisponível' },
-          { cancelCodeId: '503', description: 'Área de entrega não atendida' },
-        ]);
-        setSelected('501');
-      })
-      .finally(() => setFetching(false));
-  }, [order]);
-
-  if (!order) return null;
-
-  async function handleConfirm() {
-    if (!selected) return;
-    setLoading(true);
-    try {
-      await onCancel(order!.orderId, selected);
-      onClose();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="bg-[#141415] border-[#374151] text-white max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-red-400">
-            <XCircle className="h-5 w-5" />
-            Recusar Pedido #{order.displayId}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 py-2">
-          <Alert className="bg-red-500/10 border-red-500/30">
-            <AlertTriangle className="h-4 w-4 text-red-400" />
-            <AlertDescription className="text-red-300 text-sm">
-              Ao recusar este pedido, o cliente será notificado pelo iFood. Esta ação não pode ser desfeita.
-            </AlertDescription>
-          </Alert>
-
-          <div className="space-y-1.5">
-            <label className="text-sm text-gray-300">Motivo do cancelamento</label>
-            {fetching ? (
-              <div className="flex items-center gap-2 text-gray-400 text-sm">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Carregando motivos...
-              </div>
-            ) : (
-              <Select value={selected} onValueChange={setSelected}>
-                <SelectTrigger className="bg-[#0f0f10] border-[#374151] text-white">
-                  <SelectValue placeholder="Selecione o motivo" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#1a1a1a] border-[#374151] text-white">
-                  {reasons.map((r) => (
-                    <SelectItem
-                      key={r.cancelCodeId}
-                      value={r.cancelCodeId}
-                      className="hover:bg-[#374151] focus:bg-[#374151]"
-                    >
-                      {r.description}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
         </div>
-
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button
-            variant="outline"
-            onClick={onClose}
-            disabled={loading}
-            className="border-[#374151] text-white hover:bg-[#374151]"
-          >
-            Voltar
-          </Button>
-          <Button
-            disabled={loading || !selected || fetching}
-            onClick={handleConfirm}
-            className="bg-red-600 hover:bg-red-700 text-white"
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Confirmar Recusa
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -703,9 +494,7 @@ export default function IfoodOperacionalPage() {
   const [pollingOk, setPollingOk] = useState(true);
   const [lastPoll, setLastPoll] = useState<Date | null>(null);
 
-  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const [detailOrder, setDetailOrder] = useState<IfoodOrder | null>(null);
-  const [cancelOrder, setCancelOrder] = useState<IfoodOrder | null>(null);
 
   const prevOrderIdsRef = useRef<Set<string>>(new Set());
 
@@ -778,7 +567,7 @@ export default function IfoodOperacionalPage() {
     }
   }, [selectedMerchant, addToast]);
 
-  // Initial load + polling every 15 s
+  // Initial load + polling a cada 15s
   useEffect(() => {
     if (!selectedMerchant) return;
     fetchOrders(false);
@@ -787,87 +576,10 @@ export default function IfoodOperacionalPage() {
   }, [selectedMerchant, fetchOrders]);
 
   // -----------------------------------------------------------------------
-  // Actions
-  // -----------------------------------------------------------------------
-  function setOrderLoading(orderId: string, val: boolean) {
-    setActionLoading((prev) => ({ ...prev, [orderId]: val }));
-  }
-
-  function optimisticUpdate(orderId: string, newStatus: string) {
-    setOrders((prev) =>
-      prev.map((o) => (o.orderId === orderId ? { ...o, status: newStatus } : o)),
-    );
-  }
-
-  async function handleConfirm(order: IfoodOrder) {
-    setOrderLoading(order.orderId, true);
-    optimisticUpdate(order.orderId, 'PREPARING');
-    try {
-      const res = await fetch(`/api/ifood/orders/${order.orderId}/confirm`, { method: 'POST' });
-      if (!res.ok) throw new Error('Falha ao confirmar');
-      addToast(`✅ Pedido #${order.displayId} confirmado!`, 'success');
-    } catch {
-      optimisticUpdate(order.orderId, 'PLACED'); // rollback
-      addToast(`❌ Erro ao confirmar pedido #${order.displayId}`, 'error');
-    } finally {
-      setOrderLoading(order.orderId, false);
-    }
-  }
-
-  async function handleDispatch(order: IfoodOrder) {
-    const isDelivery = order.orderType === 'DELIVERY';
-    const endpoint = isDelivery
-      ? `/api/ifood/orders/${order.orderId}/dispatch`
-      : `/api/ifood/orders/${order.orderId}/readyToPickup`;
-    const newStatus = isDelivery ? 'DISPATCHED' : 'READY_TO_PICKUP';
-
-    setOrderLoading(order.orderId, true);
-    optimisticUpdate(order.orderId, newStatus);
-    try {
-      const res = await fetch(endpoint, { method: 'POST' });
-      if (!res.ok) throw new Error('Falha ao despachar');
-      addToast(
-        isDelivery
-          ? `🛵 Pedido #${order.displayId} despachado!`
-          : `📦 Pedido #${order.displayId} pronto para retirada!`,
-        'success',
-      );
-    } catch {
-      optimisticUpdate(order.orderId, order.status); // rollback
-      addToast(`❌ Erro ao atualizar pedido #${order.displayId}`, 'error');
-    } finally {
-      setOrderLoading(order.orderId, false);
-    }
-  }
-
-  async function handleCancel(orderId: string, code: string) {
-    const order = orders.find((o) => o.orderId === orderId);
-    setOrderLoading(orderId, true);
-    try {
-      const res = await fetch(`/api/ifood/orders/${orderId}/cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cancellationCode: code }),
-      });
-      if (!res.ok) throw new Error('Falha ao cancelar');
-      optimisticUpdate(orderId, 'CANCELLED');
-      addToast(`🗑️ Pedido #${order?.displayId ?? ''} cancelado`, 'success');
-    } catch {
-      addToast(`❌ Erro ao cancelar pedido`, 'error');
-    } finally {
-      setOrderLoading(orderId, false);
-    }
-  }
-
-  // -----------------------------------------------------------------------
   // Columns
   // -----------------------------------------------------------------------
-  const activeOrders = orders.filter(
-    (o) => !['CONCLUDED', 'CANCELLED'].includes(o.status),
-  );
-
   function getColumnOrders(statuses: readonly string[]) {
-    return activeOrders.filter((o) => statuses.includes(o.status));
+    return orders.filter((o) => statuses.includes(o.status));
   }
 
   // -----------------------------------------------------------------------
@@ -1040,11 +752,7 @@ export default function IfoodOperacionalPage() {
                         <OrderCard
                           key={order.orderId}
                           order={order}
-                          onConfirm={handleConfirm}
-                          onDispatch={handleDispatch}
-                          onReject={(o) => setCancelOrder(o)}
                           onCardClick={(o) => setDetailOrder(o)}
-                          actionLoading={actionLoading}
                         />
                       ))
                     )}
@@ -1056,23 +764,11 @@ export default function IfoodOperacionalPage() {
         )}
       </main>
 
-      {/* Modals */}
+      {/* Modal de detalhes (somente leitura) */}
       {detailOrder && (
         <OrderDetailModal
           order={detailOrder}
           onClose={() => setDetailOrder(null)}
-          onConfirm={(o) => { handleConfirm(o); }}
-          onDispatch={(o) => { handleDispatch(o); }}
-          onReject={(o) => { setCancelOrder(o); }}
-          actionLoading={actionLoading}
-        />
-      )}
-
-      {cancelOrder && (
-        <CancelModal
-          order={cancelOrder}
-          onClose={() => setCancelOrder(null)}
-          onCancel={handleCancel}
         />
       )}
     </div>
