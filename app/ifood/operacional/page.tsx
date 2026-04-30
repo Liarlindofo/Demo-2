@@ -27,6 +27,8 @@ import {
   User,
   CheckCircle2,
   Loader2,
+  PlayCircle,
+  Truck,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -224,18 +226,26 @@ function OrderCard({
   order,
   onCardClick,
   onConfirm,
-  confirmLoading,
+  onStartPrep,
+  onDispatch,
+  onReadyToPickup,
+  actionLoading,
 }: {
   order: IfoodOrder;
   onCardClick: (o: IfoodOrder) => void;
   onConfirm: (o: IfoodOrder) => void;
-  confirmLoading: Record<string, boolean>;
+  onStartPrep: (o: IfoodOrder) => void;
+  onDispatch: (o: IfoodOrder) => void;
+  onReadyToPickup: (o: IfoodOrder) => void;
+  actionLoading: Record<string, boolean>;
 }) {
   const isDelivery = order.orderType === 'DELIVERY';
   const isPlaced = order.status === 'PLACED';
+  const isConfirmed = order.status === 'CONFIRMED';
+  const isPreparing = order.status === 'PREPARING';
   const isConcluded = order.status === 'CONCLUDED';
   const isCancelled = order.status === 'CANCELLED';
-  const loading = confirmLoading[order.orderId];
+  const loading = actionLoading[order.orderId];
   const primaryPayment = order.payments?.methods?.[0];
 
   return (
@@ -312,24 +322,60 @@ function OrderCard({
           </Badge>
         </div>
 
-        {/* Botão confirmar — apenas para pedidos PLACED */}
-        {isPlaced && (
+        {/* Botões de ação — não propagam clique para o modal */}
+        {(isPlaced || isConfirmed || isPreparing) && (
           <div onClick={(e) => e.stopPropagation()}>
-            <Button
-              size="sm"
-              disabled={loading}
-              onClick={() => onConfirm(order)}
-              className="w-full bg-green-700/30 hover:bg-green-700/50 text-green-400 border border-green-700/40 text-xs h-8"
-            >
-              {loading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <>
-                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                  Confirmar
-                </>
-              )}
-            </Button>
+            {isPlaced && (
+              <Button
+                size="sm"
+                disabled={loading}
+                onClick={() => onConfirm(order)}
+                className="w-full bg-green-700/30 hover:bg-green-700/50 text-green-400 border border-green-700/40 text-xs h-8"
+              >
+                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (
+                  <><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Confirmar</>
+                )}
+              </Button>
+            )}
+
+            {isConfirmed && (
+              <Button
+                size="sm"
+                disabled={loading}
+                onClick={() => onStartPrep(order)}
+                className="w-full bg-blue-700/30 hover:bg-blue-700/50 text-blue-400 border border-blue-700/40 text-xs h-8"
+              >
+                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (
+                  <><PlayCircle className="h-3.5 w-3.5 mr-1.5" />Iniciar Preparo</>
+                )}
+              </Button>
+            )}
+
+            {isPreparing && isDelivery && (
+              <Button
+                size="sm"
+                disabled={loading}
+                onClick={() => onDispatch(order)}
+                className="w-full bg-orange-700/30 hover:bg-orange-700/50 text-orange-400 border border-orange-700/40 text-xs h-8"
+              >
+                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (
+                  <><Truck className="h-3.5 w-3.5 mr-1.5" />Despachar</>
+                )}
+              </Button>
+            )}
+
+            {isPreparing && !isDelivery && (
+              <Button
+                size="sm"
+                disabled={loading}
+                onClick={() => onReadyToPickup(order)}
+                className="w-full bg-purple-700/30 hover:bg-purple-700/50 text-purple-400 border border-purple-700/40 text-xs h-8"
+              >
+                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (
+                  <><Package className="h-3.5 w-3.5 mr-1.5" />Pronto p/ Retirada</>
+                )}
+              </Button>
+            )}
           </div>
         )}
       </CardContent>
@@ -523,7 +569,7 @@ export default function IfoodOperacionalPage() {
   const [lastPoll, setLastPoll] = useState<Date | null>(null);
 
   const [detailOrder, setDetailOrder] = useState<IfoodOrder | null>(null);
-  const [confirmLoading, setConfirmLoading] = useState<Record<string, boolean>>({});
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
   const prevOrderIdsRef = useRef<Set<string>>(new Set());
 
@@ -605,24 +651,78 @@ export default function IfoodOperacionalPage() {
   }, [selectedMerchant, fetchOrders]);
 
   // -----------------------------------------------------------------------
-  // Confirm action
+  // Helpers de loading e update otimista
+  // -----------------------------------------------------------------------
+  function setLoaderOn(orderId: string) {
+    setActionLoading((prev) => ({ ...prev, [orderId]: true }));
+  }
+  function setLoaderOff(orderId: string) {
+    setActionLoading((prev) => ({ ...prev, [orderId]: false }));
+  }
+  function optimistic(orderId: string, status: string) {
+    setOrders((prev) => prev.map((o) => (o.orderId === orderId ? { ...o, status } : o)));
+  }
+
+  // -----------------------------------------------------------------------
+  // Actions
   // -----------------------------------------------------------------------
   async function handleConfirm(order: IfoodOrder) {
-    setConfirmLoading((prev) => ({ ...prev, [order.orderId]: true }));
-    setOrders((prev) =>
-      prev.map((o) => (o.orderId === order.orderId ? { ...o, status: 'CONFIRMED' } : o)),
-    );
+    setLoaderOn(order.orderId);
+    optimistic(order.orderId, 'CONFIRMED');
     try {
       const res = await fetch(`/api/ifood/orders/${order.orderId}/confirm`, { method: 'POST' });
-      if (!res.ok) throw new Error('Falha ao confirmar');
+      if (!res.ok) throw new Error();
       addToast(`✅ Pedido #${order.displayId} confirmado!`, 'success');
     } catch {
-      setOrders((prev) =>
-        prev.map((o) => (o.orderId === order.orderId ? { ...o, status: 'PLACED' } : o)),
-      );
+      optimistic(order.orderId, 'PLACED');
       addToast(`❌ Erro ao confirmar pedido #${order.displayId}`, 'error');
     } finally {
-      setConfirmLoading((prev) => ({ ...prev, [order.orderId]: false }));
+      setLoaderOff(order.orderId);
+    }
+  }
+
+  async function handleStartPrep(order: IfoodOrder) {
+    setLoaderOn(order.orderId);
+    optimistic(order.orderId, 'PREPARING');
+    try {
+      const res = await fetch(`/api/ifood/orders/${order.orderId}/startPreparation`, { method: 'POST' });
+      if (!res.ok) throw new Error();
+      addToast(`🍳 Preparo iniciado — Pedido #${order.displayId}`, 'success');
+    } catch {
+      optimistic(order.orderId, 'CONFIRMED');
+      addToast(`❌ Erro ao iniciar preparo do pedido #${order.displayId}`, 'error');
+    } finally {
+      setLoaderOff(order.orderId);
+    }
+  }
+
+  async function handleDispatch(order: IfoodOrder) {
+    setLoaderOn(order.orderId);
+    optimistic(order.orderId, 'DISPATCHED');
+    try {
+      const res = await fetch(`/api/ifood/orders/${order.orderId}/dispatch`, { method: 'POST' });
+      if (!res.ok) throw new Error();
+      addToast(`🛵 Pedido #${order.displayId} despachado!`, 'success');
+    } catch {
+      optimistic(order.orderId, 'PREPARING');
+      addToast(`❌ Erro ao despachar pedido #${order.displayId}`, 'error');
+    } finally {
+      setLoaderOff(order.orderId);
+    }
+  }
+
+  async function handleReadyToPickup(order: IfoodOrder) {
+    setLoaderOn(order.orderId);
+    optimistic(order.orderId, 'READY_TO_PICKUP');
+    try {
+      const res = await fetch(`/api/ifood/orders/${order.orderId}/readyToPickup`, { method: 'POST' });
+      if (!res.ok) throw new Error();
+      addToast(`📦 Pedido #${order.displayId} pronto para retirada!`, 'success');
+    } catch {
+      optimistic(order.orderId, 'PREPARING');
+      addToast(`❌ Erro ao atualizar pedido #${order.displayId}`, 'error');
+    } finally {
+      setLoaderOff(order.orderId);
     }
   }
 
@@ -805,7 +905,10 @@ export default function IfoodOperacionalPage() {
                           order={order}
                           onCardClick={(o) => setDetailOrder(o)}
                           onConfirm={handleConfirm}
-                          confirmLoading={confirmLoading}
+                          onStartPrep={handleStartPrep}
+                          onDispatch={handleDispatch}
+                          onReadyToPickup={handleReadyToPickup}
+                          actionLoading={actionLoading}
                         />
                       ))
                     )}
