@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     // Janela de 14 dias (limite da API iFood)
     const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
 
-    const orders = await db.ifoodOrder.findMany({
+    const rows = await db.ifoodOrder.findMany({
       where: {
         userId: user.id,
         ...(merchantId ? { merchantId } : {}),
@@ -52,7 +52,39 @@ export async function GET(req: NextRequest) {
         isTest: true,
         createdAt: true,
         updatedAt: true,
+        rawPayload: true,
       },
+    });
+
+    // Extrair campos extras do rawPayload sem expô-lo inteiro
+    const orders = rows.map((row) => {
+      const raw = (row.rawPayload ?? {}) as Record<string, unknown>;
+      const customer = (raw.customer ?? {}) as Record<string, unknown>;
+      const delivery = (raw.delivery ?? {}) as Record<string, unknown>;
+
+      const scheduledDateTime =
+        (raw.scheduledDateTimeForDelivery as string | undefined) ??
+        (raw.preparationStartDateTime as string | undefined) ??
+        (delivery.deliveryDateTime as string | undefined) ??
+        null;
+
+      const benefits = (raw.benefits as unknown[] | undefined) ?? [];
+      const observations = (raw.observations as string | undefined) ?? null;
+      const customerTaxId =
+        (customer.taxPayerIdentificationNumber as string | undefined) ??
+        (customer.documentNumber as string | undefined) ??
+        null;
+
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { rawPayload: _raw, ...orderFields } = row;
+
+      return {
+        ...orderFields,
+        scheduledDateTime,
+        benefits,
+        observations,
+        customerTaxId,
+      };
     });
 
     return NextResponse.json({ orders });

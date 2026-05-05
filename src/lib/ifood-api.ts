@@ -131,6 +131,12 @@ export async function getCancellationReasons(orderId: string) {
 // ---------------------------------------------------------------------------
 // Payload types (subset of iFood spec)
 // ---------------------------------------------------------------------------
+export interface IfoodOrderBenefit {
+  target?: string;
+  value?: number;
+  sponsorshipValues?: Array<{ name: string; value: number; description?: string }>;
+}
+
 export interface IfoodOrderPayload {
   id: string;
   displayId: string;
@@ -138,8 +144,16 @@ export interface IfoodOrderPayload {
   orderTiming: string;
   isTest: boolean;
   createdAt: string;
+  scheduledDateTimeForDelivery?: string;
+  preparationStartDateTime?: string;
+  observations?: string;
   merchant: { id: string; name: string };
-  customer?: { name?: string; phone?: { number?: string; localizer?: string } };
+  customer?: {
+    name?: string;
+    phone?: { number?: string; localizer?: string };
+    taxPayerIdentificationNumber?: string;
+    documentNumber?: string;
+  };
   delivery?: {
     mode?: string;
     deliveredBy?: string;
@@ -147,10 +161,12 @@ export interface IfoodOrderPayload {
     deliveryAddress?: {
       streetName?: string;
       streetNumber?: string;
+      complement?: string;
       formattedAddress?: string;
       neighborhood?: string;
       city?: string;
       state?: string;
+      postalCode?: string;
       reference?: string;
     };
   };
@@ -159,7 +175,7 @@ export interface IfoodOrderPayload {
     quantity: number;
     unitPrice: number;
     totalPrice: number;
-    options?: Array<{ name: string; price: number }>;
+    options?: Array<{ name: string; price: number; quantity?: number }>;
     observations?: string;
   }>;
   payments: {
@@ -171,8 +187,10 @@ export interface IfoodOrderPayload {
     subTotal: number;
     deliveryFee?: number;
     additionalFees?: number;
+    benefits?: number;
     orderAmount: number;
   };
+  benefits?: IfoodOrderBenefit[];
 }
 
 export interface IfoodCancellationReason {

@@ -29,6 +29,11 @@ import {
   Loader2,
   PlayCircle,
   Truck,
+  CalendarClock,
+  Tag,
+  FileText,
+  CreditCard,
+  Receipt,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -46,7 +51,7 @@ interface OrderItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
-  options?: Array<{ name: string; price: number }>;
+  options?: Array<{ name: string; price: number; quantity?: number }>;
   observations?: string;
 }
 
@@ -55,6 +60,12 @@ interface PaymentMethod {
   method: string;
   type: string;
   cash?: { changeFor?: number };
+}
+
+interface OrderBenefit {
+  target?: string;
+  value?: number;
+  sponsorshipValues?: Array<{ name: string; value: number; description?: string }>;
 }
 
 interface IfoodOrder {
@@ -67,6 +78,7 @@ interface IfoodOrder {
   orderTiming: string;
   customerName: string | null;
   customerPhone: string | null;
+  customerTaxId: string | null;
   deliveryAddress: Record<string, string> | null;
   items: OrderItem[];
   payments: { prepaid?: number; pending?: number; methods?: PaymentMethod[] };
@@ -74,6 +86,9 @@ interface IfoodOrder {
   deliveryFee: number | null;
   isTest: boolean;
   createdAt: string;
+  scheduledDateTime: string | null;
+  benefits: OrderBenefit[];
+  observations: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,6 +206,39 @@ function summarizeItems(items: OrderItem[]): string {
     .concat(items.length > 2 ? ` +${items.length - 2} mais` : '');
 }
 
+function formatScheduledDate(isoDate: string): string {
+  const date = new Date(isoDate);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today.getTime() + 86_400_000);
+  const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  if (dateOnly.getTime() === today.getTime()) return `Hoje ${time}`;
+  if (dateOnly.getTime() === tomorrow.getTime()) return `Amanhã ${time}`;
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ` ${time}`;
+}
+
+function getBenefitsTotalDiscount(benefits: OrderBenefit[]): number {
+  return benefits.reduce((sum, b) => {
+    const directValue = b.value ?? 0;
+    const sponsorTotal = (b.sponsorshipValues ?? []).reduce((s, sv) => s + (sv.value ?? 0), 0);
+    return sum + directValue + sponsorTotal;
+  }, 0);
+}
+
+function formatCpfCnpj(doc: string): string {
+  const digits = doc.replace(/\D/g, '');
+  if (digits.length === 11) {
+    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  }
+  if (digits.length === 14) {
+    return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  }
+  return doc;
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -245,12 +293,19 @@ function OrderCard({
   const isPreparing = order.status === 'PREPARING';
   const isConcluded = order.status === 'CONCLUDED';
   const isCancelled = order.status === 'CANCELLED';
+  const isScheduled = order.orderTiming === 'SCHEDULED';
   const loading = actionLoading[order.orderId];
   const primaryPayment = order.payments?.methods?.[0];
+  const hasVoucher = order.benefits && order.benefits.length > 0;
+  const voucherDiscount = hasVoucher ? getBenefitsTotalDiscount(order.benefits) : 0;
 
   return (
     <Card
-      className="bg-[#1a1a1a] border-[#374151] rounded-xl cursor-pointer hover:border-[#EA1D2C]/40 transition-all mb-3 select-none"
+      className={`rounded-xl cursor-pointer transition-all mb-3 select-none border ${
+        isScheduled
+          ? 'bg-[#0d1a2e] border-blue-500/40 hover:border-blue-400/70'
+          : 'bg-[#1a1a1a] border-[#374151] hover:border-[#EA1D2C]/40'
+      }`}
       onClick={() => onCardClick(order)}
     >
       <CardContent className="p-4 space-y-3">
@@ -265,9 +320,14 @@ function OrderCard({
                 TESTE
               </Badge>
             )}
-            {order.orderTiming === 'SCHEDULED' && (
+            {isScheduled && (
               <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px] px-1.5 py-0">
                 AGENDADO
+              </Badge>
+            )}
+            {hasVoucher && (
+              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px] px-1.5 py-0">
+                VOUCHER
               </Badge>
             )}
             {isCancelled && (
@@ -288,6 +348,14 @@ function OrderCard({
           )}
         </div>
 
+        {/* Agendamento */}
+        {isScheduled && order.scheduledDateTime && (
+          <div className="flex items-center gap-1.5 text-blue-300 text-xs bg-blue-500/10 rounded-md px-2 py-1">
+            <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+            <span className="font-medium">📅 {formatScheduledDate(order.scheduledDateTime)}</span>
+          </div>
+        )}
+
         {/* Customer */}
         {order.customerName && (
           <p className="text-gray-300 text-sm font-medium truncate">{order.customerName}</p>
@@ -295,6 +363,14 @@ function OrderCard({
 
         {/* Items summary */}
         <p className="text-gray-500 text-xs leading-relaxed">{summarizeItems(order.items)}</p>
+
+        {/* Voucher discount */}
+        {hasVoucher && voucherDiscount > 0 && (
+          <div className="flex items-center gap-1.5 text-emerald-400 text-xs">
+            <Tag className="h-3 w-3" />
+            <span>Desconto: -{formatCurrency(voucherDiscount)}</span>
+          </div>
+        )}
 
         {/* Footer row */}
         <div className="flex items-center justify-between">
@@ -396,46 +472,122 @@ function OrderDetailModal({
   if (!order) return null;
 
   const isDelivery = order.orderType === 'DELIVERY';
-  const primaryPayment = order.payments?.methods?.[0];
-  const changeFor = primaryPayment?.cash?.changeFor;
+  const isScheduled = order.orderTiming === 'SCHEDULED';
+  const allPayments = order.payments?.methods ?? [];
+  const primaryPayment = allPayments[0];
   const addr = order.deliveryAddress;
   const itemsTotal = order.items.reduce((sum, i) => sum + i.totalPrice, 0);
+  const hasVoucher = order.benefits && order.benefits.length > 0;
+  const voucherDiscount = hasVoucher ? getBenefitsTotalDiscount(order.benefits) : 0;
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="bg-[#141415] border-[#374151] text-white max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 flex-wrap">
             <ShoppingBag className="h-5 w-5 text-[#EA1D2C]" />
             Pedido #{order.displayId}
             {order.isTest && (
-              <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 ml-1">TESTE</Badge>
+              <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">TESTE</Badge>
+            )}
+            {isScheduled && (
+              <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">AGENDADO</Badge>
+            )}
+            {hasVoucher && (
+              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">VOUCHER</Badge>
             )}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-5 py-1">
+
+          {/* Agendamento */}
+          {isScheduled && order.scheduledDateTime && (
+            <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/25 rounded-lg p-3">
+              <CalendarClock className="h-4 w-4 text-blue-400 shrink-0" />
+              <div>
+                <p className="text-blue-300 text-xs font-medium uppercase tracking-wider">Entrega Agendada</p>
+                <p className="text-white text-sm font-semibold">
+                  📅 {formatScheduledDate(order.scheduledDateTime)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Voucher / Benefício */}
+          {hasVoucher && (
+            <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-lg p-3 space-y-1.5">
+              <div className="flex items-center gap-2 text-emerald-400 text-xs font-medium uppercase tracking-wider">
+                <Tag className="h-3.5 w-3.5" />
+                Cupom / Voucher Aplicado
+              </div>
+              {order.benefits.map((b, bi) => (
+                <div key={bi}>
+                  {b.value && b.value > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-300">{b.target ?? 'Desconto'}</span>
+                      <span className="text-emerald-400 font-semibold">-{formatCurrency(b.value)}</span>
+                    </div>
+                  )}
+                  {(b.sponsorshipValues ?? []).map((sv, si) => (
+                    <div key={si} className="flex justify-between text-sm">
+                      <span className="text-gray-300">{sv.name ?? sv.description ?? 'Desconto'}</span>
+                      <span className="text-emerald-400 font-semibold">-{formatCurrency(sv.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {voucherDiscount > 0 && (
+                <div className="flex justify-between text-sm font-bold border-t border-emerald-500/20 pt-1.5 mt-1">
+                  <span className="text-emerald-300">Total de descontos</span>
+                  <span className="text-emerald-400">-{formatCurrency(voucherDiscount)}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Customer */}
-          {order.customerName && (
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-gray-400" />
-              <span className="text-gray-300">{order.customerName}</span>
-              {order.customerPhone && (
+          <div className="bg-black/30 rounded-lg p-3 space-y-2">
+            <p className="text-gray-400 text-xs font-medium uppercase tracking-wider">Cliente</p>
+            {order.customerName && (
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-gray-400 shrink-0" />
+                <span className="text-gray-300 text-sm">{order.customerName}</span>
+              </div>
+            )}
+            {order.customerPhone && (
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-gray-400 shrink-0" />
                 <a
                   href={`tel:${order.customerPhone}`}
-                  className="ml-auto flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300"
+                  className="text-blue-400 hover:text-blue-300 text-sm"
                 >
-                  <Phone className="h-3.5 w-3.5" />
                   {order.customerPhone}
                 </a>
-              )}
+              </div>
+            )}
+            {order.customerTaxId && (
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-gray-400 shrink-0" />
+                <span className="text-gray-300 text-sm">{formatCpfCnpj(order.customerTaxId)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Observations */}
+          {order.observations && (
+            <div className="bg-yellow-500/10 border border-yellow-500/25 rounded-lg p-3">
+              <p className="text-yellow-400 text-xs font-medium uppercase tracking-wider mb-1">
+                Observações do Pedido
+              </p>
+              <p className="text-yellow-200 text-sm">{order.observations}</p>
             </div>
           )}
 
           {/* Delivery address */}
           {isDelivery && addr && (
             <div className="bg-black/30 rounded-lg p-3 space-y-1">
-              <div className="flex items-center gap-2 text-gray-400 text-sm font-medium mb-1">
+              <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
                 <MapPin className="h-3.5 w-3.5" />
                 Endereço de Entrega
               </div>
@@ -444,9 +596,13 @@ function OrderDetailModal({
               ) : (
                 <p className="text-white text-sm">
                   {addr.streetName} {addr.streetNumber}
-                  {addr.neighborhood ? `, ${addr.neighborhood}` : ''}
-                  {addr.city ? ` — ${addr.city}/${addr.state}` : ''}
+                  {addr.complement ? `, ${addr.complement}` : ''}
+                  {addr.neighborhood ? ` — ${addr.neighborhood}` : ''}
+                  {addr.city ? `, ${addr.city}/${addr.state}` : ''}
                 </p>
+              )}
+              {addr.postalCode && (
+                <p className="text-gray-400 text-xs">CEP: {addr.postalCode}</p>
               )}
               {addr.reference && (
                 <p className="text-gray-400 text-xs">Ref: {addr.reference}</p>
@@ -456,7 +612,7 @@ function OrderDetailModal({
 
           {/* Items */}
           <div>
-            <p className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-2">Itens</p>
+            <p className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-2">Itens do Pedido</p>
             <div className="space-y-2">
               {order.items.map((item, idx) => (
                 <div key={idx} className="bg-black/20 rounded-lg p-3">
@@ -464,22 +620,30 @@ function OrderDetailModal({
                     <span className="text-white text-sm font-medium">
                       {item.quantity}x {item.name}
                     </span>
-                    <span className="text-gray-300 text-sm ml-2 shrink-0">
-                      {formatCurrency(item.totalPrice)}
-                    </span>
+                    <div className="text-right ml-2 shrink-0">
+                      <span className="text-gray-300 text-sm">{formatCurrency(item.totalPrice)}</span>
+                      {item.quantity > 1 && (
+                        <p className="text-gray-500 text-xs">{formatCurrency(item.unitPrice)} un.</p>
+                      )}
+                    </div>
                   </div>
                   {item.options && item.options.length > 0 && (
-                    <div className="mt-1.5 space-y-0.5">
+                    <div className="mt-1.5 space-y-0.5 pl-2 border-l border-[#374151]">
                       {item.options.map((opt, oi) => (
                         <div key={oi} className="flex justify-between text-xs text-gray-400">
-                          <span>+ {opt.name}</span>
-                          {opt.price > 0 && <span>{formatCurrency(opt.price)}</span>}
+                          <span>
+                            {opt.quantity && opt.quantity > 1 ? `${opt.quantity}x ` : ''}
+                            {opt.name}
+                          </span>
+                          {opt.price > 0 && <span>+{formatCurrency(opt.price)}</span>}
                         </div>
                       ))}
                     </div>
                   )}
                   {item.observations && (
-                    <p className="text-xs text-yellow-400 mt-1">Obs: {item.observations}</p>
+                    <p className="text-xs text-yellow-400 mt-1.5 bg-yellow-500/10 rounded px-2 py-1">
+                      Obs: {item.observations}
+                    </p>
                   )}
                 </div>
               ))}
@@ -489,13 +653,19 @@ function OrderDetailModal({
           {/* Totals */}
           <div className="bg-black/20 rounded-lg p-3 space-y-1.5 text-sm">
             <div className="flex justify-between text-gray-400">
-              <span>Subtotal</span>
+              <span>Subtotal dos itens</span>
               <span>{formatCurrency(itemsTotal)}</span>
             </div>
             {(order.deliveryFee ?? 0) > 0 && (
               <div className="flex justify-between text-gray-400">
                 <span>Taxa de entrega</span>
                 <span>{formatCurrency(order.deliveryFee!)}</span>
+              </div>
+            )}
+            {voucherDiscount > 0 && (
+              <div className="flex justify-between text-emerald-400">
+                <span>Desconto (voucher)</span>
+                <span>-{formatCurrency(voucherDiscount)}</span>
               </div>
             )}
             <div className="flex justify-between text-white font-semibold border-t border-[#374151] pt-1.5 mt-1.5">
@@ -505,20 +675,39 @@ function OrderDetailModal({
           </div>
 
           {/* Payment */}
-          {primaryPayment && (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400">Pagamento</span>
-              <div className="text-right">
-                <p className="text-white">{getPaymentLabel(primaryPayment.method)}</p>
-                {primaryPayment.type === 'OFFLINE' && (
-                  <p className="text-xs text-gray-500">Na entrega</p>
-                )}
-                {changeFor && changeFor > order.totalAmount && (
-                  <p className="text-xs text-yellow-400">
-                    Troco para {formatCurrency(changeFor)}
-                  </p>
-                )}
+          {allPayments.length > 0 && (
+            <div className="bg-black/30 rounded-lg p-3 space-y-2">
+              <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
+                <CreditCard className="h-3.5 w-3.5" />
+                Forma de Pagamento
               </div>
+              {allPayments.map((pm, pi) => (
+                <div key={pi} className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-white text-sm font-medium">{getPaymentLabel(pm.method)}</span>
+                    <span className="text-gray-300 text-sm">{formatCurrency(pm.value)}</span>
+                  </div>
+                  <div className="flex gap-3 text-xs text-gray-500">
+                    {pm.type === 'OFFLINE' ? (
+                      <span className="flex items-center gap-1">
+                        <Receipt className="h-3 w-3" /> Na entrega
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1">
+                        <Receipt className="h-3 w-3" /> Online (pré-pago)
+                      </span>
+                    )}
+                  </div>
+                  {pm.cash?.changeFor && pm.cash.changeFor > 0 && (
+                    <p className="text-yellow-400 text-xs bg-yellow-500/10 rounded px-2 py-1">
+                      💵 Troco para {formatCurrency(pm.cash.changeFor)}
+                      {pm.cash.changeFor > order.totalAmount && (
+                        <span className="text-yellow-300"> (troco: {formatCurrency(pm.cash.changeFor - order.totalAmount)})</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 
@@ -730,7 +919,16 @@ export default function IfoodOperacionalPage() {
   // Columns
   // -----------------------------------------------------------------------
   function getColumnOrders(statuses: readonly string[]) {
-    return orders.filter((o) => statuses.includes(o.status));
+    const filtered = orders.filter((o) => statuses.includes(o.status));
+    // Pedidos agendados ficam no fim de cada coluna (imediatos primeiro)
+    return [
+      ...filtered.filter((o) => o.orderTiming !== 'SCHEDULED'),
+      ...filtered.filter((o) => o.orderTiming === 'SCHEDULED').sort((a, b) => {
+        const da = a.scheduledDateTime ? new Date(a.scheduledDateTime).getTime() : Infinity;
+        const db2 = b.scheduledDateTime ? new Date(b.scheduledDateTime).getTime() : Infinity;
+        return da - db2;
+      }),
+    ];
   }
 
   // -----------------------------------------------------------------------
@@ -898,20 +1096,52 @@ export default function IfoodOperacionalPage() {
                       <div className="text-gray-600 text-sm text-center py-8 border border-dashed border-[#374151] rounded-xl">
                         Nenhum pedido
                       </div>
-                    ) : (
-                      colOrders.map((order) => (
-                        <OrderCard
-                          key={order.orderId}
-                          order={order}
-                          onCardClick={(o) => setDetailOrder(o)}
-                          onConfirm={handleConfirm}
-                          onStartPrep={handleStartPrep}
-                          onDispatch={handleDispatch}
-                          onReadyToPickup={handleReadyToPickup}
-                          actionLoading={actionLoading}
-                        />
-                      ))
-                    )}
+                    ) : (() => {
+                      const immediate = colOrders.filter((o) => o.orderTiming !== 'SCHEDULED');
+                      const scheduled = colOrders.filter((o) => o.orderTiming === 'SCHEDULED');
+                      return (
+                        <>
+                          {immediate.map((order) => (
+                            <OrderCard
+                              key={order.orderId}
+                              order={order}
+                              onCardClick={(o) => setDetailOrder(o)}
+                              onConfirm={handleConfirm}
+                              onStartPrep={handleStartPrep}
+                              onDispatch={handleDispatch}
+                              onReadyToPickup={handleReadyToPickup}
+                              actionLoading={actionLoading}
+                            />
+                          ))}
+                          {scheduled.length > 0 && (
+                            <>
+                              {immediate.length > 0 && (
+                                <div className="flex items-center gap-2 my-2 px-1">
+                                  <div className="flex-1 h-px bg-blue-500/20" />
+                                  <span className="text-blue-400 text-[10px] font-medium uppercase tracking-wider flex items-center gap-1">
+                                    <CalendarClock className="h-3 w-3" />
+                                    Agendados
+                                  </span>
+                                  <div className="flex-1 h-px bg-blue-500/20" />
+                                </div>
+                              )}
+                              {scheduled.map((order) => (
+                                <OrderCard
+                                  key={order.orderId}
+                                  order={order}
+                                  onCardClick={(o) => setDetailOrder(o)}
+                                  onConfirm={handleConfirm}
+                                  onStartPrep={handleStartPrep}
+                                  onDispatch={handleDispatch}
+                                  onReadyToPickup={handleReadyToPickup}
+                                  actionLoading={actionLoading}
+                                />
+                              ))}
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               );
