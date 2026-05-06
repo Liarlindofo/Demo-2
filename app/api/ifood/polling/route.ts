@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
 
     // Polling de eventos
     const events = await pollIfoodEvents(merchantIds);
+    console.log('[Polling] Eventos recebidos:', JSON.stringify(events));
 
     if (events.length === 0) {
       return NextResponse.json({ ok: true, events: 0 });
