@@ -84,7 +84,7 @@ async function handleEvent(
 ) {
   const userId = merchantUserMap.get(event.merchantId);
 
-  if (event.code === 'PLACED') {
+  if (event.code === 'PLC' || event.fullCode === 'PLACED') {
     if (!userId) {
       console.warn(`[polling] merchantId ${event.merchantId} sem userId mapeado — ignorando PLACED`);
       return;
