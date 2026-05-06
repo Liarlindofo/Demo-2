@@ -9,8 +9,16 @@ import {
   IfoodEvent,
 } from '@/lib/ifood-api';
 
-// Mapeamento dos códigos de evento iFood para status interno
+// Mapeamento de code/fullCode de evento iFood para status interno
+// Inclui tanto short codes (ex: CAN) quanto fullCodes (ex: CANCELLED)
 const EVENT_STATUS_MAP: Record<string, string> = {
+  // Short codes
+  CAN: 'CANCELLED',
+  CON: 'CONCLUDED',
+  RTP: 'READY_TO_PICKUP',
+  DSP: 'DISPATCHED',
+  CFM: 'CONFIRMED',
+  // Full codes (fallback)
   CANCELLED: 'CANCELLED',
   CANCELLATION_REQUESTED: 'CANCELLED',
   CONCLUDED: 'CONCLUDED',
@@ -122,8 +130,20 @@ async function handleEvent(
     return;
   }
 
+  // iFood solicitou cancelamento por negociação (disputa)
+  if (
+    event.fullCode === 'HANDSHAKE_DISPUTE' &&
+    event.metadata?.action === 'CANCELLATION'
+  ) {
+    await db.ifoodOrder.updateMany({
+      where: { orderId: event.orderId },
+      data: { status: 'DISPUTE' },
+    });
+    return;
+  }
+
   // Para demais eventos, atualiza o status do pedido existente
-  const newStatus = EVENT_STATUS_MAP[event.code];
+  const newStatus = EVENT_STATUS_MAP[event.code] ?? EVENT_STATUS_MAP[event.fullCode];
   if (!newStatus) {
     // Evento desconhecido — apenas será acknowledged, sem ação
     return;

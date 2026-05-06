@@ -34,6 +34,8 @@ import {
   FileText,
   CreditCard,
   Receipt,
+  XCircle,
+  AlertTriangle,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -66,6 +68,11 @@ interface OrderBenefit {
   target?: string;
   value?: number;
   sponsorshipValues?: Array<{ name: string; value: number; description?: string }>;
+}
+
+interface CancellationReason {
+  cancelCodeId: string;
+  description: string;
 }
 
 interface IfoodOrder {
@@ -130,10 +137,18 @@ const COLUMNS = [
   {
     id: 'CONCLUIDOS',
     label: 'Concluídos',
-    statuses: ['CONCLUDED', 'CANCELLED'],
+    statuses: ['CONCLUDED'],
     color: 'border-gray-600',
     headerColor: 'bg-gray-600/10 text-gray-400',
     dot: 'bg-gray-500',
+  },
+  {
+    id: 'CANCELAMENTOS',
+    label: 'Cancelamentos',
+    statuses: ['CANCELLED', 'DISPUTE'],
+    color: 'border-red-700',
+    headerColor: 'bg-red-700/10 text-red-400',
+    dot: 'bg-red-500',
   },
 ] as const;
 
@@ -277,6 +292,7 @@ function OrderCard({
   onStartPrep,
   onDispatch,
   onReadyToPickup,
+  onCancel,
   actionLoading,
 }: {
   order: IfoodOrder;
@@ -285,6 +301,7 @@ function OrderCard({
   onStartPrep: (o: IfoodOrder) => void;
   onDispatch: (o: IfoodOrder) => void;
   onReadyToPickup: (o: IfoodOrder) => void;
+  onCancel: (o: IfoodOrder) => void;
   actionLoading: Record<string, boolean>;
 }) {
   const isDelivery = order.orderType === 'DELIVERY';
@@ -293,6 +310,8 @@ function OrderCard({
   const isPreparing = order.status === 'PREPARING';
   const isConcluded = order.status === 'CONCLUDED';
   const isCancelled = order.status === 'CANCELLED';
+  const isDispute = order.status === 'DISPUTE';
+  const canCancelOrder = isPlaced || isConfirmed || isPreparing;
   const isScheduled = order.orderTiming === 'SCHEDULED';
   const loading = actionLoading[order.orderId];
   const primaryPayment = order.payments?.methods?.[0];
@@ -333,6 +352,11 @@ function OrderCard({
             {isCancelled && (
               <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[10px] px-1.5 py-0">
                 CANCELADO
+              </Badge>
+            )}
+            {isDispute && (
+              <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-[10px] px-1.5 py-0">
+                DISPUTA
               </Badge>
             )}
             {isConcluded && (
@@ -399,8 +423,8 @@ function OrderCard({
         </div>
 
         {/* Botões de ação — não propagam clique para o modal */}
-        {(isPlaced || isConfirmed || isPreparing) && (
-          <div onClick={(e) => e.stopPropagation()}>
+        {canCancelOrder && (
+          <div onClick={(e) => e.stopPropagation()} className="space-y-1.5">
             {isPlaced && (
               <Button
                 size="sm"
@@ -452,10 +476,110 @@ function OrderCard({
                 )}
               </Button>
             )}
+
+            {/* Botão cancelar — discreto, abaixo da ação principal */}
+            <Button
+              size="sm"
+              disabled={loading}
+              onClick={() => onCancel(order)}
+              className="w-full bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/30 text-xs h-7"
+            >
+              <XCircle className="h-3.5 w-3.5 mr-1.5" />
+              Cancelar pedido
+            </Button>
           </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Cancel Modal
+// ---------------------------------------------------------------------------
+function CancelModal({
+  order,
+  reasons,
+  loadingReasons,
+  cancelLoading,
+  selectedCode,
+  onSelectCode,
+  onConfirm,
+  onClose,
+}: {
+  order: IfoodOrder;
+  reasons: CancellationReason[];
+  loadingReasons: boolean;
+  cancelLoading: boolean;
+  selectedCode: string;
+  onSelectCode: (code: string) => void;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="bg-[#141415] border-[#374151] text-white max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-red-400" />
+            Cancelar Pedido #{order.displayId}
+          </DialogTitle>
+        </DialogHeader>
+
+        {loadingReasons ? (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="animate-spin h-6 w-6 text-gray-400" />
+          </div>
+        ) : (
+          <div className="space-y-3 py-1">
+            <p className="text-gray-400 text-sm">Selecione o motivo do cancelamento:</p>
+            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+              {reasons.map((r) => (
+                <button
+                  key={r.cancelCodeId}
+                  type="button"
+                  onClick={() => onSelectCode(r.cancelCodeId)}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+                    selectedCode === r.cancelCodeId
+                      ? 'bg-red-500/20 border-red-500/50 text-red-300'
+                      : 'bg-black/20 border-[#374151] text-gray-300 hover:border-red-500/30 hover:bg-red-900/10'
+                  }`}
+                >
+                  {r.description}
+                </button>
+              ))}
+              {reasons.length === 0 && (
+                <p className="text-gray-500 text-sm text-center py-6">
+                  Nenhum motivo disponível.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            disabled={cancelLoading}
+            className="border-[#374151] text-white hover:bg-[#374151]"
+          >
+            Voltar
+          </Button>
+          <Button
+            disabled={cancelLoading || !selectedCode || loadingReasons || reasons.length === 0}
+            onClick={onConfirm}
+            className="bg-red-700/30 hover:bg-red-700/50 text-red-400 border border-red-700/40"
+          >
+            {cancelLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <><XCircle className="h-4 w-4 mr-1.5" />Confirmar Cancelamento</>
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -760,6 +884,12 @@ export default function IfoodOperacionalPage() {
   const [detailOrder, setDetailOrder] = useState<IfoodOrder | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
+  const [cancelOrder, setCancelOrder] = useState<IfoodOrder | null>(null);
+  const [cancelReasons, setCancelReasons] = useState<CancellationReason[]>([]);
+  const [cancelReasonsLoading, setCancelReasonsLoading] = useState(false);
+  const [selectedCancelCode, setSelectedCancelCode] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
+
   const prevOrderIdsRef = useRef<Set<string>>(new Set());
 
   // -----------------------------------------------------------------------
@@ -804,10 +934,29 @@ export default function IfoodOperacionalPage() {
     else setRefreshing(true);
 
     try {
-      const res = await fetch(`/api/ifood/orders?merchantId=${selectedMerchant}`);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const [res, resCancelled] = await Promise.all([
+        fetch(`/api/ifood/orders?merchantId=${selectedMerchant}`),
+        fetch(`/api/ifood/orders?merchantId=${selectedMerchant}&status=CANCELLED`),
+      ]);
+
       if (!res.ok) throw new Error('Erro ao buscar pedidos');
+
       const data = (await res.json()) as { orders: IfoodOrder[] };
-      const incoming = data.orders ?? [];
+      const active = data.orders ?? [];
+
+      // Cancelamentos de hoje (filtro client-side)
+      const cancelledData = resCancelled.ok
+        ? ((await resCancelled.json()) as { orders: IfoodOrder[] }).orders ?? []
+        : [];
+      const todayCancelled = cancelledData.filter(
+        (o) => new Date(o.createdAt) >= todayStart,
+      );
+
+      // Mescla: pedidos ativos (inclui DISPUTE) + cancelados de hoje
+      const incoming = [...active, ...todayCancelled];
 
       // Detectar novos pedidos PLACED para alertar
       const incomingIds = new Set(incoming.map((o) => o.orderId));
@@ -818,8 +967,18 @@ export default function IfoodOperacionalPage() {
         playNewOrderAlert();
         addToast(`🛵 ${newPlaced.length} novo(s) pedido(s) chegou!`, 'success');
       }
-      prevOrderIdsRef.current = incomingIds;
 
+      // Detectar novos pedidos em DISPUTE para alertar
+      const newDispute = incoming.filter(
+        (o) => o.status === 'DISPUTE' && !prevOrderIdsRef.current.has(o.orderId),
+      );
+      if (newDispute.length > 0 && prevOrderIdsRef.current.size > 0) {
+        newDispute.forEach((o) =>
+          addToast(`⚠️ iFood solicitou cancelamento do pedido #${o.displayId}`, 'error'),
+        );
+      }
+
+      prevOrderIdsRef.current = incomingIds;
       setOrders(incoming);
       setPollingOk(true);
       setLastPoll(new Date());
@@ -912,6 +1071,47 @@ export default function IfoodOperacionalPage() {
       addToast(`❌ Erro ao atualizar pedido #${order.displayId}`, 'error');
     } finally {
       setLoaderOff(order.orderId);
+    }
+  }
+
+  async function handleCancel(order: IfoodOrder) {
+    setCancelOrder(order);
+    setCancelReasons([]);
+    setSelectedCancelCode('');
+    setCancelReasonsLoading(true);
+    try {
+      const res = await fetch(`/api/ifood/orders/${order.orderId}/cancellation-reasons`);
+      const data = (await res.json()) as { reasons?: CancellationReason[] };
+      const list = data.reasons ?? [];
+      setCancelReasons(list);
+      if (list.length > 0) setSelectedCancelCode(list[0].cancelCodeId);
+    } catch {
+      addToast('❌ Erro ao carregar motivos de cancelamento', 'error');
+    } finally {
+      setCancelReasonsLoading(false);
+    }
+  }
+
+  async function handleConfirmCancel() {
+    if (!cancelOrder || !selectedCancelCode || cancelLoading) return;
+    const orderToCancel = cancelOrder;
+    const previousStatus = orderToCancel.status;
+    setCancelLoading(true);
+    optimistic(orderToCancel.orderId, 'CANCELLED');
+    try {
+      const res = await fetch(`/api/ifood/orders/${orderToCancel.orderId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cancellationCode: selectedCancelCode }),
+      });
+      if (!res.ok) throw new Error();
+      addToast(`✅ Pedido #${orderToCancel.displayId} cancelado.`, 'success');
+      setCancelOrder(null);
+    } catch {
+      optimistic(orderToCancel.orderId, previousStatus);
+      addToast(`❌ Erro ao cancelar pedido #${orderToCancel.displayId}`, 'error');
+    } finally {
+      setCancelLoading(false);
     }
   }
 
@@ -1110,6 +1310,7 @@ export default function IfoodOperacionalPage() {
                               onStartPrep={handleStartPrep}
                               onDispatch={handleDispatch}
                               onReadyToPickup={handleReadyToPickup}
+                              onCancel={handleCancel}
                               actionLoading={actionLoading}
                             />
                           ))}
@@ -1134,6 +1335,7 @@ export default function IfoodOperacionalPage() {
                                   onStartPrep={handleStartPrep}
                                   onDispatch={handleDispatch}
                                   onReadyToPickup={handleReadyToPickup}
+                                  onCancel={handleCancel}
                                   actionLoading={actionLoading}
                                 />
                               ))}
@@ -1155,6 +1357,20 @@ export default function IfoodOperacionalPage() {
         <OrderDetailModal
           order={detailOrder}
           onClose={() => setDetailOrder(null)}
+        />
+      )}
+
+      {/* Modal de cancelamento */}
+      {cancelOrder && (
+        <CancelModal
+          order={cancelOrder}
+          reasons={cancelReasons}
+          loadingReasons={cancelReasonsLoading}
+          cancelLoading={cancelLoading}
+          selectedCode={selectedCancelCode}
+          onSelectCode={setSelectedCancelCode}
+          onConfirm={handleConfirmCancel}
+          onClose={() => setCancelOrder(null)}
         />
       )}
     </div>
