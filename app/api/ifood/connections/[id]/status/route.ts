@@ -46,24 +46,11 @@ export async function GET(
     );
 
     if (!res.ok) {
-      await db.ifoodConnection.update({
-        where: { id },
-        data: { status: 'error' },
-      });
       return NextResponse.json({ status: 'ERROR', connectionId: id });
     }
 
     const data = (await res.json()) as { value?: string };
     const ifoodStatus = data.value ?? 'UNKNOWN';
-
-    // Sincroniza status no banco
-    const dbStatus =
-      ifoodStatus === 'OPEN' ? 'active' : ifoodStatus === 'CLOSED' ? 'inactive' : 'error';
-
-    await db.ifoodConnection.update({
-      where: { id },
-      data: { status: dbStatus },
-    });
 
     return NextResponse.json({ status: ifoodStatus, connectionId: id });
   } catch (err) {

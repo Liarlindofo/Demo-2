@@ -75,18 +75,6 @@ export async function GET() {
       }
     }
 
-    // Update DB status for each connection (fire-and-forget)
-    for (const conn of connections) {
-      const ifoodStatus = statusMap[conn.id];
-      if (ifoodStatus !== undefined) {
-        const dbStatus =
-          ifoodStatus === 'OPEN' ? 'active' : ifoodStatus === 'CLOSED' ? 'inactive' : 'error';
-        db.ifoodConnection
-          .update({ where: { id: conn.id }, data: { status: dbStatus } })
-          .catch(() => {});
-      }
-    }
-
     return NextResponse.json({
       connections: connections.map((c) => ({
         ...c,
