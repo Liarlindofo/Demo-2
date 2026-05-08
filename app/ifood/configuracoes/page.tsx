@@ -763,13 +763,13 @@ export default function IfoodConfiguracoesPage() {
                   {tab.label}
                 </span>
               ) : (
-                <span
+                <Link
                   key={tab.href}
-                  className="px-4 py-2.5 text-sm font-medium text-gray-500 cursor-not-allowed border-b-2 border-transparent"
-                  title="Em breve"
+                  href={tab.href}
+                  className="px-4 py-2.5 text-sm font-medium text-gray-500 hover:text-gray-300 border-b-2 border-transparent transition-colors"
                 >
                   {tab.label}
-                </span>
+                </Link>
               )
             ))}
           </nav>
