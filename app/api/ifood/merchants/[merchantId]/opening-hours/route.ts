@@ -91,7 +91,7 @@ export async function GET(
 
 // ---------------------------------------------------------------------------
 // PUT /api/ifood/merchants/[merchantId]/opening-hours
-// Atualiza horários de funcionamento
+// Atualiza horários de funcionamento — envia todos os 7 dias (fechados com shifts:[])
 // Body esperado: { openingHours: [{ dayOfWeek: string, shifts: [{ start: string, duration: number }] }] }
 // ---------------------------------------------------------------------------
 export async function PUT(
@@ -111,22 +111,40 @@ export async function PUT(
 
     const token = await getValidIfoodToken();
 
-    const res = await fetch(
-      `https://merchant-api.ifood.com.br/merchant/v1.0/merchants/${merchantId}/opening-hours`,
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
+    // Tenta primeiro com array direto (formato mais comum do iFood v1)
+    const tryPut = async (bodyPayload: unknown) =>
+      fetch(
+        `https://merchant-api.ifood.com.br/merchant/v1.0/merchants/${merchantId}/opening-hours`,
+        {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(bodyPayload),
         },
-        body: JSON.stringify(body.openingHours),
-      },
-    );
+      );
 
-    if (!res.ok) {
+    let res = await tryPut(body.openingHours);
+
+    // Se falhou com array direto, tenta formato encapsulado { openingHours: [...] }
+    if (!res.ok && res.status !== 204) {
+      const fallback = await tryPut({ openingHours: body.openingHours });
+      if (fallback.ok || fallback.status === 204) {
+        res = fallback;
+      }
+    }
+
+    if (!res.ok && res.status !== 204) {
       const text = await res.text();
       console.error('[PUT opening-hours] iFood error:', res.status, text);
-      return NextResponse.json({ error: 'Erro ao salvar horários no iFood' }, { status: 502 });
+      // Expõe a mensagem real do iFood para facilitar depuração
+      let ifoodMessage = `Erro HTTP ${res.status}`;
+      try {
+        const parsed = JSON.parse(text) as { message?: string; details?: string; description?: string };
+        ifoodMessage = parsed.message ?? parsed.details ?? parsed.description ?? ifoodMessage;
+      } catch { /* não era JSON */ }
+      return NextResponse.json(
+        { error: `Erro ao salvar horários no iFood: ${ifoodMessage}` },
+        { status: 502 },
+      );
     }
 
     return NextResponse.json({ success: true });

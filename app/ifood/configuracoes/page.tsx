@@ -213,17 +213,16 @@ function toEditSchedule(days: OpeningHoursDay[]): EditDaySchedule[] {
   });
 }
 
-/** Converte EditDaySchedule[] de volta para o formato iFood */
+/** Converte EditDaySchedule[] de volta para o formato iFood.
+ *  Inclui TODOS os 7 dias — inativos com shifts:[] — pois a API iFood exige o conjunto completo. */
 function fromEditSchedule(schedule: EditDaySchedule[]): OpeningHoursDay[] {
-  return schedule
-    .filter((d) => d.active && d.shifts.length > 0)
-    .map((d) => ({
-      dayOfWeek: d.dayOfWeek,
-      shifts: d.shifts
-        .filter((s) => s.start && s.end && calcDuration(s.start, s.end) > 0)
-        .map((s) => ({ start: s.start, duration: calcDuration(s.start, s.end) })),
-    }))
-    .filter((d) => d.shifts.length > 0);
+  return schedule.map((d) => {
+    if (!d.active) return { dayOfWeek: d.dayOfWeek, shifts: [] };
+    const validShifts = d.shifts
+      .filter((s) => s.start && s.end && calcDuration(s.start, s.end) > 0)
+      .map((s) => ({ start: s.start, duration: calcDuration(s.start, s.end) }));
+    return { dayOfWeek: d.dayOfWeek, shifts: validShifts };
+  });
 }
 
 function StatusBadge({ status }: { status: string; }) {
