@@ -400,10 +400,19 @@ function OrderCard({
         )}
 
         {/* Footer row */}
-        <div className="flex items-center justify-between">
-          <span className="text-white font-semibold">{formatCurrency(order.totalAmount)}</span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-white font-semibold shrink-0">{formatCurrency(order.totalAmount)}</span>
           {primaryPayment && (
-            <span className="text-gray-500 text-xs">{getPaymentLabel(primaryPayment.method)}</span>
+            primaryPayment.method === 'CASH' ? (
+              <span className="text-yellow-400 text-xs font-medium text-right">
+                💵 Dinheiro
+                {primaryPayment.cash?.changeFor && primaryPayment.cash.changeFor > order.totalAmount
+                  ? ` — Troco: ${formatCurrency(primaryPayment.cash.changeFor - order.totalAmount)}`
+                  : ' — Sem troco'}
+              </span>
+            ) : (
+              <span className="text-gray-500 text-xs">{getPaymentLabel(primaryPayment.method)}</span>
+            )
           )}
         </div>
 
@@ -643,6 +652,36 @@ function OrderDetailModal({
 
         <div className="space-y-5 py-1">
 
+          {/* Tipo e timing do pedido */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge
+              className={`text-xs px-2 py-0.5 ${
+                isDelivery
+                  ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                  : 'bg-purple-500/15 text-purple-400 border-purple-500/30'
+              }`}
+            >
+              {isDelivery ? (
+                <><Bike className="h-3 w-3 mr-1 inline" />Delivery</>
+              ) : (
+                <><Package className="h-3 w-3 mr-1 inline" />Retirada</>
+              )}
+            </Badge>
+            <Badge
+              className={`text-xs px-2 py-0.5 ${
+                isScheduled
+                  ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                  : 'bg-gray-600/30 text-gray-400 border-gray-600/40'
+              }`}
+            >
+              {isScheduled ? (
+                <><CalendarClock className="h-3 w-3 mr-1 inline" />Agendado</>
+              ) : (
+                <><Clock className="h-3 w-3 mr-1 inline" />Imediato</>
+              )}
+            </Badge>
+          </div>
+
           {/* Agendamento */}
           {isScheduled && order.scheduledDateTime && (
             <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/25 rounded-lg p-3">
@@ -752,17 +791,28 @@ function OrderDetailModal({
                 <p className="text-white text-sm">{addr.formattedAddress}</p>
               ) : (
                 <p className="text-white text-sm">
-                  {addr.streetName} {addr.streetNumber}
-                  {addr.complement ? `, ${addr.complement}` : ''}
-                  {addr.neighborhood ? ` — ${addr.neighborhood}` : ''}
-                  {addr.city ? `, ${addr.city}/${addr.state}` : ''}
+                  {[
+                    addr.streetName,
+                    addr.streetNumber,
+                  ].filter(Boolean).join(', ')}
                 </p>
+              )}
+              {addr.complement && (
+                <p className="text-gray-300 text-xs">Complemento: {addr.complement}</p>
+              )}
+              {addr.neighborhood && (
+                <p className="text-gray-400 text-xs">Bairro: {addr.neighborhood}</p>
+              )}
+              {addr.city && (
+                <p className="text-gray-400 text-xs">{addr.city}{addr.state ? `/${addr.state}` : ''}</p>
               )}
               {addr.postalCode && (
                 <p className="text-gray-400 text-xs">CEP: {addr.postalCode}</p>
               )}
               {addr.reference && (
-                <p className="text-gray-400 text-xs">Ref: {addr.reference}</p>
+                <p className="text-yellow-400 text-xs bg-yellow-500/10 rounded px-2 py-1 mt-1">
+                  📍 Referência: {addr.reference}
+                </p>
               )}
             </div>
           )}
@@ -833,38 +883,49 @@ function OrderDetailModal({
 
           {/* Payment */}
           {allPayments.length > 0 && (
-            <div className="bg-black/30 rounded-lg p-3 space-y-2">
-              <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
+            <div className="bg-black/30 rounded-lg p-3 space-y-3">
+              <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wider">
                 <CreditCard className="h-3.5 w-3.5" />
                 Forma de Pagamento
               </div>
-              {allPayments.map((pm, pi) => (
-                <div key={pi} className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="text-white text-sm font-medium">{getPaymentLabel(pm.method)}</span>
-                    <span className="text-gray-300 text-sm">{formatCurrency(pm.value)}</span>
-                  </div>
-                  <div className="flex gap-3 text-xs text-gray-500">
-                    {pm.type === 'OFFLINE' ? (
-                      <span className="flex items-center gap-1">
-                        <Receipt className="h-3 w-3" /> Na entrega
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1">
-                        <Receipt className="h-3 w-3" /> Online (pré-pago)
-                      </span>
+              {allPayments.map((pm, pi) => {
+                const isCash = pm.method === 'CASH';
+                const isOnline = pm.type !== 'OFFLINE';
+                const changeFor = pm.cash?.changeFor ?? 0;
+                const changeAmount = changeFor > order.totalAmount ? changeFor - order.totalAmount : 0;
+                return (
+                  <div key={pi} className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-white text-sm font-medium">{getPaymentLabel(pm.method)}</span>
+                      <span className="text-gray-300 text-sm">{formatCurrency(pm.value)}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 flex items-center gap-1">
+                      <Receipt className="h-3 w-3 shrink-0" />
+                      {isOnline ? (
+                        <span className="text-green-400">✓ Já pago (online)</span>
+                      ) : (
+                        <span>Pagamento na entrega</span>
+                      )}
+                    </div>
+                    {isCash && (
+                      changeAmount > 0 ? (
+                        <div className="bg-yellow-500/10 border border-yellow-500/25 rounded px-2.5 py-1.5 space-y-0.5">
+                          <p className="text-yellow-300 text-xs">
+                            💵 Cliente pagará com: <span className="font-semibold">{formatCurrency(changeFor)}</span>
+                          </p>
+                          <p className="text-yellow-400 text-sm font-bold">
+                            Troco a devolver: {formatCurrency(changeAmount)}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-gray-400 text-xs bg-black/20 rounded px-2 py-1">
+                          💵 Pagamento em dinheiro — sem troco
+                        </p>
+                      )
                     )}
                   </div>
-                  {pm.cash?.changeFor && pm.cash.changeFor > 0 && (
-                    <p className="text-yellow-400 text-xs bg-yellow-500/10 rounded px-2 py-1">
-                      💵 Troco para {formatCurrency(pm.cash.changeFor)}
-                      {pm.cash.changeFor > order.totalAmount && (
-                        <span className="text-yellow-300"> (troco: {formatCurrency(pm.cash.changeFor - order.totalAmount)})</span>
-                      )}
-                    </p>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
