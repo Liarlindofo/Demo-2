@@ -36,6 +36,9 @@ import {
   Truck,
   CheckCircle2,
   XCircle,
+  PauseCircle,
+  PlayCircle,
+  Timer,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -105,6 +108,20 @@ interface MerchantStatusRaw {
   };
 }
 
+interface Interruption {
+  id: string;
+  description?: string;
+  start: string;
+  end: string;
+}
+
+const PAUSE_PRESETS = [
+  { label: '30 min', value: 30 },
+  { label: '1 hora', value: 60 },
+  { label: '1h30', value: 90 },
+  { label: '2 horas', value: 120 },
+];
+
 const MAX_STORES = 5;
 
 // ---------------------------------------------------------------------------
@@ -112,6 +129,20 @@ const MAX_STORES = 5;
 // ---------------------------------------------------------------------------
 function truncateMerchantId(id: string) {
   return id.length > 16 ? `${id.slice(0, 8)}...${id.slice(-4)}` : id;
+}
+
+function formatPauseRemaining(endIso: string): string {
+  const diff = new Date(endIso).getTime() - Date.now();
+  if (diff <= 0) return 'Encerrada';
+  const totalMin = Math.ceil(diff / 60_000);
+  if (totalMin < 60) return `${totalMin} min restantes`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m > 0 ? `${h}h${m}min restantes` : `${h}h restantes`;
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
 function StatusBadge({ status }: { status: string; }) {
@@ -193,6 +224,20 @@ export default function IfoodConfiguracoesPage() {
   const [merchantDetails, setMerchantDetails] = useState<MerchantDetails | null>(null);
   const [merchantStatusData, setMerchantStatusData] = useState<MerchantStatusRaw | null>(null);
 
+  // Interrupções (pausas) por loja — keyed by merchantId
+  const [interruptions, setInterruptions] = useState<Record<string, Interruption[]>>({});
+  const [interruptionsLoading, setInterruptionsLoading] = useState<Record<string, boolean>>({});
+  const [removingPause, setRemovingPause] = useState<Record<string, boolean>>({});
+
+  // Modal criar pausa
+  const [pauseTarget, setPauseTarget] = useState<IfoodConnection | null>(null);
+  const [pauseDescription, setPauseDescription] = useState('');
+  const [pauseMinutes, setPauseMinutes] = useState(60);
+  const [pauseCustom, setPauseCustom] = useState('');
+  const [pauseIsCustom, setPauseIsCustom] = useState(false);
+  const [pauseLoading, setPauseLoading] = useState(false);
+  const [pauseError, setPauseError] = useState('');
+
   // ---------------------------------------------------------------------------
   // Carregar conexões
   // ---------------------------------------------------------------------------
@@ -213,6 +258,16 @@ export default function IfoodConfiguracoesPage() {
   useEffect(() => {
     loadConnections();
   }, [loadConnections]);
+
+  // Carrega interrupções para cada loja ao montar ou ao reconectar
+  useEffect(() => {
+    connections.forEach((conn) => {
+      if (interruptions[conn.merchantId] === undefined) {
+        loadInterruptions(conn);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connections]);
 
   // ---------------------------------------------------------------------------
   // Verificar merchantId na API iFood (step 1 do modal)
@@ -335,6 +390,98 @@ export default function IfoodConfiguracoesPage() {
     } finally {
       setTestingStatus((prev) => ({ ...prev, [connection.id]: false }));
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Interrupções (pausas)
+  // ---------------------------------------------------------------------------
+  async function loadInterruptions(conn: IfoodConnection) {
+    setInterruptionsLoading((prev) => ({ ...prev, [conn.merchantId]: true }));
+    try {
+      const res = await fetch(`/api/ifood/merchants/${conn.merchantId}/interruptions`);
+      if (res.ok) {
+        const data = await res.json() as { interruptions: Interruption[] };
+        setInterruptions((prev) => ({ ...prev, [conn.merchantId]: data.interruptions ?? [] }));
+      }
+    } catch {
+      // falha silenciosa — não bloqueia a UI
+    } finally {
+      setInterruptionsLoading((prev) => ({ ...prev, [conn.merchantId]: false }));
+    }
+  }
+
+  async function handleCreatePause() {
+    if (!pauseTarget) return;
+    const minutes = pauseIsCustom ? parseInt(pauseCustom, 10) : pauseMinutes;
+    if (!minutes || minutes <= 0 || minutes > 1440) {
+      setPauseError('Duração inválida (entre 1 e 1440 minutos)');
+      return;
+    }
+    setPauseLoading(true);
+    setPauseError('');
+    try {
+      const res = await fetch(`/api/ifood/merchants/${pauseTarget.merchantId}/interruptions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: pauseDescription || 'Pausa manual', durationMinutes: minutes }),
+      });
+      const data = await res.json() as { interruption?: Interruption; error?: string };
+      if (!res.ok) {
+        setPauseError(data.error ?? 'Erro ao criar pausa');
+        return;
+      }
+      // Atualiza lista local
+      await loadInterruptions(pauseTarget);
+      addToast(`⏸ Loja "${pauseTarget.merchantName}" pausada por ${minutes} min`, 'success');
+      closePauseModal();
+    } catch {
+      setPauseError('Erro de conexão. Tente novamente.');
+    } finally {
+      setPauseLoading(false);
+    }
+  }
+
+  async function handleRemovePause(conn: IfoodConnection, interruptionId: string) {
+    setRemovingPause((prev) => ({ ...prev, [interruptionId]: true }));
+    try {
+      const res = await fetch(
+        `/api/ifood/merchants/${conn.merchantId}/interruptions/${interruptionId}`,
+        { method: 'DELETE' },
+      );
+      if (res.ok || res.status === 204) {
+        setInterruptions((prev) => ({
+          ...prev,
+          [conn.merchantId]: (prev[conn.merchantId] ?? []).filter((i) => i.id !== interruptionId),
+        }));
+        addToast(`▶️ Pausa removida — "${conn.merchantName}" voltou ao ar`, 'success');
+      } else {
+        const data = await res.json() as { error?: string };
+        addToast(`❌ ${data.error ?? 'Erro ao remover pausa'}`, 'error');
+      }
+    } catch {
+      addToast('❌ Erro ao remover pausa', 'error');
+    } finally {
+      setRemovingPause((prev) => ({ ...prev, [interruptionId]: false }));
+    }
+  }
+
+  function openPauseModal(conn: IfoodConnection) {
+    setPauseTarget(conn);
+    setPauseDescription('');
+    setPauseMinutes(60);
+    setPauseCustom('');
+    setPauseIsCustom(false);
+    setPauseError('');
+  }
+
+  function closePauseModal() {
+    setPauseTarget(null);
+    setPauseDescription('');
+    setPauseMinutes(60);
+    setPauseCustom('');
+    setPauseIsCustom(false);
+    setPauseError('');
+    setPauseLoading(false);
   }
 
   // ---------------------------------------------------------------------------
@@ -522,16 +669,65 @@ export default function IfoodConfiguracoesPage() {
                     {realtimeStatus[conn.id] && (
                       <RealtimeStatusBadge status={realtimeStatus[conn.id]} />
                     )}
+                    {(interruptions[conn.merchantId] ?? []).length > 0 && (
+                      <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-xs">
+                        <PauseCircle className="h-3 w-3 mr-1" />
+                        PAUSADA
+                      </Badge>
+                    )}
                   </div>
 
+                  {/* Pausas ativas */}
+                  {interruptionsLoading[conn.merchantId] ? (
+                    <div className="flex items-center gap-1.5 text-gray-500 text-xs">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Carregando pausas...
+                    </div>
+                  ) : (interruptions[conn.merchantId] ?? []).length > 0 ? (
+                    <div className="space-y-1.5">
+                      <p className="text-orange-400 text-xs font-medium uppercase tracking-wider flex items-center gap-1">
+                        <PauseCircle className="h-3.5 w-3.5" />
+                        Pausas Ativas ({(interruptions[conn.merchantId] ?? []).length})
+                      </p>
+                      {(interruptions[conn.merchantId] ?? []).map((int) => (
+                        <div
+                          key={int.id}
+                          className="bg-orange-500/10 border border-orange-500/25 rounded-lg px-3 py-2 flex items-start justify-between gap-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-orange-200 text-xs font-medium truncate">
+                              {int.description ?? 'Pausa manual'}
+                            </p>
+                            <p className="text-orange-400/70 text-[10px] flex items-center gap-1 mt-0.5">
+                              <Timer className="h-3 w-3 shrink-0" />
+                              {formatDateTime(int.start)} → {formatDateTime(int.end)}
+                              {' · '}{formatPauseRemaining(int.end)}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={removingPause[int.id]}
+                            onClick={() => handleRemovePause(conn, int.id)}
+                            className="h-6 w-6 p-0 text-orange-400 hover:text-white hover:bg-orange-500/20 shrink-0"
+                          >
+                            {removingPause[int.id]
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : <XCircle className="h-3 w-3" />}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
                   {/* Botões */}
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <Button
                       onClick={() => handleTestStatus(conn)}
                       disabled={testingStatus[conn.id]}
                       variant="outline"
                       size="sm"
-                      className="flex-1 border-[#374151] text-white hover:bg-[#374151]"
+                      className="border-[#374151] text-white hover:bg-[#374151]"
                     >
                       {testingStatus[conn.id] ? (
                         <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Verificando</>
@@ -543,10 +739,19 @@ export default function IfoodConfiguracoesPage() {
                       onClick={() => handleViewDetails(conn)}
                       variant="outline"
                       size="sm"
-                      className="flex-1 border-[#374151] text-white hover:bg-[#374151]"
+                      className="border-[#374151] text-white hover:bg-[#374151]"
                     >
                       <Info className="h-3.5 w-3.5 mr-1.5" />
-                      Ver Detalhes
+                      Detalhes
+                    </Button>
+                    <Button
+                      onClick={() => openPauseModal(conn)}
+                      variant="outline"
+                      size="sm"
+                      className="col-span-2 border-orange-700/40 text-orange-400 hover:bg-orange-500/10 hover:border-orange-500/50"
+                    >
+                      <PauseCircle className="h-3.5 w-3.5 mr-1.5" />
+                      Pausar Loja
                     </Button>
                   </div>
                 </CardContent>
@@ -566,6 +771,131 @@ export default function IfoodConfiguracoesPage() {
           </AlertDescription>
         </Alert>
       </main>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Modal: Pausar Loja                                                  */}
+      {/* ------------------------------------------------------------------ */}
+      <Dialog open={!!pauseTarget} onOpenChange={(o) => { if (!o) closePauseModal(); }}>
+        <DialogContent className="bg-[#141415] border-[#374151] text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PauseCircle className="h-5 w-5 text-orange-400" />
+              Pausar Loja — {pauseTarget?.merchantName}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-1">
+            <Alert className="bg-orange-500/10 border-orange-500/25">
+              <AlertTriangle className="h-4 w-4 text-orange-400" />
+              <AlertDescription className="text-orange-300 text-sm">
+                A loja ficará indisponível no iFood durante o período definido. Clientes não conseguirão fazer novos pedidos.
+              </AlertDescription>
+            </Alert>
+
+            {/* Motivo */}
+            <div className="space-y-1.5">
+              <Label className="text-gray-300 text-sm">Motivo da pausa (opcional)</Label>
+              <input
+                type="text"
+                value={pauseDescription}
+                onChange={(e) => setPauseDescription(e.target.value)}
+                placeholder="ex: Falta de ingredientes, alta demanda..."
+                className="w-full bg-[#0f0f10] border border-[#374151] text-white placeholder:text-gray-600 text-sm rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+              />
+            </div>
+
+            {/* Duração — presets */}
+            <div className="space-y-1.5">
+              <Label className="text-gray-300 text-sm">Duração</Label>
+              <div className="grid grid-cols-4 gap-2">
+                {PAUSE_PRESETS.map((p) => (
+                  <button
+                    key={p.value}
+                    type="button"
+                    onClick={() => { setPauseMinutes(p.value); setPauseIsCustom(false); }}
+                    className={`rounded-lg border text-sm py-2 transition-colors ${
+                      !pauseIsCustom && pauseMinutes === p.value
+                        ? 'bg-orange-500/20 border-orange-500/50 text-orange-300 font-semibold'
+                        : 'bg-black/20 border-[#374151] text-gray-400 hover:border-orange-500/30 hover:text-orange-400'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Personalizado */}
+              <div className="flex items-center gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setPauseIsCustom(!pauseIsCustom)}
+                  className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                    pauseIsCustom
+                      ? 'bg-orange-500/20 border-orange-500/50 text-orange-300'
+                      : 'border-[#374151] text-gray-500 hover:border-orange-500/30 hover:text-orange-400'
+                  }`}
+                >
+                  <Timer className="h-3 w-3" />
+                  Personalizado
+                </button>
+                {pauseIsCustom && (
+                  <div className="flex items-center gap-1.5 flex-1">
+                    <input
+                      type="number"
+                      min={1}
+                      max={1440}
+                      value={pauseCustom}
+                      onChange={(e) => setPauseCustom(e.target.value)}
+                      placeholder="minutos"
+                      className="w-24 bg-[#0f0f10] border border-[#374151] text-white text-sm rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                    />
+                    <span className="text-gray-500 text-xs">min</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Resumo */}
+            <div className="bg-black/30 rounded-lg px-3 py-2 text-sm">
+              <span className="text-gray-400">Duração selecionada: </span>
+              <span className="text-orange-300 font-semibold">
+                {pauseIsCustom
+                  ? (pauseCustom ? `${pauseCustom} min` : '—')
+                  : PAUSE_PRESETS.find((p) => p.value === pauseMinutes)?.label ?? `${pauseMinutes} min`}
+              </span>
+            </div>
+
+            {pauseError && (
+              <Alert className="bg-red-500/10 border-red-500/30">
+                <AlertTriangle className="h-4 w-4 text-red-400" />
+                <AlertDescription className="text-red-400 text-sm">{pauseError}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={closePauseModal}
+              disabled={pauseLoading}
+              className="border-[#374151] text-white hover:bg-[#374151]"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreatePause}
+              disabled={pauseLoading}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {pauseLoading ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Pausando...</>
+              ) : (
+                <><PauseCircle className="h-4 w-4 mr-2" />Confirmar Pausa</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ------------------------------------------------------------------ */}
       {/* Modal: Detalhes da Loja                                             */}
