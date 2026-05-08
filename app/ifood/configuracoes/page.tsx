@@ -28,6 +28,14 @@ import {
   WifiOff,
   Clock,
   ShoppingBag,
+  Info,
+  MapPin,
+  Phone,
+  Building2,
+  Tag,
+  Truck,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -42,6 +50,60 @@ interface IfoodConnection {
 }
 
 type IfoodStatus = 'OPEN' | 'CLOSED' | 'BUSY' | 'PAUSED' | 'ERROR' | 'UNKNOWN' | null;
+
+interface MerchantAddress {
+  streetName?: string;
+  streetNumber?: string;
+  complement?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+  reference?: string;
+}
+
+interface MerchantContact {
+  phone?: string;
+  email?: string;
+}
+
+interface MerchantCategory {
+  id?: string;
+  description?: string;
+}
+
+interface MerchantDeliveryMethod {
+  id?: string;
+  mode?: string;
+  title?: string;
+  subtitle?: string;
+  minTime?: number;
+  maxTime?: number;
+  minOrderValue?: number;
+}
+
+interface MerchantDetails {
+  id?: string;
+  name?: string;
+  corporateName?: string;
+  taxId?: string;         // CNPJ
+  address?: MerchantAddress;
+  contacts?: MerchantContact[];
+  mainCategory?: MerchantCategory;
+  categories?: MerchantCategory[];
+  deliveryMethods?: MerchantDeliveryMethod[];
+  enabled?: boolean;
+}
+
+interface MerchantStatusRaw {
+  status: string;
+  raw?: {
+    value?: string;
+    message?: string;
+    validations?: Array<{ id?: string; code?: string; state?: string; message?: string }>;
+  };
+}
 
 const MAX_STORES = 5;
 
@@ -124,6 +186,12 @@ export default function IfoodConfiguracoesPage() {
   // Status em tempo real por card
   const [testingStatus, setTestingStatus] = useState<Record<string, boolean>>({});
   const [realtimeStatus, setRealtimeStatus] = useState<Record<string, IfoodStatus>>({});
+
+  // Modal de detalhes da loja
+  const [detailsTarget, setDetailsTarget] = useState<IfoodConnection | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [merchantDetails, setMerchantDetails] = useState<MerchantDetails | null>(null);
+  const [merchantStatusData, setMerchantStatusData] = useState<MerchantStatusRaw | null>(null);
 
   // ---------------------------------------------------------------------------
   // Carregar conexões
@@ -266,6 +334,37 @@ export default function IfoodConfiguracoesPage() {
       setRealtimeStatus((prev) => ({ ...prev, [connection.id]: 'ERROR' }));
     } finally {
       setTestingStatus((prev) => ({ ...prev, [connection.id]: false }));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ver detalhes completos da loja
+  // ---------------------------------------------------------------------------
+  async function handleViewDetails(connection: IfoodConnection) {
+    setDetailsTarget(connection);
+    setMerchantDetails(null);
+    setMerchantStatusData(null);
+    setDetailsLoading(true);
+
+    try {
+      const [detailsRes, statusRes] = await Promise.all([
+        fetch(`/api/ifood/merchants/${connection.merchantId}/details`),
+        fetch(`/api/ifood/merchants/${connection.merchantId}/status`),
+      ]);
+
+      if (detailsRes.ok) {
+        const d = await detailsRes.json() as { merchant: MerchantDetails };
+        setMerchantDetails(d.merchant);
+      }
+
+      if (statusRes.ok) {
+        const s = await statusRes.json() as MerchantStatusRaw;
+        setMerchantStatusData(s);
+      }
+    } catch {
+      addToast('❌ Erro ao carregar detalhes da loja', 'error');
+    } finally {
+      setDetailsLoading(false);
     }
   }
 
@@ -425,26 +524,31 @@ export default function IfoodConfiguracoesPage() {
                     )}
                   </div>
 
-                  {/* Botão testar */}
-                  <Button
-                    onClick={() => handleTestStatus(conn)}
-                    disabled={testingStatus[conn.id]}
-                    variant="outline"
-                    size="sm"
-                    className="w-full border-[#374151] text-white hover:bg-[#374151] mt-1"
-                  >
-                    {testingStatus[conn.id] ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
-                        Verificando...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-3.5 w-3.5 mr-2" />
-                        Testar Conexão
-                      </>
-                    )}
-                  </Button>
+                  {/* Botões */}
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => handleTestStatus(conn)}
+                      disabled={testingStatus[conn.id]}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 border-[#374151] text-white hover:bg-[#374151]"
+                    >
+                      {testingStatus[conn.id] ? (
+                        <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Verificando</>
+                      ) : (
+                        <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Testar</>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => handleViewDetails(conn)}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 border-[#374151] text-white hover:bg-[#374151]"
+                    >
+                      <Info className="h-3.5 w-3.5 mr-1.5" />
+                      Ver Detalhes
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -462,6 +566,206 @@ export default function IfoodConfiguracoesPage() {
           </AlertDescription>
         </Alert>
       </main>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Modal: Detalhes da Loja                                             */}
+      {/* ------------------------------------------------------------------ */}
+      <Dialog open={!!detailsTarget} onOpenChange={(o) => { if (!o) { setDetailsTarget(null); setMerchantDetails(null); setMerchantStatusData(null); } }}>
+        <DialogContent className="bg-[#141415] border-[#374151] text-white max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5 text-[#EA1D2C]" />
+              {detailsTarget?.merchantName}
+            </DialogTitle>
+          </DialogHeader>
+
+          {detailsLoading ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              <p className="text-gray-500 text-sm">Carregando informações...</p>
+            </div>
+          ) : (
+            <div className="space-y-5 py-1">
+
+              {/* Status operacional */}
+              {merchantStatusData && (() => {
+                const st = merchantStatusData.status;
+                const validations = merchantStatusData.raw?.validations ?? [];
+                const statusMap: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
+                  OPEN:    { label: 'Aberto', icon: <Wifi className="h-4 w-4" />, cls: 'bg-green-500/15 border-green-500/30 text-green-400' },
+                  CLOSED:  { label: 'Fechado', icon: <WifiOff className="h-4 w-4" />, cls: 'bg-gray-500/15 border-gray-500/30 text-gray-400' },
+                  BUSY:    { label: 'Ocupado', icon: <Clock className="h-4 w-4" />, cls: 'bg-yellow-500/15 border-yellow-500/30 text-yellow-400' },
+                  PAUSED:  { label: 'Pausado', icon: <Clock className="h-4 w-4" />, cls: 'bg-orange-500/15 border-orange-500/30 text-orange-400' },
+                  ERROR:   { label: 'Erro de conexão', icon: <AlertTriangle className="h-4 w-4" />, cls: 'bg-red-500/15 border-red-500/30 text-red-400' },
+                  UNKNOWN: { label: 'Desconhecido', icon: null, cls: 'bg-gray-500/15 border-gray-500/30 text-gray-400' },
+                };
+                const cfg = statusMap[st] ?? statusMap.UNKNOWN;
+                return (
+                  <div className={`rounded-lg border p-3 space-y-2 ${cfg.cls}`}>
+                    <div className="flex items-center gap-2 font-semibold text-sm">
+                      {cfg.icon}
+                      Status iFood: {cfg.label}
+                    </div>
+                    {merchantStatusData.raw?.message && (
+                      <p className="text-xs opacity-80">{merchantStatusData.raw.message}</p>
+                    )}
+                    {validations.length > 0 && (
+                      <div className="space-y-1 pt-1 border-t border-current/20">
+                        <p className="text-xs font-medium opacity-70 uppercase tracking-wider">Validações</p>
+                        {validations.map((v, i) => (
+                          <div key={i} className="flex items-center gap-1.5 text-xs">
+                            {v.state === 'VALID' || v.state === 'OK'
+                              ? <CheckCircle2 className="h-3 w-3 text-green-400 shrink-0" />
+                              : <XCircle className="h-3 w-3 text-red-400 shrink-0" />}
+                            <span className="opacity-80">{v.message ?? v.code}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Informações básicas */}
+              {merchantDetails && (
+                <>
+                  {/* Identificação */}
+                  <div className="bg-black/30 rounded-lg p-3 space-y-2">
+                    <p className="text-gray-400 text-xs font-medium uppercase tracking-wider">Identificação</p>
+                    {merchantDetails.corporateName && (
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-gray-400 shrink-0" />
+                        <span className="text-gray-300 text-sm">{merchantDetails.corporateName}</span>
+                      </div>
+                    )}
+                    {merchantDetails.taxId && (
+                      <div className="flex items-start gap-2">
+                        <span className="text-gray-400 text-xs mt-0.5 shrink-0">CNPJ</span>
+                        <span className="text-gray-300 text-sm font-mono">{merchantDetails.taxId}</span>
+                      </div>
+                    )}
+                    <div className="flex items-start gap-2">
+                      <span className="text-gray-400 text-xs mt-0.5 shrink-0">Merchant ID</span>
+                      <span className="text-gray-500 text-xs font-mono break-all">{detailsTarget?.merchantId}</span>
+                    </div>
+                  </div>
+
+                  {/* Endereço */}
+                  {merchantDetails.address && (() => {
+                    const a = merchantDetails.address!;
+                    return (
+                      <div className="bg-black/30 rounded-lg p-3 space-y-1.5">
+                        <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
+                          <MapPin className="h-3.5 w-3.5" />
+                          Endereço
+                        </div>
+                        {(a.streetName || a.streetNumber) && (
+                          <p className="text-white text-sm">
+                            {[a.streetName, a.streetNumber].filter(Boolean).join(', ')}
+                          </p>
+                        )}
+                        {a.complement && (
+                          <p className="text-gray-300 text-xs">Complemento: {a.complement}</p>
+                        )}
+                        {a.neighborhood && (
+                          <p className="text-gray-400 text-xs">Bairro: {a.neighborhood}</p>
+                        )}
+                        {a.city && (
+                          <p className="text-gray-400 text-xs">{a.city}{a.state ? `/${a.state}` : ''}</p>
+                        )}
+                        {a.postalCode && (
+                          <p className="text-gray-400 text-xs">CEP: {a.postalCode}</p>
+                        )}
+                        {a.reference && (
+                          <p className="text-yellow-400 text-xs">📍 {a.reference}</p>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Contato */}
+                  {(merchantDetails.contacts ?? []).length > 0 && (
+                    <div className="bg-black/30 rounded-lg p-3 space-y-1.5">
+                      <p className="text-gray-400 text-xs font-medium uppercase tracking-wider">Contato</p>
+                      {merchantDetails.contacts!.map((c, i) => (
+                        <div key={i} className="space-y-1">
+                          {c.phone && (
+                            <div className="flex items-center gap-2">
+                              <Phone className="h-4 w-4 text-gray-400 shrink-0" />
+                              <a href={`tel:${c.phone}`} className="text-blue-400 hover:text-blue-300 text-sm">
+                                {c.phone}
+                              </a>
+                            </div>
+                          )}
+                          {c.email && (
+                            <p className="text-gray-300 text-sm pl-6">{c.email}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Categoria */}
+                  {(merchantDetails.mainCategory ?? merchantDetails.categories?.[0]) && (
+                    <div className="bg-black/30 rounded-lg p-3 space-y-1">
+                      <p className="text-gray-400 text-xs font-medium uppercase tracking-wider">Categoria</p>
+                      <div className="flex items-center gap-2">
+                        <Tag className="h-4 w-4 text-gray-400 shrink-0" />
+                        <span className="text-gray-300 text-sm">
+                          {(merchantDetails.mainCategory ?? merchantDetails.categories![0]).description}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Modalidades de entrega */}
+                  {(merchantDetails.deliveryMethods ?? []).length > 0 && (
+                    <div className="bg-black/30 rounded-lg p-3 space-y-2">
+                      <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wider">
+                        <Truck className="h-3.5 w-3.5" />
+                        Modalidades de Entrega
+                      </div>
+                      {merchantDetails.deliveryMethods!.map((dm, i) => (
+                        <div key={i} className="bg-black/20 rounded p-2 space-y-0.5">
+                          <p className="text-white text-sm font-medium">{dm.title ?? dm.mode}</p>
+                          {dm.subtitle && (
+                            <p className="text-gray-400 text-xs">{dm.subtitle}</p>
+                          )}
+                          <div className="flex flex-wrap gap-3 text-xs text-gray-500 mt-1">
+                            {(dm.minTime !== undefined && dm.maxTime !== undefined) && (
+                              <span>⏱ {dm.minTime}–{dm.maxTime} min</span>
+                            )}
+                            {dm.minOrderValue !== undefined && dm.minOrderValue > 0 && (
+                              <span>🛒 Pedido mín.: R$ {(dm.minOrderValue / 100).toFixed(2).replace('.', ',')}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Fallback: sem dados */}
+              {!detailsLoading && !merchantDetails && !merchantStatusData && (
+                <div className="text-center py-8 text-gray-500 text-sm">
+                  Não foi possível carregar as informações desta loja.
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setDetailsTarget(null); setMerchantDetails(null); setMerchantStatusData(null); }}
+              className="border-[#374151] text-white hover:bg-[#374151]"
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ------------------------------------------------------------------ */}
       {/* Modal: Adicionar Loja                                               */}
