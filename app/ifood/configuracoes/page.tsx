@@ -201,13 +201,14 @@ function toEditSchedule(days: OpeningHoursDay[]): EditDaySchedule[] {
   const map = Object.fromEntries(days.map((d) => [d.dayOfWeek, d]));
   return DAY_ORDER.map((dow) => {
     const day = map[dow];
-    if (!day || day.shifts.length === 0) {
+    const shifts = day?.shifts ?? [];
+    if (!day || shifts.length === 0) {
       return { dayOfWeek: dow, active: false, shifts: [{ start: '08:00', end: '22:00' }] };
     }
     return {
       dayOfWeek: dow,
       active: true,
-      shifts: day.shifts.map((s) => ({ start: s.start, end: shiftEnd(s.start, s.duration) })),
+      shifts: shifts.map((s) => ({ start: s.start, end: shiftEnd(s.start, s.duration) })),
     };
   });
 }
@@ -935,7 +936,7 @@ export default function IfoodConfiguracoesPage() {
                       );
                       const activeDays = DAY_ORDER
                         .map((dow) => ({ dow, day: days.find((d) => d.dayOfWeek === dow) }))
-                        .filter(({ day }) => day && day.shifts.length > 0);
+                        .filter(({ day }) => (day?.shifts?.length ?? 0) > 0);
                       if (activeDays.length === 0) return (
                         <p className="text-gray-600 text-xs italic py-1">Nenhum horário configurado</p>
                       );
@@ -945,7 +946,7 @@ export default function IfoodConfiguracoesPage() {
                             <div key={dow} className="flex items-start gap-2 text-xs">
                               <span className="text-gray-500 w-7 shrink-0 font-medium">{DAY_LABEL_SHORT[dow]}</span>
                               <span className="text-gray-300">
-                                {day!.shifts.map((s) => `${s.start}–${shiftEnd(s.start, s.duration)}`).join(', ')}
+                                {(day?.shifts ?? []).map((s) => `${s.start}–${shiftEnd(s.start, s.duration)}`).join(', ')}
                               </span>
                             </div>
                           ))}

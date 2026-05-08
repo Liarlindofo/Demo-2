@@ -49,8 +49,38 @@ export async function GET(
     }
 
     const data = await res.json();
-    // iFood retorna array diretamente ou { openingHours: [] }
-    const openingHours = Array.isArray(data) ? data : (data.openingHours ?? data.shifts ?? []);
+
+    // Normaliza qualquer formato que iFood retorne para:
+    // [{ dayOfWeek: string, shifts: [{ start: string, duration: number }] }]
+    const raw: unknown[] = Array.isArray(data)
+      ? data
+      : ((data as Record<string, unknown>).openingHours as unknown[] | undefined)
+        ?? ((data as Record<string, unknown>).shifts as unknown[] | undefined)
+        ?? [];
+
+    type RawShift = { dayOfWeek?: string; start?: string; duration?: number; shifts?: RawShift[] };
+    const typedRaw = raw as RawShift[];
+
+    // Detecta formato "flat" (cada item é um turno com dayOfWeek, sem array .shifts)
+    const isFlat = typedRaw.length > 0 && !('shifts' in typedRaw[0]);
+
+    let openingHours;
+    if (isFlat) {
+      const grouped: Record<string, { start: string; duration: number }[]> = {};
+      for (const item of typedRaw) {
+        if (item.dayOfWeek && item.start !== undefined && item.duration !== undefined) {
+          if (!grouped[item.dayOfWeek]) grouped[item.dayOfWeek] = [];
+          grouped[item.dayOfWeek].push({ start: item.start, duration: item.duration });
+        }
+      }
+      openingHours = Object.entries(grouped).map(([dayOfWeek, shifts]) => ({ dayOfWeek, shifts }));
+    } else {
+      openingHours = typedRaw.map((d) => ({
+        dayOfWeek: d.dayOfWeek ?? '',
+        shifts: (d.shifts ?? []).map((s) => ({ start: s.start ?? '', duration: s.duration ?? 0 })),
+      }));
+    }
+
     return NextResponse.json({ openingHours });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro interno';
