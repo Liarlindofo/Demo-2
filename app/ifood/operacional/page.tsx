@@ -96,6 +96,7 @@ interface IfoodOrder {
   scheduledDateTime: string | null;
   benefits: OrderBenefit[];
   observations: string | null;
+  pickupCode: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +324,9 @@ function OrderCard({
       className={`rounded-xl cursor-pointer transition-all mb-3 select-none border ${
         isScheduled
           ? 'bg-[#0d1a2e] border-blue-500/40 hover:border-blue-400/70'
-          : 'bg-[#1a1a1a] border-[#374151] hover:border-[#EA1D2C]/40'
+          : !isDelivery
+            ? 'bg-[#1a1a1a] border-purple-500/40 hover:border-purple-400/60'
+            : 'bg-[#1a1a1a] border-[#374151] hover:border-[#EA1D2C]/40'
       }`}
       onClick={() => onCardClick(order)}
     >
@@ -421,6 +424,21 @@ function OrderCard({
             {isDelivery ? 'Delivery' : 'Retirada'}
           </Badge>
         </div>
+
+        {/* Código de retirada — exibido com destaque na coluna "Pronto para Retirada" */}
+        {order.status === 'READY_TO_PICKUP' && order.pickupCode && (
+          <div className="flex items-center gap-2.5 bg-purple-500/15 border border-purple-500/30 rounded-lg px-3 py-2">
+            <Package className="h-4 w-4 text-purple-400 shrink-0" />
+            <div>
+              <p className="text-purple-300 text-[10px] font-medium uppercase tracking-wider leading-none mb-0.5">
+                Código de Retirada
+              </p>
+              <p className="text-purple-100 text-xl font-bold tracking-widest leading-none">
+                {order.pickupCode}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Botões de ação — não propagam clique para o modal */}
         {canCancelOrder && (
@@ -697,6 +715,21 @@ function OrderDetailModal({
               </div>
             )}
           </div>
+
+          {/* Código de retirada (TAKEOUT) */}
+          {!isDelivery && order.pickupCode && (
+            <div className="flex items-center gap-3 bg-purple-500/15 border border-purple-500/30 rounded-lg p-3">
+              <Package className="h-5 w-5 text-purple-400 shrink-0" />
+              <div>
+                <p className="text-purple-300 text-xs font-medium uppercase tracking-wider mb-0.5">
+                  Código de Retirada
+                </p>
+                <p className="text-purple-100 text-2xl font-bold tracking-widest">
+                  {order.pickupCode}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Observations */}
           {order.observations && (

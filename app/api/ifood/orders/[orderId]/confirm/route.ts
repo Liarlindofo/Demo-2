@@ -7,7 +7,8 @@ import { resolveOrderAction } from '@/lib/ifood-order-action';
 
 // ---------------------------------------------------------------------------
 // POST /api/ifood/orders/:orderId/confirm
-// Confirma o pedido + inicia preparo (chamadas encadeadas para melhor UX)
+// DELIVERY: confirma + inicia preparo automaticamente → PREPARING
+// TAKEOUT / outros: apenas confirma → CONFIRMED (preparo iniciado manualmente)
 // ---------------------------------------------------------------------------
 export async function POST(
   _req: NextRequest,
@@ -18,22 +19,33 @@ export async function POST(
     const resolved = await resolveOrderAction(orderId);
     if (resolved.ok === false) return resolved.response;
 
-    // Chama confirm na API iFood
+    const orderRecord = await db.ifoodOrder.findUnique({
+      where: { orderId },
+      select: { orderType: true },
+    });
+    const isDelivery = orderRecord?.orderType === 'DELIVERY';
+
     await confirmOrder(orderId);
 
-    // Encadeia startPreparation para ir direto ao preparo
-    try {
-      await startPreparation(orderId);
-    } catch {
-      // Se startPreparation falhar, confirmar ainda é válido
+    if (isDelivery) {
+      try {
+        await startPreparation(orderId);
+      } catch {
+        // Se startPreparation falhar, confirmar ainda é válido
+      }
+      await db.ifoodOrder.update({
+        where: { orderId },
+        data: { status: 'PREPARING' },
+      });
+      return NextResponse.json({ success: true, status: 'PREPARING' });
     }
 
+    // TAKEOUT / INDOOR / DINE_IN: aguarda ação manual de iniciar preparo
     await db.ifoodOrder.update({
       where: { orderId },
-      data: { status: 'PREPARING' },
+      data: { status: 'CONFIRMED' },
     });
-
-    return NextResponse.json({ success: true, status: 'PREPARING' });
+    return NextResponse.json({ success: true, status: 'CONFIRMED' });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro interno';
     console.error('[POST ifood confirm]', message);

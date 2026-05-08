@@ -74,6 +74,7 @@ export async function GET(req: NextRequest) {
         (customer.taxPayerIdentificationNumber as string | undefined) ??
         (customer.documentNumber as string | undefined) ??
         null;
+      const pickupCode = (raw.pickupCode as string | undefined) ?? null;
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { rawPayload: _raw, ...orderFields } = row;
@@ -84,6 +85,7 @@ export async function GET(req: NextRequest) {
         benefits,
         observations,
         customerTaxId,
+        pickupCode,
       };
     });
 
