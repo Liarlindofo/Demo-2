@@ -48,38 +48,19 @@ export async function GET(
       return NextResponse.json({ error: 'Erro ao buscar horários no iFood' }, { status: 502 });
     }
 
-    const data = await res.json();
+    const data = await res.json() as { shifts?: { id?: string; dayOfWeek?: string; start?: string; duration?: number }[] };
 
-    // Normaliza qualquer formato que iFood retorne para:
-    // [{ dayOfWeek: string, shifts: [{ start: string, duration: number }] }]
-    const raw: unknown[] = Array.isArray(data)
-      ? data
-      : ((data as Record<string, unknown>).openingHours as unknown[] | undefined)
-        ?? ((data as Record<string, unknown>).shifts as unknown[] | undefined)
-        ?? [];
-
-    type RawShift = { dayOfWeek?: string; start?: string; duration?: number; shifts?: RawShift[] };
-    const typedRaw = raw as RawShift[];
-
-    // Detecta formato "flat" (cada item é um turno com dayOfWeek, sem array .shifts)
-    const isFlat = typedRaw.length > 0 && !('shifts' in typedRaw[0]);
-
-    let openingHours;
-    if (isFlat) {
-      const grouped: Record<string, { start: string; duration: number }[]> = {};
-      for (const item of typedRaw) {
-        if (item.dayOfWeek && item.start !== undefined && item.duration !== undefined) {
-          if (!grouped[item.dayOfWeek]) grouped[item.dayOfWeek] = [];
-          grouped[item.dayOfWeek].push({ start: item.start, duration: item.duration });
-        }
+    // iFood retorna { shifts: [{ id, dayOfWeek, start, duration }] }
+    // Agrupar por dayOfWeek, ignorando o campo id
+    const flatShifts = data.shifts ?? [];
+    const grouped: Record<string, { start: string; duration: number }[]> = {};
+    for (const shift of flatShifts) {
+      if (shift.dayOfWeek && shift.start !== undefined && shift.duration !== undefined) {
+        if (!grouped[shift.dayOfWeek]) grouped[shift.dayOfWeek] = [];
+        grouped[shift.dayOfWeek].push({ start: shift.start, duration: shift.duration });
       }
-      openingHours = Object.entries(grouped).map(([dayOfWeek, shifts]) => ({ dayOfWeek, shifts }));
-    } else {
-      openingHours = typedRaw.map((d) => ({
-        dayOfWeek: d.dayOfWeek ?? '',
-        shifts: (d.shifts ?? []).map((s) => ({ start: s.start ?? '', duration: s.duration ?? 0 })),
-      }));
     }
+    const openingHours = Object.entries(grouped).map(([dayOfWeek, shifts]) => ({ dayOfWeek, shifts }));
 
     return NextResponse.json({ openingHours });
   } catch (err) {
@@ -111,26 +92,26 @@ export async function PUT(
 
     const token = await getValidIfoodToken();
 
-    // Tenta primeiro com array direto (formato mais comum do iFood v1)
-    const tryPut = async (bodyPayload: unknown) =>
-      fetch(
-        `https://merchant-api.ifood.com.br/merchant/v1.0/merchants/${merchantId}/opening-hours`,
-        {
-          method: 'PUT',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(bodyPayload),
-        },
-      );
+    type DayEntry = { dayOfWeek?: string; shifts?: { start?: string; duration?: number }[] };
+    const openingHours = body.openingHours as DayEntry[];
 
-    let res = await tryPut(body.openingHours);
+    // Converter formato agrupado por dia para formato flat esperado pelo iFood
+    const flatShifts = openingHours.flatMap((day) =>
+      (day.shifts ?? []).map((shift) => ({
+        dayOfWeek: day.dayOfWeek,
+        start: shift.start,
+        duration: shift.duration,
+      })),
+    );
 
-    // Se falhou com array direto, tenta formato encapsulado { openingHours: [...] }
-    if (!res.ok && res.status !== 204) {
-      const fallback = await tryPut({ openingHours: body.openingHours });
-      if (fallback.ok || fallback.status === 204) {
-        res = fallback;
-      }
-    }
+    const res = await fetch(
+      `https://merchant-api.ifood.com.br/merchant/v1.0/merchants/${merchantId}/opening-hours`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shifts: flatShifts }),
+      },
+    );
 
     if (!res.ok && res.status !== 204) {
       const text = await res.text();
