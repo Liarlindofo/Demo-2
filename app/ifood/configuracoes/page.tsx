@@ -39,6 +39,8 @@ import {
   PauseCircle,
   PlayCircle,
   Timer,
+  CalendarDays,
+  Pencil,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -122,6 +124,42 @@ const PAUSE_PRESETS = [
   { label: '2 horas', value: 120 },
 ];
 
+// ---------------------------------------------------------------------------
+// Opening hours types & constants
+// ---------------------------------------------------------------------------
+interface Shift {
+  start: string;    // "HH:MM"
+  duration: number; // minutos
+}
+
+interface OpeningHoursDay {
+  dayOfWeek: string;
+  shifts: Shift[];
+}
+
+interface EditShift {
+  start: string; // "HH:MM"
+  end: string;   // "HH:MM"
+}
+
+interface EditDaySchedule {
+  dayOfWeek: string;
+  active: boolean;
+  shifts: EditShift[];
+}
+
+const DAY_ORDER = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const;
+
+const DAY_LABEL_SHORT: Record<string, string> = {
+  MONDAY: 'Seg', TUESDAY: 'Ter', WEDNESDAY: 'Qua',
+  THURSDAY: 'Qui', FRIDAY: 'Sex', SATURDAY: 'Sáb', SUNDAY: 'Dom',
+};
+
+const DAY_LABEL_FULL: Record<string, string> = {
+  MONDAY: 'Segunda-feira', TUESDAY: 'Terça-feira', WEDNESDAY: 'Quarta-feira',
+  THURSDAY: 'Quinta-feira', FRIDAY: 'Sexta-feira', SATURDAY: 'Sábado', SUNDAY: 'Domingo',
+};
+
 const MAX_STORES = 5;
 
 // ---------------------------------------------------------------------------
@@ -143,6 +181,48 @@ function formatPauseRemaining(endIso: string): string {
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+/** "10:00" + 540 min → "19:00" */
+function shiftEnd(start: string, duration: number): string {
+  const [h, m] = start.split(':').map(Number);
+  const total = h * 60 + m + duration;
+  return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** "19:00" - "10:00" → 540 */
+function calcDuration(start: string, end: string): number {
+  const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  return toMin(end) - toMin(start);
+}
+
+/** Converte OpeningHoursDay[] em EditDaySchedule[] (todos os 7 dias) */
+function toEditSchedule(days: OpeningHoursDay[]): EditDaySchedule[] {
+  const map = Object.fromEntries(days.map((d) => [d.dayOfWeek, d]));
+  return DAY_ORDER.map((dow) => {
+    const day = map[dow];
+    if (!day || day.shifts.length === 0) {
+      return { dayOfWeek: dow, active: false, shifts: [{ start: '08:00', end: '22:00' }] };
+    }
+    return {
+      dayOfWeek: dow,
+      active: true,
+      shifts: day.shifts.map((s) => ({ start: s.start, end: shiftEnd(s.start, s.duration) })),
+    };
+  });
+}
+
+/** Converte EditDaySchedule[] de volta para o formato iFood */
+function fromEditSchedule(schedule: EditDaySchedule[]): OpeningHoursDay[] {
+  return schedule
+    .filter((d) => d.active && d.shifts.length > 0)
+    .map((d) => ({
+      dayOfWeek: d.dayOfWeek,
+      shifts: d.shifts
+        .filter((s) => s.start && s.end && calcDuration(s.start, s.end) > 0)
+        .map((s) => ({ start: s.start, duration: calcDuration(s.start, s.end) })),
+    }))
+    .filter((d) => d.shifts.length > 0);
 }
 
 function StatusBadge({ status }: { status: string; }) {
@@ -224,6 +304,16 @@ export default function IfoodConfiguracoesPage() {
   const [merchantDetails, setMerchantDetails] = useState<MerchantDetails | null>(null);
   const [merchantStatusData, setMerchantStatusData] = useState<MerchantStatusRaw | null>(null);
 
+  // Horários de funcionamento por loja — keyed by merchantId
+  const [openingHours, setOpeningHours] = useState<Record<string, OpeningHoursDay[]>>({});
+  const [openingHoursLoading, setOpeningHoursLoading] = useState<Record<string, boolean>>({});
+
+  // Modal editar horários
+  const [editHoursTarget, setEditHoursTarget] = useState<IfoodConnection | null>(null);
+  const [editSchedule, setEditSchedule] = useState<EditDaySchedule[]>([]);
+  const [editHoursLoading, setEditHoursLoading] = useState(false);
+  const [editHoursError, setEditHoursError] = useState('');
+
   // Interrupções (pausas) por loja — keyed by merchantId
   const [interruptions, setInterruptions] = useState<Record<string, Interruption[]>>({});
   const [interruptionsLoading, setInterruptionsLoading] = useState<Record<string, boolean>>({});
@@ -259,12 +349,11 @@ export default function IfoodConfiguracoesPage() {
     loadConnections();
   }, [loadConnections]);
 
-  // Carrega interrupções para cada loja ao montar ou ao reconectar
+  // Carrega interrupções e horários para cada loja ao montar ou ao reconectar
   useEffect(() => {
     connections.forEach((conn) => {
-      if (interruptions[conn.merchantId] === undefined) {
-        loadInterruptions(conn);
-      }
+      if (interruptions[conn.merchantId] === undefined) loadInterruptions(conn);
+      if (openingHours[conn.merchantId] === undefined) loadOpeningHours(conn);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connections]);
@@ -482,6 +571,104 @@ export default function IfoodConfiguracoesPage() {
     setPauseIsCustom(false);
     setPauseError('');
     setPauseLoading(false);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Horários de funcionamento
+  // ---------------------------------------------------------------------------
+  async function loadOpeningHours(conn: IfoodConnection) {
+    setOpeningHoursLoading((prev) => ({ ...prev, [conn.merchantId]: true }));
+    try {
+      const res = await fetch(`/api/ifood/merchants/${conn.merchantId}/opening-hours`);
+      if (res.ok) {
+        const data = await res.json() as { openingHours: OpeningHoursDay[] };
+        setOpeningHours((prev) => ({ ...prev, [conn.merchantId]: data.openingHours ?? [] }));
+      }
+    } catch {
+      // falha silenciosa
+    } finally {
+      setOpeningHoursLoading((prev) => ({ ...prev, [conn.merchantId]: false }));
+    }
+  }
+
+  function openEditHours(conn: IfoodConnection) {
+    const days = openingHours[conn.merchantId] ?? [];
+    setEditSchedule(toEditSchedule(days));
+    setEditHoursTarget(conn);
+    setEditHoursError('');
+  }
+
+  function closeEditHours() {
+    setEditHoursTarget(null);
+    setEditSchedule([]);
+    setEditHoursError('');
+    setEditHoursLoading(false);
+  }
+
+  async function handleSaveHours() {
+    if (!editHoursTarget) return;
+    setEditHoursLoading(true);
+    setEditHoursError('');
+    try {
+      const payload = fromEditSchedule(editSchedule);
+      const res = await fetch(`/api/ifood/merchants/${editHoursTarget.merchantId}/opening-hours`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ openingHours: payload }),
+      });
+      if (!res.ok) {
+        const d = await res.json() as { error?: string };
+        setEditHoursError(d.error ?? 'Erro ao salvar horários');
+        return;
+      }
+      setOpeningHours((prev) => ({ ...prev, [editHoursTarget.merchantId]: payload }));
+      addToast('✅ Horários salvos com sucesso!', 'success');
+      closeEditHours();
+    } catch {
+      setEditHoursError('Erro de conexão. Tente novamente.');
+    } finally {
+      setEditHoursLoading(false);
+    }
+  }
+
+  // Helpers para editar o estado do schedule no modal
+  function toggleDay(dayOfWeek: string) {
+    setEditSchedule((prev) =>
+      prev.map((d) => d.dayOfWeek === dayOfWeek ? { ...d, active: !d.active } : d),
+    );
+  }
+
+  function updateShift(dayOfWeek: string, index: number, field: 'start' | 'end', value: string) {
+    setEditSchedule((prev) =>
+      prev.map((d) =>
+        d.dayOfWeek !== dayOfWeek ? d : {
+          ...d,
+          shifts: d.shifts.map((s, i) => i === index ? { ...s, [field]: value } : s),
+        },
+      ),
+    );
+  }
+
+  function addShift(dayOfWeek: string) {
+    setEditSchedule((prev) =>
+      prev.map((d) =>
+        d.dayOfWeek !== dayOfWeek ? d : {
+          ...d,
+          shifts: [...d.shifts, { start: '08:00', end: '22:00' }],
+        },
+      ),
+    );
+  }
+
+  function removeShift(dayOfWeek: string, index: number) {
+    setEditSchedule((prev) =>
+      prev.map((d) =>
+        d.dayOfWeek !== dayOfWeek ? d : {
+          ...d,
+          shifts: d.shifts.filter((_, i) => i !== index),
+        },
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -720,6 +907,53 @@ export default function IfoodConfiguracoesPage() {
                     </div>
                   ) : null}
 
+                  {/* Horários de funcionamento — resumo compacto */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-gray-400 text-xs font-medium uppercase tracking-wider flex items-center gap-1">
+                        <CalendarDays className="h-3.5 w-3.5" />
+                        Horários
+                      </p>
+                      <button
+                        onClick={() => openEditHours(conn)}
+                        className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
+                      >
+                        <Pencil className="h-2.5 w-2.5" />
+                        Editar
+                      </button>
+                    </div>
+
+                    {openingHoursLoading[conn.merchantId] ? (
+                      <div className="flex items-center gap-1.5 text-gray-500 text-xs py-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Carregando...
+                      </div>
+                    ) : (() => {
+                      const days = openingHours[conn.merchantId];
+                      if (!days) return (
+                        <p className="text-gray-600 text-xs italic py-1">Não carregado</p>
+                      );
+                      const activeDays = DAY_ORDER
+                        .map((dow) => ({ dow, day: days.find((d) => d.dayOfWeek === dow) }))
+                        .filter(({ day }) => day && day.shifts.length > 0);
+                      if (activeDays.length === 0) return (
+                        <p className="text-gray-600 text-xs italic py-1">Nenhum horário configurado</p>
+                      );
+                      return (
+                        <div className="space-y-0.5">
+                          {activeDays.map(({ dow, day }) => (
+                            <div key={dow} className="flex items-start gap-2 text-xs">
+                              <span className="text-gray-500 w-7 shrink-0 font-medium">{DAY_LABEL_SHORT[dow]}</span>
+                              <span className="text-gray-300">
+                                {day!.shifts.map((s) => `${s.start}–${shiftEnd(s.start, s.duration)}`).join(', ')}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
                   {/* Botões */}
                   <div className="grid grid-cols-2 gap-2">
                     <Button
@@ -891,6 +1125,139 @@ export default function IfoodConfiguracoesPage() {
                 <><Loader2 className="h-4 w-4 animate-spin mr-2" />Pausando...</>
               ) : (
                 <><PauseCircle className="h-4 w-4 mr-2" />Confirmar Pausa</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Modal: Editar Horários                                              */}
+      {/* ------------------------------------------------------------------ */}
+      <Dialog open={!!editHoursTarget} onOpenChange={(o) => { if (!o) closeEditHours(); }}>
+        <DialogContent className="bg-[#141415] border-[#374151] text-white max-w-xl max-h-[92vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarDays className="h-5 w-5 text-blue-400" />
+              Horários — {editHoursTarget?.merchantName}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 py-1">
+            {editSchedule.map((day) => (
+              <div
+                key={day.dayOfWeek}
+                className={`rounded-lg border transition-colors ${
+                  day.active
+                    ? 'bg-black/20 border-[#374151]'
+                    : 'bg-black/10 border-[#2a2a2a] opacity-60'
+                }`}
+              >
+                {/* Header do dia */}
+                <div className="flex items-center justify-between px-3 py-2.5">
+                  <div className="flex items-center gap-3">
+                    {/* Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => toggleDay(day.dayOfWeek)}
+                      className={`relative w-9 h-5 rounded-full transition-colors ${
+                        day.active ? 'bg-blue-500' : 'bg-gray-700'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                          day.active ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                    <span className={`text-sm font-medium ${day.active ? 'text-white' : 'text-gray-500'}`}>
+                      {DAY_LABEL_FULL[day.dayOfWeek]}
+                    </span>
+                  </div>
+                  {!day.active && (
+                    <span className="text-gray-600 text-xs">Fechado</span>
+                  )}
+                </div>
+
+                {/* Períodos */}
+                {day.active && (
+                  <div className="px-3 pb-3 space-y-2">
+                    {day.shifts.map((shift, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <input
+                            type="time"
+                            value={shift.start}
+                            onChange={(e) => updateShift(day.dayOfWeek, idx, 'start', e.target.value)}
+                            className="bg-[#0f0f10] border border-[#374151] text-white text-sm rounded px-2 py-1.5 w-28 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                          />
+                          <span className="text-gray-500 text-xs shrink-0">às</span>
+                          <input
+                            type="time"
+                            value={shift.end}
+                            onChange={(e) => updateShift(day.dayOfWeek, idx, 'end', e.target.value)}
+                            className="bg-[#0f0f10] border border-[#374151] text-white text-sm rounded px-2 py-1.5 w-28 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                          />
+                          {shift.start && shift.end && calcDuration(shift.start, shift.end) > 0 && (
+                            <span className="text-gray-500 text-[10px] shrink-0">
+                              ({Math.floor(calcDuration(shift.start, shift.end) / 60)}h
+                              {calcDuration(shift.start, shift.end) % 60 > 0
+                                ? `${calcDuration(shift.start, shift.end) % 60}min`
+                                : ''})
+                            </span>
+                          )}
+                        </div>
+                        {day.shifts.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeShift(day.dayOfWeek, idx)}
+                            className="text-gray-600 hover:text-red-400 transition-colors shrink-0"
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={() => addShift(day.dayOfWeek)}
+                      className="flex items-center gap-1.5 text-blue-400 hover:text-blue-300 text-xs transition-colors mt-1"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Adicionar período
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {editHoursError && (
+              <Alert className="bg-red-500/10 border-red-500/30">
+                <AlertTriangle className="h-4 w-4 text-red-400" />
+                <AlertDescription className="text-red-400 text-sm">{editHoursError}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={closeEditHours}
+              disabled={editHoursLoading}
+              className="border-[#374151] text-white hover:bg-[#374151]"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSaveHours}
+              disabled={editHoursLoading}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {editHoursLoading ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Salvando...</>
+              ) : (
+                <><CheckCircle2 className="h-4 w-4 mr-2" />Salvar Horários</>
               )}
             </Button>
           </DialogFooter>
