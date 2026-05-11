@@ -95,11 +95,13 @@ export async function PUT(
     type DayEntry = { dayOfWeek?: string; shifts?: { start?: string; duration?: number }[] };
     const openingHours = body.openingHours as DayEntry[];
 
+    const formatStart = (s: string) => s.length === 5 ? `${s}:00` : s;
+
     // Converter formato agrupado por dia para formato flat esperado pelo iFood
     const flatShifts = openingHours.flatMap((day) =>
       (day.shifts ?? []).map((shift) => ({
         dayOfWeek: day.dayOfWeek,
-        start: shift.start,
+        start: shift.start ? formatStart(shift.start) : shift.start,
         duration: shift.duration,
       })),
     );
