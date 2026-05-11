@@ -54,7 +54,7 @@ interface IfoodConnection {
   createdAt: string;
 }
 
-type IfoodStatus = 'OPEN' | 'CLOSED' | 'BUSY' | 'PAUSED' | 'ERROR' | 'UNKNOWN' | null;
+type IfoodStatus = 'ONLINE' | 'FECHADO' | 'AVISO' | 'INDISPONÍVEL' | 'OPEN' | 'CLOSED' | 'BUSY' | 'PAUSED' | 'ERROR' | 'UNKNOWN' | null;
 
 interface MerchantAddress {
   streetName?: string;
@@ -103,11 +103,8 @@ interface MerchantDetails {
 
 interface MerchantStatusRaw {
   status: string;
-  raw?: {
-    value?: string;
-    message?: string;
-    validations?: Array<{ id?: string; code?: string; state?: string; message?: string }>;
-  };
+  available: boolean;
+  message?: string;
 }
 
 interface Interruption {
@@ -245,12 +242,16 @@ function RealtimeStatusBadge({ status }: { status: IfoodStatus }) {
   if (!status) return null;
 
   const map: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
-    OPEN: { label: 'Aberto', icon: <Wifi className="h-3 w-3" />, className: 'bg-green-500/20 text-green-400 border-green-500/30' },
-    CLOSED: { label: 'Fechado', icon: <WifiOff className="h-3 w-3" />, className: 'bg-gray-500/20 text-gray-400 border-gray-500/30' },
-    BUSY: { label: 'Ocupado', icon: <Clock className="h-3 w-3" />, className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
-    PAUSED: { label: 'Pausado', icon: <Clock className="h-3 w-3" />, className: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
-    ERROR: { label: 'Erro', icon: <AlertTriangle className="h-3 w-3" />, className: 'bg-red-500/20 text-red-400 border-red-500/30' },
-    UNKNOWN: { label: 'Desconhecido', icon: null, className: 'bg-gray-500/20 text-gray-400 border-gray-500/30' },
+    ONLINE:        { label: 'Online',       icon: <Wifi className="h-3 w-3" />,          className: 'bg-green-500/20 text-green-400 border-green-500/30' },
+    FECHADO:       { label: 'Fechado',      icon: <WifiOff className="h-3 w-3" />,       className: 'bg-gray-500/20 text-gray-400 border-gray-500/30' },
+    AVISO:         { label: 'Aviso',        icon: <AlertTriangle className="h-3 w-3" />, className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+    'INDISPONÍVEL':{ label: 'Indisponível', icon: <AlertTriangle className="h-3 w-3" />, className: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
+    OPEN:          { label: 'Aberto',       icon: <Wifi className="h-3 w-3" />,          className: 'bg-green-500/20 text-green-400 border-green-500/30' },
+    CLOSED:        { label: 'Fechado',      icon: <WifiOff className="h-3 w-3" />,       className: 'bg-gray-500/20 text-gray-400 border-gray-500/30' },
+    BUSY:          { label: 'Ocupado',      icon: <Clock className="h-3 w-3" />,         className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+    PAUSED:        { label: 'Pausado',      icon: <Clock className="h-3 w-3" />,         className: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
+    ERROR:         { label: 'Erro',         icon: <AlertTriangle className="h-3 w-3" />, className: 'bg-red-500/20 text-red-400 border-red-500/30' },
+    UNKNOWN:       { label: 'Desconhecido', icon: null,                                  className: 'bg-gray-500/20 text-gray-400 border-gray-500/30' },
   };
 
   const cfg = map[status] ?? map.UNKNOWN;
@@ -1287,37 +1288,22 @@ export default function IfoodConfiguracoesPage() {
               {/* Status operacional */}
               {merchantStatusData && (() => {
                 const st = merchantStatusData.status;
-                const validations = merchantStatusData.raw?.validations ?? [];
                 const statusMap: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
-                  OPEN:    { label: 'Aberto', icon: <Wifi className="h-4 w-4" />, cls: 'bg-green-500/15 border-green-500/30 text-green-400' },
-                  CLOSED:  { label: 'Fechado', icon: <WifiOff className="h-4 w-4" />, cls: 'bg-gray-500/15 border-gray-500/30 text-gray-400' },
-                  BUSY:    { label: 'Ocupado', icon: <Clock className="h-4 w-4" />, cls: 'bg-yellow-500/15 border-yellow-500/30 text-yellow-400' },
-                  PAUSED:  { label: 'Pausado', icon: <Clock className="h-4 w-4" />, cls: 'bg-orange-500/15 border-orange-500/30 text-orange-400' },
-                  ERROR:   { label: 'Erro de conexão', icon: <AlertTriangle className="h-4 w-4" />, cls: 'bg-red-500/15 border-red-500/30 text-red-400' },
-                  UNKNOWN: { label: 'Desconhecido', icon: null, cls: 'bg-gray-500/15 border-gray-500/30 text-gray-400' },
+                  ONLINE:        { label: 'Online',          icon: <Wifi className="h-4 w-4" />,          cls: 'bg-green-500/15 border-green-500/30 text-green-400' },
+                  FECHADO:       { label: 'Fechado',         icon: <WifiOff className="h-4 w-4" />,       cls: 'bg-gray-500/15 border-gray-500/30 text-gray-400' },
+                  AVISO:         { label: 'Aviso',           icon: <AlertTriangle className="h-4 w-4" />, cls: 'bg-yellow-500/15 border-yellow-500/30 text-yellow-400' },
+                  'INDISPONÍVEL':{ label: 'Indisponível',    icon: <AlertTriangle className="h-4 w-4" />, cls: 'bg-orange-500/15 border-orange-500/30 text-orange-400' },
+                  ERROR:         { label: 'Erro de conexão', icon: <AlertTriangle className="h-4 w-4" />, cls: 'bg-red-500/15 border-red-500/30 text-red-400' },
                 };
-                const cfg = statusMap[st] ?? statusMap.UNKNOWN;
+                const cfg = statusMap[st] ?? { label: st, icon: null, cls: 'bg-gray-500/15 border-gray-500/30 text-gray-400' };
                 return (
                   <div className={`rounded-lg border p-3 space-y-2 ${cfg.cls}`}>
                     <div className="flex items-center gap-2 font-semibold text-sm">
                       {cfg.icon}
                       Status iFood: {cfg.label}
                     </div>
-                    {merchantStatusData.raw?.message && (
-                      <p className="text-xs opacity-80">{merchantStatusData.raw.message}</p>
-                    )}
-                    {validations.length > 0 && (
-                      <div className="space-y-1 pt-1 border-t border-current/20">
-                        <p className="text-xs font-medium opacity-70 uppercase tracking-wider">Validações</p>
-                        {validations.map((v, i) => (
-                          <div key={i} className="flex items-center gap-1.5 text-xs">
-                            {v.state === 'VALID' || v.state === 'OK'
-                              ? <CheckCircle2 className="h-3 w-3 text-green-400 shrink-0" />
-                              : <XCircle className="h-3 w-3 text-red-400 shrink-0" />}
-                            <span className="opacity-80">{v.message ?? v.code}</span>
-                          </div>
-                        ))}
-                      </div>
+                    {merchantStatusData.message && (
+                      <p className="text-xs opacity-80">{merchantStatusData.message}</p>
                     )}
                   </div>
                 );

@@ -45,8 +45,32 @@ export async function GET(
       return NextResponse.json({ status: 'ERROR', available: false });
     }
 
-    const data = await res.json();
-    return NextResponse.json({ status: data.value ?? 'UNKNOWN', raw: data });
+    type IfoodStatusItem = {
+      salesChannel?: string;
+      operation?: string;
+      state?: string;
+      available?: boolean;
+      message?: { title?: string; subtitle?: string };
+    };
+    const data = await res.json() as IfoodStatusItem[];
+
+    const item = Array.isArray(data) && data.length > 0 ? data[0] : null;
+    if (!item) {
+      return NextResponse.json({ status: 'INDISPONÍVEL', available: false });
+    }
+
+    const stateMap: Record<string, { status: string; available: boolean }> = {
+      OK:      { status: 'ONLINE',       available: true  },
+      CLOSED:  { status: 'FECHADO',      available: false },
+      WARNING: { status: 'AVISO',        available: true  },
+    };
+    const mapped = stateMap[item.state ?? ''] ?? { status: 'INDISPONÍVEL', available: false };
+
+    return NextResponse.json({
+      status: mapped.status,
+      available: mapped.available,
+      message: item.message?.title,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro interno';
     console.error('[GET merchant status]', message);
