@@ -49,10 +49,31 @@ export async function GET(
       return NextResponse.json({ status: 'ERROR', connectionId: id });
     }
 
-    const data = (await res.json()) as { value?: string };
-    const ifoodStatus = data.value ?? 'UNKNOWN';
+    type IfoodStatusItem = {
+      state?: string;
+      available?: boolean;
+      message?: { title?: string };
+    };
+    const data = await res.json() as IfoodStatusItem[];
 
-    return NextResponse.json({ status: ifoodStatus, connectionId: id });
+    const item = Array.isArray(data) && data.length > 0 ? data[0] : null;
+    if (!item) {
+      return NextResponse.json({ status: 'INDISPONÍVEL', available: false, connectionId: id });
+    }
+
+    const stateMap: Record<string, { status: string; available: boolean }> = {
+      OK:      { status: 'ONLINE',       available: true  },
+      CLOSED:  { status: 'FECHADO',      available: false },
+      WARNING: { status: 'AVISO',        available: true  },
+    };
+    const mapped = stateMap[item.state ?? ''] ?? { status: 'INDISPONÍVEL', available: false };
+
+    return NextResponse.json({
+      status: mapped.status,
+      available: mapped.available,
+      message: item.message?.title,
+      connectionId: id,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro interno';
     console.error('[GET ifood/connections/:id/status]', message);

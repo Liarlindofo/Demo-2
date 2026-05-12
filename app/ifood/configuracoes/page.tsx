@@ -447,7 +447,7 @@ export default function IfoodConfiguracoesPage() {
 
     try {
       const res = await fetch(`/api/ifood/connections/${connection.id}/status`);
-      const data = await res.json() as { status?: string; error?: string };
+      const data = await res.json() as { status?: string; available?: boolean; message?: string; error?: string };
 
       if (!res.ok) {
         addToast(`❌ ${data.error ?? 'Erro ao testar conexão'}`, 'error');
@@ -455,22 +455,25 @@ export default function IfoodConfiguracoesPage() {
         return;
       }
 
-      const s = (data.status ?? 'UNKNOWN') as IfoodStatus;
+      const s = (data.status ?? 'INDISPONÍVEL') as IfoodStatus;
       setRealtimeStatus((prev) => ({ ...prev, [connection.id]: s }));
 
-      const labels: Record<string, string> = {
-        OPEN: '🟢 Loja aberta no iFood',
-        CLOSED: '⚫ Loja fechada no iFood',
-        BUSY: '🟡 Loja ocupada',
-        PAUSED: '🟠 Loja pausada',
+      const toastLabels: Record<string, string> = {
+        ONLINE:        '🟢 Loja online no iFood',
+        FECHADO:       '⚫ Loja fechada no iFood',
+        AVISO:         '🟡 Loja com aviso no iFood',
+        'INDISPONÍVEL':'🟠 Loja indisponível no iFood',
       };
-      addToast(labels[s ?? ''] ?? `Status: ${s}`, s === 'OPEN' ? 'success' : 'error');
+      const toastMsg = data.message
+        ? `${toastLabels[s ?? ''] ?? `Status: ${s}`} — ${data.message}`
+        : (toastLabels[s ?? ''] ?? `Status: ${s}`);
+      addToast(toastMsg, s === 'ONLINE' ? 'success' : 'error');
 
-      // Atualiza status no estado local
+      // Sincroniza badge permanente com o resultado do teste
       setConnections((prev) =>
         prev.map((c) =>
           c.id === connection.id
-            ? { ...c, status: s === 'OPEN' ? 'active' : s === 'CLOSED' ? 'inactive' : 'error' }
+            ? { ...c, status: s === 'ONLINE' ? 'active' : s === 'FECHADO' ? 'inactive' : 'error' }
             : c,
         ),
       );
