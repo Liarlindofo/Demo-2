@@ -88,6 +88,8 @@ export function construirSessoesFromProdutos(
       quantidadeContada: null,
       estoqueMinimo: cfg?.estoqueMinimo,
       observacao: undefined,
+      modoContagem: cfg?.modoContagem ?? 'kg',
+      kgPorUnidade: cfg?.kgPorUnidade,
     });
   });
 

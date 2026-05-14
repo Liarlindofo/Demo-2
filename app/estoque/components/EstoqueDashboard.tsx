@@ -18,7 +18,7 @@ type Screen = 'home' | 'counting' | 'history' | 'alerts' | 'products';
 export function EstoqueDashboard() {
   const [screen, setScreen] = useState<Screen>('home');
 
-  const { config, hydrated: configHydrated, getConfig, setAtivo, setMinimo } = useEstoqueConfig();
+  const { config, hydrated: configHydrated, getConfig, setAtivo, setMinimo, setModoContagem, setKgPorUnidade } = useEstoqueConfig();
 
   const {
     sessions,
@@ -112,6 +112,8 @@ export function EstoqueDashboard() {
         onVoltar={() => setScreen('home')}
         onSetAtivo={setAtivo}
         onSetMinimo={setMinimo}
+        onSetModoContagem={setModoContagem}
+        onSetKgPorUnidade={setKgPorUnidade}
       />
     );
   }

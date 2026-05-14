@@ -20,6 +20,8 @@ interface GerenciarProdutosProps {
   onVoltar: () => void;
   onSetAtivo: (insumoId: string, ativo: boolean) => void;
   onSetMinimo: (insumoId: string, minimo: number | undefined) => void;
+  onSetModoContagem: (insumoId: string, modo: 'kg' | 'unidade') => void;
+  onSetKgPorUnidade: (insumoId: string, kg: number | undefined) => void;
 }
 
 function Toggle({ ativo, onChange }: { ativo: boolean; onChange: (v: boolean) => void }) {
@@ -45,6 +47,8 @@ export function GerenciarProdutos({
   onVoltar,
   onSetAtivo,
   onSetMinimo,
+  onSetModoContagem,
+  onSetKgPorUnidade,
 }: GerenciarProdutosProps) {
   const [search, setSearch] = useState('');
 
@@ -129,6 +133,8 @@ export function GerenciarProdutos({
                   config={config[p.id]}
                   onSetAtivo={onSetAtivo}
                   onSetMinimo={onSetMinimo}
+                  onSetModoContagem={onSetModoContagem}
+                  onSetKgPorUnidade={onSetKgPorUnidade}
                 />
               ))
             )}
@@ -164,6 +170,8 @@ export function GerenciarProdutos({
                       config={config[p.id]}
                       onSetAtivo={onSetAtivo}
                       onSetMinimo={onSetMinimo}
+                      onSetModoContagem={onSetModoContagem}
+                      onSetKgPorUnidade={onSetKgPorUnidade}
                     />
                   ))}
                 </div>
@@ -180,46 +188,49 @@ export function GerenciarProdutos({
 
 interface ProdutoRowProps {
   produto: { id: string; nome: string; unidadeMedida: string | null };
-  config: { ativo: boolean; estoqueMinimo?: number } | undefined;
+  config: { ativo: boolean; estoqueMinimo?: number; modoContagem?: 'kg' | 'unidade'; kgPorUnidade?: number } | undefined;
   onSetAtivo: (id: string, v: boolean) => void;
   onSetMinimo: (id: string, v: number | undefined) => void;
+  onSetModoContagem: (id: string, modo: 'kg' | 'unidade') => void;
+  onSetKgPorUnidade: (id: string, kg: number | undefined) => void;
 }
 
-function ProdutoRow({ produto, config, onSetAtivo, onSetMinimo }: ProdutoRowProps) {
-  const ativo = config?.ativo !== false; // padrão = true
+function ProdutoRow({ produto, config, onSetAtivo, onSetMinimo, onSetModoContagem, onSetKgPorUnidade }: ProdutoRowProps) {
+  const ativo = config?.ativo !== false;
   const minimo = config?.estoqueMinimo;
-  const unidade = produto.unidadeMedida ?? 'un';
+  const modo = config?.modoContagem ?? 'kg';
+  const kgPorUnidade = config?.kgPorUnidade;
 
   const handleMinimo = (raw: string) => {
-    if (raw === '') {
-      onSetMinimo(produto.id, undefined);
-      return;
-    }
+    if (raw === '') { onSetMinimo(produto.id, undefined); return; }
     const n = parseFloat(raw.replace(',', '.'));
     if (!isNaN(n) && n >= 0) onSetMinimo(produto.id, n);
+  };
+
+  const handleKgPorUnidade = (raw: string) => {
+    if (raw === '') { onSetKgPorUnidade(produto.id, undefined); return; }
+    const n = parseFloat(raw.replace(',', '.'));
+    if (!isNaN(n) && n > 0) onSetKgPorUnidade(produto.id, n);
   };
 
   return (
     <div
       className={`rounded-2xl border px-4 py-3 transition-colors ${
-        ativo
-          ? 'bg-[#1c1c1e] border-[#2a2a2e]'
-          : 'bg-[#141416] border-[#2a2a2e] opacity-50'
+        ativo ? 'bg-[#1c1c1e] border-[#2a2a2e]' : 'bg-[#141416] border-[#2a2a2e] opacity-50'
       }`}
     >
+      {/* Linha principal */}
       <div className="flex items-center gap-3">
-        {/* Toggle */}
         <Toggle ativo={ativo} onChange={v => onSetAtivo(produto.id, v)} />
 
-        {/* Nome + unidade */}
         <div className="flex-1 min-w-0">
           <p className={`text-sm font-medium truncate ${ativo ? 'text-white' : 'text-gray-500'}`}>
             {produto.nome}
           </p>
-          <p className="text-xs text-gray-600">{unidade}</p>
+          <p className="text-xs text-gray-600">{produto.unidadeMedida ?? 'un'}</p>
         </div>
 
-        {/* Campo de mínimo */}
+        {/* Mínimo — sempre em kg */}
         {ativo && (
           <div className="flex items-center gap-1.5 shrink-0">
             <span className="text-xs text-gray-500">mín:</span>
@@ -233,10 +244,52 @@ function ProdutoRow({ produto, config, onSetAtivo, onSetMinimo }: ProdutoRowProp
               placeholder="—"
               className="w-16 text-right text-sm font-medium bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1 text-white focus:outline-none focus:border-amber-500/60 placeholder-gray-700"
             />
-            <span className="text-xs text-gray-600">{unidade}</span>
+            <span className="text-xs text-gray-600">kg</span>
           </div>
         )}
       </div>
+
+      {/* Linha de modo de contagem */}
+      {ativo && (
+        <div className="mt-2.5 flex items-center gap-2 pl-14">
+          <span className="text-xs text-gray-500 shrink-0">Contar por:</span>
+
+          {/* Segmented control kg / un */}
+          <div className="flex rounded-lg overflow-hidden border border-[#374151] shrink-0">
+            {(['kg', 'unidade'] as const).map(m => (
+              <button
+                key={m}
+                onClick={() => onSetModoContagem(produto.id, m)}
+                className={`px-3 py-1 text-xs font-medium transition-colors ${
+                  modo === m
+                    ? 'bg-amber-500 text-black'
+                    : 'bg-[#2a2a2e] text-gray-400 hover:text-white'
+                }`}
+              >
+                {m === 'kg' ? 'kg' : 'unidade'}
+              </button>
+            ))}
+          </div>
+
+          {/* Campo kg por unidade — só aparece quando modo = unidade */}
+          {modo === 'unidade' && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500 shrink-0">1 un =</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0.001"
+                step="0.1"
+                value={kgPorUnidade ?? ''}
+                onChange={e => handleKgPorUnidade(e.target.value)}
+                placeholder="0,0"
+                className="w-16 text-right text-sm font-medium bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1 text-white focus:outline-none focus:border-amber-500/60 placeholder-gray-700"
+              />
+              <span className="text-xs text-gray-600">kg</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

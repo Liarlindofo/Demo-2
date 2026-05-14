@@ -7,6 +7,8 @@ const CONFIG_KEY = 'plateful_estoque_config';
 export interface ProdutoConfig {
   ativo: boolean;
   estoqueMinimo?: number;
+  modoContagem?: 'kg' | 'unidade';
+  kgPorUnidade?: number;
 }
 
 export type EstoqueConfigMap = Record<string, ProdutoConfig>;
@@ -60,5 +62,19 @@ export function useEstoqueConfig() {
     }));
   }, []);
 
-  return { config, hydrated, getConfig, setAtivo, setMinimo };
+  const setModoContagem = useCallback((insumoId: string, modo: 'kg' | 'unidade') => {
+    setConfig(prev => ({
+      ...prev,
+      [insumoId]: { ...(prev[insumoId] ?? { ativo: true }), modoContagem: modo },
+    }));
+  }, []);
+
+  const setKgPorUnidade = useCallback((insumoId: string, kg: number | undefined) => {
+    setConfig(prev => ({
+      ...prev,
+      [insumoId]: { ...(prev[insumoId] ?? { ativo: true }), kgPorUnidade: kg },
+    }));
+  }, []);
+
+  return { config, hydrated, getConfig, setAtivo, setMinimo, setModoContagem, setKgPorUnidade };
 }

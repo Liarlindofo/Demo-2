@@ -24,10 +24,14 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
     item.estoqueMinimo !== undefined &&
     item.quantidadeContada! < item.estoqueMinimo;
 
+  const modoUnidade = item.modoContagem === 'unidade';
+  const kgPorUn = item.kgPorUnidade ?? 1;
+
   const handleAdicionar = () => {
     const num = parseFloat(addValue.replace(',', '.'));
     if (isNaN(num) || num < 0) return;
-    const novoTotal = parseFloat(((item.quantidadeContada ?? 0) + num).toFixed(3));
+    const kgAdicionados = modoUnidade ? num * kgPorUn : num;
+    const novoTotal = parseFloat(((item.quantidadeContada ?? 0) + kgAdicionados).toFixed(3));
     onQuantidade(categoriaId, item.insumoId, novoTotal);
     setAddValue('');
     setTimeout(() => inputRef.current?.focus(), 50);
@@ -82,14 +86,21 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
         {/* Total acumulado */}
         {contado && (
           <div className="text-right shrink-0">
-            <span
-              className={`text-xl font-bold ${
-                abaixoMinimo ? 'text-amber-300' : 'text-green-300'
-              }`}
-            >
-              {formatQtd(item.quantidadeContada)}
-            </span>
-            <span className="text-xs text-gray-500 ml-1">{item.unidade}</span>
+            <div className="flex items-baseline gap-1">
+              <span
+                className={`text-xl font-bold ${
+                  abaixoMinimo ? 'text-amber-300' : 'text-green-300'
+                }`}
+              >
+                {formatQtd(item.quantidadeContada)}
+              </span>
+              <span className="text-xs text-gray-500">kg</span>
+            </div>
+            {modoUnidade && item.kgPorUnidade && (
+              <p className="text-xs text-gray-600 leading-tight">
+                ≈ {formatQtd(item.quantidadeContada! / kgPorUn)} un
+              </p>
+            )}
           </div>
         )}
 
@@ -128,7 +139,11 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
           value={addValue}
           onChange={e => setAddValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={contado ? `+ adicionar ${item.unidade}` : `quantidade em ${item.unidade}`}
+          placeholder={
+            modoUnidade
+              ? contado ? '+ adicionar un' : 'quantidade em un'
+              : contado ? `+ adicionar ${item.unidade}` : `quantidade em ${item.unidade}`
+          }
           className="flex-1 bg-[#2a2a2e] border border-[#374151] rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/60 transition-colors"
         />
         <button
@@ -141,7 +156,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
           }`}
         >
           <Plus className="w-4 h-4" />
-          {contado ? 'Somar' : 'Adicionar'}
+          {contado ? 'Somar' : 'Adicionar'} {modoUnidade ? 'un' : item.unidade}
         </button>
       </div>
 
