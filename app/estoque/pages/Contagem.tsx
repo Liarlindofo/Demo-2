@@ -115,22 +115,27 @@ export function Contagem({
                     item.estoqueMinimo !== undefined &&
                     item.quantidadeContada < item.estoqueMinimo;
                   return (
-                    <div key={item.insumoId} className="flex justify-between items-center text-xs">
-                      <span className="text-gray-400">{item.nome}</span>
-                      <span
-                        className={`font-semibold ${
-                          item.quantidadeContada === null
-                            ? 'text-gray-600'
-                            : abaixo
-                            ? 'text-amber-400'
-                            : 'text-white'
-                        }`}
-                      >
-                        {item.quantidadeContada === null
-                          ? '—'
-                          : `${formatQtd(item.quantidadeContada)} ${item.unidade}`}
-                        {abaixo && ' ⚠'}
-                      </span>
+                    <div key={item.insumoId} className="flex flex-col gap-0.5 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">{item.nome}</span>
+                        <span
+                          className={`font-semibold ${
+                            item.quantidadeContada === null
+                              ? 'text-gray-600'
+                              : abaixo
+                              ? 'text-amber-400'
+                              : 'text-white'
+                          }`}
+                        >
+                          {item.quantidadeContada === null
+                            ? '—'
+                            : `${formatQtd(item.quantidadeContada)} ${item.unidade}`}
+                          {abaixo && ' ⚠'}
+                        </span>
+                      </div>
+                      {item.observacao && (
+                        <p className="text-amber-400/70 italic pl-1">💬 {item.observacao}</p>
+                      )}
                     </div>
                   );
                 })}

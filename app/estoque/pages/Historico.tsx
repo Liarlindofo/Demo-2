@@ -64,16 +64,21 @@ export function Historico({ sessions, onVoltar, onRetomar, onExcluir }: Historic
                   {cat.status === 'concluida' && <CheckCircle2 className="w-4 h-4 text-green-400" />}
                   {alertas > 0 && <span className="text-xs text-amber-400">⚠ {alertas}</span>}
                 </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <div className="flex flex-col gap-1.5">
                   {cat.itens.map(item => {
                     const abaixo = item.quantidadeContada !== null && item.estoqueMinimo !== undefined && item.quantidadeContada < item.estoqueMinimo;
                     return (
-                      <div key={item.insumoId} className="flex justify-between text-xs gap-2">
-                        <span className="text-gray-500 truncate">{item.nome}</span>
-                        <span className={`font-medium shrink-0 ${item.quantidadeContada === null ? 'text-gray-700' : abaixo ? 'text-amber-400' : 'text-white'}`}>
-                          {item.quantidadeContada === null ? '—' : `${formatQtd(item.quantidadeContada)} ${item.unidade}`}
-                          {abaixo && ' ⚠'}
-                        </span>
+                      <div key={item.insumoId} className="flex flex-col gap-0.5">
+                        <div className="flex justify-between text-xs gap-2">
+                          <span className="text-gray-500 truncate">{item.nome}</span>
+                          <span className={`font-medium shrink-0 ${item.quantidadeContada === null ? 'text-gray-700' : abaixo ? 'text-amber-400' : 'text-white'}`}>
+                            {item.quantidadeContada === null ? '—' : `${formatQtd(item.quantidadeContada)} ${item.unidade}`}
+                            {abaixo && ' ⚠'}
+                          </span>
+                        </div>
+                        {item.observacao && (
+                          <p className="text-xs text-amber-400/70 italic pl-1">💬 {item.observacao}</p>
+                        )}
                       </div>
                     );
                   })}
