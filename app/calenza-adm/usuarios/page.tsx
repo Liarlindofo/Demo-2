@@ -35,6 +35,7 @@ const TOOL_LABELS: Record<SystemTool, string> = {
   [SystemTool.ANALYTICS]: "Analytics",
   [SystemTool.ESTOQUE]: "Estoque",
   [SystemTool.IFOOD]: "iFood",
+  [SystemTool.RH]: "RH",
 };
 
 // Grupos visuais de ferramentas para organizar a UI
