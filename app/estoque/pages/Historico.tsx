@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronLeft, CheckCircle2, Clock, Trash2, ChevronRight } from 'lucide-react';
 import type { StockSession } from '../types';
+import { formatQtd } from '../utils';
 
 interface HistoricoProps {
   sessions: StockSession[];
@@ -70,7 +71,7 @@ export function Historico({ sessions, onVoltar, onRetomar, onExcluir }: Historic
                       <div key={item.insumoId} className="flex justify-between text-xs gap-2">
                         <span className="text-gray-500 truncate">{item.nome}</span>
                         <span className={`font-medium shrink-0 ${item.quantidadeContada === null ? 'text-gray-700' : abaixo ? 'text-amber-400' : 'text-white'}`}>
-                          {item.quantidadeContada === null ? '—' : `${item.quantidadeContada} ${item.unidade}`}
+                          {item.quantidadeContada === null ? '—' : `${formatQtd(item.quantidadeContada)} ${item.unidade}`}
                           {abaixo && ' ⚠'}
                         </span>
                       </div>

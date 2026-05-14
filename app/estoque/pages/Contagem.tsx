@@ -5,6 +5,7 @@ import { X, CheckCircle2, AlertTriangle, ChevronLeft } from 'lucide-react';
 import type { StockSession } from '../types';
 import { ProgressBar } from '../components/ProgressBar';
 import { SessionAccordion } from '../components/SessionAccordion';
+import { formatQtd } from '../utils';
 
 interface ContagemProps {
   session: StockSession;
@@ -91,7 +92,7 @@ export function Contagem({
               <div className="space-y-1">
                 {alertas.map(a => (
                   <p key={a.insumoId} className="text-xs text-gray-400">
-                    • {a.nome}: {a.quantidadeContada} {a.unidade} (mín: {a.estoqueMinimo})
+                    • {a.nome}: {formatQtd(a.quantidadeContada)} {a.unidade} (mín: {formatQtd(a.estoqueMinimo ?? null)})
                   </p>
                 ))}
               </div>
@@ -127,7 +128,7 @@ export function Contagem({
                       >
                         {item.quantidadeContada === null
                           ? '—'
-                          : `${item.quantidadeContada} ${item.unidade}`}
+                          : `${formatQtd(item.quantidadeContada)} ${item.unidade}`}
                         {abaixo && ' ⚠'}
                       </span>
                     </div>

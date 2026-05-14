@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { AlertTriangle, MessageSquare, X, Check, Plus } from 'lucide-react';
 import type { StockItem } from '../types';
+import { formatQtd } from '../utils';
 
 interface StockItemRowProps {
   item: StockItem;
@@ -26,7 +27,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
   const handleAdicionar = () => {
     const num = parseFloat(addValue.replace(',', '.'));
     if (isNaN(num) || num < 0) return;
-    const novoTotal = (item.quantidadeContada ?? 0) + num;
+    const novoTotal = parseFloat(((item.quantidadeContada ?? 0) + num).toFixed(3));
     onQuantidade(categoriaId, item.insumoId, novoTotal);
     setAddValue('');
     setTimeout(() => inputRef.current?.focus(), 50);
@@ -86,7 +87,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
                 abaixoMinimo ? 'text-amber-300' : 'text-green-300'
               }`}
             >
-              {item.quantidadeContada}
+              {formatQtd(item.quantidadeContada)}
             </span>
             <span className="text-xs text-gray-500 ml-1">{item.unidade}</span>
           </div>
@@ -171,7 +172,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
         <div className="px-3 pb-3">
           <p className="text-xs text-amber-400 flex items-center gap-1.5">
             <AlertTriangle className="w-3 h-3" />
-            Abaixo do mínimo ({item.estoqueMinimo} {item.unidade})
+            Abaixo do mínimo ({formatQtd(item.estoqueMinimo ?? null)} {item.unidade})
           </p>
         </div>
       )}

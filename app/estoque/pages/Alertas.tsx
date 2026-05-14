@@ -2,6 +2,7 @@
 
 import { ChevronLeft, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { StockSession } from '../types';
+import { formatQtd } from '../utils';
 
 interface AlertasProps {
   sessions: StockSession[];
@@ -101,9 +102,9 @@ export function Alertas({ sessions, onVoltar }: AlertasProps) {
                         </div>
                         <div className="text-right shrink-0">
                           <p className={`text-lg font-bold ${gravidade === 'critico' ? 'text-red-400' : 'text-amber-400'}`}>
-                            {a.quantidadeContada} {a.unidade}
+                            {formatQtd(a.quantidadeContada)} {a.unidade}
                           </p>
-                          <p className="text-xs text-gray-500">de {a.estoqueMinimo} {a.unidade}</p>
+                          <p className="text-xs text-gray-500">de {formatQtd(a.estoqueMinimo)} {a.unidade}</p>
                         </div>
                       </div>
 
@@ -119,7 +120,7 @@ export function Alertas({ sessions, onVoltar }: AlertasProps) {
 
                       <div className="flex items-center justify-between text-xs text-gray-600">
                         <span>
-                          Falta: <span className="text-white font-medium">{a.falta.toFixed(1)} {a.unidade}</span>
+                          Falta: <span className="text-white font-medium">{formatQtd(a.falta)} {a.unidade}</span>
                         </span>
                         <span>
                           Contado em {new Date(a.dataContagem).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
