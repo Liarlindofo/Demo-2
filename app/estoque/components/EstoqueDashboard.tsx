@@ -18,7 +18,7 @@ type Screen = 'home' | 'counting' | 'history' | 'alerts' | 'products';
 export function EstoqueDashboard() {
   const [screen, setScreen] = useState<Screen>('home');
 
-  const { config, hydrated: configHydrated, getConfig, setAtivo, setMinimo, setModoContagem, setKgPorUnidade } = useEstoqueConfig();
+  const { config, productOrder, hydrated: configHydrated, getConfig, setAtivo, setMinimo, setModoContagem, setKgPorUnidade, setProductOrder, moverProdutoAcima, moverProdutoAbaixo } = useEstoqueConfig();
 
   const {
     sessions,
@@ -42,7 +42,7 @@ export function EstoqueDashboard() {
     isLoading: produtosLoading,
     error: produtosError,
     refetch,
-  } = useProdutosEstoque(config);
+  } = useProdutosEstoque(config, productOrder);
 
   const totalAlertas = sessions
     .filter(s => s.status === 'concluida')
@@ -60,7 +60,8 @@ export function EstoqueDashboard() {
   }
 
   const handleIniciar = async () => {
-    await iniciarContagem(criarSessoesPadrao());
+    const sessoesIniciais = sessoesProdutos.length > 0 ? sessoesProdutos : criarSessoesPadrao();
+    await iniciarContagem(sessoesIniciais);
     setScreen('counting');
   };
 
@@ -109,11 +110,15 @@ export function EstoqueDashboard() {
       <GerenciarProdutos
         produtos={produtos}
         config={config}
+        productOrder={productOrder}
         onVoltar={() => setScreen('home')}
         onSetAtivo={setAtivo}
         onSetMinimo={setMinimo}
         onSetModoContagem={setModoContagem}
         onSetKgPorUnidade={setKgPorUnidade}
+        onMoverAcima={moverProdutoAcima}
+        onMoverAbaixo={moverProdutoAbaixo}
+        onRefetch={refetch}
       />
     );
   }

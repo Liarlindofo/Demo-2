@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 
 const CONFIG_KEY = 'plateful_estoque_config';
+const ORDER_KEY = 'plateful_estoque_produto_order';
 
 export interface ProdutoConfig {
   ativo: boolean;
@@ -28,18 +29,39 @@ function salvar(config: EstoqueConfigMap) {
   } catch { /* quota */ }
 }
 
+function carregarOrdem(): string[] {
+  try {
+    const raw = localStorage.getItem(ORDER_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function salvarOrdem(order: string[]) {
+  try {
+    localStorage.setItem(ORDER_KEY, JSON.stringify(order));
+  } catch { /* quota */ }
+}
+
 export function useEstoqueConfig() {
   const [config, setConfig] = useState<EstoqueConfigMap>({});
+  const [productOrder, setProductOrderState] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     setConfig(carregar());
+    setProductOrderState(carregarOrdem());
     setHydrated(true);
   }, []);
 
   useEffect(() => {
     if (hydrated) salvar(config);
   }, [config, hydrated]);
+
+  useEffect(() => {
+    if (hydrated) salvarOrdem(productOrder);
+  }, [productOrder, hydrated]);
 
   /** Retorna a config de um produto; padrão = ativo com mínimo indefinido */
   const getConfig = useCallback(
@@ -76,5 +98,58 @@ export function useEstoqueConfig() {
     }));
   }, []);
 
-  return { config, hydrated, getConfig, setAtivo, setMinimo, setModoContagem, setKgPorUnidade };
+  const setProductOrder = useCallback((order: string[]) => {
+    setProductOrderState(order);
+  }, []);
+
+  /** Move produto uma posição acima na ordem global */
+  const moverProdutoAcima = useCallback((produtoId: string, allIds: string[]) => {
+    setProductOrderState(prev => {
+      // Garante que todos os IDs estejam na ordem
+      const ordem = allIds.map(id => {
+        const idx = prev.indexOf(id);
+        return { id, idx: idx === -1 ? 9999 : idx };
+      });
+      ordem.sort((a, b) => a.idx - b.idx);
+      const ids = ordem.map(o => o.id);
+
+      const pos = ids.indexOf(produtoId);
+      if (pos <= 0) return prev;
+      const nova = [...ids];
+      [nova[pos - 1], nova[pos]] = [nova[pos], nova[pos - 1]];
+      return nova;
+    });
+  }, []);
+
+  /** Move produto uma posição abaixo na ordem global */
+  const moverProdutoAbaixo = useCallback((produtoId: string, allIds: string[]) => {
+    setProductOrderState(prev => {
+      const ordem = allIds.map(id => {
+        const idx = prev.indexOf(id);
+        return { id, idx: idx === -1 ? 9999 : idx };
+      });
+      ordem.sort((a, b) => a.idx - b.idx);
+      const ids = ordem.map(o => o.id);
+
+      const pos = ids.indexOf(produtoId);
+      if (pos === -1 || pos >= ids.length - 1) return prev;
+      const nova = [...ids];
+      [nova[pos], nova[pos + 1]] = [nova[pos + 1], nova[pos]];
+      return nova;
+    });
+  }, []);
+
+  return {
+    config,
+    productOrder,
+    hydrated,
+    getConfig,
+    setAtivo,
+    setMinimo,
+    setModoContagem,
+    setKgPorUnidade,
+    setProductOrder,
+    moverProdutoAcima,
+    moverProdutoAbaixo,
+  };
 }

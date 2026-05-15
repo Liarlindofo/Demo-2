@@ -18,11 +18,12 @@ export async function GET() {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
     
-    // Verificar se tem permissão para PRODUTOS ou ETIQUETAGEM
+    // Verificar se tem permissão para PRODUTOS, ETIQUETAGEM ou ESTOQUE
     const hasProdutosPermission = await checkToolPermission(stackUser.id, SystemTool.PRODUTOS);
     const hasEtiquetagemPermission = await checkToolPermission(stackUser.id, SystemTool.ETIQUETAGEM);
+    const hasEstoquePermission = await checkToolPermission(stackUser.id, SystemTool.ESTOQUE);
     
-    if (!hasProdutosPermission && !hasEtiquetagemPermission) {
+    if (!hasProdutosPermission && !hasEtiquetagemPermission && !hasEstoquePermission) {
       return NextResponse.json(
         {
           error: 'Acesso negado',

@@ -62,6 +62,7 @@ function resolverSessao(produto: ProdutoAPI): { id: string; nome: string; icone:
 export function construirSessoesFromProdutos(
   produtos: ProdutoAPI[],
   config: import('./useEstoqueConfig').EstoqueConfigMap = {},
+  productOrder: string[] = [],
 ): StockCategory[] {
   const ativos = produtos.filter(p => {
     if (p.isAtivo !== 1) return false;
@@ -113,7 +114,15 @@ export function construirSessoesFromProdutos(
     nome: config.nome,
     icone: config.icone,
     status: 'pendente' as const,
-    itens: itens.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+    itens: itens.sort((a, b) => {
+      if (productOrder.length === 0) return a.nome.localeCompare(b.nome, 'pt-BR');
+      const ia = productOrder.indexOf(a.insumoId);
+      const ib = productOrder.indexOf(b.insumoId);
+      if (ia === -1 && ib === -1) return a.nome.localeCompare(b.nome, 'pt-BR');
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    }),
   }));
 }
 
@@ -129,6 +138,7 @@ export interface ProdutosEstoqueState {
 
 export function useProdutosEstoque(
   config: import('./useEstoqueConfig').EstoqueConfigMap = {},
+  productOrder: string[] = [],
 ): ProdutosEstoqueState {
   const [produtos, setProdutos] = useState<ProdutoAPI[]>([]);
   const [sessoes, setSessoes] = useState<StockCategory[]>([]);
@@ -152,7 +162,7 @@ export function useProdutosEstoque(
       .then(prods => {
         if (cancelled) return;
         setProdutos(prods);
-        const built = construirSessoesFromProdutos(prods, config);
+        const built = construirSessoesFromProdutos(prods, config, productOrder);
         setSessoes(built.length > 0 ? built : criarSessoesPadrao());
       })
       .catch(err => {
