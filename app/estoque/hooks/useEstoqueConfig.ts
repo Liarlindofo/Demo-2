@@ -1,9 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-
-const CONFIG_KEY = 'plateful_estoque_config';
-const ORDER_KEY = 'plateful_estoque_produto_order';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 export interface ProdutoConfig {
   ativo: boolean;
@@ -14,127 +11,135 @@ export interface ProdutoConfig {
 
 export type EstoqueConfigMap = Record<string, ProdutoConfig>;
 
-function carregar(): EstoqueConfigMap {
-  try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+// ── Helpers de persistência ────────────────────────────────────────────────────
+
+async function fetchConfig(): Promise<{ configs: EstoqueConfigMap; order: string[] }> {
+  const res = await fetch('/api/estoque/config');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
 
-function salvar(config: EstoqueConfigMap) {
-  try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-  } catch { /* quota */ }
+async function patchProduto(produtoId: string, cfg: Partial<ProdutoConfig>) {
+  await fetch('/api/estoque/config', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'produto', produtoId, ...cfg }),
+  });
 }
 
-function carregarOrdem(): string[] {
-  try {
-    const raw = localStorage.getItem(ORDER_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+async function patchOrdem(order: string[]) {
+  await fetch('/api/estoque/config', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'ordem', order }),
+  });
 }
 
-function salvarOrdem(order: string[]) {
-  try {
-    localStorage.setItem(ORDER_KEY, JSON.stringify(order));
-  } catch { /* quota */ }
-}
+// ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useEstoqueConfig() {
   const [config, setConfig] = useState<EstoqueConfigMap>({});
   const [productOrder, setProductOrderState] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
+  // Debounce refs — evitam request por keystroke
+  const debounceMap = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Carrega do banco na montagem
   useEffect(() => {
-    setConfig(carregar());
-    setProductOrderState(carregarOrdem());
-    setHydrated(true);
+    fetchConfig()
+      .then(({ configs, order }) => {
+        setConfig(configs);
+        setProductOrderState(order);
+      })
+      .catch(err => {
+        console.warn('[useEstoqueConfig] Falha ao carregar config:', err.message);
+      })
+      .finally(() => setHydrated(true));
   }, []);
 
-  useEffect(() => {
-    if (hydrated) salvar(config);
-  }, [config, hydrated]);
+  // ── Config de produto ────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    if (hydrated) salvarOrdem(productOrder);
-  }, [productOrder, hydrated]);
-
-  /** Retorna a config de um produto; padrão = ativo com mínimo indefinido */
   const getConfig = useCallback(
     (insumoId: string): ProdutoConfig =>
       config[insumoId] ?? { ativo: true, estoqueMinimo: undefined },
     [config],
   );
 
-  const setAtivo = useCallback((insumoId: string, ativo: boolean) => {
-    setConfig(prev => ({
-      ...prev,
-      [insumoId]: { ...(prev[insumoId] ?? {}), ativo },
-    }));
-  }, []);
+  /** Atualiza campo(s) de um produto localmente e persiste no banco (debounced) */
+  const updateProduto = useCallback(
+    (insumoId: string, partial: Partial<ProdutoConfig>, debounceMs = 600) => {
+      setConfig(prev => ({
+        ...prev,
+        [insumoId]: { ...(prev[insumoId] ?? { ativo: true }), ...partial },
+      }));
 
-  const setMinimo = useCallback((insumoId: string, minimo: number | undefined) => {
-    setConfig(prev => ({
-      ...prev,
-      [insumoId]: { ...(prev[insumoId] ?? { ativo: true }), estoqueMinimo: minimo },
-    }));
-  }, []);
+      // Cancela debounce anterior para este produto
+      if (debounceMap.current[insumoId]) {
+        clearTimeout(debounceMap.current[insumoId]);
+      }
+      debounceMap.current[insumoId] = setTimeout(() => {
+        const current = config[insumoId] ?? { ativo: true };
+        patchProduto(insumoId, { ...current, ...partial }).catch(err =>
+          console.warn('[useEstoqueConfig] Falha ao salvar config:', err.message),
+        );
+      }, debounceMs);
+    },
+    [config],
+  );
 
-  const setModoContagem = useCallback((insumoId: string, modo: 'kg' | 'unidade') => {
-    setConfig(prev => ({
-      ...prev,
-      [insumoId]: { ...(prev[insumoId] ?? { ativo: true }), modoContagem: modo },
-    }));
-  }, []);
+  const setAtivo = useCallback(
+    (insumoId: string, ativo: boolean) => updateProduto(insumoId, { ativo }, 0),
+    [updateProduto],
+  );
 
-  const setKgPorUnidade = useCallback((insumoId: string, kg: number | undefined) => {
-    setConfig(prev => ({
-      ...prev,
-      [insumoId]: { ...(prev[insumoId] ?? { ativo: true }), kgPorUnidade: kg },
-    }));
-  }, []);
+  const setMinimo = useCallback(
+    (insumoId: string, estoqueMinimo: number | undefined) =>
+      updateProduto(insumoId, { estoqueMinimo }),
+    [updateProduto],
+  );
+
+  const setModoContagem = useCallback(
+    (insumoId: string, modoContagem: 'kg' | 'unidade') =>
+      updateProduto(insumoId, { modoContagem }, 0),
+    [updateProduto],
+  );
+
+  const setKgPorUnidade = useCallback(
+    (insumoId: string, kgPorUnidade: number | undefined) =>
+      updateProduto(insumoId, { kgPorUnidade }),
+    [updateProduto],
+  );
+
+  // ── Ordem de produtos ────────────────────────────────────────────────────────
 
   const setProductOrder = useCallback((order: string[]) => {
     setProductOrderState(order);
+    patchOrdem(order).catch(err =>
+      console.warn('[useEstoqueConfig] Falha ao salvar ordem:', err.message),
+    );
   }, []);
 
-  /** Move produto uma posição acima na ordem global */
   const moverProdutoAcima = useCallback((produtoId: string, allIds: string[]) => {
     setProductOrderState(prev => {
-      // Garante que todos os IDs estejam na ordem
-      const ordem = allIds.map(id => {
-        const idx = prev.indexOf(id);
-        return { id, idx: idx === -1 ? 9999 : idx };
-      });
-      ordem.sort((a, b) => a.idx - b.idx);
-      const ids = ordem.map(o => o.id);
-
-      const pos = ids.indexOf(produtoId);
+      const ordem = buildOrdem(prev, allIds);
+      const pos = ordem.indexOf(produtoId);
       if (pos <= 0) return prev;
-      const nova = [...ids];
+      const nova = [...ordem];
       [nova[pos - 1], nova[pos]] = [nova[pos], nova[pos - 1]];
+      patchOrdem(nova).catch(() => {});
       return nova;
     });
   }, []);
 
-  /** Move produto uma posição abaixo na ordem global */
   const moverProdutoAbaixo = useCallback((produtoId: string, allIds: string[]) => {
     setProductOrderState(prev => {
-      const ordem = allIds.map(id => {
-        const idx = prev.indexOf(id);
-        return { id, idx: idx === -1 ? 9999 : idx };
-      });
-      ordem.sort((a, b) => a.idx - b.idx);
-      const ids = ordem.map(o => o.id);
-
-      const pos = ids.indexOf(produtoId);
-      if (pos === -1 || pos >= ids.length - 1) return prev;
-      const nova = [...ids];
+      const ordem = buildOrdem(prev, allIds);
+      const pos = ordem.indexOf(produtoId);
+      if (pos === -1 || pos >= ordem.length - 1) return prev;
+      const nova = [...ordem];
       [nova[pos], nova[pos + 1]] = [nova[pos + 1], nova[pos]];
+      patchOrdem(nova).catch(() => {});
       return nova;
     });
   }, []);
@@ -152,4 +157,12 @@ export function useEstoqueConfig() {
     moverProdutoAcima,
     moverProdutoAbaixo,
   };
+}
+
+// ── Util: garante que todos os IDs aparecem na ordem ────────────────────────────
+
+function buildOrdem(prev: string[], allIds: string[]): string[] {
+  const seen = new Set(prev);
+  const extra = allIds.filter(id => !seen.has(id));
+  return [...prev.filter(id => allIds.includes(id)), ...extra];
 }

@@ -53,6 +53,8 @@ model User {
   etiquetagemEtiquetas EtiquetagemEtiqueta[]
   cmvStoreData         CmvStoreData[]
   estoqueContagens     EstoqueContagem[]
+  estoqueProdutoConfig EstoqueProdutoConfig[]
+  estoqueProdutoOrdem  EstoqueProdutoOrdem?
   ifoodConnections     IfoodConnection[]
   ifoodOrders          IfoodOrder[]
   ifoodFinancialEvents   IfoodFinancialEvent[]
@@ -580,6 +582,32 @@ model EstoqueContagem {
   @@index([status])
   @@index([userId, status])
   @@map("estoque_contagens")
+}
+
+model EstoqueProdutoConfig {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  produtoId     String   @map("produto_id")
+  ativo         Boolean  @default(true)
+  estoqueMinimo Float?   @map("estoque_minimo")
+  modoContagem  String   @default("kg") @map("modo_contagem") // "kg" | "unidade"
+  kgPorUnidade  Float?   @map("kg_por_unidade")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, produtoId])
+  @@index([userId])
+  @@map("estoque_produto_config")
+}
+
+model EstoqueProdutoOrdem {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ordem     Json     @default("[]") // string[] - array de IDs de produtos
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("estoque_produto_ordem")
 }
 
 // ============================================
