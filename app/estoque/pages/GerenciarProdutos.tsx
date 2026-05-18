@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ChevronLeft, Search, Package, Plus, X, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
+import { ChevronLeft, Search, Package, Plus, X, ChevronUp, ChevronDown, Loader2, Download } from 'lucide-react';
 import type { EstoqueConfigMap } from '../hooks/useEstoqueConfig';
 import { construirSessoesFromProdutos } from '../hooks/useProdutosEstoque';
 
@@ -226,6 +226,27 @@ export function GerenciarProdutos({
   const [search, setSearch] = useState('');
   const [reordenando, setReordenando] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [importando, setImportando] = useState(false);
+  const [importMsg, setImportMsg] = useState<{ tipo: 'sucesso' | 'erro'; texto: string } | null>(null);
+
+  const handleImportarPadrao = async () => {
+    setImportando(true);
+    setImportMsg(null);
+    try {
+      const res = await fetch('/api/estoque/importar-insumos-padrao', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setImportMsg({ tipo: 'erro', texto: data.error || 'Erro ao importar' });
+      } else {
+        setImportMsg({ tipo: 'sucesso', texto: data.mensagem });
+        onRefetch();
+      }
+    } catch {
+      setImportMsg({ tipo: 'erro', texto: 'Erro de conexão. Tente novamente.' });
+    } finally {
+      setImportando(false);
+    }
+  };
 
   const produtosAtivos = produtos.filter(p => p.isAtivo === 1);
   const allIds = produtosAtivos.map(p => p.id);
@@ -315,11 +336,33 @@ export function GerenciarProdutos({
 
         {/* Info */}
         {!reordenando && (
-          <div className="px-4 py-3 bg-[#141416] border-b border-[#2a2a2e]">
+          <div className="px-4 py-3 bg-[#141416] border-b border-[#2a2a2e] space-y-2">
             <p className="text-xs text-gray-500">
               Produtos <span className="text-white">desabilitados</span> não aparecem nas próximas contagens.
               O <span className="text-white">estoque mínimo</span> gera alerta quando a quantidade contada estiver abaixo.
             </p>
+
+            {/* Botão de importar insumos padrão */}
+            <button
+              onClick={handleImportarPadrao}
+              disabled={importando}
+              className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border border-[#374151] text-gray-400 hover:text-white hover:border-amber-500/50 transition-colors disabled:opacity-60"
+            >
+              {importando
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : <Download className="w-3 h-3" />}
+              {importando ? 'Importando…' : 'Importar insumos padrão'}
+            </button>
+
+            {importMsg && (
+              <p className={`text-xs px-3 py-1.5 rounded-lg border ${
+                importMsg.tipo === 'sucesso'
+                  ? 'text-green-400 bg-green-500/10 border-green-500/20'
+                  : 'text-red-400 bg-red-500/10 border-red-500/20'
+              }`}>
+                {importMsg.texto}
+              </p>
+            )}
           </div>
         )}
 
