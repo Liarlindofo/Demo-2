@@ -60,12 +60,19 @@ export function useStockSession() {
 
   // ── Criar nova contagem ────────────────────────────────────────────────────
   const iniciarContagem = useCallback(
-    async (sessoesIniciais?: StockCategory[], gerente = 'Gerente'): Promise<StockSession> => {
-      // Se já existe uma em andamento, retoma
+    async (sessoesIniciais?: StockCategory[], gerente = 'Gerente', forceNew = false): Promise<StockSession> => {
       const existente = sessions.find(s => s.status === 'em_andamento');
-      if (existente) {
+
+      // Se existe uma em andamento e não é forçado novo, retoma
+      if (existente && !forceNew) {
         setActiveSessionId(existente.id);
         return existente;
+      }
+
+      // Se forçado novo e existe uma em andamento, exclui ela antes
+      if (existente && forceNew) {
+        await apiDelete(existente.id);
+        setSessions(prev => prev.filter(s => s.id !== existente.id));
       }
 
       const nova = await apiPost(sessoesIniciais ?? criarSessoesPadrao(), gerente);

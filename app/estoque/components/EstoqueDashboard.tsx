@@ -61,7 +61,9 @@ export function EstoqueDashboard() {
 
   const handleIniciar = async () => {
     const sessoesIniciais = sessoesProdutos.length > 0 ? sessoesProdutos : criarSessoesPadrao();
-    await iniciarContagem(sessoesIniciais);
+    // Se já há sessão ativa, força criação de uma nova (substitui a antiga)
+    const temAtiva = sessions.some(s => s.status === 'em_andamento');
+    await iniciarContagem(sessoesIniciais, 'Gerente', temAtiva);
     setScreen('counting');
   };
 
