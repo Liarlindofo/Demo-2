@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { History, AlertTriangle, RefreshCw, Package } from 'lucide-react';
+import { History, AlertTriangle, Package } from 'lucide-react';
 import { useStockSession } from '../hooks/useStockSession';
 import { useProdutosEstoque } from '../hooks/useProdutosEstoque';
 import { useEstoqueConfig } from '../hooks/useEstoqueConfig';
@@ -49,8 +49,8 @@ export function EstoqueDashboard() {
     .flatMap(s => calcularAlertasReposicao(s))
     .length;
 
-  // ── Loading ────────────────────────────────────────────────────────────────
-  if (!hydrated || !configHydrated || produtosLoading) {
+  // ── Loading (aguarda apenas config do banco) ──────────────────────────────
+  if (!hydrated || !configHydrated) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center gap-3">
         <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
@@ -134,18 +134,6 @@ export function EstoqueDashboard() {
         onRetomar={handleRetomar}
       />
 
-      {produtosError && (
-        <div className="mx-4 -mt-2 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
-          <span className="text-amber-400">⚠️</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-amber-300 font-medium">Usando lista padrão de insumos</p>
-            <p className="text-xs text-gray-500 truncate">Não foi possível carregar os produtos</p>
-          </div>
-          <button onClick={refetch} className="p-1.5 text-amber-400 hover:text-white transition-colors">
-            <RefreshCw className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Bottom nav */}
       <div className="fixed bottom-0 left-0 right-0 bg-[#1c1c1e] border-t border-[#2a2a2e] flex">
