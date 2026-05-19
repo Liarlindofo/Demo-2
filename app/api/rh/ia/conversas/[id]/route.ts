@@ -4,8 +4,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     const conversa = await prisma.rhIaConversa.findFirst({
-      where: { id: params.id, userId: user.id },
+      where: { id, userId: user.id },
       include: {
         mensagens: { orderBy: { createdAt: 'asc' } },
       },
@@ -34,8 +35,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
@@ -47,14 +49,14 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     const conversa = await prisma.rhIaConversa.findFirst({
-      where: { id: params.id, userId: user.id },
+      where: { id, userId: user.id },
     });
 
     if (!conversa) {
       return NextResponse.json({ error: 'Conversa não encontrada' }, { status: 404 });
     }
 
-    await prisma.rhIaConversa.delete({ where: { id: params.id } });
+    await prisma.rhIaConversa.delete({ where: { id } });
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
