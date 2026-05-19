@@ -14,6 +14,7 @@ import {
   MessageSquare,
   ChevronLeft,
   ChevronRight,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface Message {
@@ -22,6 +23,7 @@ interface Message {
   content: string;
   citacoes?: string[];
   error?: boolean;
+  acoesExecutadas?: string[];
 }
 
 interface Conversa {
@@ -195,7 +197,7 @@ export default function IaPage() {
         return;
       }
 
-      const data: { resposta: string; citacoes?: string[]; conversaId: string } = await res.json();
+      const data: { resposta: string; citacoes?: string[]; conversaId: string; acoesExecutadas?: string[] } = await res.json();
 
       setMessages((prev) => [
         ...prev,
@@ -204,6 +206,7 @@ export default function IaPage() {
           role: 'assistant',
           content: data.resposta,
           citacoes: data.citacoes,
+          acoesExecutadas: data.acoesExecutadas,
         },
       ]);
 
@@ -446,6 +449,20 @@ export default function IaPage() {
                     >
                       {msg.content}
                     </div>
+
+                    {msg.acoesExecutadas && msg.acoesExecutadas.length > 0 && (
+                      <div className="mt-2 px-1 space-y-1">
+                        {msg.acoesExecutadas.map((acao, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20 text-xs text-green-400"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                            {acao}
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {msg.citacoes && msg.citacoes.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-2 px-1">

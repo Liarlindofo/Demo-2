@@ -78,6 +78,14 @@ const navItems = [
     bg: 'bg-blue-500/10',
   },
   {
+    href: '/rh/lojas',
+    icon: Building2,
+    label: 'Lojas',
+    description: 'Cadastro e gestão de unidades',
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10',
+  },
+  {
     href: '/rh/custos',
     icon: DollarSign,
     label: 'Custos',
@@ -98,8 +106,8 @@ const navItems = [
     icon: BarChart3,
     label: 'Simulador',
     description: 'Impacto da mudança 6x1 → 5x2',
-    color: 'text-amber-400',
-    bg: 'bg-amber-500/10',
+    color: 'text-orange-400',
+    bg: 'bg-orange-500/10',
   },
   {
     href: '/rh/ia',
