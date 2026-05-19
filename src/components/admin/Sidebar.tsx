@@ -89,7 +89,7 @@ export default function AdminSidebar({ session, onLogout, loading }: SidebarProp
     return true;
   });
 
-  const SidebarContent = () => (
+  const sidebarInner = (
     <div className="h-full bg-[#1a1a1a] border-r border-[#374151] flex flex-col">
       <div className="p-6 border-b border-[#374151]">
         <h2 className="text-xl font-bold">Plateful Admin</h2>
@@ -154,7 +154,7 @@ export default function AdminSidebar({ session, onLogout, loading }: SidebarProp
 
       {/* Desktop Sidebar */}
       <aside className="hidden lg:block fixed left-0 top-0 h-full w-64">
-        <SidebarContent />
+        {sidebarInner}
       </aside>
 
       {/* Mobile Sidebar */}
@@ -165,7 +165,7 @@ export default function AdminSidebar({ session, onLogout, loading }: SidebarProp
             onClick={() => setMobileOpen(false)}
           />
           <aside className="lg:hidden fixed left-0 top-0 h-full w-64 z-50">
-            <SidebarContent />
+            {sidebarInner}
           </aside>
         </>
       )}
