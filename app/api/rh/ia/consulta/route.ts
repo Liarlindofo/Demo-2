@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
 
-const SYSTEM_PROMPT = `Você é um especialista em direito trabalhista brasileiro e gestão de RH para pequenas e médias empresas do setor de alimentação (CNAE 5611-2/01 — Restaurantes e similares).
+const DEFAULT_SYSTEM_PROMPT = `Você é um especialista em direito trabalhista brasileiro e gestão de RH para pequenas e médias empresas do setor de alimentação (CNAE 5611-2/01 — Restaurantes e similares).
 
 Responda SEMPRE com base na legislação vigente atual, citando:
 - Artigos da CLT
@@ -20,6 +20,17 @@ Formate as respostas de forma clara:
 - Cite sempre a fonte legal (lei, portaria, resolução)
 - Organize respostas longas com tópicos ou tabelas
 - Mencione sempre se alguma informação pode ter sido atualizada recentemente`;
+
+async function getSystemPrompt(): Promise<string> {
+  try {
+    const config = await prisma.systemConfig.findUnique({
+      where: { key: 'rh_ia_system_prompt' },
+    });
+    return config?.value?.trim() || DEFAULT_SYSTEM_PROMPT;
+  } catch {
+    return DEFAULT_SYSTEM_PROMPT;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,8 +65,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const systemPrompt = await getSystemPrompt();
+
     const messages = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       ...historico.slice(-10),
       { role: 'user', content: pergunta.trim() },
     ];

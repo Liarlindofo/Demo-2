@@ -861,3 +861,14 @@ model UserToolPermission {
   @@index([isEnabled])
   @@map("user_tool_permissions")
 }
+
+// Configurações globais do sistema (chave-valor)
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  label     String?
+  updatedAt DateTime @updatedAt
+
+  @@map("system_configs")
+}
