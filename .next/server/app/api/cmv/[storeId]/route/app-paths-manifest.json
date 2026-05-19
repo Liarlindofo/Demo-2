@@ -1,0 +1,3 @@
+{
+  "/api/cmv/[storeId]/route": "app/api/cmv/[storeId]/route.js"
+}

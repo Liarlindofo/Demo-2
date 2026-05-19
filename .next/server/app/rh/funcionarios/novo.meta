@@ -1,0 +1,17 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/rh/layout,_N_T_/rh/funcionarios/layout,_N_T_/rh/funcionarios/novo/layout,_N_T_/rh/funcionarios/novo/page,_N_T_/rh/funcionarios/novo"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/rh/funcionarios/novo/__PAGE__",
+    "/rh/funcionarios/novo",
+    "/rh/funcionarios",
+    "/rh",
+    "/_index",
+    "/_head"
+  ]
+}

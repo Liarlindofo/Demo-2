@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/etiquetagem/layout,_N_T_/etiquetagem/historico/layout,_N_T_/etiquetagem/historico/page,_N_T_/etiquetagem/historico"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/etiquetagem/historico/__PAGE__",
+    "/etiquetagem/historico",
+    "/etiquetagem",
+    "/_index",
+    "/_head"
+  ]
+}

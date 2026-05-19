@@ -1,0 +1,3 @@
+{
+  "/api/checklist/evaluations/[id]/route": "app/api/checklist/evaluations/[id]/route.js"
+}

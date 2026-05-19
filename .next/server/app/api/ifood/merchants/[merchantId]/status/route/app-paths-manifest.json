@@ -1,0 +1,3 @@
+{
+  "/api/ifood/merchants/[merchantId]/status/route": "app/api/ifood/merchants/[merchantId]/status/route.js"
+}

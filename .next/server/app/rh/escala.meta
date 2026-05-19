@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/rh/layout,_N_T_/rh/escala/layout,_N_T_/rh/escala/page,_N_T_/rh/escala"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/rh/escala/__PAGE__",
+    "/rh/escala",
+    "/rh",
+    "/_index",
+    "/_head"
+  ]
+}
