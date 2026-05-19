@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { stackServerApp } from '@/stack';
+import { prisma } from '@/lib/prisma';
 
 const SYSTEM_PROMPT = `Você é um especialista em direito trabalhista brasileiro e gestão de RH para pequenas e médias empresas do setor de alimentação (CNAE 5611-2/01 — Restaurantes e similares).
 
@@ -22,23 +23,23 @@ Formate as respostas de forma clara:
 
 export async function POST(request: NextRequest) {
   try {
-    // Verificar autenticação
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
 
+    const user = await prisma.user.findFirst({ where: { stackUserId: stackUser.id } });
+    if (!user) {
+      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    }
+
     const body = await request.json();
-    const { pergunta, historico = [] } = body;
+    const { pergunta, historico = [], conversaId } = body;
 
     if (!pergunta || typeof pergunta !== 'string' || !pergunta.trim()) {
       return NextResponse.json({ error: 'Pergunta inválida' }, { status: 400 });
     }
 
-    // Prioridade:
-    // 1. PERPLEXITY_API_KEY       → Perplexity direto (melhor, com citações)
-    // 2. RH_OPENROUTER_API_KEY    → chave OpenRouter dedicada para o RH
-    // 3. OPENROUTER_API_KEY       → chave OpenRouter compartilhada (fallback)
     const perplexityKey = process.env.PERPLEXITY_API_KEY;
     const openrouterKey =
       process.env.RH_OPENROUTER_API_KEY ?? process.env.OPENROUTER_API_KEY;
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
-      ...historico.slice(-10), // últimas 10 mensagens de contexto
+      ...historico.slice(-10),
       { role: 'user', content: pergunta.trim() },
     ];
 
@@ -112,11 +113,48 @@ export async function POST(request: NextRequest) {
 
       const data = await res.json();
       resposta = data.choices[0].message.content;
-      // OpenRouter não retorna citations estruturadas no mesmo formato
       citacoes = [];
     }
 
-    return NextResponse.json({ resposta, citacoes });
+    // ── Persistir no banco ────────────────────────────────────────────────────
+    let idConversa = conversaId as string | undefined;
+
+    if (!idConversa) {
+      // Criar nova conversa com o título baseado na primeira pergunta
+      const titulo = pergunta.trim().slice(0, 80);
+      const novaConversa = await prisma.rhIaConversa.create({
+        data: { userId: user.id, titulo },
+      });
+      idConversa = novaConversa.id;
+    } else {
+      // Atualizar updatedAt da conversa existente
+      await prisma.rhIaConversa.update({
+        where: { id: idConversa },
+        data: { updatedAt: new Date() },
+      });
+    }
+
+    // Salvar mensagem do usuário e resposta da IA
+    await prisma.rhIaMensagem.createMany({
+      data: [
+        {
+          conversaId: idConversa,
+          role: 'user',
+          content: pergunta.trim(),
+          citacoes: [],
+          isError: false,
+        },
+        {
+          conversaId: idConversa,
+          role: 'assistant',
+          content: resposta,
+          citacoes: citacoes,
+          isError: false,
+        },
+      ],
+    });
+
+    return NextResponse.json({ resposta, citacoes, conversaId: idConversa });
   } catch (error: any) {
     console.error('[RH IA] Erro:', error.message);
     return NextResponse.json(
