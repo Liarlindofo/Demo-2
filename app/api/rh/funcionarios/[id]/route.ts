@@ -22,13 +22,14 @@ const INCLUDE = {
   loja: { select: { id: true, nome: true } },
 } as const;
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const funcionario = await prisma.rhFuncionario.findFirst({
-      where: { id: params.id, userId: dbUser.id },
+      where: { id, userId: dbUser.id },
       include: INCLUDE,
     });
 
@@ -42,13 +43,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const existing = await prisma.rhFuncionario.findFirst({
-      where: { id: params.id, userId: dbUser.id },
+      where: { id, userId: dbUser.id },
     });
     if (!existing)
       return NextResponse.json({ error: 'Funcionário não encontrado' }, { status: 404 });
@@ -73,7 +75,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     } = body;
 
     const funcionario = await prisma.rhFuncionario.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...(nome !== undefined && { nome: nome.trim() }),
         ...(cpf !== undefined && { cpf: cpf || null }),
@@ -101,20 +103,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const existing = await prisma.rhFuncionario.findFirst({
-      where: { id: params.id, userId: dbUser.id },
+      where: { id, userId: dbUser.id },
     });
     if (!existing)
       return NextResponse.json({ error: 'Funcionário não encontrado' }, { status: 404 });
 
-    // Soft delete: apenas desativa
     await prisma.rhFuncionario.update({
-      where: { id: params.id },
+      where: { id },
       data: { ativo: false },
     });
 
