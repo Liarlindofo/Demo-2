@@ -98,12 +98,29 @@ export function interceptFetchErrors() {
   };
 }
 
+// Padrões de erros internos do React/Next.js que não devem exibir popup
+const INTERNAL_ERROR_PATTERNS = [
+  /Minified React error/i,
+  /hydrat/i,
+  /react\.dev\/errors/i,
+  /nextjs\.org\/docs\/messages/i,
+  /Cannot update a component/i,
+  /ResizeObserver loop/i,
+];
+
+function isInternalError(message: string): boolean {
+  return INTERNAL_ERROR_PATTERNS.some((p) => p.test(message));
+}
+
 // Interceptar erros JavaScript globais
 export function interceptGlobalErrors() {
   // Erros não tratados
   window.addEventListener('error', (event) => {
+    const message = event.message || 'Erro JavaScript não tratado';
+    if (isInternalError(message)) return; // ignorar erros internos do React/Next.js
+
     handleError({
-      message: event.message || 'Erro JavaScript não tratado',
+      message,
       details: `Arquivo: ${event.filename} (linha ${event.lineno}:${event.colno})`,
       stack: event.error?.stack,
       url: event.filename,
@@ -115,9 +132,11 @@ export function interceptGlobalErrors() {
   // Promises rejeitadas não tratadas
   window.addEventListener('unhandledrejection', (event) => {
     const error = event.reason;
-    
+    const message = error?.message || 'Promise rejeitada não tratada';
+    if (isInternalError(message)) return;
+
     handleError({
-      message: error?.message || 'Promise rejeitada não tratada',
+      message,
       details: error?.stack || String(error),
       stack: error?.stack,
       timestamp: new Date().toISOString(),

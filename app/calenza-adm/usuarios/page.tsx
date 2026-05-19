@@ -368,10 +368,18 @@ export default function UsuariosPage() {
                             <span className="font-medium">Username:</span> {user.user.username}
                           </p>
                         )}
-                        <p>
+                        <p suppressHydrationWarning>
                           <span className="font-medium">Última atividade:</span>{" "}
                           {user.lastActiveAt
-                            ? new Date(user.lastActiveAt).toLocaleString("pt-BR")
+                            ? (() => {
+                                const d = new Date(user.lastActiveAt as string);
+                                const dd = String(d.getUTCDate()).padStart(2, "0");
+                                const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+                                const yyyy = d.getUTCFullYear();
+                                const hh = String(d.getUTCHours()).padStart(2, "0");
+                                const min = String(d.getUTCMinutes()).padStart(2, "0");
+                                return `${dd}/${mm}/${yyyy} ${hh}:${min} UTC`;
+                              })()
                             : "Nunca"}
                         </p>
                       </div>

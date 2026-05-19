@@ -81,12 +81,13 @@ export default function AdminDashboardSimple({ session, data }: DashboardProps) 
     try {
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) return "Data inválida";
-      const dd = String(date.getDate()).padStart(2, "0");
-      const mm = String(date.getMonth() + 1).padStart(2, "0");
-      const yyyy = date.getFullYear();
-      const hh = String(date.getHours()).padStart(2, "0");
-      const min = String(date.getMinutes()).padStart(2, "0");
-      return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+      // Usar métodos UTC para garantir output idêntico no servidor (UTC) e no browser
+      const dd = String(date.getUTCDate()).padStart(2, "0");
+      const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+      const yyyy = date.getUTCFullYear();
+      const hh = String(date.getUTCHours()).padStart(2, "0");
+      const min = String(date.getUTCMinutes()).padStart(2, "0");
+      return `${dd}/${mm}/${yyyy} ${hh}:${min} UTC`;
     } catch {
       return "Data inválida";
     }
