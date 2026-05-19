@@ -243,10 +243,10 @@ export default function IaPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex">
+    <div className="h-screen overflow-hidden bg-[#0a0a0a] text-white flex">
       {/* Sidebar */}
       <aside
-        className={`flex-shrink-0 flex flex-col border-r border-[#2a2a2e] bg-[#0d0d0f] transition-all duration-200 ${
+        className={`flex-shrink-0 flex flex-col border-r border-[#2a2a2e] bg-[#0d0d0f] h-full transition-all duration-200 ${
           sidebarOpen ? 'w-64' : 'w-12'
         }`}
       >
@@ -340,9 +340,9 @@ export default function IaPage() {
       </aside>
 
       {/* Main chat */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* Header */}
-        <div className="border-b border-[#2a2a2e] bg-[#0a0a0a] sticky top-0 z-10">
+        <div className="flex-shrink-0 border-b border-[#2a2a2e] bg-[#0a0a0a] z-10">
           <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
@@ -375,7 +375,7 @@ export default function IaPage() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto min-h-0">
           {loadingConversa ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="w-6 h-6 text-pink-400 animate-spin" />
@@ -394,16 +394,16 @@ export default function IaPage() {
                       trabalho e obrigações CLT.
                     </p>
                   </div>
-                  <div className="w-full">
+                  <div className="w-full max-w-xl">
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wider text-center mb-3">
                       Perguntas rápidas
                     </p>
-                    <div className="flex flex-wrap gap-2 justify-center">
+                    <div className="grid grid-cols-2 gap-2">
                       {QUICK_QUESTIONS.map((q) => (
                         <button
                           key={q}
                           onClick={() => sendMessage(q)}
-                          className="px-4 py-2 rounded-xl bg-[#1c1c1e] border border-[#2a2a2e] text-sm text-gray-300 hover:border-pink-500/40 hover:text-white hover:bg-[#222224] transition-all"
+                          className="px-4 py-2.5 rounded-xl bg-[#1c1c1e] border border-[#2a2a2e] text-sm text-gray-300 text-left hover:border-pink-500/40 hover:text-white hover:bg-[#222224] transition-all"
                         >
                           {q}
                         </button>
@@ -485,27 +485,8 @@ export default function IaPage() {
           )}
         </div>
 
-        {/* Quick chips */}
-        {messages.length > 0 && !loading && (
-          <div className="border-t border-[#2a2a2e] bg-[#0a0a0a]">
-            <div className="max-w-3xl mx-auto px-4 pt-3 pb-1">
-              <div className="flex gap-2 overflow-x-auto pb-2">
-                {QUICK_QUESTIONS.slice(0, 4).map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => sendMessage(q)}
-                    className="flex-shrink-0 px-3 py-1.5 rounded-xl bg-[#1c1c1e] border border-[#2a2a2e] text-xs text-gray-400 hover:text-white hover:border-pink-500/30 transition-all"
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Input */}
-        <div className="border-t border-[#2a2a2e] bg-[#0a0a0a] sticky bottom-0">
+        <div className="flex-shrink-0 border-t border-[#2a2a2e] bg-[#0a0a0a]">
           <div className="max-w-3xl mx-auto px-4 py-4">
             <div className="flex gap-3 items-end bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-3 focus-within:border-pink-500/30 transition-colors">
               <textarea
