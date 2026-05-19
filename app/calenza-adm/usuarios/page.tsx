@@ -372,7 +372,7 @@ export default function UsuariosPage() {
                           <span className="font-medium">Última atividade:</span>{" "}
                           {user.lastActiveAt
                             ? (() => {
-                                const d = new Date(user.lastActiveAt as string);
+                                const d = new Date(user.lastActiveAt!);
                                 const dd = String(d.getUTCDate()).padStart(2, "0");
                                 const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
                                 const yyyy = d.getUTCFullYear();
