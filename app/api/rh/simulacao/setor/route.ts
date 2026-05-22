@@ -90,7 +90,7 @@ export async function GET(req: Request) {
               id: pos.id,
               cargo: pos.cargo,
               turno: pos.turno,
-              idealMin: pos.quantidade,
+              idealMin: pos.quantidadeIdeal,
               funcionarios6x1: f6x1.length,
               funcionarios5x2: f5x2.length,
               totalFuncionarios: funcionarios.length,
