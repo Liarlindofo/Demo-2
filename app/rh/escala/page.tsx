@@ -122,8 +122,9 @@ export default function EscalaPage() {
 
   funcionarios.forEach((f) => {
     const turno = f.turno as Turno;
+    const diasFolga = Array.isArray(f.diasFolga) ? f.diasFolga : [];
     DIAS.forEach((dia) => {
-      if (!f.diasFolga.includes(dia)) {
+      if (!diasFolga.includes(dia)) {
         if (grid[turno]) grid[turno][dia].push(f);
       }
     });

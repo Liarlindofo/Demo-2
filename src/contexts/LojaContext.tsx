@@ -26,8 +26,6 @@ const LojaContext = createContext<LojaContextType>({
   refetch: () => {},
 });
 
-const LOJA_STORAGE_KEY = 'plateful_rh_loja_selecionada';
-
 export function LojaProvider({ children }: { children: ReactNode }) {
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [lojaSelecionada, setLojaSelecionadaState] = useState<Loja | null>(null);
@@ -39,13 +37,6 @@ export function LojaProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         const data: Loja[] = await res.json();
         setLojas(data);
-
-        // Restaurar seleção do localStorage
-        const saved = localStorage.getItem(LOJA_STORAGE_KEY);
-        if (saved) {
-          const savedLoja = data.find(l => l.id === saved);
-          if (savedLoja) setLojaSelecionadaState(savedLoja);
-        }
       }
     } catch (err) {
       console.error('[LojaContext] Falha ao carregar lojas:', err);
@@ -60,11 +51,6 @@ export function LojaProvider({ children }: { children: ReactNode }) {
 
   const setLojaSelecionada = (loja: Loja | null) => {
     setLojaSelecionadaState(loja);
-    if (loja) {
-      localStorage.setItem(LOJA_STORAGE_KEY, loja.id);
-    } else {
-      localStorage.removeItem(LOJA_STORAGE_KEY);
-    }
   };
 
   return (
