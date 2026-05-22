@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useLoja } from '@/contexts/LojaContext';
+import { useLoja, Loja } from '@/contexts/LojaContext';
 import {
   ArrowLeft, ClipboardList, Plus, Pencil, Trash2, X,
   Check, ChevronUp, ChevronDown, BarChart3, Settings,
@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 
 interface Cargo { id: string; nome: string }
-interface Loja { id: string; nome: string }
 
 interface PosicaoIdeal {
   id: string;
