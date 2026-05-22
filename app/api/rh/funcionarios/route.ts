@@ -17,6 +17,14 @@ async function getDbUser() {
   });
 }
 
+function calcDatasExperiencia(dataAdmissao: Date) {
+  const d1 = new Date(dataAdmissao);
+  d1.setDate(d1.getDate() + 45);
+  const d2 = new Date(dataAdmissao);
+  d2.setDate(d2.getDate() + 90);
+  return { dataFimExperiencia1: d1, dataFimExperiencia2: d2 };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
@@ -71,6 +79,7 @@ export async function POST(req: Request) {
       cpf,
       email,
       telefone,
+      dataNascimento,
       dataAdmissao,
       cargoId,
       lojaId,
@@ -89,13 +98,15 @@ export async function POST(req: Request) {
     if (!salarioBruto || salarioBruto <= 0)
       return NextResponse.json({ error: 'Salário inválido' }, { status: 400 });
 
-    // Verificar que cargo e loja pertencem ao usuário
     const [cargo, loja] = await Promise.all([
       prisma.rhCargo.findFirst({ where: { id: cargoId, userId: dbUser.id } }),
       prisma.rhLoja.findFirst({ where: { id: lojaId, userId: dbUser.id } }),
     ]);
     if (!cargo) return NextResponse.json({ error: 'Cargo não encontrado' }, { status: 404 });
     if (!loja) return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 });
+
+    const admissao = new Date(dataAdmissao);
+    const { dataFimExperiencia1, dataFimExperiencia2 } = calcDatasExperiencia(admissao);
 
     const funcionario = await prisma.rhFuncionario.create({
       data: {
@@ -104,7 +115,8 @@ export async function POST(req: Request) {
         cpf: cpf || null,
         email: email || null,
         telefone: telefone || null,
-        dataAdmissao: new Date(dataAdmissao),
+        dataNascimento: dataNascimento ? new Date(dataNascimento) : null,
+        dataAdmissao: admissao,
         cargoId,
         lojaId,
         salarioBruto,
@@ -114,6 +126,12 @@ export async function POST(req: Request) {
         horarioSaida: horarioSaida ?? '17:00',
         diasFolga: diasFolga ?? [],
         observacoes: observacoes || null,
+        dataInicioExperiencia: admissao,
+        dataFimExperiencia1,
+        dataFimExperiencia2,
+        dataInicioFerias: admissao,
+        statusFerias: 'a_gozar',
+        diasFeriasGozados: 0,
       },
       include: {
         cargo: { select: { id: true, nome: true, ratPct: true } },

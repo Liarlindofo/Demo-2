@@ -65,6 +65,8 @@ model User {
   rhCargos               RhCargo[]
   rhFuncionarios         RhFuncionario[]
   rhIaConversas          RhIaConversa[]
+  rhHistoricoFuncionarios RhHistoricoFuncionario[]
+  rhQuadrosIdeais        RhQuadroIdeal[]
 
   @@map("users")
 }
@@ -757,64 +759,145 @@ model IfoodCatalogChangeLog {
 // ── Módulo RH ─────────────────────────────────────────────────────────────────
 
 model RhLoja {
-  id           String          @id @default(cuid())
-  userId       String
-  nome         String
-  cnpj         String?
-  endereco     String?
-  ativo        Boolean         @default(true)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  funcionarios RhFuncionario[]
+  id            String          @id @default(cuid())
+  userId        String
+  nome          String
+  cnpj          String?
+  endereco      String?
+  ativo         Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  funcionarios  RhFuncionario[]
+  quadroIdeal   RhQuadroIdeal?
 
   @@index([userId])
   @@map("rh_lojas")
 }
 
 model RhCargo {
-  id           String          @id @default(cuid())
-  userId       String
-  nome         String
-  descricao    String?
-  ratPct       Float           @default(2.0)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  funcionarios RhFuncionario[]
+  id            String           @id @default(cuid())
+  userId        String
+  nome          String
+  descricao     String?
+  ratPct        Float            @default(2.0)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  funcionarios  RhFuncionario[]
+  posicoesIdeais RhPosicaoIdeal[]
 
   @@index([userId])
   @@map("rh_cargos")
 }
 
 model RhFuncionario {
-  id             String   @id @default(cuid())
-  userId         String
-  nome           String
-  cpf            String?
-  email          String?
-  telefone       String?
-  dataAdmissao   DateTime
-  cargoId        String
-  lojaId         String
-  salarioBruto   Float
-  escala         String
-  turno          String
-  horarioEntrada String   @default("08:00")
-  horarioSaida   String   @default("17:00")
-  diasFolga      Json     @default("[]")
-  observacoes    String?
-  ativo          Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cargo          RhCargo  @relation(fields: [cargoId], references: [id])
-  loja           RhLoja   @relation(fields: [lojaId], references: [id])
+  id                    String                   @id @default(cuid())
+  userId                String
+  nome                  String
+  cpf                   String?
+  email                 String?
+  telefone              String?
+  dataNascimento        DateTime?
+  dataAdmissao          DateTime
+  cargoId               String
+  lojaId                String
+  salarioBruto          Float
+  escala                String
+  turno                 String
+  horarioEntrada        String                   @default("08:00")
+  horarioSaida          String                   @default("17:00")
+  diasFolga             Json                     @default("[]")
+  observacoes           String?
+  ativo                 Boolean                  @default(true)
+  // Período de experiência (calculado automaticamente)
+  dataInicioExperiencia DateTime?
+  dataFimExperiencia1   DateTime?
+  dataFimExperiencia2   DateTime?
+  // Férias
+  dataInicioFerias      DateTime?
+  dataGozoFerias        DateTime?
+  statusFerias          String?                  @default("a_gozar")
+  diasFeriasGozados     Int?                     @default(0)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  user                  User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cargo                 RhCargo                  @relation(fields: [cargoId], references: [id])
+  loja                  RhLoja                   @relation(fields: [lojaId], references: [id])
+  historico             RhHistoricoFuncionario[]
 
   @@index([userId])
   @@index([lojaId])
   @@index([cargoId])
   @@map("rh_funcionarios")
+}
+
+model RhHistoricoFuncionario {
+  id            String        @id @default(cuid())
+  userId        String
+  funcionarioId String
+  campo         String
+  valorAnterior String
+  valorNovo     String
+  alteradoPor   String
+  motivo        String?
+  createdAt     DateTime      @default(now())
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  funcionario   RhFuncionario @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+
+  @@index([funcionarioId])
+  @@index([userId])
+  @@map("rh_historico_funcionarios")
+}
+
+model RhQuadroIdeal {
+  id        String         @id @default(cuid())
+  userId    String
+  lojaId    String         @unique
+  nome      String?
+  ativo     Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loja      RhLoja         @relation(fields: [lojaId], references: [id])
+  setores   RhSetorIdeal[]
+
+  @@index([userId])
+  @@map("rh_quadros_ideais")
+}
+
+model RhSetorIdeal {
+  id            String           @id @default(cuid())
+  quadroIdealId String
+  nome          String
+  descricao     String?
+  ordem         Int              @default(0)
+  ativo         Boolean          @default(true)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  quadroIdeal   RhQuadroIdeal    @relation(fields: [quadroIdealId], references: [id], onDelete: Cascade)
+  posicoes      RhPosicaoIdeal[]
+
+  @@index([quadroIdealId])
+  @@map("rh_setores_ideais")
+}
+
+model RhPosicaoIdeal {
+  id              String       @id @default(cuid())
+  setorId         String
+  cargoId         String
+  turno           String
+  quantidadeIdeal Int
+  observacoes     String?
+  ativo           Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  setor           RhSetorIdeal @relation(fields: [setorId], references: [id], onDelete: Cascade)
+  cargo           RhCargo      @relation(fields: [cargoId], references: [id])
+
+  @@index([setorId])
+  @@index([cargoId])
+  @@map("rh_posicoes_ideais")
 }
 
 model RhIaConversa {

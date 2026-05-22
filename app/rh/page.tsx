@@ -13,6 +13,8 @@ import {
   TrendingUp,
   Building2,
   ChevronRight,
+  Bell,
+  ClipboardList,
 } from 'lucide-react';
 
 interface Funcionario {
@@ -28,6 +30,18 @@ interface Stats {
   custoMensal: number;
   escala6x1: number;
   escala5x2: number;
+}
+
+interface AlertasResumo {
+  totalCriticos: number;
+  totalFeriasVencidas: number;
+  totalExperienciaMes: number;
+}
+
+interface ComparativoResumo {
+  totalIdeal: number;
+  totalOk: number;
+  totalGaps: number;
 }
 
 function LojaSelector({
@@ -102,6 +116,22 @@ const navItems = [
     bg: 'bg-purple-500/10',
   },
   {
+    href: '/rh/alertas',
+    icon: Bell,
+    label: 'Alertas',
+    description: 'Vencimentos, férias e aniversários',
+    color: 'text-red-400',
+    bg: 'bg-red-500/10',
+  },
+  {
+    href: '/rh/quadro-ideal',
+    icon: ClipboardList,
+    label: 'Quadro Ideal',
+    description: 'Estrutura ideal por setor',
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-500/10',
+  },
+  {
     href: '/rh/simulacao',
     icon: BarChart3,
     label: 'Simulador',
@@ -123,6 +153,8 @@ export default function RhDashboard() {
   const { lojas, lojaSelecionada, setLojaSelecionada, loading: lojaLoading } = useLoja();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [alertasResumo, setAlertasResumo] = useState<AlertasResumo | null>(null);
+  const [comparativoResumo, setComparativoResumo] = useState<ComparativoResumo | null>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -145,6 +177,21 @@ export default function RhDashboard() {
       }
     };
     fetchStats();
+  }, [lojaSelecionada]);
+
+  useEffect(() => {
+    fetch('/api/rh/alertas')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setAlertasResumo(d.resumo))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!lojaSelecionada) { setComparativoResumo(null); return; }
+    fetch(`/api/rh/quadro-ideal/comparativo?lojaId=${lojaSelecionada.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setComparativoResumo(d.resumo))
+      .catch(() => {});
   }, [lojaSelecionada]);
 
   const fmt = (v: number) =>
@@ -228,6 +275,59 @@ export default function RhDashboard() {
               </div>
             </>
           )}
+        </div>
+
+        {/* Cards de Alertas e Quadro Ideal */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Link href="/rh/alertas" className="group bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 hover:border-red-500/30 hover:bg-[#222224] transition-all">
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+                <Bell className="w-5 h-5 text-red-400" />
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-red-400 transition-colors" />
+            </div>
+            <div className="mt-3">
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-white">Vencimentos e Alertas</h3>
+                {alertasResumo && alertasResumo.totalCriticos > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-xs font-bold border border-red-500/30">
+                    {alertasResumo.totalCriticos} crítico{alertasResumo.totalCriticos !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-gray-400 mt-1">
+                {alertasResumo
+                  ? `${alertasResumo.totalExperienciaMes} experiências · ${alertasResumo.totalFeriasVencidas} férias vencidas`
+                  : 'Experiências, férias e aniversários'}
+              </p>
+            </div>
+          </Link>
+
+          <Link href="/rh/quadro-ideal" className="group bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 hover:border-cyan-500/30 hover:bg-[#222224] transition-all">
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+                <ClipboardList className="w-5 h-5 text-cyan-400" />
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-cyan-400 transition-colors" />
+            </div>
+            <div className="mt-3">
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-white">Quadro Ideal</h3>
+                {comparativoResumo && comparativoResumo.totalGaps > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-bold border border-amber-500/30">
+                    {comparativoResumo.totalGaps} gap{comparativoResumo.totalGaps !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-gray-400 mt-1">
+                {lojaSelecionada
+                  ? (comparativoResumo
+                      ? `${comparativoResumo.totalOk}/${comparativoResumo.totalIdeal} posições preenchidas`
+                      : 'Quadro não configurado para esta loja')
+                  : 'Selecione uma loja para ver os gaps'}
+              </p>
+            </div>
+          </Link>
         </div>
 
         {/* Navigation Grid */}
