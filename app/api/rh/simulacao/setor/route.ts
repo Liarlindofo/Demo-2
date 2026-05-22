@@ -39,7 +39,7 @@ export async function GET(req: Request) {
           include: {
             posicoes: {
               where: { ativo: true },
-              orderBy: { ordem: 'asc' },
+              orderBy: { createdAt: 'asc' },
               include: {
                 cargo: { select: { id: true, nome: true } },
               },
