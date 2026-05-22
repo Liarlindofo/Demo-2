@@ -6,8 +6,12 @@ import { useLoja } from '@/contexts/LojaContext';
 import {
   ArrowLeft, Edit3, Save, X, User, Briefcase, DollarSign, Clock,
   AlertTriangle, TrendingUp, Building2, Phone, Mail, Calendar,
-  History, Umbrella, ChevronRight,
+  History, Umbrella, ChevronRight, FileText, ArrowRight,
 } from 'lucide-react';
+import DocumentosTab from '@/components/rh/DocumentosTab';
+import OcorrenciasTab from '@/components/rh/OcorrenciasTab';
+import TransferenciasTab from '@/components/rh/TransferenciasTab';
+import DrawerTransferencia from '@/components/rh/DrawerTransferencia';
 
 interface Cargo { id: string; nome: string; ratPct: number }
 interface Loja { id: string; nome: string; ativo: boolean }
@@ -74,7 +78,7 @@ const fmtDate = (d: string | null | undefined) => !d ? '—' : new Date(d).toLoc
 const inputCls = 'w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/50 transition-colors';
 const labelCls = 'block text-xs font-medium text-gray-400 mb-1.5';
 
-type Tab = 'dados' | 'ferias' | 'historico';
+type Tab = 'dados' | 'ferias' | 'historico' | 'documentos' | 'ocorrencias' | 'transferencias';
 
 export default function FuncionarioDetailPage() {
   const router = useRouter();
@@ -95,6 +99,7 @@ export default function FuncionarioDetailPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [tab, setTab] = useState<Tab>('dados');
   const [toast, setToast] = useState('');
+  const [showDrawerTransferencia, setShowDrawerTransferencia] = useState(false);
 
   // Férias
   const [dataGozoFerias, setDataGozoFerias] = useState('');
@@ -301,10 +306,17 @@ export default function FuncionarioDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl p-1 w-fit">
-          {([['dados', User, 'Dados'], ['ferias', Umbrella, 'Férias'], ['historico', History, 'Histórico']] as const).map(([t, Icon, label]) => (
+        <div className="flex flex-wrap gap-1 bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl p-1 w-fit">
+          {([
+            ['dados', User, 'Dados'],
+            ['ferias', Umbrella, 'Férias'],
+            ['documentos', FileText, 'Documentos'],
+            ['ocorrencias', AlertTriangle, 'Ocorrências'],
+            ['transferencias', ArrowRight, 'Transferências'],
+            ['historico', History, 'Histórico'],
+          ] as const).map(([t, Icon, label]) => (
             <button key={t} onClick={() => setTab(t as Tab)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-amber-500 text-black' : 'text-gray-400 hover:text-white'}`}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-amber-500 text-black' : 'text-gray-400 hover:text-white'}`}
             >
               <Icon className="w-4 h-4" />{label}
             </button>
@@ -626,6 +638,55 @@ export default function FuncionarioDetailPage() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ── TAB DOCUMENTOS ── */}
+        {tab === 'documentos' && (
+          <DocumentosTab
+            funcionarioId={params.id}
+            uploadadoPor={funcionario.nome}
+          />
+        )}
+
+        {/* ── TAB OCORRÊNCIAS ── */}
+        {tab === 'ocorrencias' && (
+          <OcorrenciasTab
+            funcionarioId={params.id}
+            registradoPor={funcionario.nome}
+          />
+        )}
+
+        {/* ── TAB TRANSFERÊNCIAS ── */}
+        {tab === 'transferencias' && (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowDrawerTransferencia(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-black text-sm font-bold rounded-xl hover:bg-amber-400 transition-colors"
+              >
+                <ArrowRight className="w-4 h-4" />
+                Transferir para outra loja
+              </button>
+            </div>
+            <TransferenciasTab funcionarioId={params.id} />
+          </div>
+        )}
+
+        {showDrawerTransferencia && (
+          <DrawerTransferencia
+            funcionarioId={params.id}
+            funcionarioNome={funcionario.nome}
+            lojaAtualId={funcionario.lojaId}
+            lojaAtualNome={funcionario.loja.nome}
+            lojas={lojas}
+            aprovadoPor=""
+            onClose={() => setShowDrawerTransferencia(false)}
+            onSuccess={() => {
+              setShowDrawerTransferencia(false);
+              showToast(`${funcionario.nome} transferido com sucesso`);
+              setTab('transferencias');
+            }}
+          />
         )}
       </div>
     </div>

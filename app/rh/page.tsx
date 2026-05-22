@@ -15,6 +15,8 @@ import {
   ChevronRight,
   Bell,
   ClipboardList,
+  FileText,
+  ArrowRight,
 } from 'lucide-react';
 
 interface Funcionario {
@@ -147,6 +149,22 @@ const navItems = [
     color: 'text-pink-400',
     bg: 'bg-pink-500/10',
   },
+  {
+    href: '/rh/funcionarios',
+    icon: FileText,
+    label: 'Documentos',
+    description: 'Gestão de documentos por funcionário',
+    color: 'text-indigo-400',
+    bg: 'bg-indigo-500/10',
+  },
+  {
+    href: '/rh/funcionarios',
+    icon: ArrowRight,
+    label: 'Transferências',
+    description: 'Histórico de transferências entre lojas',
+    color: 'text-teal-400',
+    bg: 'bg-teal-500/10',
+  },
 ];
 
 export default function RhDashboard() {
@@ -155,6 +173,9 @@ export default function RhDashboard() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [alertasResumo, setAlertasResumo] = useState<AlertasResumo | null>(null);
   const [comparativoResumo, setComparativoResumo] = useState<ComparativoResumo | null>(null);
+  const [ocorrenciasMes, setOcorrenciasMes] = useState<number | null>(null);
+  const [custoTotal, setCustoTotal] = useState<number | null>(null);
+  const [transferenciasMes, setTransferenciasMes] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -191,6 +212,20 @@ export default function RhDashboard() {
     fetch(`/api/rh/quadro-ideal/comparativo?lojaId=${lojaSelecionada.id}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => d && setComparativoResumo(d.resumo))
+      .catch(() => {});
+  }, [lojaSelecionada]);
+
+  useEffect(() => {
+    const lojaParam = lojaSelecionada ? `?lojaId=${lojaSelecionada.id}` : '';
+    fetch(`/api/rh/ocorrencias/resumo${lojaParam}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setOcorrenciasMes(d.totalMes))
+      .catch(() => {});
+    fetch('/api/rh/custos/consolidado')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setCustoTotal(lojaSelecionada
+        ? (d.lojas?.find((l: { lojaId: string; totalCustoReal: number }) => l.lojaId === lojaSelecionada.id)?.totalCustoReal ?? null)
+        : d.rede?.totalCustoReal ?? null))
       .catch(() => {});
   }, [lojaSelecionada]);
 
@@ -328,6 +363,57 @@ export default function RhDashboard() {
               </p>
             </div>
           </Link>
+
+          <Link href="/rh/custos" className="group bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 hover:border-green-500/30 hover:bg-[#222224] transition-all">
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
+                <DollarSign className="w-5 h-5 text-green-400" />
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-green-400 transition-colors" />
+            </div>
+            <div className="mt-3">
+              <h3 className="font-semibold text-white">Custos da Rede</h3>
+              <p className="text-sm text-gray-400 mt-1">
+                {custoTotal !== null
+                  ? `Custo total: ${fmt(custoTotal)}/mês`
+                  : 'Folha de pagamento e encargos'}
+              </p>
+            </div>
+          </Link>
+
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-amber-400" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <h3 className="font-semibold text-white">Ocorrências</h3>
+              <p className="text-sm text-gray-400 mt-1">
+                {ocorrenciasMes !== null
+                  ? `${ocorrenciasMes} ocorrência${ocorrenciasMes !== 1 ? 's' : ''} este mês`
+                  : 'Faltas, advertências e atestados'}
+              </p>
+              <p className="text-xs text-gray-500 mt-2">Acesse pelo perfil do funcionário</p>
+            </div>
+          </div>
+
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-teal-500/10 flex items-center justify-center">
+                <ArrowRight className="w-5 h-5 text-teal-400" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <h3 className="font-semibold text-white">Transferências</h3>
+              <p className="text-sm text-gray-400 mt-1">
+                {transferenciasMes !== null
+                  ? `${transferenciasMes} transferência${transferenciasMes !== 1 ? 's' : ''} este mês`
+                  : 'Movimentação entre lojas'}
+              </p>
+              <p className="text-xs text-gray-500 mt-2">Acesse pelo perfil do funcionário</p>
+            </div>
+          </div>
         </div>
 
         {/* Navigation Grid */}

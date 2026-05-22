@@ -39,6 +39,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/three": "^0.180.0",
+    "@vercel/blob": "^2.4.0",
     "@wppconnect-team/wppconnect": "^1.30.2",
     "autoprefixer": "^10.4.20",
     "axios": "^1.7.7",

@@ -67,6 +67,10 @@ model User {
   rhIaConversas          RhIaConversa[]
   rhHistoricoFuncionarios RhHistoricoFuncionario[]
   rhQuadrosIdeais        RhQuadroIdeal[]
+  rhDocumentos           RhDocumentoFuncionario[]
+  rhOcorrencias          RhOcorrencia[]
+  rhSnapshots            RhSnapshotCustoMensal[]
+  rhTransferencias       RhTransferenciaLoja[]
 
   @@map("users")
 }
@@ -759,17 +763,21 @@ model IfoodCatalogChangeLog {
 // ── Módulo RH ─────────────────────────────────────────────────────────────────
 
 model RhLoja {
-  id            String          @id @default(cuid())
-  userId        String
-  nome          String
-  cnpj          String?
-  endereco      String?
-  ativo         Boolean         @default(true)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  funcionarios  RhFuncionario[]
-  quadroIdeal   RhQuadroIdeal?
+  id                    String                  @id @default(cuid())
+  userId                String
+  nome                  String
+  cnpj                  String?
+  endereco              String?
+  fap                   Float                   @default(1.0)
+  ativo                 Boolean                 @default(true)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  user                  User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  funcionarios          RhFuncionario[]
+  quadroIdeal           RhQuadroIdeal?
+  snapshots             RhSnapshotCustoMensal[]
+  transferenciasOrigem  RhTransferenciaLoja[]   @relation("TransferenciaOrigem")
+  transferenciasDestino RhTransferenciaLoja[]   @relation("TransferenciaDestino")
 
   @@index([userId])
   @@map("rh_lojas")
@@ -825,6 +833,9 @@ model RhFuncionario {
   cargo                 RhCargo                  @relation(fields: [cargoId], references: [id])
   loja                  RhLoja                   @relation(fields: [lojaId], references: [id])
   historico             RhHistoricoFuncionario[]
+  documentos            RhDocumentoFuncionario[]
+  ocorrencias           RhOcorrencia[]
+  transferencias        RhTransferenciaLoja[]
 
   @@index([userId])
   @@index([lojaId])
@@ -925,6 +936,96 @@ model RhIaMensagem {
 
   @@index([conversaId])
   @@map("rh_ia_mensagens")
+}
+
+model RhDocumentoFuncionario {
+  id             String        @id @default(cuid())
+  funcionarioId  String
+  userId         String
+  tipo           String
+  nome           String
+  url            String
+  tamanhoBytes   Int?
+  dataVencimento DateTime?
+  mesReferencia  Int?
+  anoReferencia  Int?
+  observacoes    String?
+  ativo          Boolean       @default(true)
+  uploadadoPor   String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  funcionario    RhFuncionario @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([funcionarioId])
+  @@index([userId])
+  @@map("rh_documentos_funcionarios")
+}
+
+model RhOcorrencia {
+  id            String        @id @default(cuid())
+  funcionarioId String
+  userId        String
+  tipo          String
+  data          DateTime
+  descricao     String        @db.Text
+  gravidade     String?
+  testemunhas   String?
+  providencia   String?
+  cidAfastamento String?
+  dataInicioAfastamento DateTime?
+  dataFimAfastamento    DateTime?
+  registradoPor String
+  ativo         Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  funcionario   RhFuncionario @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([funcionarioId])
+  @@index([userId])
+  @@map("rh_ocorrencias")
+}
+
+model RhSnapshotCustoMensal {
+  id                String   @id @default(cuid())
+  lojaId            String
+  userId            String
+  mes               Int
+  ano               Int
+  totalFuncionarios Int
+  totalSalarioBruto Float
+  totalEncargos     Float
+  totalCustoReal    Float
+  custoAnualizado   Float
+  geradoEm          DateTime @default(now())
+  loja              RhLoja   @relation(fields: [lojaId], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([lojaId, mes, ano, userId])
+  @@index([lojaId])
+  @@index([userId])
+  @@map("rh_snapshots_custo_mensal")
+}
+
+model RhTransferenciaLoja {
+  id                String        @id @default(cuid())
+  funcionarioId     String
+  lojaOrigemId      String
+  lojaDestinoId     String
+  userId            String
+  dataTransferencia DateTime
+  motivo            String?
+  aprovadoPor       String?
+  createdAt         DateTime      @default(now())
+  funcionario       RhFuncionario @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+  lojaOrigem        RhLoja        @relation("TransferenciaOrigem", fields: [lojaOrigemId], references: [id])
+  lojaDestino       RhLoja        @relation("TransferenciaDestino", fields: [lojaDestinoId], references: [id])
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([funcionarioId])
+  @@index([userId])
+  @@map("rh_transferencias_lojas")
 }
 
 // Permissões de ferramentas para usuários do sistema (stack_users)
