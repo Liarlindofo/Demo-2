@@ -6,8 +6,9 @@ import { useLoja } from '@/contexts/LojaContext';
 import {
   ArrowLeft, Edit3, Save, X, User, Briefcase, DollarSign, Clock,
   AlertTriangle, TrendingUp, Building2, Phone, Mail, Calendar,
-  History, Umbrella, ChevronRight, FileText, ArrowRight,
+  History, Umbrella, ChevronRight, FileText, ArrowRight, Gift,
 } from 'lucide-react';
+import BonificacoesTab from '@/components/rh/BonificacoesTab';
 import DocumentosTab from '@/components/rh/DocumentosTab';
 import OcorrenciasTab from '@/components/rh/OcorrenciasTab';
 import TransferenciasTab from '@/components/rh/TransferenciasTab';
@@ -93,7 +94,7 @@ const fmtDate = (d: string | null | undefined) => !d ? '—' : new Date(d).toLoc
 const inputCls = 'w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/50 transition-colors';
 const labelCls = 'block text-xs font-medium text-gray-400 mb-1.5';
 
-type Tab = 'dados' | 'ferias' | 'historico' | 'documentos' | 'ocorrencias' | 'transferencias';
+type Tab = 'dados' | 'ferias' | 'bonificacoes' | 'historico' | 'documentos' | 'ocorrencias' | 'transferencias';
 
 export default function FuncionarioDetailPage() {
   const router = useRouter();
@@ -349,6 +350,7 @@ export default function FuncionarioDetailPage() {
           {([
             ['dados', User, 'Dados'],
             ['ferias', Umbrella, 'Férias'],
+            ['bonificacoes', Gift, 'Bonificações'],
             ['documentos', FileText, 'Documentos'],
             ['ocorrencias', AlertTriangle, 'Ocorrências'],
             ['transferencias', ArrowRight, 'Transferências'],
@@ -661,6 +663,11 @@ export default function FuncionarioDetailPage() {
               </button>
             </div>
           </div>
+        )}
+
+        {/* ── TAB BONIFICAÇÕES ── */}
+        {tab === 'bonificacoes' && (
+          <BonificacoesTab funcionarioId={params.id} />
         )}
 
         {/* ── TAB HISTÓRICO ── */}

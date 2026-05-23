@@ -262,6 +262,22 @@
       "namedRegex": "^/api/ifood/orders/(?<nxtPorderId>[^/]+?)/startPreparation(?:/)?$"
     },
     {
+      "page": "/api/rh/bonificacoes/assiduidade/[funcionarioId]",
+      "regex": "^/api/rh/bonificacoes/assiduidade/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPfuncionarioId": "nxtPfuncionarioId"
+      },
+      "namedRegex": "^/api/rh/bonificacoes/assiduidade/(?<nxtPfuncionarioId>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/rh/bonificacoes/plr/[id]",
+      "regex": "^/api/rh/bonificacoes/plr/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/rh/bonificacoes/plr/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
       "page": "/api/rh/documentos/[id]",
       "regex": "^/api/rh/documentos/([^/]+?)(?:/)?$",
       "routeKeys": {
@@ -293,6 +309,14 @@
         "nxtPbonificacaoId": "nxtPbonificacaoId"
       },
       "namedRegex": "^/api/rh/funcionarios/(?<nxtPid>[^/]+?)/bonificacoes/(?<nxtPbonificacaoId>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/rh/funcionarios/[id]/bonificacoes-historico",
+      "regex": "^/api/rh/funcionarios/([^/]+?)/bonificacoes\\-historico(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/rh/funcionarios/(?<nxtPid>[^/]+?)/bonificacoes\\-historico(?:/)?$"
     },
     {
       "page": "/api/rh/funcionarios/[id]/documentos",
@@ -785,6 +809,24 @@
       "regex": "^/api/rh/alertas/historico\\-recente(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/rh/alertas/historico\\-recente(?:/)?$"
+    },
+    {
+      "page": "/api/rh/bonificacoes/assiduidade",
+      "regex": "^/api/rh/bonificacoes/assiduidade(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/bonificacoes/assiduidade(?:/)?$"
+    },
+    {
+      "page": "/api/rh/bonificacoes/plr",
+      "regex": "^/api/rh/bonificacoes/plr(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/bonificacoes/plr(?:/)?$"
+    },
+    {
+      "page": "/api/rh/bonificacoes/resumo",
+      "regex": "^/api/rh/bonificacoes/resumo(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/bonificacoes/resumo(?:/)?$"
     },
     {
       "page": "/api/rh/calculos/impostos",

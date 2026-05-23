@@ -17,6 +17,7 @@ import {
   ClipboardList,
   FileText,
   ArrowRight,
+  Gift,
 } from 'lucide-react';
 
 interface Funcionario {
@@ -45,6 +46,13 @@ interface ComparativoResumo {
   totalIdeal: number;
   totalOk: number;
   totalGaps: number;
+}
+
+interface BonificacoesResumo {
+  mesLabel: string;
+  comAssiduidade: number;
+  semAssiduidade: number;
+  plrsTrimestre: number;
 }
 
 function LojaSelector({
@@ -177,6 +185,7 @@ export default function RhDashboard() {
   const [ocorrenciasMes, setOcorrenciasMes] = useState<number | null>(null);
   const [custoTotal, setCustoTotal] = useState<number | null>(null);
   const [transferenciasMes, setTransferenciasMes] = useState<number | null>(null);
+  const [bonificacoesResumo, setBonificacoesResumo] = useState<BonificacoesResumo | null>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -203,6 +212,13 @@ export default function RhDashboard() {
     };
     fetchStats();
   }, [lojaSelecionada]);
+
+  useEffect(() => {
+    fetch('/api/rh/bonificacoes/resumo')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setBonificacoesResumo(d))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch('/api/rh/alertas')
@@ -315,6 +331,39 @@ export default function RhDashboard() {
             </>
           )}
         </div>
+
+        {/* Bonificações do mês */}
+        {bonificacoesResumo && (
+          <Link
+            href="/rh/ia"
+            className="group block bg-[#1c1c1e] border border-amber-500/20 rounded-2xl p-5 hover:border-amber-500/40 hover:bg-[#222224] transition-all"
+          >
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                <Gift className="w-5 h-5 text-amber-400" />
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-amber-400 transition-colors" />
+            </div>
+            <h3 className="font-semibold text-white mt-3">
+              Bonificações — {bonificacoesResumo.mesLabel}
+            </h3>
+            <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
+              <div>
+                <p className="text-2xl font-bold text-green-400">{bonificacoesResumo.comAssiduidade}</p>
+                <p className="text-xs text-gray-500">com assiduidade confirmada</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-red-400">{bonificacoesResumo.semAssiduidade}</p>
+                <p className="text-xs text-gray-500">sem assiduidade</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-amber-400">{bonificacoesResumo.plrsTrimestre}</p>
+                <p className="text-xs text-gray-500">PLRs no trimestre</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-3">Gerencie assiduidade e PLR pela IA Trabalhista →</p>
+          </Link>
+        )}
 
         {/* Cards de Alertas e Quadro Ideal */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

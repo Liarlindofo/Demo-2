@@ -43,6 +43,13 @@ const QUICK_QUESTIONS = [
   'Encargos Sistema S alimentação',
 ];
 
+const QUICK_BONIFICACOES = [
+  'Quem perde a assiduidade esse mês?',
+  'Confirmar assiduidade de todos',
+  'Lançar PLR da loja AHU — R$ 500 por funcionário',
+  'Ver pagamentos do trimestre atual',
+];
+
 function TypingDots() {
   return (
     <div className="flex items-center gap-1 py-1">
@@ -407,6 +414,20 @@ export default function IaPage() {
                           key={q}
                           onClick={() => sendMessage(q)}
                           className="px-4 py-2.5 rounded-xl bg-[#1c1c1e] border border-[#2a2a2e] text-sm text-gray-300 text-left hover:border-pink-500/40 hover:text-white hover:bg-[#222224] transition-all"
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider text-center mb-3 mt-6">
+                      Bonificações
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {QUICK_BONIFICACOES.map((q) => (
+                        <button
+                          key={q}
+                          onClick={() => sendMessage(q)}
+                          className="px-4 py-2.5 rounded-xl bg-[#1c1c1e] border border-amber-500/20 text-sm text-gray-300 text-left hover:border-amber-500/50 hover:text-amber-100 hover:bg-amber-500/5 transition-all"
                         >
                           {q}
                         </button>

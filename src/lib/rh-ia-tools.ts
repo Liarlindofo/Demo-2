@@ -2,6 +2,52 @@ import { prisma } from './prisma';
 import { ensureRhCargosPadrao } from './rh-cargos-padrao';
 import { enrichFuncionario } from './rh-funcionario';
 import { limparCPF, validarCPF } from './validacoes';
+import { seedAssiduidadeMes, mesAnoAtual, trimestreAtual } from './seed-assiduidade';
+
+export const RH_BONIFICACOES_PROMPT = `
+## BONIFICAÇÕES
+
+### Assiduidade Mensal
+Todos os funcionários ativos têm direito a R$200,00 de bonificação de assiduidade por mês.
+O padrão é que todos recebam (recebeu = true). Você só altera para false quando o gestor informar.
+
+Condições que cancelam a assiduidade (o gestor informa, você não decide sozinho):
+- Falta injustificada no mês
+- Atraso registrado no mês
+- Atestado médico no mês
+
+Quando o gestor disser "X não vai ganhar a bonificação" ou variações:
+→ Use atualizar_assiduidade com recebeu=false
+→ Confirme nominalmente quem foi afetado e o valor que deixará de receber
+
+Quando o gestor disser "todos vão ganhar normalmente" ou não mencionar ninguém:
+→ Não faça nada, o padrão já é recebeu=true
+
+### PLR Trimestral
+É uma bonificação coletiva por loja, paga quando a loja bate a meta.
+O gestor informa o valor. Você distribui igualmente para todos os funcionários ativos da loja.
+
+REGRA OBRIGATÓRIA: sempre perguntar se o valor informado é por pessoa ou total,
+a menos que o gestor deixe explícito ("R$500 cada" ou "R$4.000 para dividir").
+
+Após lançar PLR, confirme:
+- Nome da loja
+- Trimestre e ano
+- Número de funcionários contemplados
+- Valor por funcionário
+- Total distribuído
+
+Trimestres:
+- Q1: Janeiro, Fevereiro, Março
+- Q2: Abril, Maio, Junho
+- Q3: Julho, Agosto, Setembro
+- Q4: Outubro, Novembro, Dezembro
+
+### Ferramentas de bonificação disponíveis:
+- listar_assiduidade → consultar status do mês
+- atualizar_assiduidade → bloquear ou restaurar assiduidade de funcionários
+- lancar_plr → criar PLR trimestral para uma loja
+`;
 
 // ─── Definições das ferramentas para o AI ────────────────────────────────────
 
@@ -146,6 +192,74 @@ export const RH_TOOLS = [
       parameters: { type: 'object', properties: {} },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'listar_assiduidade',
+      description:
+        'Lista o status de bonificação de assiduidade (R$200/mês) de todos os funcionários ativos no mês informado.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mes: { type: 'number', description: 'Mês 1-12 (padrão: mês atual)' },
+          ano: { type: 'number', description: 'Ano (padrão: ano atual)' },
+          lojaId: { type: 'string', description: 'Filtrar por loja (opcional)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'atualizar_assiduidade',
+      description:
+        'Atualiza se funcionários recebem ou não a bonificação de assiduidade de R$200 no mês. Use quando o gestor informar quem perde ou recupera a bonificação.',
+      parameters: {
+        type: 'object',
+        properties: {
+          funcionarioIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'IDs dos funcionários',
+          },
+          recebeu: {
+            type: 'boolean',
+            description: 'true = recebe R$200; false = não recebe',
+          },
+          motivo: {
+            type: 'string',
+            description: 'Motivo se recebeu=false: falta, atraso, atestado, outro',
+          },
+          mes: { type: 'number' },
+          ano: { type: 'number' },
+        },
+        required: ['funcionarioIds', 'recebeu'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'lancar_plr',
+      description:
+        'Lança PLR trimestral para uma loja, distribuindo igualmente entre todos os funcionários ativos. Use valorPorFuncionario quando for valor por pessoa; valorTotal quando for o bolo total a dividir.',
+      parameters: {
+        type: 'object',
+        properties: {
+          lojaId: { type: 'string', description: 'ID da loja' },
+          valorTotal: { type: 'number', description: 'Valor total a dividir entre todos' },
+          valorPorFuncionario: {
+            type: 'number',
+            description: 'Valor fixo por funcionário (alternativa ao valorTotal)',
+          },
+          trimestre: { type: 'number', enum: [1, 2, 3, 4] },
+          ano: { type: 'number' },
+          observacao: { type: 'string' },
+        },
+        required: ['lojaId'],
+      },
+    },
+  },
 ];
 
 // ─── Execução das ferramentas ─────────────────────────────────────────────────
@@ -171,6 +285,12 @@ export async function executeRhTool(
         return await listarCargos(userId);
       case 'listar_lojas':
         return await listarLojas(userId);
+      case 'listar_assiduidade':
+        return await listarAssiduidade(args, userId);
+      case 'atualizar_assiduidade':
+        return await atualizarAssiduidade(args, userId);
+      case 'lancar_plr':
+        return await lancarPlr(args, userId);
       default:
         return JSON.stringify({ erro: `Ferramenta desconhecida: ${toolName}` });
     }
@@ -353,4 +473,192 @@ async function listarLojas(userId: string) {
     select: { id: true, nome: true, cnpj: true },
   });
   return JSON.stringify(lojas);
+}
+
+const MESES_LABEL = [
+  '', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+async function listarAssiduidade(args: Record<string, unknown>, userId: string) {
+  const atual = mesAnoAtual();
+  const mes = Number(args.mes ?? atual.mes);
+  const ano = Number(args.ano ?? atual.ano);
+  const lojaId = args.lojaId as string | undefined;
+
+  const count = await prisma.rhBonificacaoAssiduidade.count({
+    where: { mes, ano, funcionario: { userId, ativo: true } },
+  });
+  if (count === 0) await seedAssiduidadeMes(userId, mes, ano);
+
+  const registros = await prisma.rhBonificacaoAssiduidade.findMany({
+    where: {
+      mes,
+      ano,
+      funcionario: {
+        userId,
+        ativo: true,
+        ...(lojaId ? { lojaId } : {}),
+      },
+    },
+    include: {
+      funcionario: {
+        select: { id: true, nome: true, loja: { select: { nome: true } } },
+      },
+    },
+    orderBy: { funcionario: { nome: 'asc' } },
+  });
+
+  return JSON.stringify({
+    mes,
+    ano,
+    mesLabel: MESES_LABEL[mes],
+    total: registros.length,
+    comAssiduidade: registros.filter((r) => r.recebeu).length,
+    semAssiduidade: registros.filter((r) => !r.recebeu).length,
+    funcionarios: registros.map((r) => ({
+      id: r.funcionarioId,
+      nome: r.funcionario.nome,
+      loja: r.funcionario.loja.nome,
+      valorDireito: r.valorDireito,
+      recebeu: r.recebeu,
+      motivo: r.motivo,
+    })),
+  });
+}
+
+async function atualizarAssiduidade(args: Record<string, unknown>, userId: string) {
+  const funcionarioIds = args.funcionarioIds as string[];
+  const recebeu = Boolean(args.recebeu);
+  const motivo = (args.motivo as string) || 'informado pelo gestor';
+  const atual = mesAnoAtual();
+  const mes = Number(args.mes ?? atual.mes);
+  const ano = Number(args.ano ?? atual.ano);
+
+  const funcionarios = await prisma.rhFuncionario.findMany({
+    where: { userId, id: { in: funcionarioIds }, ativo: true },
+    select: { id: true, nome: true, loja: { select: { nome: true } } },
+  });
+
+  if (funcionarios.length === 0) {
+    return JSON.stringify({ erro: 'Nenhum funcionário encontrado com os IDs informados' });
+  }
+
+  await Promise.all(
+    funcionarios.map((f) =>
+      prisma.rhBonificacaoAssiduidade.upsert({
+        where: { funcionarioId_mes_ano: { funcionarioId: f.id, mes, ano } },
+        create: {
+          funcionarioId: f.id,
+          mes,
+          ano,
+          valorDireito: 200,
+          recebeu,
+          motivo: recebeu ? null : motivo,
+          viaIA: true,
+          registradoPor: 'IA Trabalhista',
+        },
+        update: {
+          recebeu,
+          motivo: recebeu ? null : motivo,
+          viaIA: true,
+          registradoPor: 'IA Trabalhista',
+        },
+      })
+    )
+  );
+
+  const nomes = funcionarios.map((f) => f.nome).join(', ');
+  const valorPerdido = recebeu ? 0 : funcionarios.length * 200;
+
+  return JSON.stringify({
+    sucesso: true,
+    mensagem: recebeu
+      ? `Assiduidade de R$200 confirmada para: ${nomes} (${MESES_LABEL[mes]}/${ano}).`
+      : `${funcionarios.length} funcionário(s) não receberão R$200 de assiduidade em ${MESES_LABEL[mes]}/${ano}: ${nomes}.`,
+    funcionarios: funcionarios.map((f) => ({
+      nome: f.nome,
+      loja: f.loja.nome,
+      recebeu,
+      valor: recebeu ? 200 : 0,
+    })),
+    valorTotalNaoPago: valorPerdido,
+  });
+}
+
+async function lancarPlr(args: Record<string, unknown>, userId: string) {
+  const lojaId = args.lojaId as string;
+  const trimestre = Number(args.trimestre ?? trimestreAtual());
+  const ano = Number(args.ano ?? new Date().getFullYear());
+  let valorTotal = Number(args.valorTotal ?? 0);
+  let valorPorFuncionario = Number(args.valorPorFuncionario ?? 0);
+
+  if (!valorTotal && !valorPorFuncionario) {
+    return JSON.stringify({
+      erro: 'Informe valorTotal (bolo a dividir) ou valorPorFuncionario (valor por pessoa)',
+    });
+  }
+
+  const loja = await prisma.rhLoja.findFirst({
+    where: { id: lojaId, userId, ativo: true },
+  });
+  if (!loja) return JSON.stringify({ erro: 'Loja não encontrada' });
+
+  const existente = await prisma.rhPLRTrimestral.findFirst({
+    where: { lojaId, trimestre, ano },
+  });
+  if (existente) {
+    return JSON.stringify({ erro: `PLR Q${trimestre}/${ano} já lançado para ${loja.nome}` });
+  }
+
+  const funcionarios = await prisma.rhFuncionario.findMany({
+    where: { userId, lojaId, ativo: true },
+    select: { id: true, nome: true },
+  });
+
+  if (funcionarios.length === 0) {
+    return JSON.stringify({ erro: 'Nenhum funcionário ativo nesta loja' });
+  }
+
+  if (valorPorFuncionario > 0 && !valorTotal) {
+    valorTotal = valorPorFuncionario * funcionarios.length;
+  } else {
+    valorPorFuncionario = valorTotal / funcionarios.length;
+  }
+
+  const plr = await prisma.$transaction(async (tx) => {
+    const p = await tx.rhPLRTrimestral.create({
+      data: {
+        lojaId,
+        trimestre,
+        ano,
+        valorTotal,
+        valorPorFuncionario,
+        observacao: (args.observacao as string) || null,
+        registradoPor: 'IA Trabalhista',
+        viaIA: true,
+      },
+    });
+    await tx.rhPLRPagamento.createMany({
+      data: funcionarios.map((f) => ({
+        plrId: p.id,
+        funcionarioId: f.id,
+        valor: valorPorFuncionario,
+      })),
+    });
+    return p;
+  });
+
+  return JSON.stringify({
+    sucesso: true,
+    mensagem: `PLR Q${trimestre}/${ano} lançado para ${loja.nome}. ${funcionarios.length} funcionários receberão R$${valorPorFuncionario.toFixed(2)} cada. Total: R$${valorTotal.toFixed(2)}.`,
+    plrId: plr.id,
+    loja: loja.nome,
+    trimestre,
+    ano,
+    totalFuncionarios: funcionarios.length,
+    valorPorFuncionario,
+    valorTotal,
+    contemplados: funcionarios.map((f) => f.nome),
+  });
 }

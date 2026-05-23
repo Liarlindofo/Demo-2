@@ -778,6 +778,7 @@ model RhLoja {
   snapshots             RhSnapshotCustoMensal[]
   transferenciasOrigem  RhTransferenciaLoja[]   @relation("TransferenciaOrigem")
   transferenciasDestino RhTransferenciaLoja[]   @relation("TransferenciaDestino")
+  plrs                  RhPLRTrimestral[]
 
   @@index([userId])
   @@map("rh_lojas")
@@ -842,6 +843,8 @@ model RhFuncionario {
   ocorrencias           RhOcorrencia[]
   transferencias        RhTransferenciaLoja[]
   bonificacoesTrimestrais RhBonificacaoTrimestral[]
+  bonificacoesAssiduidade RhBonificacaoAssiduidade[]
+  plrPagamentos         RhPLRPagamento[]
 
   @@unique([userId, cpf])
   @@index([userId])
@@ -866,6 +869,59 @@ model RhBonificacaoTrimestral {
   @@unique([funcionarioId, trimestre, ano])
   @@index([funcionarioId])
   @@map("rh_bonificacoes_trimestrais")
+}
+
+model RhBonificacaoAssiduidade {
+  id            String        @id @default(cuid())
+  funcionarioId String
+  mes           Int
+  ano           Int
+  valorDireito  Float         @default(200)
+  recebeu       Boolean       @default(true)
+  motivo        String?
+  registradoPor String?
+  viaIA         Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  funcionario   RhFuncionario @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+
+  @@unique([funcionarioId, mes, ano])
+  @@index([funcionarioId])
+  @@map("rh_bonificacoes_assiduidade")
+}
+
+model RhPLRTrimestral {
+  id                  String           @id @default(cuid())
+  lojaId              String
+  trimestre           Int
+  ano                 Int
+  valorTotal          Float
+  valorPorFuncionario Float
+  metaBatida          Boolean          @default(true)
+  observacao          String?
+  registradoPor       String?
+  viaIA               Boolean          @default(false)
+  createdAt           DateTime         @default(now())
+  loja                RhLoja           @relation(fields: [lojaId], references: [id], onDelete: Cascade)
+  pagamentos          RhPLRPagamento[]
+
+  @@unique([lojaId, trimestre, ano])
+  @@index([lojaId])
+  @@map("rh_plr_trimestrais")
+}
+
+model RhPLRPagamento {
+  id            String          @id @default(cuid())
+  plrId         String
+  funcionarioId String
+  valor         Float
+  createdAt     DateTime        @default(now())
+  plr           RhPLRTrimestral @relation(fields: [plrId], references: [id], onDelete: Cascade)
+  funcionario   RhFuncionario   @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+
+  @@unique([plrId, funcionarioId])
+  @@index([funcionarioId])
+  @@map("rh_plr_pagamentos")
 }
 
 model RhHistoricoFuncionario {

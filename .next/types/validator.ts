@@ -1289,6 +1289,51 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../app/api/rh/bonificacoes/assiduidade/[funcionarioId]/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/rh/bonificacoes/assiduidade/[funcionarioId]">> = Specific
+  const handler = {} as typeof import("../../app/api/rh/bonificacoes/assiduidade/[funcionarioId]/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../app/api/rh/bonificacoes/assiduidade/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/rh/bonificacoes/assiduidade">> = Specific
+  const handler = {} as typeof import("../../app/api/rh/bonificacoes/assiduidade/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../app/api/rh/bonificacoes/plr/[id]/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/rh/bonificacoes/plr/[id]">> = Specific
+  const handler = {} as typeof import("../../app/api/rh/bonificacoes/plr/[id]/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../app/api/rh/bonificacoes/plr/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/rh/bonificacoes/plr">> = Specific
+  const handler = {} as typeof import("../../app/api/rh/bonificacoes/plr/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../app/api/rh/bonificacoes/resumo/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/rh/bonificacoes/resumo">> = Specific
+  const handler = {} as typeof import("../../app/api/rh/bonificacoes/resumo/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../app/api/rh/calculos/impostos/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/rh/calculos/impostos">> = Specific
@@ -1365,6 +1410,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/rh/documentos/upload">> = Specific
   const handler = {} as typeof import("../../app/api/rh/documentos/upload/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../app/api/rh/funcionarios/[id]/bonificacoes-historico/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/rh/funcionarios/[id]/bonificacoes-historico">> = Specific
+  const handler = {} as typeof import("../../app/api/rh/funcionarios/[id]/bonificacoes-historico/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

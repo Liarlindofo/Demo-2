@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
-import { RH_TOOLS, executeRhTool } from '@/lib/rh-ia-tools';
+import { RH_TOOLS, RH_BONIFICACOES_PROMPT, executeRhTool } from '@/lib/rh-ia-tools';
 
 const DEFAULT_SYSTEM_PROMPT = `Você é um especialista em direito trabalhista brasileiro e gestão de RH para pequenas e médias empresas do setor de alimentação (CNAE 5611-2/01 — Restaurantes e similares).
 
@@ -22,7 +22,9 @@ Formate as respostas de forma clara:
 - Organize respostas longas com tópicos ou tabelas
 - Mencione sempre se alguma informação pode ter sido atualizada recentemente
 
-Você também tem acesso ao módulo de RH da plataforma e pode realizar ações como consultar funcionários, alterar escalas, gerenciar folgas e cadastrar novos colaboradores. Quando o usuário pedir uma alteração, execute-a usando as ferramentas disponíveis e confirme o que foi feito.`;
+Você também tem acesso ao módulo de RH da plataforma e pode realizar ações como consultar funcionários, alterar escalas, gerenciar folgas e cadastrar novos colaboradores. Quando o usuário pedir uma alteração, execute-a usando as ferramentas disponíveis e confirme o que foi feito.
+
+${RH_BONIFICACOES_PROMPT}`;
 
 async function getSystemPrompt(): Promise<string> {
   try {

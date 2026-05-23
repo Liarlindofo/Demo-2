@@ -1,0 +1,10 @@
+var R=require("../../../../../chunks/[turbopack]_runtime.js")("server/app/api/rh/bonificacoes/assiduidade/route.js")
+R.c("server/chunks/[root-of-the-server]__857bfe61._.js")
+R.c("server/chunks/797a3_next_8ffc8760._.js")
+R.c("server/chunks/797a3_next_92c518d3._.js")
+R.c("server/chunks/drin-platform_3df58451._.js")
+R.c("server/chunks/[root-of-the-server]__174edc0b._.js")
+R.c("server/chunks/797a3_next_dist_adc3ff95._.js")
+R.c("server/chunks/0a1fd_next-internal_server_app_api_rh_bonificacoes_assiduidade_route_actions_86613435.js")
+R.m(599649)
+module.exports=R.m(599649).exports

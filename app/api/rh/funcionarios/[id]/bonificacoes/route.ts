@@ -1,21 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { getRhDbUser } from '@/lib/rh-api-auth';
 
 export const dynamic = 'force-dynamic';
-
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 async function getFuncionario(id: string, userId: string) {
   return prisma.rhFuncionario.findFirst({ where: { id, userId } });
@@ -24,7 +11,7 @@ async function getFuncionario(id: string, userId: string) {
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const dbUser = await getDbUser();
+    const dbUser = await getRhDbUser();
     if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const funcionario = await getFuncionario(id, dbUser.id);
@@ -38,7 +25,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     return NextResponse.json(bonificacoes);
   } catch (err) {
-    console.error('[GET bonificacoes]', err);
+    console.error('[GET bonificacoes trimestrais]', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }
@@ -46,7 +33,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const dbUser = await getDbUser();
+    const dbUser = await getRhDbUser();
     if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const funcionario = await getFuncionario(id, dbUser.id);
@@ -96,7 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         { status: 409 }
       );
     }
-    console.error('[POST bonificacoes]', err);
+    console.error('[POST bonificacoes trimestrais]', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }
