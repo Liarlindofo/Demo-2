@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { ensureRhCargosPadrao } from '@/lib/rh-cargos-padrao';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +22,8 @@ export async function GET() {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+
+    await ensureRhCargosPadrao(dbUser.id);
 
     const cargos = await prisma.rhCargo.findMany({
       where: { userId: dbUser.id },

@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { ensureRhCargosPadrao } from './rh-cargos-padrao';
 
 // ─── Definições das ferramentas para o AI ────────────────────────────────────
 
@@ -316,6 +317,7 @@ async function criarFuncionario(args: any, userId: string) {
 }
 
 async function listarCargos(userId: string) {
+  await ensureRhCargosPadrao(userId);
   const cargos = await prisma.rhCargo.findMany({
     where: { userId },
     orderBy: { nome: 'asc' },
