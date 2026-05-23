@@ -5,10 +5,10 @@
     "/api/checklist/upload-photo": {
       "maxDuration": 60
     },
-    "/api/cron/cleanup-sales": {},
     "/api/checklist/drafts": {
       "maxDuration": 60
     },
+    "/api/cron/cleanup-sales": {},
     "/api/cron/sync-saipos": {},
     "/api/cron/ifood-catalog-sync": {},
     "/api/debug/check-sales": {},

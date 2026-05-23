@@ -5,17 +5,8 @@ import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 import { SystemTool } from '@/types/admin';
 import { requireToolPermission } from '@/lib/auth/toolPermissions';
 
-// ⚙️ Configuração - Aumentar limite de body para 50MB
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb',
-    },
-  },
-};
-
-// Limite máximo do body (50MB em bytes)
-export const maxDuration = 60; // 60 segundos de timeout
+// Rascunhos podem incluir fotos em base64 — timeout estendido no App Router
+export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 // 🎯 POST - Salvar/Atualizar rascunho do checklist (completo)

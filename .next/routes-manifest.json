@@ -262,12 +262,109 @@
       "namedRegex": "^/api/ifood/orders/(?<nxtPorderId>[^/]+?)/startPreparation(?:/)?$"
     },
     {
+      "page": "/api/rh/documentos/[id]",
+      "regex": "^/api/rh/documentos/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/rh/documentos/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
       "page": "/api/rh/funcionarios/[id]",
       "regex": "^/api/rh/funcionarios/([^/]+?)(?:/)?$",
       "routeKeys": {
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/api/rh/funcionarios/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/rh/funcionarios/[id]/bonificacoes",
+      "regex": "^/api/rh/funcionarios/([^/]+?)/bonificacoes(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/rh/funcionarios/(?<nxtPid>[^/]+?)/bonificacoes(?:/)?$"
+    },
+    {
+      "page": "/api/rh/funcionarios/[id]/bonificacoes/[bonificacaoId]",
+      "regex": "^/api/rh/funcionarios/([^/]+?)/bonificacoes/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid",
+        "nxtPbonificacaoId": "nxtPbonificacaoId"
+      },
+      "namedRegex": "^/api/rh/funcionarios/(?<nxtPid>[^/]+?)/bonificacoes/(?<nxtPbonificacaoId>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/rh/funcionarios/[id]/documentos",
+      "regex": "^/api/rh/funcionarios/([^/]+?)/documentos(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/rh/funcionarios/(?<nxtPid>[^/]+?)/documentos(?:/)?$"
+    },
+    {
+      "page": "/api/rh/funcionarios/[id]/historico",
+      "regex": "^/api/rh/funcionarios/([^/]+?)/historico(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/rh/funcionarios/(?<nxtPid>[^/]+?)/historico(?:/)?$"
+    },
+    {
+      "page": "/api/rh/funcionarios/[id]/ocorrencias",
+      "regex": "^/api/rh/funcionarios/([^/]+?)/ocorrencias(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/rh/funcionarios/(?<nxtPid>[^/]+?)/ocorrencias(?:/)?$"
+    },
+    {
+      "page": "/api/rh/funcionarios/[id]/transferencias",
+      "regex": "^/api/rh/funcionarios/([^/]+?)/transferencias(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/rh/funcionarios/(?<nxtPid>[^/]+?)/transferencias(?:/)?$"
+    },
+    {
+      "page": "/api/rh/ia/conversas/[id]",
+      "regex": "^/api/rh/ia/conversas/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/rh/ia/conversas/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/rh/lojas/[id]",
+      "regex": "^/api/rh/lojas/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/rh/lojas/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/rh/ocorrencias/[id]",
+      "regex": "^/api/rh/ocorrencias/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/rh/ocorrencias/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/rh/quadro-ideal/posicoes/[id]",
+      "regex": "^/api/rh/quadro\\-ideal/posicoes/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/rh/quadro\\-ideal/posicoes/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/rh/quadro-ideal/setores/[id]",
+      "regex": "^/api/rh/quadro\\-ideal/setores/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/rh/quadro\\-ideal/setores/(?<nxtPid>[^/]+?)(?:/)?$"
     },
     {
       "page": "/checklist/loja/[id]",
@@ -358,6 +455,12 @@
       "regex": "^/api/auth/stack\\-sync(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/auth/stack\\-sync(?:/)?$"
+    },
+    {
+      "page": "/api/calenza-adm/configuracoes",
+      "regex": "^/api/calenza\\-adm/configuracoes(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/calenza\\-adm/configuracoes(?:/)?$"
     },
     {
       "page": "/api/calenza-adm/login",
@@ -672,6 +775,18 @@
       "namedRegex": "^/api/ifood/polling(?:/)?$"
     },
     {
+      "page": "/api/rh/alertas",
+      "regex": "^/api/rh/alertas(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/alertas(?:/)?$"
+    },
+    {
+      "page": "/api/rh/alertas/historico-recente",
+      "regex": "^/api/rh/alertas/historico\\-recente(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/alertas/historico\\-recente(?:/)?$"
+    },
+    {
       "page": "/api/rh/calculos/impostos",
       "regex": "^/api/rh/calculos/impostos(?:/)?$",
       "routeKeys": {},
@@ -684,10 +799,52 @@
       "namedRegex": "^/api/rh/cargos(?:/)?$"
     },
     {
+      "page": "/api/rh/custos/consolidado",
+      "regex": "^/api/rh/custos/consolidado(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/custos/consolidado(?:/)?$"
+    },
+    {
+      "page": "/api/rh/custos/exportar",
+      "regex": "^/api/rh/custos/exportar(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/custos/exportar(?:/)?$"
+    },
+    {
+      "page": "/api/rh/custos/historico",
+      "regex": "^/api/rh/custos/historico(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/custos/historico(?:/)?$"
+    },
+    {
+      "page": "/api/rh/custos/snapshot",
+      "regex": "^/api/rh/custos/snapshot(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/custos/snapshot(?:/)?$"
+    },
+    {
+      "page": "/api/rh/documentos",
+      "regex": "^/api/rh/documentos(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/documentos(?:/)?$"
+    },
+    {
+      "page": "/api/rh/documentos/upload",
+      "regex": "^/api/rh/documentos/upload(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/documentos/upload(?:/)?$"
+    },
+    {
       "page": "/api/rh/funcionarios",
       "regex": "^/api/rh/funcionarios(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/rh/funcionarios(?:/)?$"
+    },
+    {
+      "page": "/api/rh/funcionarios/verificar-cpf",
+      "regex": "^/api/rh/funcionarios/verificar\\-cpf(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/funcionarios/verificar\\-cpf(?:/)?$"
     },
     {
       "page": "/api/rh/ia/consulta",
@@ -696,16 +853,70 @@
       "namedRegex": "^/api/rh/ia/consulta(?:/)?$"
     },
     {
+      "page": "/api/rh/ia/conversas",
+      "regex": "^/api/rh/ia/conversas(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/ia/conversas(?:/)?$"
+    },
+    {
       "page": "/api/rh/lojas",
       "regex": "^/api/rh/lojas(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/rh/lojas(?:/)?$"
     },
     {
+      "page": "/api/rh/ocorrencias",
+      "regex": "^/api/rh/ocorrencias(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/ocorrencias(?:/)?$"
+    },
+    {
+      "page": "/api/rh/ocorrencias/resumo",
+      "regex": "^/api/rh/ocorrencias/resumo(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/ocorrencias/resumo(?:/)?$"
+    },
+    {
+      "page": "/api/rh/quadro-ideal",
+      "regex": "^/api/rh/quadro\\-ideal(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/quadro\\-ideal(?:/)?$"
+    },
+    {
+      "page": "/api/rh/quadro-ideal/comparativo",
+      "regex": "^/api/rh/quadro\\-ideal/comparativo(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/quadro\\-ideal/comparativo(?:/)?$"
+    },
+    {
+      "page": "/api/rh/quadro-ideal/posicoes",
+      "regex": "^/api/rh/quadro\\-ideal/posicoes(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/quadro\\-ideal/posicoes(?:/)?$"
+    },
+    {
+      "page": "/api/rh/quadro-ideal/setores",
+      "regex": "^/api/rh/quadro\\-ideal/setores(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/quadro\\-ideal/setores(?:/)?$"
+    },
+    {
       "page": "/api/rh/simulacao/escala",
       "regex": "^/api/rh/simulacao/escala(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/rh/simulacao/escala(?:/)?$"
+    },
+    {
+      "page": "/api/rh/simulacao/setor",
+      "regex": "^/api/rh/simulacao/setor(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/simulacao/setor(?:/)?$"
+    },
+    {
+      "page": "/api/rh/transferencias",
+      "regex": "^/api/rh/transferencias(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/rh/transferencias(?:/)?$"
     },
     {
       "page": "/api/saipos/aggregate",
@@ -796,6 +1007,12 @@
       "regex": "^/calenza\\-adm(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/calenza\\-adm(?:/)?$"
+    },
+    {
+      "page": "/calenza-adm/configuracoes",
+      "regex": "^/calenza\\-adm/configuracoes(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/calenza\\-adm/configuracoes(?:/)?$"
     },
     {
       "page": "/calenza-adm/login",
@@ -954,6 +1171,12 @@
       "namedRegex": "^/rh(?:/)?$"
     },
     {
+      "page": "/rh/alertas",
+      "regex": "^/rh/alertas(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rh/alertas(?:/)?$"
+    },
+    {
       "page": "/rh/custos",
       "regex": "^/rh/custos(?:/)?$",
       "routeKeys": {},
@@ -982,6 +1205,18 @@
       "regex": "^/rh/ia(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/rh/ia(?:/)?$"
+    },
+    {
+      "page": "/rh/lojas",
+      "regex": "^/rh/lojas(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rh/lojas(?:/)?$"
+    },
+    {
+      "page": "/rh/quadro-ideal",
+      "regex": "^/rh/quadro\\-ideal(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/rh/quadro\\-ideal(?:/)?$"
     },
     {
       "page": "/rh/simulacao",

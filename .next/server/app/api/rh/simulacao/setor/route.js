@@ -1,0 +1,10 @@
+var R=require("../../../../../chunks/[turbopack]_runtime.js")("server/app/api/rh/simulacao/setor/route.js")
+R.c("server/chunks/[root-of-the-server]__0bc7e12f._.js")
+R.c("server/chunks/797a3_next_dist_adc3ff95._.js")
+R.c("server/chunks/797a3_next_92c518d3._.js")
+R.c("server/chunks/797a3_next_8ffc8760._.js")
+R.c("server/chunks/drin-platform_3df58451._.js")
+R.c("server/chunks/[root-of-the-server]__174edc0b._.js")
+R.c("server/chunks/0038a__next-internal_server_app_api_rh_simulacao_setor_route_actions_70c3f9cb.js")
+R.m(49262)
+module.exports=R.m(49262).exports

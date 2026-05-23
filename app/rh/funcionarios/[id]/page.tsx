@@ -743,15 +743,15 @@ export default function FuncionarioDetailPage() {
           </div>
         )}
 
+        <DrawerBonificacaoTrimestral
+          open={showDrawerBonificacao}
+          onClose={() => setShowDrawerBonificacao(false)}
+          funcionarioId={params.id}
+          edit={editBonificacao}
+          onSaved={fetchBonificacoes}
+        />
         {showDrawerTransferencia && (
-          <DrawerBonificacaoTrimestral
-        open={showDrawerBonificacao}
-        onClose={() => setShowDrawerBonificacao(false)}
-        funcionarioId={params.id}
-        edit={editBonificacao}
-        onSaved={fetchBonificacoes}
-      />
-      <DrawerTransferencia
+          <DrawerTransferencia
             funcionarioId={params.id}
             funcionarioNome={funcionario.nome}
             lojaAtualId={funcionario.lojaId}

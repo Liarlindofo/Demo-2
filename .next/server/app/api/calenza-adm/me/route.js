@@ -1,10 +1,10 @@
 var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/calenza-adm/me/route.js")
-R.c("server/chunks/[root-of-the-server]__ac29015d._.js")
-R.c("server/chunks/797a3_next_dist_adc3ff95._.js")
+R.c("server/chunks/[root-of-the-server]__9a13c0e1._.js")
+R.c("server/chunks/797a3_next_8ffc8760._.js")
 R.c("server/chunks/797a3_next_92c518d3._.js")
 R.c("server/chunks/[root-of-the-server]__174edc0b._.js")
 R.c("server/chunks/drin-platform_f035e968._.js")
-R.c("server/chunks/797a3_next_8ffc8760._.js")
+R.c("server/chunks/797a3_next_dist_adc3ff95._.js")
 R.c("server/chunks/0038a__next-internal_server_app_api_calenza-adm_me_route_actions_0643126a.js")
 R.m(197258)
 module.exports=R.m(197258).exports

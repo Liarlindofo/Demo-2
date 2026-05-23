@@ -1,5 +1,5 @@
 var R=require("../../../../../../chunks/[turbopack]_runtime.js")("server/app/api/calenza-adm/usuarios/[id]/permissoes/route.js")
-R.c("server/chunks/[root-of-the-server]__ea50e65e._.js")
+R.c("server/chunks/[root-of-the-server]__855e2e34._.js")
 R.c("server/chunks/797a3_next_8ffc8760._.js")
 R.c("server/chunks/797a3_next_92c518d3._.js")
 R.c("server/chunks/drin-platform_f035e968._.js")

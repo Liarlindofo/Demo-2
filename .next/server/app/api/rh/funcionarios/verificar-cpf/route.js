@@ -1,0 +1,10 @@
+var R=require("../../../../../chunks/[turbopack]_runtime.js")("server/app/api/rh/funcionarios/verificar-cpf/route.js")
+R.c("server/chunks/[root-of-the-server]__e6873b5f._.js")
+R.c("server/chunks/797a3_next_dist_adc3ff95._.js")
+R.c("server/chunks/797a3_next_92c518d3._.js")
+R.c("server/chunks/797a3_next_8ffc8760._.js")
+R.c("server/chunks/drin-platform_3df58451._.js")
+R.c("server/chunks/[root-of-the-server]__174edc0b._.js")
+R.c("server/chunks/a1a6c_server_app_api_rh_funcionarios_verificar-cpf_route_actions_24a9b5f4.js")
+R.m(474853)
+module.exports=R.m(474853).exports
