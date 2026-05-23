@@ -114,3 +114,68 @@ export function mediaMensalBonificacoesTrimestrais(
   const soma = ativas.reduce((s, b) => s + b.valor, 0);
   return soma / 12;
 }
+
+/** PLR trimestral rateado em 3 meses do trimestre */
+export function plrProjetadoMensal(valorTrimestre: number | null | undefined): number {
+  if (!valorTrimestre || valorTrimestre <= 0) return 0;
+  return valorTrimestre / 3;
+}
+
+export interface BonificacoesComposicaoMes {
+  mes: number;
+  ano: number;
+  trimestre: number;
+  assiduidadePrograma: number;
+  plrProjetadoMensal: number;
+  bonificacaoTrimestralMedia: number;
+  totalVariavel: number;
+}
+
+export function calcularBonificacoesComposicao(input: {
+  mes: number;
+  ano: number;
+  trimestre: number;
+  assiduidadeMes?: { recebeu: boolean; valorDireito: number } | null;
+  plrValorTrimestre?: number | null;
+  trimestrais?: { valor: number; ativo?: boolean }[];
+}): BonificacoesComposicaoMes {
+  const assiduidadePrograma =
+    input.assiduidadeMes?.recebeu === true ? input.assiduidadeMes.valorDireito : 0;
+  const plrProjetado = plrProjetadoMensal(input.plrValorTrimestre);
+  const bonificacaoTrimestralMedia = mediaMensalBonificacoesTrimestrais(
+    input.trimestrais ?? []
+  );
+  const totalVariavel =
+    assiduidadePrograma + plrProjetado + bonificacaoTrimestralMedia;
+
+  return {
+    mes: input.mes,
+    ano: input.ano,
+    trimestre: input.trimestre,
+    assiduidadePrograma,
+    plrProjetadoMensal: plrProjetado,
+    bonificacaoTrimestralMedia,
+    totalVariavel,
+  };
+}
+
+export function totalBrutoComBonificacoes(
+  composicao: ComposicaoSalarial,
+  bonificacoes: BonificacoesComposicaoMes
+): number {
+  return composicao.totalBruto + bonificacoes.totalVariavel;
+}
+
+export function custoMensalEmpresaComBonificacoes(
+  composicao: ComposicaoSalarial,
+  encargosTotal: number,
+  bonificacoes: BonificacoesComposicaoMes
+): number {
+  return (
+    composicao.baseCalculoEncargos +
+    encargosTotal +
+    composicao.valorAlimentacao +
+    composicao.valorVT +
+    bonificacoes.totalVariavel
+  );
+}

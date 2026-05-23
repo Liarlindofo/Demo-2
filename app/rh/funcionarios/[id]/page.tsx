@@ -46,6 +46,15 @@ interface Funcionario {
     baseCalculoEncargos: number;
     adicionalResponsabilidade: number;
   };
+  bonificacoesComposicao?: {
+    mes: number;
+    ano: number;
+    trimestre: number;
+    assiduidadePrograma: number;
+    plrProjetadoMensal: number;
+    bonificacaoTrimestralMedia: number;
+    totalVariavel: number;
+  };
   escala: '6x1' | '5x2';
   diasFolga: string[];
   turno: 'manhã' | 'tarde' | 'noite' | 'integral';
@@ -204,6 +213,18 @@ export default function FuncionarioDetailPage() {
     const res = await fetch(`/api/rh/funcionarios/${params.id}/bonificacoes`);
     if (res.ok) setBonificacoes(await res.json());
   }, [params.id]);
+
+  const refetchFuncionario = useCallback(async () => {
+    const res = await fetch(`/api/rh/funcionarios/${params.id}`);
+    if (res.ok) {
+      const f: Funcionario = await res.json();
+      setFuncionario(f);
+    }
+  }, [params.id]);
+
+  const handleBonificacaoSaved = useCallback(async () => {
+    await Promise.all([fetchBonificacoes(), refetchFuncionario()]);
+  }, [fetchBonificacoes, refetchFuncionario]);
 
   useEffect(() => {
     if (tab === 'dados' && funcionario) fetchBonificacoes();
@@ -476,6 +497,7 @@ export default function FuncionarioDetailPage() {
                     valorVT={funcionario.valorVT}
                     ratPct={funcionario.cargo.ratPct}
                     fap={funcionario.loja.fap ?? 1}
+                    bonificacoesComposicao={funcionario.bonificacoesComposicao}
                   />
                 )}
               </div>
@@ -755,7 +777,7 @@ export default function FuncionarioDetailPage() {
           onClose={() => setShowDrawerBonificacao(false)}
           funcionarioId={params.id}
           edit={editBonificacao}
-          onSaved={fetchBonificacoes}
+          onSaved={handleBonificacaoSaved}
         />
         {showDrawerTransferencia && (
           <DrawerTransferencia

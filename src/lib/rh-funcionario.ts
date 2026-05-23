@@ -1,6 +1,9 @@
 import {
   calcularComposicaoSalarial,
   calcularEncargosPatronais,
+  custoMensalEmpresaComBonificacoes,
+  totalBrutoComBonificacoes,
+  type BonificacoesComposicaoMes,
   type ComposicaoSalarial,
 } from '@/lib/calculos-rh';
 
@@ -15,7 +18,8 @@ export type CamposComposicaoSalarial = {
 export function enrichFuncionario<T extends CamposComposicaoSalarial>(
   funcionario: T,
   ratPct?: number,
-  fap?: number
+  fap?: number,
+  bonificacoesComposicao?: BonificacoesComposicaoMes
 ) {
   const composicaoSalarial = calcularComposicaoSalarial(funcionario);
   const encargosPatronais =
@@ -23,10 +27,25 @@ export function enrichFuncionario<T extends CamposComposicaoSalarial>(
       ? calcularEncargosPatronais(composicaoSalarial.baseCalculoEncargos, ratPct, fap ?? 1)
       : undefined;
 
+  const salarioBruto = bonificacoesComposicao
+    ? totalBrutoComBonificacoes(composicaoSalarial, bonificacoesComposicao)
+    : composicaoSalarial.totalBruto;
+
+  const custoMensalTotal =
+    bonificacoesComposicao && encargosPatronais
+      ? custoMensalEmpresaComBonificacoes(
+          composicaoSalarial,
+          encargosPatronais.totalEncargos,
+          bonificacoesComposicao
+        )
+      : undefined;
+
   return {
     ...funcionario,
     composicaoSalarial,
-    salarioBruto: composicaoSalarial.totalBruto,
+    salarioBruto,
+    ...(bonificacoesComposicao ? { bonificacoesComposicao } : {}),
+    ...(custoMensalTotal !== undefined ? { custoMensalTotal } : {}),
     ...(encargosPatronais ? { encargosPatronais } : {}),
   };
 }

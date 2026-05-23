@@ -8,6 +8,7 @@ import {
   formatComposicaoHistorico,
 } from '@/lib/rh-funcionario';
 import { calcularComposicaoSalarial } from '@/lib/calculos-rh';
+import { carregarBonificacoesComposicao } from '@/lib/rh-bonificacoes-composicao';
 import { limparCPF, validarCPF, validarDataNascimento } from '@/lib/validacoes';
 
 export const dynamic = 'force-dynamic';
@@ -93,8 +94,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     if (!funcionario)
       return NextResponse.json({ error: 'Funcionário não encontrado' }, { status: 404 });
 
+    const bonificacoesComposicao = await carregarBonificacoesComposicao(id);
+
     return NextResponse.json(
-      enrichFuncionario(funcionario, funcionario.cargo.ratPct, funcionario.loja.fap)
+      enrichFuncionario(
+        funcionario,
+        funcionario.cargo.ratPct,
+        funcionario.loja.fap,
+        bonificacoesComposicao
+      )
     );
   } catch (err) {
     console.error('[GET /api/rh/funcionarios/[id]]', err);
@@ -268,8 +276,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return updated;
     });
 
+    const bonificacoesComposicao = await carregarBonificacoesComposicao(id);
+
     return NextResponse.json(
-      enrichFuncionario(funcionario, funcionario.cargo.ratPct, funcionario.loja.fap)
+      enrichFuncionario(
+        funcionario,
+        funcionario.cargo.ratPct,
+        funcionario.loja.fap,
+        bonificacoesComposicao
+      )
     );
   } catch (err) {
     console.error('[PATCH /api/rh/funcionarios/[id]]', err);

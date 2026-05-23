@@ -4,6 +4,9 @@ import {
   calcularComposicaoSalarial,
   calcularEncargosPatronais,
   custoAnualizado,
+  custoMensalEmpresaComBonificacoes,
+  totalBrutoComBonificacoes,
+  type BonificacoesComposicaoMes,
   type ComposicaoSalarial as ComposicaoType,
 } from '@/lib/calculos-rh';
 
@@ -19,6 +22,7 @@ interface Props {
   ratPct: number;
   fap?: number;
   composicao?: ComposicaoType;
+  bonificacoesComposicao?: BonificacoesComposicaoMes;
 }
 
 export default function ComposicaoSalarialCard({
@@ -30,6 +34,7 @@ export default function ComposicaoSalarialCard({
   ratPct,
   fap = 1,
   composicao: composicaoProp,
+  bonificacoesComposicao,
 }: Props) {
   const composicao =
     composicaoProp ??
@@ -41,14 +46,21 @@ export default function ComposicaoSalarialCard({
       valorVT,
     });
 
+  const bon = bonificacoesComposicao;
   const enc = calcularEncargosPatronais(composicao.baseCalculoEncargos, ratPct, fap);
-  const custoMensal =
-    composicao.baseCalculoEncargos +
-    enc.totalEncargos +
-    composicao.valorAlimentacao +
-    composicao.valorVT;
+  const totalBruto = bon
+    ? totalBrutoComBonificacoes(composicao, bon)
+    : composicao.totalBruto;
+  const custoMensal = bon
+    ? custoMensalEmpresaComBonificacoes(composicao, enc.totalEncargos, bon)
+    : composicao.baseCalculoEncargos +
+      enc.totalEncargos +
+      composicao.valorAlimentacao +
+      composicao.valorVT;
   const custoAnual = custoAnualizado(custoMensal);
   const pctEnc = enc.percentualSobreBase.toFixed(2);
+
+  const temBonificacoesVariaveis = bon && bon.totalVariavel > 0;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -65,7 +77,10 @@ export default function ComposicaoSalarialCard({
             />
           )}
           {composicao.bonificacaoAssiduidade > 0 && (
-            <Row label="Bonificação de Assiduidade" value={composicao.bonificacaoAssiduidade} />
+            <Row
+              label="Bonificação de Assiduidade (cadastro)"
+              value={composicao.bonificacaoAssiduidade}
+            />
           )}
           <div className="border-t border-[#2a2a2e] my-2" />
           <Row label="Base de cálculo de encargos" value={composicao.baseCalculoEncargos} bold />
@@ -76,8 +91,37 @@ export default function ComposicaoSalarialCard({
           {composicao.valorVT > 0 && (
             <Row label="Vale Transporte" value={composicao.valorVT} />
           )}
+          {temBonificacoesVariaveis && (
+            <>
+              <div className="border-t border-[#2a2a2e] my-2" />
+              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider pt-1">
+                Bonificações do mês
+              </p>
+              {bon!.assiduidadePrograma > 0 && (
+                <Row
+                  label="Assiduidade mensal (programa)"
+                  value={bon!.assiduidadePrograma}
+                  className="text-emerald-400/90"
+                />
+              )}
+              {bon!.bonificacaoTrimestralMedia > 0 && (
+                <Row
+                  label="Bonificação trimestral (média mensal)"
+                  value={bon!.bonificacaoTrimestralMedia}
+                  className="text-emerald-400/90"
+                />
+              )}
+              {bon!.plrProjetadoMensal > 0 && (
+                <Row
+                  label={`PLR Q${bon!.trimestre}/${bon!.ano} (projeção mensal)`}
+                  value={bon!.plrProjetadoMensal}
+                  className="text-emerald-400/90"
+                />
+              )}
+            </>
+          )}
           <div className="border-t border-[#2a2a2e] my-2" />
-          <Row label="Total Bruto" value={composicao.totalBruto} bold accent />
+          <Row label="Total Bruto" value={totalBruto} bold accent />
         </div>
       </div>
 
@@ -92,6 +136,13 @@ export default function ComposicaoSalarialCard({
             value={enc.totalEncargos}
             className="text-red-400"
           />
+          {temBonificacoesVariaveis && (
+            <Row
+              label="Bonificações variáveis (sem encargo)"
+              value={bon!.totalVariavel}
+              className="text-emerald-400/90"
+            />
+          )}
           <div className="border-t border-[#2a2a2e] my-2" />
           <Row label="Custo mensal total" value={custoMensal} bold />
           <Row label="Custo anual (c/ 13º e férias)" value={custoAnual} bold accent />
