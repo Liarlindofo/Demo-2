@@ -803,14 +803,19 @@ model RhFuncionario {
   id                    String                   @id @default(cuid())
   userId                String
   nome                  String
-  cpf                   String?
+  cpf                   String
   email                 String?
   telefone              String?
-  dataNascimento        DateTime?
+  dataNascimento        DateTime
   dataAdmissao          DateTime
   cargoId               String
   lojaId                String
-  salarioBruto          Float
+  // Composição salarial
+  salarioBase             Float
+  valorAlimentacao        Float                    @default(0)
+  valorVT                 Float                    @default(0)
+  cargoResponsabilidade   Boolean                  @default(false)
+  bonificacaoAssiduidade  Float                    @default(0)
   escala                String
   turno                 String
   horarioEntrada        String                   @default("08:00")
@@ -836,11 +841,31 @@ model RhFuncionario {
   documentos            RhDocumentoFuncionario[]
   ocorrencias           RhOcorrencia[]
   transferencias        RhTransferenciaLoja[]
+  bonificacoesTrimestrais RhBonificacaoTrimestral[]
 
+  @@unique([userId, cpf])
   @@index([userId])
   @@index([lojaId])
   @@index([cargoId])
   @@map("rh_funcionarios")
+}
+
+model RhBonificacaoTrimestral {
+  id            String        @id @default(cuid())
+  funcionarioId String
+  valor         Float
+  trimestre     Int
+  ano           Int
+  dataPagamento DateTime
+  motivo        String?
+  registradoPor String
+  ativo         Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  funcionario   RhFuncionario @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+
+  @@unique([funcionarioId, trimestre, ano])
+  @@index([funcionarioId])
+  @@map("rh_bonificacoes_trimestrais")
 }
 
 model RhHistoricoFuncionario {

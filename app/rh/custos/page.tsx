@@ -20,12 +20,15 @@ interface FuncionarioDetalhe {
 
 interface LojaConsolidado {
   lojaId: string; lojaNome: string; fap: number; totalFuncionarios: number;
+  totalFolhaBruta?: number; totalBaseEncargos?: number;
   totalSalarioBruto: number; totalEncargos: number; totalCustoReal: number;
   custoAnualizado: number; funcionarios: FuncionarioDetalhe[];
 }
 
 interface Rede {
-  totalFuncionarios: number; totalSalarioBruto: number;
+  totalFuncionarios: number;
+  totalFolhaBruta?: number; totalBaseEncargos?: number;
+  totalSalarioBruto: number;
   totalEncargos: number; totalCustoReal: number; custoAnualizado: number;
 }
 
@@ -222,7 +225,7 @@ export default function CustosPage() {
 
         {/* Card da rede */}
         {rede && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-2">
                 <Users className="w-4 h-4 text-blue-400" />
@@ -236,8 +239,16 @@ export default function CustosPage() {
                 <DollarSign className="w-4 h-4 text-amber-400" />
                 <p className="text-xs text-gray-400 uppercase tracking-wider">Folha Bruta</p>
               </div>
-              <p className="text-xl font-bold text-amber-400">{fmt(rede.totalSalarioBruto)}</p>
-              <p className="text-xs text-gray-500 mt-0.5">soma dos salários</p>
+              <p className="text-xl font-bold text-amber-400">{fmt(rede.totalFolhaBruta ?? rede.totalSalarioBruto)}</p>
+              <p className="text-xs text-gray-500 mt-0.5">soma do total bruto</p>
+            </div>
+            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <DollarSign className="w-4 h-4 text-orange-400" />
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Base Encargos</p>
+              </div>
+              <p className="text-xl font-bold text-orange-400">{fmt(rede.totalBaseEncargos ?? 0)}</p>
+              <p className="text-xs text-gray-500 mt-0.5">base de cálculo patronal</p>
             </div>
             <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-2">
@@ -270,8 +281,12 @@ export default function CustosPage() {
                 </div>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between text-gray-400">
-                    <span>Folha bruta</span>
-                    <span className="font-medium text-white">{fmt(loja.totalSalarioBruto)}</span>
+                    <span>Folha bruta total</span>
+                    <span className="font-medium text-white">{fmt(loja.totalFolhaBruta ?? loja.totalSalarioBruto)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-400">
+                    <span>Base de encargos</span>
+                    <span className="font-medium text-orange-400">{fmt(loja.totalBaseEncargos ?? 0)}</span>
                   </div>
                   <div className="flex justify-between text-gray-400">
                     <span>Encargos</span>

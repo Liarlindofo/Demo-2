@@ -85,29 +85,39 @@ export async function GET() {
         urgencia: diasParaVencimento < 0 ? 'vencido' : diasParaVencimento <= 30 ? 'critico' : 'atencao',
       }));
 
-    // Aniversários do mês atual
+    // Aniversários do mês atual (dataNascimento obrigatório)
     const mesAtual = hoje.getMonth() + 1;
-    const aniversariantesMes = funcionarios
-      .filter((f) => {
-        if (!f.dataNascimento) return false;
-        const mes = new Date(f.dataNascimento).getUTCMonth() + 1;
-        return mes === mesAtual;
-      })
-      .map((f) => {
-        const nascimento = new Date(f.dataNascimento!);
-        const diaAniversario = nascimento.getUTCDate();
-        const anoAtual = hoje.getFullYear();
-        const dataAniversarioEsteAno = new Date(anoAtual, mesAtual - 1, diaAniversario);
-        const idade = anoAtual - nascimento.getUTCFullYear();
-        return {
-          funcionario: { id: f.id, nome: f.nome, loja: f.loja, cargo: f.cargo },
-          dataNascimento: f.dataNascimento,
-          diaAniversario,
-          idade,
-          jaPassou: dataAniversarioEsteAno < hoje,
-        };
-      })
-      .sort((a, b) => a.diaAniversario - b.diaAniversario);
+    const aniversariantesRaw = await prisma.$queryRaw<
+      { id: string; nome: string; dataNascimento: Date; lojaId: string; cargoId: string }[]
+    >`
+      SELECT f.id, f.nome, f."dataNascimento", f."lojaId", f."cargoId"
+      FROM "rh_funcionarios" f
+      WHERE f."userId" = ${dbUser.id}
+        AND f.ativo = true
+        AND EXTRACT(MONTH FROM f."dataNascimento") = ${mesAtual}
+      ORDER BY EXTRACT(DAY FROM f."dataNascimento")
+    `;
+
+    const aniversariantesMes = aniversariantesRaw.map((row) => {
+      const f = funcionarios.find((x) => x.id === row.id);
+      const nascimento = new Date(row.dataNascimento);
+      const diaAniversario = nascimento.getUTCDate();
+      const anoAtual = hoje.getFullYear();
+      const dataAniversarioEsteAno = new Date(anoAtual, mesAtual - 1, diaAniversario);
+      const idade = anoAtual - nascimento.getUTCFullYear();
+      return {
+        funcionario: {
+          id: row.id,
+          nome: row.nome,
+          loja: f?.loja ?? { id: row.lojaId, nome: '' },
+          cargo: f?.cargo ?? { id: row.cargoId, nome: '' },
+        },
+        dataNascimento: row.dataNascimento,
+        diaAniversario,
+        idade,
+        jaPassou: dataAniversarioEsteAno < hoje,
+      };
+    });
 
     // Resumo
     const totalCriticos = alertasExperiencia.filter(a => a.urgencia === 'critico').length

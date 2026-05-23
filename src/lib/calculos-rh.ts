@@ -1,3 +1,13 @@
+export interface ComposicaoSalarial {
+  salarioBase: number;
+  adicionalResponsabilidade: number;
+  bonificacaoAssiduidade: number;
+  valorAlimentacao: number;
+  valorVT: number;
+  baseCalculoEncargos: number;
+  totalBruto: number;
+}
+
 export interface EncargosPatronais {
   inssPatronal: number;
   fgts: number;
@@ -5,31 +15,75 @@ export interface EncargosPatronais {
   sistemaS: number;
   totalEncargos: number;
   custoTotal: number;
+  custoTotalEmpresa: number;
   percentualSobreSalario: number;
+  percentualSobreBase: number;
 }
 
-/**
- * Calcula encargos patronais sobre o salário bruto.
- * @param salario  Salário bruto em R$
- * @param rat      RAT do cargo em % (ex: 2 = 2%)
- * @param fap      FAP da loja (multiplicador do RAT, ex: 1.0)
- */
+export function calcularComposicaoSalarial(funcionario: {
+  salarioBase: number;
+  cargoResponsabilidade: boolean;
+  bonificacaoAssiduidade: number;
+  valorAlimentacao: number;
+  valorVT: number;
+}): ComposicaoSalarial {
+  const adicionalResponsabilidade = funcionario.cargoResponsabilidade
+    ? funcionario.salarioBase * 0.4
+    : 0;
+
+  const baseCalculoEncargos =
+    funcionario.salarioBase +
+    adicionalResponsabilidade +
+    funcionario.bonificacaoAssiduidade;
+
+  const totalBruto =
+    baseCalculoEncargos +
+    funcionario.valorAlimentacao +
+    funcionario.valorVT;
+
+  return {
+    salarioBase: funcionario.salarioBase,
+    adicionalResponsabilidade,
+    bonificacaoAssiduidade: funcionario.bonificacaoAssiduidade,
+    valorAlimentacao: funcionario.valorAlimentacao,
+    valorVT: funcionario.valorVT,
+    baseCalculoEncargos,
+    totalBruto,
+  };
+}
+
+/** Encargos incidem apenas sobre baseCalculoEncargos (não VT/VR) */
 export function calcularEncargosPatronais(
-  salario: number,
+  baseCalculoEncargos: number,
   rat: number = 2,
   fap: number = 1.0
 ): EncargosPatronais {
-  const inssPatronal    = salario * 0.20;
-  const fgts            = salario * 0.08;
-  const ratAjustado     = salario * (rat / 100) * fap;
-  const senac           = salario * 0.01;
-  const sesc            = salario * 0.015;
-  const sebrae          = salario * 0.006;
-  const incra           = salario * 0.002;
-  const salarioEducacao = salario * 0.025;
+  if (baseCalculoEncargos <= 0) {
+    return {
+      inssPatronal: 0,
+      fgts: 0,
+      rat: 0,
+      sistemaS: 0,
+      totalEncargos: 0,
+      custoTotal: 0,
+      custoTotalEmpresa: 0,
+      percentualSobreSalario: 0,
+      percentualSobreBase: 0,
+    };
+  }
 
-  const sistemaS      = senac + sesc + sebrae + incra + salarioEducacao;
+  const inssPatronal = baseCalculoEncargos * 0.2;
+  const fgts = baseCalculoEncargos * 0.08;
+  const ratAjustado = baseCalculoEncargos * (rat / 100) * fap;
+  const senac = baseCalculoEncargos * 0.01;
+  const sesc = baseCalculoEncargos * 0.015;
+  const sebrae = baseCalculoEncargos * 0.006;
+  const incra = baseCalculoEncargos * 0.002;
+  const salarioEducacao = baseCalculoEncargos * 0.025;
+
+  const sistemaS = senac + sesc + sebrae + incra + salarioEducacao;
   const totalEncargos = inssPatronal + fgts + ratAjustado + sistemaS;
+  const custoTotalEmpresa = baseCalculoEncargos + totalEncargos;
 
   return {
     inssPatronal,
@@ -37,8 +91,10 @@ export function calcularEncargosPatronais(
     rat: ratAjustado,
     sistemaS,
     totalEncargos,
-    custoTotal: salario + totalEncargos,
-    percentualSobreSalario: (totalEncargos / salario) * 100,
+    custoTotal: custoTotalEmpresa,
+    custoTotalEmpresa,
+    percentualSobreSalario: (totalEncargos / baseCalculoEncargos) * 100,
+    percentualSobreBase: (totalEncargos / baseCalculoEncargos) * 100,
   };
 }
 
@@ -47,4 +103,14 @@ export const FATOR_ANUAL = 14.33;
 
 export function custoAnualizado(custoMensal: number): number {
   return custoMensal * FATOR_ANUAL;
+}
+
+/** Projeção mensal média de bonificações trimestrais (soma anual / 12) */
+export function mediaMensalBonificacoesTrimestrais(
+  bonificacoes: { valor: number; ativo?: boolean }[]
+): number {
+  const ativas = bonificacoes.filter((b) => b.ativo !== false);
+  if (ativas.length === 0) return 0;
+  const soma = ativas.reduce((s, b) => s + b.valor, 0);
+  return soma / 12;
 }

@@ -2,6 +2,17 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { calcularComposicaoSalarial } from '@/lib/calculos-rh';
+
+function baseEncargos(f: {
+  salarioBase: number;
+  cargoResponsabilidade: boolean;
+  bonificacaoAssiduidade: number;
+  valorAlimentacao: number;
+  valorVT: number;
+}) {
+  return calcularComposicaoSalarial(f).baseCalculoEncargos;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -67,7 +78,14 @@ export async function GET(req: Request) {
                 turno: pos.turno ?? undefined,
                 ativo: true,
               },
-              select: { escala: true, salarioBruto: true },
+              select: {
+                escala: true,
+                salarioBase: true,
+                cargoResponsabilidade: true,
+                bonificacaoAssiduidade: true,
+                valorAlimentacao: true,
+                valorVT: true,
+              },
             });
 
             const f6x1 = funcionarios.filter((f) => f.escala === '6x1');
@@ -75,15 +93,15 @@ export async function GET(req: Request) {
 
             const salarioMedio6x1 =
               f6x1.length > 0
-                ? f6x1.reduce((s, f) => s + f.salarioBruto, 0) / f6x1.length
+                ? f6x1.reduce((s, f) => s + baseEncargos(f), 0) / f6x1.length
                 : 0;
             const salarioMedio5x2 =
               f5x2.length > 0
-                ? f5x2.reduce((s, f) => s + f.salarioBruto, 0) / f5x2.length
+                ? f5x2.reduce((s, f) => s + baseEncargos(f), 0) / f5x2.length
                 : 0;
             const salarioMedioGeral =
               funcionarios.length > 0
-                ? funcionarios.reduce((s, f) => s + f.salarioBruto, 0) / funcionarios.length
+                ? funcionarios.reduce((s, f) => s + baseEncargos(f), 0) / funcionarios.length
                 : 1518;
 
             return {

@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import {
+  enrichFuncionario,
+  CAMPOS_COMPOSICAO_HISTORICO,
+  formatComposicaoHistorico,
+} from '@/lib/rh-funcionario';
+import { calcularComposicaoSalarial } from '@/lib/calculos-rh';
+import { limparCPF, validarCPF, validarDataNascimento } from '@/lib/validacoes';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,18 +26,49 @@ async function getDbUser() {
 
 const INCLUDE = {
   cargo: { select: { id: true, nome: true, ratPct: true } },
-  loja: { select: { id: true, nome: true } },
+  loja: { select: { id: true, nome: true, fap: true } },
 } as const;
 
-// Campos que geram entrada no histórico quando alterados
-const CAMPOS_HISTORICO = ['salarioBruto', 'cargoId', 'lojaId', 'escala', 'turno', 'ativo'] as const;
+const CAMPOS_HISTORICO = [
+  ...CAMPOS_COMPOSICAO_HISTORICO,
+  'cargoId',
+  'lojaId',
+  'escala',
+  'turno',
+  'ativo',
+] as const;
 type CampoHistorico = (typeof CAMPOS_HISTORICO)[number];
 
-function valorParaString(campo: CampoHistorico, valor: unknown): string {
+function valorParaString(
+  campo: CampoHistorico,
+  valor: unknown,
+  existing?: Record<string, unknown>
+): string {
   if (valor === null || valor === undefined) return '';
-  if (campo === 'salarioBruto') return `R$ ${Number(valor).toFixed(2)}`;
+  if (campo === 'cargoResponsabilidade') return valor ? 'Sim' : 'Não';
   if (typeof valor === 'boolean') return valor ? 'Ativo' : 'Inativo';
+  if (
+    campo === 'salarioBase' ||
+    campo === 'bonificacaoAssiduidade' ||
+    campo === 'valorAlimentacao' ||
+    campo === 'valorVT'
+  ) {
+    return `R$ ${Number(valor).toFixed(2)}`;
+  }
+  if (CAMPOS_COMPOSICAO_HISTORICO.includes(campo as (typeof CAMPOS_COMPOSICAO_HISTORICO)[number])) {
+    return '';
+  }
   return String(valor);
+}
+
+function composicaoSnapshot(data: {
+  salarioBase: number;
+  cargoResponsabilidade: boolean;
+  bonificacaoAssiduidade: number;
+  valorAlimentacao: number;
+  valorVT: number;
+}) {
+  return formatComposicaoHistorico(calcularComposicaoSalarial(data));
 }
 
 function calcDatasExperiencia(dataAdmissao: Date) {
@@ -55,7 +93,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     if (!funcionario)
       return NextResponse.json({ error: 'Funcionário não encontrado' }, { status: 404 });
 
-    return NextResponse.json(funcionario);
+    return NextResponse.json(
+      enrichFuncionario(funcionario, funcionario.cargo.ratPct, funcionario.loja.fap)
+    );
   } catch (err) {
     console.error('[GET /api/rh/funcionarios/[id]]', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
@@ -77,14 +117,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const body = await req.json();
     const {
       nome,
-      cpf,
+      cpf: cpfRaw,
       email,
       telefone,
       dataNascimento,
       dataAdmissao,
       cargoId,
       lojaId,
-      salarioBruto,
+      salarioBase,
+      valorAlimentacao,
+      valorVT,
+      cargoResponsabilidade,
+      bonificacaoAssiduidade,
       escala,
       turno,
       horarioEntrada,
@@ -98,7 +142,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       motivo,
     } = body;
 
-    // Calcular datas de experiência se admissão mudou
+    if (cpfRaw !== undefined) {
+      const cpf = limparCPF(String(cpfRaw));
+      if (!validarCPF(cpf))
+        return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
+      const dup = await prisma.rhFuncionario.findFirst({
+        where: { userId: dbUser.id, cpf, id: { not: id } },
+      });
+      if (dup) return NextResponse.json({ error: 'CPF já cadastrado' }, { status: 409 });
+    }
+
+    if (dataNascimento !== undefined) {
+      const nasc = new Date(dataNascimento);
+      const errNasc = validarDataNascimento(nasc);
+      if (errNasc) return NextResponse.json({ error: errNasc }, { status: 400 });
+    }
+
+    if (salarioBase !== undefined && Number(salarioBase) <= 0)
+      return NextResponse.json({ error: 'Salário base inválido' }, { status: 400 });
+
     let experienciaData = {};
     if (dataAdmissao !== undefined) {
       const admissao = new Date(dataAdmissao);
@@ -111,9 +173,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       };
     }
 
-    // Detectar alterações nos campos auditados antes de salvar
+    const composicaoAntes = composicaoSnapshot(existing);
+    const merged = {
+      salarioBase: salarioBase !== undefined ? Number(salarioBase) : existing.salarioBase,
+      cargoResponsabilidade:
+        cargoResponsabilidade !== undefined
+          ? Boolean(cargoResponsabilidade)
+          : existing.cargoResponsabilidade,
+      bonificacaoAssiduidade:
+        bonificacaoAssiduidade !== undefined
+          ? Number(bonificacaoAssiduidade)
+          : existing.bonificacaoAssiduidade,
+      valorAlimentacao:
+        valorAlimentacao !== undefined ? Number(valorAlimentacao) : existing.valorAlimentacao,
+      valorVT: valorVT !== undefined ? Number(valorVT) : existing.valorVT,
+    };
+    const composicaoDepois = composicaoSnapshot(merged);
+    const composicaoMudou = composicaoAntes !== composicaoDepois;
+
     const alteracoes: Array<{ campo: string; valorAnterior: string; valorNovo: string }> = [];
+
     for (const campo of CAMPOS_HISTORICO) {
+      if (campo === 'salarioBase' && composicaoMudou) continue;
       if (body[campo] !== undefined) {
         const anterior = valorParaString(campo, existing[campo]);
         const novo = valorParaString(campo, body[campo]);
@@ -122,25 +203,37 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
       }
     }
+    if (composicaoMudou) {
+      alteracoes.push({
+        campo: 'composicaoSalarial',
+        valorAnterior: composicaoAntes,
+        valorNovo: composicaoDepois,
+      });
+    }
 
     const alteradoPor = dbUser.fullName || dbUser.email || dbUser.id;
 
-    // Executar update + histórico na mesma transação
     const funcionario = await prisma.$transaction(async (tx) => {
       const updated = await tx.rhFuncionario.update({
         where: { id },
         data: {
           ...(nome !== undefined && { nome: nome.trim() }),
-          ...(cpf !== undefined && { cpf: cpf || null }),
+          ...(cpfRaw !== undefined && { cpf: limparCPF(String(cpfRaw)) }),
           ...(email !== undefined && { email: email || null }),
           ...(telefone !== undefined && { telefone: telefone || null }),
-          ...(dataNascimento !== undefined && {
-            dataNascimento: dataNascimento ? new Date(dataNascimento) : null,
-          }),
+          ...(dataNascimento !== undefined && { dataNascimento: new Date(dataNascimento) }),
           ...(dataAdmissao !== undefined && { dataAdmissao: new Date(dataAdmissao) }),
           ...(cargoId !== undefined && { cargoId }),
           ...(lojaId !== undefined && { lojaId }),
-          ...(salarioBruto !== undefined && { salarioBruto }),
+          ...(salarioBase !== undefined && { salarioBase: Number(salarioBase) }),
+          ...(valorAlimentacao !== undefined && { valorAlimentacao: Number(valorAlimentacao) }),
+          ...(valorVT !== undefined && { valorVT: Number(valorVT) }),
+          ...(cargoResponsabilidade !== undefined && {
+            cargoResponsabilidade: Boolean(cargoResponsabilidade),
+          }),
+          ...(bonificacaoAssiduidade !== undefined && {
+            bonificacaoAssiduidade: Number(bonificacaoAssiduidade),
+          }),
           ...(escala !== undefined && { escala }),
           ...(turno !== undefined && { turno }),
           ...(horarioEntrada !== undefined && { horarioEntrada }),
@@ -158,7 +251,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         include: INCLUDE,
       });
 
-      // Registrar histórico para cada campo alterado
       if (alteracoes.length > 0) {
         await tx.rhHistoricoFuncionario.createMany({
           data: alteracoes.map((a) => ({
@@ -176,7 +268,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return updated;
     });
 
-    return NextResponse.json(funcionario);
+    return NextResponse.json(
+      enrichFuncionario(funcionario, funcionario.cargo.ratPct, funcionario.loja.fap)
+    );
   } catch (err) {
     console.error('[PATCH /api/rh/funcionarios/[id]]', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });

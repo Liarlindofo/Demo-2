@@ -31,6 +31,15 @@ interface Funcionario {
   lojaId: string;
   loja: { id: string; nome: string };
   salarioBruto: number;
+  composicaoSalarial?: {
+    salarioBase: number;
+    adicionalResponsabilidade: number;
+    bonificacaoAssiduidade: number;
+    valorAlimentacao: number;
+    valorVT: number;
+    baseCalculoEncargos: number;
+    totalBruto: number;
+  };
   escala: '6x1' | '5x2';
   turno: 'manhã' | 'tarde' | 'noite' | 'integral';
 }
@@ -381,7 +390,14 @@ export default function FuncionariosPage() {
                     <span className="hidden md:block text-sm text-gray-400">
                       {TURNO_LABELS[f.turno] ?? f.turno}
                     </span>
-                    <span className="hidden md:block text-sm text-gray-300 font-mono">
+                    <span
+                      className="hidden md:block text-sm text-gray-300 font-mono cursor-help"
+                      title={
+                        f.composicaoSalarial
+                          ? `Base: ${fmt(f.composicaoSalarial.salarioBase)} | Resp.: ${fmt(f.composicaoSalarial.adicionalResponsabilidade)} | Assid.: ${fmt(f.composicaoSalarial.bonificacaoAssiduidade)} | VR: ${fmt(f.composicaoSalarial.valorAlimentacao)} | VT: ${fmt(f.composicaoSalarial.valorVT)}`
+                          : undefined
+                      }
+                    >
                       {fmt(f.salarioBruto)}
                     </span>
 

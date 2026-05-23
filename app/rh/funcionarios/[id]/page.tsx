@@ -12,6 +12,11 @@ import DocumentosTab from '@/components/rh/DocumentosTab';
 import OcorrenciasTab from '@/components/rh/OcorrenciasTab';
 import TransferenciasTab from '@/components/rh/TransferenciasTab';
 import DrawerTransferencia from '@/components/rh/DrawerTransferencia';
+import ComposicaoSalarialCard from '@/components/rh/ComposicaoSalarial';
+import ComposicaoSalarialForm, { type ComposicaoSalarialValues } from '@/components/rh/ComposicaoSalarialForm';
+import DrawerBonificacaoTrimestral, { type BonificacaoTrimestral } from '@/components/rh/DrawerBonificacaoTrimestral';
+import { formatarCPF, calcularIdade } from '@/lib/validacoes';
+import { buildComposicaoPayload, parseMoney } from '@/components/rh/FuncionarioForm';
 
 interface Cargo { id: string; nome: string; ratPct: number }
 interface Loja { id: string; nome: string; ativo: boolean }
@@ -19,17 +24,27 @@ interface Loja { id: string; nome: string; ativo: boolean }
 interface Funcionario {
   id: string;
   nome: string;
-  cpf?: string | null;
+  cpf: string;
   email?: string | null;
   telefone?: string | null;
-  dataNascimento?: string | null;
+  dataNascimento: string;
   dataAdmissao: string;
   ativo: boolean;
   cargoId: string;
   cargo: { id: string; nome: string; ratPct: number };
   lojaId: string;
-  loja: { id: string; nome: string };
+  loja: { id: string; nome: string; fap?: number };
+  salarioBase: number;
+  valorAlimentacao: number;
+  valorVT: number;
+  cargoResponsabilidade: boolean;
+  bonificacaoAssiduidade: number;
   salarioBruto: number;
+  composicaoSalarial?: {
+    totalBruto: number;
+    baseCalculoEncargos: number;
+    adicionalResponsabilidade: number;
+  };
   escala: '6x1' | '5x2';
   diasFolga: string[];
   turno: 'manhã' | 'tarde' | 'noite' | 'integral';
@@ -59,7 +74,7 @@ interface Historico {
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const CAMPO_LABELS: Record<string, string> = {
-  salarioBruto: 'Salário', cargoId: 'Cargo', lojaId: 'Loja',
+  composicaoSalarial: 'Composição salarial', salarioBase: 'Salário base', cargoId: 'Cargo', lojaId: 'Loja',
   escala: 'Escala', turno: 'Turno', ativo: 'Status',
 };
 
@@ -116,7 +131,12 @@ export default function FuncionarioDetailPage() {
   const [dataAdmissao, setDataAdmissao] = useState('');
   const [cargoId, setCargoId] = useState('');
   const [lojaId, setLojaId] = useState('');
-  const [salarioBruto, setSalarioBruto] = useState('');
+  const [composicao, setComposicao] = useState<ComposicaoSalarialValues>({
+    salarioBase: '', cargoResponsabilidade: false, valorAlimentacao: '', valorVT: '', bonificacaoAssiduidade: '',
+  });
+  const [bonificacoes, setBonificacoes] = useState<BonificacaoTrimestral[]>([]);
+  const [showDrawerBonificacao, setShowDrawerBonificacao] = useState(false);
+  const [editBonificacao, setEditBonificacao] = useState<BonificacaoTrimestral | null>(null);
   const [escala, setEscala] = useState<'6x1' | '5x2'>('6x1');
   const [turno, setTurno] = useState<'manhã' | 'tarde' | 'noite' | 'integral'>('manhã');
   const [horarioEntrada, setHorarioEntrada] = useState('');
@@ -130,7 +150,14 @@ export default function FuncionarioDetailPage() {
     setNome(f.nome); setCpf(f.cpf ?? ''); setEmail(f.email ?? '');
     setTelefone(f.telefone ?? ''); setDataNascimento(f.dataNascimento ? f.dataNascimento.split('T')[0] : '');
     setDataAdmissao(f.dataAdmissao.split('T')[0]); setCargoId(f.cargoId);
-    setLojaId(f.lojaId); setSalarioBruto(f.salarioBruto.toFixed(2).replace('.', ','));
+    setLojaId(f.lojaId);
+    setComposicao({
+      salarioBase: f.salarioBase.toFixed(2).replace('.', ','),
+      cargoResponsabilidade: f.cargoResponsabilidade,
+      valorAlimentacao: f.valorAlimentacao.toFixed(2).replace('.', ','),
+      valorVT: f.valorVT.toFixed(2).replace('.', ','),
+      bonificacaoAssiduidade: f.bonificacaoAssiduidade.toFixed(2).replace('.', ','),
+    });
     setEscala(f.escala); setTurno(f.turno); setHorarioEntrada(f.horarioEntrada);
     setHorarioSaida(f.horarioSaida); setDiasFolga(Array.isArray(f.diasFolga) ? f.diasFolga : []);
     setObservacoes(f.observacoes ?? '');
@@ -172,19 +199,31 @@ export default function FuncionarioDetailPage() {
     if (tab === 'historico') fetchHistorico();
   }, [tab, fetchHistorico]);
 
-  const parseSalario = (v: string) => parseFloat(v.replace(/[^0-9,]/g, '').replace(',', '.')) || 0;
+  const fetchBonificacoes = useCallback(async () => {
+    const res = await fetch(`/api/rh/funcionarios/${params.id}/bonificacoes`);
+    if (res.ok) setBonificacoes(await res.json());
+  }, [params.id]);
+
+  useEffect(() => {
+    if (tab === 'dados' && funcionario) fetchBonificacoes();
+  }, [tab, funcionario, fetchBonificacoes]);
 
   const handleSave = async () => {
     const errs: Record<string, string> = {};
     if (!nome.trim()) errs.nome = 'Nome é obrigatório';
-    if (parseSalario(salarioBruto) <= 0) errs.salarioBruto = 'Salário inválido';
+    if (parseMoney(composicao.salarioBase) <= 0) errs.salarioBase = 'Salário base inválido';
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/rh/funcionarios/${params.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: nome.trim(), cpf: cpf || null, email: email || null, telefone: telefone || null, dataNascimento: dataNascimento || null, dataAdmissao, cargoId, lojaId, salarioBruto: parseSalario(salarioBruto), escala, turno, horarioEntrada, horarioSaida, diasFolga, observacoes: observacoes || null }),
+        body: JSON.stringify({
+          nome: nome.trim(), cpf, email: email || null, telefone: telefone || null,
+          dataNascimento, dataAdmissao, cargoId, lojaId,
+          ...buildComposicaoPayload(composicao),
+          escala, turno, horarioEntrada, horarioSaida, diasFolga, observacoes: observacoes || null,
+        }),
       });
       if (res.ok) { const updated: Funcionario = await res.json(); setFuncionario(updated); setEditMode(false); showToast('Dados salvos'); }
     } finally { setSaving(false); }
@@ -352,8 +391,14 @@ export default function FuncionarioDetailPage() {
                       { icon: Phone, label: 'Telefone', value: funcionario.telefone ?? '—' },
                       { icon: Mail, label: 'E-mail', value: funcionario.email ?? '—' },
                       { icon: Calendar, label: 'Admissão', value: fmtDate(funcionario.dataAdmissao) },
-                      { icon: Calendar, label: 'Nascimento', value: fmtDate(funcionario.dataNascimento) },
-                      ...(funcionario.cpf ? [{ icon: User, label: 'CPF', value: funcionario.cpf }] : []),
+                      {
+                        icon: Calendar,
+                        label: 'Nascimento',
+                        value: funcionario.dataNascimento
+                          ? `${fmtDate(funcionario.dataNascimento)} (${calcularIdade(new Date(funcionario.dataNascimento))} anos)`
+                          : '—',
+                      },
+                      { icon: User, label: 'CPF', value: formatarCPF(funcionario.cpf) },
                     ].map(({ icon: Icon, label, value }) => (
                       <div key={label} className="flex items-center gap-3">
                         <Icon className="w-4 h-4 text-gray-600 flex-shrink-0" />
@@ -413,24 +458,50 @@ export default function FuncionarioDetailPage() {
                 )}
               </div>
 
-              {/* Salário */}
+              {/* Composição Salarial */}
               <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6">
                 <div className="flex items-center gap-2 mb-5 pb-3 border-b border-[#2a2a2e]">
-                  <DollarSign className="w-4 h-4 text-amber-500" /><h2 className="text-sm font-semibold text-white">Salário</h2>
+                  <DollarSign className="w-4 h-4 text-amber-500" /><h2 className="text-sm font-semibold text-white">Composição Salarial</h2>
                 </div>
                 {editMode ? (
-                  <div>
-                    <label className={labelCls}>Salário bruto *</label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">R$</span>
-                      <input type="text" value={salarioBruto} onChange={e => setSalarioBruto(e.target.value)} className={`${inputCls} pl-9 ${errors.salarioBruto ? 'border-red-500/50' : ''}`} />
-                    </div>
-                    {errors.salarioBruto && <p className="text-xs text-red-400 mt-1">{errors.salarioBruto}</p>}
-                  </div>
+                  <ComposicaoSalarialForm values={composicao} onChange={p => setComposicao(prev => ({ ...prev, ...p }))} errors={errors} parseMoney={parseMoney} />
                 ) : (
-                  <div className="text-2xl font-bold text-white">{fmt(funcionario.salarioBruto)}<span className="text-sm font-normal text-gray-500 ml-1">/mês</span></div>
+                  <ComposicaoSalarialCard
+                    salarioBase={funcionario.salarioBase}
+                    cargoResponsabilidade={funcionario.cargoResponsabilidade}
+                    bonificacaoAssiduidade={funcionario.bonificacaoAssiduidade}
+                    valorAlimentacao={funcionario.valorAlimentacao}
+                    valorVT={funcionario.valorVT}
+                    ratPct={funcionario.cargo.ratPct}
+                    fap={funcionario.loja.fap ?? 1}
+                  />
                 )}
               </div>
+
+              {/* Bonificações trimestrais */}
+              {!editMode && (
+                <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-semibold text-white">Bonificações Trimestrais</h2>
+                    <button type="button" onClick={() => { setEditBonificacao(null); setShowDrawerBonificacao(true); }}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30">+ Registrar</button>
+                  </div>
+                  {bonificacoes.length === 0 ? (
+                    <p className="text-sm text-gray-500">Nenhuma bonificação registrada.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {bonificacoes.map(b => (
+                        <div key={b.id} className="flex items-center justify-between py-2 border-b border-[#2a2a2e] last:border-0 text-sm">
+                          <span className="text-white">Q{b.trimestre} {b.ano}</span>
+                          <span className="text-amber-400 font-mono">{fmt(b.valor)}</span>
+                          <span className="text-gray-500 text-xs">{fmtDate(b.dataPagamento)}</span>
+                          <span className="text-gray-500 text-xs truncate max-w-[120px]">{b.motivo ?? '—'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Escala */}
               <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6">
@@ -673,7 +744,14 @@ export default function FuncionarioDetailPage() {
         )}
 
         {showDrawerTransferencia && (
-          <DrawerTransferencia
+          <DrawerBonificacaoTrimestral
+        open={showDrawerBonificacao}
+        onClose={() => setShowDrawerBonificacao(false)}
+        funcionarioId={params.id}
+        edit={editBonificacao}
+        onSaved={fetchBonificacoes}
+      />
+      <DrawerTransferencia
             funcionarioId={params.id}
             funcionarioNome={funcionario.nome}
             lojaAtualId={funcionario.lojaId}

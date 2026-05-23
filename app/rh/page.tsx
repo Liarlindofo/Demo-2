@@ -23,6 +23,7 @@ interface Funcionario {
   id: string;
   nome: string;
   salarioBruto: number;
+  composicaoSalarial?: { baseCalculoEncargos: number; valorAlimentacao: number; valorVT: number };
   escala: '6x1' | '5x2';
   ativo: boolean;
 }
@@ -187,7 +188,10 @@ export default function RhDashboard() {
         if (!res.ok) throw new Error('Falha ao carregar');
         const data: Funcionario[] = await res.json();
         const total = data.length;
-        const custoMensal = data.reduce((acc, f) => acc + f.salarioBruto * 1.44, 0);
+        const custoMensal = data.reduce((acc, f) => {
+          const base = f.composicaoSalarial?.baseCalculoEncargos ?? f.salarioBruto / 1.44;
+          return acc + base * 1.44 + (f.composicaoSalarial?.valorAlimentacao ?? 0) + (f.composicaoSalarial?.valorVT ?? 0);
+        }, 0);
         const escala6x1 = data.filter((f) => f.escala === '6x1').length;
         const escala5x2 = data.filter((f) => f.escala === '5x2').length;
         setStats({ total, custoMensal, escala6x1, escala5x2 });

@@ -1,5 +1,7 @@
 import { prisma } from './prisma';
 import { ensureRhCargosPadrao } from './rh-cargos-padrao';
+import { enrichFuncionario } from './rh-funcionario';
+import { limparCPF, validarCPF } from './validacoes';
 
 // ─── Definições das ferramentas para o AI ────────────────────────────────────
 
@@ -47,7 +49,11 @@ export const RH_TOOLS = [
           },
           horarioEntrada: { type: 'string', description: 'Horário de entrada no formato HH:MM' },
           horarioSaida: { type: 'string', description: 'Horário de saída no formato HH:MM' },
-          salarioBruto: { type: 'number', description: 'Novo salário bruto em reais' },
+          salarioBase: { type: 'number', description: 'Novo salário base em reais' },
+          cargoResponsabilidade: { type: 'boolean' },
+          valorAlimentacao: { type: 'number' },
+          valorVT: { type: 'number' },
+          bonificacaoAssiduidade: { type: 'number' },
           cargoId: { type: 'string', description: 'ID do novo cargo' },
           lojaId: { type: 'string', description: 'ID da nova loja' },
           observacoes: { type: 'string', description: 'Observações do funcionário' },
@@ -98,7 +104,12 @@ export const RH_TOOLS = [
           dataAdmissao: { type: 'string', description: 'Data de admissão (YYYY-MM-DD)' },
           cargoId: { type: 'string', description: 'ID do cargo' },
           lojaId: { type: 'string', description: 'ID da loja' },
-          salarioBruto: { type: 'number', description: 'Salário bruto em reais' },
+          salarioBase: { type: 'number', description: 'Salário base contratual em reais' },
+          dataNascimento: { type: 'string', description: 'Data de nascimento (YYYY-MM-DD)' },
+          cargoResponsabilidade: { type: 'boolean', description: 'Cargo de responsabilidade (+40%)' },
+          valorAlimentacao: { type: 'number', description: 'Vale refeição/alimentação mensal' },
+          valorVT: { type: 'number', description: 'Vale transporte mensal' },
+          bonificacaoAssiduidade: { type: 'number', description: 'Bonificação de assiduidade mensal' },
           escala: {
             type: 'string',
             enum: ['5x2', '6x1', '12x36', '5x1', '4x3'],
@@ -115,7 +126,7 @@ export const RH_TOOLS = [
             description: 'Dias de folga (0=Dom … 6=Sáb)',
           },
         },
-        required: ['nome', 'dataAdmissao', 'cargoId', 'lojaId', 'salarioBruto', 'escala', 'turno'],
+        required: ['nome', 'cpf', 'dataNascimento', 'dataAdmissao', 'cargoId', 'lojaId', 'salarioBase', 'escala', 'turno'],
       },
     },
   },
@@ -195,7 +206,7 @@ async function listarFuncionarios(args: any, userId: string) {
       cargoId: f.cargoId,
       loja: f.loja.nome,
       lojaId: f.lojaId,
-      salarioBruto: f.salarioBruto,
+      ...enrichFuncionario(f),
       escala: f.escala,
       turno: f.turno,
       horarioEntrada: f.horarioEntrada,
@@ -217,7 +228,8 @@ async function atualizarFuncionario(args: any, userId: string) {
   const dadosUpdate: Record<string, any> = {};
   const allowed = [
     'escala', 'turno', 'horarioEntrada', 'horarioSaida',
-    'salarioBruto', 'cargoId', 'lojaId', 'observacoes', 'ativo',
+    'salarioBase', 'cargoResponsabilidade', 'bonificacaoAssiduidade',
+    'valorAlimentacao', 'valorVT', 'cargoId', 'lojaId', 'observacoes', 'ativo',
   ];
   for (const key of allowed) {
     if (campos[key] !== undefined) dadosUpdate[key] = campos[key];
@@ -275,13 +287,16 @@ async function gerenciarFolgas(args: any, userId: string) {
 
 async function criarFuncionario(args: any, userId: string) {
   const {
-    nome, cpf, email, telefone, dataAdmissao, cargoId, lojaId,
-    salarioBruto, escala, turno,
+    nome, cpf: cpfRaw, email, telefone, dataNascimento, dataAdmissao, cargoId, lojaId,
+    salarioBase, cargoResponsabilidade = false, valorAlimentacao = 0, valorVT = 0,
+    bonificacaoAssiduidade = 0, escala, turno,
     horarioEntrada = '08:00', horarioSaida = '17:00',
     diasFolga = [],
   } = args;
 
-  // Validar cargo e loja
+  const cpf = limparCPF(String(cpfRaw ?? ''));
+  if (!validarCPF(cpf)) return JSON.stringify({ erro: 'CPF inválido' });
+
   const cargo = await prisma.rhCargo.findFirst({ where: { id: cargoId, userId } });
   if (!cargo) return JSON.stringify({ erro: 'Cargo não encontrado' });
 
@@ -292,13 +307,18 @@ async function criarFuncionario(args: any, userId: string) {
     data: {
       userId,
       nome,
-      cpf: cpf || null,
+      cpf,
       email: email || null,
       telefone: telefone || null,
+      dataNascimento: new Date(dataNascimento),
       dataAdmissao: new Date(dataAdmissao),
       cargoId,
       lojaId,
-      salarioBruto,
+      salarioBase,
+      cargoResponsabilidade: Boolean(cargoResponsabilidade),
+      valorAlimentacao: Number(valorAlimentacao) || 0,
+      valorVT: Number(valorVT) || 0,
+      bonificacaoAssiduidade: Number(bonificacaoAssiduidade) || 0,
       escala,
       turno,
       horarioEntrada,

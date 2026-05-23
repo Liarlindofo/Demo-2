@@ -4,6 +4,17 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLoja } from '@/contexts/LojaContext';
 import { ArrowLeft, Plus, X, User, Briefcase, DollarSign, Clock } from 'lucide-react';
+import {
+  DadosPessoaisFields,
+  ComposicaoSalarialForm,
+  validateDadosPessoais,
+  validateComposicao,
+  buildComposicaoPayload,
+  buildDadosPessoaisPayload,
+  type ComposicaoSalarialValues,
+  type DadosPessoaisValues,
+} from '@/components/rh/FuncionarioForm';
+import { limparCPF, validarCPF } from '@/lib/validacoes';
 
 interface Cargo {
   id: string;
@@ -19,14 +30,6 @@ interface Loja {
 }
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-
-function formatCPF(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 11);
-  return digits
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4');
-}
 
 function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
@@ -51,15 +54,23 @@ export default function NovoFuncionarioPage() {
   const [novoCargoRat, setNovoCargoRat] = useState('2');
   const [savingCargo, setSavingCargo] = useState(false);
 
-  // Form fields
-  const [nome, setNome] = useState('');
-  const [cpf, setCpf] = useState('');
-  const [email, setEmail] = useState('');
-  const [telefone, setTelefone] = useState('');
-  const [dataAdmissao, setDataAdmissao] = useState(new Date().toISOString().split('T')[0]);
+  const [dadosPessoais, setDadosPessoais] = useState<DadosPessoaisValues>({
+    nome: '',
+    cpf: '',
+    email: '',
+    telefone: '',
+    dataNascimento: '',
+    dataAdmissao: new Date().toISOString().split('T')[0],
+  });
+  const [composicao, setComposicao] = useState<ComposicaoSalarialValues>({
+    salarioBase: '',
+    cargoResponsabilidade: false,
+    valorAlimentacao: '',
+    valorVT: '',
+    bonificacaoAssiduidade: '',
+  });
   const [cargoId, setCargoId] = useState('');
   const [lojaId, setLojaId] = useState(lojaSelecionada?.id ?? '');
-  const [salarioBruto, setSalarioBruto] = useState('');
   const [escala, setEscala] = useState<'6x1' | '5x2'>('6x1');
   const [turno, setTurno] = useState<'manhã' | 'tarde' | 'noite' | 'integral'>('manhã');
   const [horarioEntrada, setHorarioEntrada] = useState('08:00');
@@ -84,37 +95,40 @@ export default function NovoFuncionarioPage() {
     );
   };
 
-  const parseSalario = (v: string) => {
-    const clean = v.replace(/[^0-9,]/g, '').replace(',', '.');
-    return parseFloat(clean) || 0;
-  };
+  const parseMoney = (v: string) => parseFloat(v.replace(/[^0-9,]/g, '').replace(',', '.')) || 0;
 
-  const validate = () => {
-    const errs: Record<string, string> = {};
-    if (!nome.trim()) errs.nome = 'Nome é obrigatório';
+  const validate = async () => {
+    const cpfOk =
+      limparCPF(dadosPessoais.cpf).length === 11 &&
+      validarCPF(dadosPessoais.cpf) &&
+      (await fetch(
+        `/api/rh/funcionarios/verificar-cpf?cpf=${limparCPF(dadosPessoais.cpf)}`
+      )
+        .then((r) => r.json())
+        .then((d) => d.disponivel === true)
+        .catch(() => false));
+
+    const errs = {
+      ...validateDadosPessoais(dadosPessoais, cpfOk),
+      ...validateComposicao(composicao),
+    };
     if (!cargoId) errs.cargoId = 'Cargo é obrigatório';
     if (!lojaId) errs.lojaId = 'Loja é obrigatória';
-    if (parseSalario(salarioBruto) <= 0) errs.salarioBruto = 'Salário deve ser maior que zero';
-    if (!dataAdmissao) errs.dataAdmissao = 'Data de admissão é obrigatória';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (!(await validate())) return;
 
     setSubmitting(true);
     try {
       const payload = {
-        nome: nome.trim(),
-        cpf: cpf || null,
-        email: email || null,
-        telefone: telefone || null,
-        dataAdmissao,
+        ...buildDadosPessoaisPayload(dadosPessoais),
+        ...buildComposicaoPayload(composicao),
         cargoId,
         lojaId,
-        salarioBruto: parseSalario(salarioBruto),
         escala,
         turno,
         horarioEntrada,
@@ -254,61 +268,11 @@ export default function NovoFuncionarioPage() {
           {/* Dados Pessoais */}
           <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6">
             <SectionTitle icon={<User className="w-4 h-4 text-amber-500" />} title="Dados Pessoais" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="sm:col-span-2">
-                <label className={labelCls}>Nome completo *</label>
-                <input
-                  type="text"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                  placeholder="João da Silva"
-                  className={`${inputCls} ${errors.nome ? 'border-red-500/50' : ''}`}
-                />
-                {errors.nome && <p className="text-xs text-red-400 mt-1">{errors.nome}</p>}
-              </div>
-              <div>
-                <label className={labelCls}>CPF</label>
-                <input
-                  type="text"
-                  value={cpf}
-                  onChange={(e) => setCpf(formatCPF(e.target.value))}
-                  placeholder="000.000.000-00"
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Telefone</label>
-                <input
-                  type="text"
-                  value={telefone}
-                  onChange={(e) => setTelefone(e.target.value)}
-                  placeholder="(41) 99999-9999"
-                  className={inputCls}
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className={labelCls}>E-mail</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="joao@exemplo.com"
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Data de admissão *</label>
-                <input
-                  type="date"
-                  value={dataAdmissao}
-                  onChange={(e) => setDataAdmissao(e.target.value)}
-                  className={`${inputCls} ${errors.dataAdmissao ? 'border-red-500/50' : ''}`}
-                />
-                {errors.dataAdmissao && (
-                  <p className="text-xs text-red-400 mt-1">{errors.dataAdmissao}</p>
-                )}
-              </div>
-            </div>
+            <DadosPessoaisFields
+              values={dadosPessoais}
+              onChange={(p) => setDadosPessoais((prev) => ({ ...prev, ...p }))}
+              errors={errors}
+            />
           </div>
 
           {/* Cargo e Lotação */}
@@ -377,41 +341,18 @@ export default function NovoFuncionarioPage() {
             </div>
           </div>
 
-          {/* Salário */}
+          {/* Composição Salarial */}
           <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6">
             <SectionTitle
               icon={<DollarSign className="w-4 h-4 text-amber-500" />}
-              title="Salário"
+              title="Composição Salarial"
             />
-            <div>
-              <label className={labelCls}>Salário bruto *</label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
-                  R$
-                </span>
-                <input
-                  type="text"
-                  value={salarioBruto}
-                  onChange={(e) => setSalarioBruto(e.target.value)}
-                  placeholder="1.518,00"
-                  className={`${inputCls} pl-9 ${errors.salarioBruto ? 'border-red-500/50' : ''}`}
-                />
-              </div>
-              {errors.salarioBruto && (
-                <p className="text-xs text-red-400 mt-1">{errors.salarioBruto}</p>
-              )}
-              {parseSalario(salarioBruto) > 0 && (
-                <p className="text-xs text-gray-500 mt-2">
-                  Custo patronal estimado:{' '}
-                  <span className="text-amber-400 font-medium">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-                      parseSalario(salarioBruto) * 1.44
-                    )}
-                  </span>{' '}
-                  /mês (incluindo encargos ~44%)
-                </p>
-              )}
-            </div>
+            <ComposicaoSalarialForm
+              values={composicao}
+              onChange={(p) => setComposicao((prev) => ({ ...prev, ...p }))}
+              errors={errors}
+              parseMoney={parseMoney}
+            />
           </div>
 
           {/* Escala de Trabalho */}

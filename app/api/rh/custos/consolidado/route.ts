@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
-import { calcularEncargosPatronais, FATOR_ANUAL } from '@/lib/calculos-rh';
+import {
+  calcularComposicaoSalarial,
+  calcularEncargosPatronais,
+  FATOR_ANUAL,
+} from '@/lib/calculos-rh';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,22 +41,38 @@ export async function GET() {
     const consolidado = lojas.map((loja) => {
       const funcs = loja.funcionarios;
       const funcionariosDetalhes = funcs.map((f) => {
-        const enc = calcularEncargosPatronais(f.salarioBruto, f.cargo.ratPct, loja.fap);
+        const composicao = calcularComposicaoSalarial(f);
+        const enc = calcularEncargosPatronais(
+          composicao.baseCalculoEncargos,
+          f.cargo.ratPct,
+          loja.fap
+        );
+        const custoTotal =
+          composicao.baseCalculoEncargos +
+          enc.totalEncargos +
+          composicao.valorAlimentacao +
+          composicao.valorVT;
         return {
           id: f.id,
           nome: f.nome,
           cargo: f.cargo.nome,
-          salarioBruto: f.salarioBruto,
+          salarioBruto: composicao.totalBruto,
+          baseCalculoEncargos: composicao.baseCalculoEncargos,
+          composicaoSalarial: composicao,
           encargos: enc.totalEncargos,
-          percentualEncargos: enc.percentualSobreSalario,
-          custoTotal: enc.custoTotal,
-          custoAnual: enc.custoTotal * FATOR_ANUAL,
+          percentualEncargos: enc.percentualSobreBase,
+          custoTotal,
+          custoAnual: custoTotal * FATOR_ANUAL,
         };
       });
 
-      const totalSalarioBruto = funcs.reduce((s, f) => s + f.salarioBruto, 0);
+      const totalFolhaBruta = funcionariosDetalhes.reduce((s, f) => s + f.salarioBruto, 0);
+      const totalBaseEncargos = funcionariosDetalhes.reduce(
+        (s, f) => s + f.baseCalculoEncargos,
+        0
+      );
       const totalEncargos = funcionariosDetalhes.reduce((s, f) => s + f.encargos, 0);
-      const totalCustoReal = totalSalarioBruto + totalEncargos;
+      const totalCustoReal = funcionariosDetalhes.reduce((s, f) => s + f.custoTotal, 0);
       const custoAnualizado = totalCustoReal * FATOR_ANUAL;
 
       return {
@@ -60,7 +80,9 @@ export async function GET() {
         lojaNome: loja.nome,
         fap: loja.fap,
         totalFuncionarios: funcs.length,
-        totalSalarioBruto,
+        totalFolhaBruta,
+        totalBaseEncargos,
+        totalSalarioBruto: totalFolhaBruta,
         totalEncargos,
         totalCustoReal,
         custoAnualizado,
@@ -70,7 +92,9 @@ export async function GET() {
 
     const rede = {
       totalFuncionarios: consolidado.reduce((s, l) => s + l.totalFuncionarios, 0),
-      totalSalarioBruto: consolidado.reduce((s, l) => s + l.totalSalarioBruto, 0),
+      totalFolhaBruta: consolidado.reduce((s, l) => s + l.totalFolhaBruta, 0),
+      totalBaseEncargos: consolidado.reduce((s, l) => s + l.totalBaseEncargos, 0),
+      totalSalarioBruto: consolidado.reduce((s, l) => s + l.totalFolhaBruta, 0),
       totalEncargos: consolidado.reduce((s, l) => s + l.totalEncargos, 0),
       totalCustoReal: consolidado.reduce((s, l) => s + l.totalCustoReal, 0),
       custoAnualizado: consolidado.reduce((s, l) => s + l.custoAnualizado, 0),

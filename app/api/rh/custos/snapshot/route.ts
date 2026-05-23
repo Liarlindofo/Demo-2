@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
-import { calcularEncargosPatronais, FATOR_ANUAL } from '@/lib/calculos-rh';
+import {
+  calcularComposicaoSalarial,
+  calcularEncargosPatronais,
+  FATOR_ANUAL,
+} from '@/lib/calculos-rh';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,12 +43,17 @@ export async function POST() {
 
     const upserts = lojas.map((loja) => {
       const funcs = loja.funcionarios;
-      const totalSalarioBruto = funcs.reduce((s, f) => s + f.salarioBruto, 0);
-      const totalEncargos = funcs.reduce((s, f) => {
-        const enc = calcularEncargosPatronais(f.salarioBruto, f.cargo.ratPct, loja.fap);
-        return s + enc.totalEncargos;
-      }, 0);
-      const totalCustoReal = totalSalarioBruto + totalEncargos;
+      let totalSalarioBruto = 0;
+      let totalEncargos = 0;
+      let totalCustoReal = 0;
+      for (const f of funcs) {
+        const comp = calcularComposicaoSalarial(f);
+        const enc = calcularEncargosPatronais(comp.baseCalculoEncargos, f.cargo.ratPct, loja.fap);
+        totalSalarioBruto += comp.totalBruto;
+        totalEncargos += enc.totalEncargos;
+        totalCustoReal +=
+          comp.baseCalculoEncargos + enc.totalEncargos + comp.valorAlimentacao + comp.valorVT;
+      }
 
       return prisma.rhSnapshotCustoMensal.upsert({
         where: { lojaId_mes_ano_userId: { lojaId: loja.id, mes, ano, userId: dbUser.id } },

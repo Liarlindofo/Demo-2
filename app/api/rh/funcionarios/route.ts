@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { enrichFuncionario, enrichFuncionarios } from '@/lib/rh-funcionario';
+import { limparCPF, validarCPF, validarDataNascimento } from '@/lib/validacoes';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +25,17 @@ function calcDatasExperiencia(dataAdmissao: Date) {
   const d2 = new Date(dataAdmissao);
   d2.setDate(d2.getDate() + 90);
   return { dataFimExperiencia1: d1, dataFimExperiencia2: d2 };
+}
+
+function parseComposicaoBody(body: Record<string, unknown>) {
+  const salarioBase = Number(body.salarioBase);
+  return {
+    salarioBase,
+    valorAlimentacao: Number(body.valorAlimentacao ?? 0) || 0,
+    valorVT: Number(body.valorVT ?? 0) || 0,
+    cargoResponsabilidade: Boolean(body.cargoResponsabilidade),
+    bonificacaoAssiduidade: Number(body.bonificacaoAssiduidade ?? 0) || 0,
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -48,7 +61,7 @@ export async function GET(req: NextRequest) {
     if (search) {
       where.OR = [
         { nome: { contains: search, mode: 'insensitive' } },
-        { cpf: { contains: search } },
+        { cpf: { contains: search.replace(/\D/g, '') } },
       ];
     }
 
@@ -56,12 +69,21 @@ export async function GET(req: NextRequest) {
       where,
       include: {
         cargo: { select: { id: true, nome: true, ratPct: true } },
-        loja: { select: { id: true, nome: true } },
+        loja: { select: { id: true, nome: true, fap: true } },
       },
       orderBy: { nome: 'asc' },
     });
 
-    return NextResponse.json(funcionarios);
+    const fapMap = Object.fromEntries(
+      funcionarios.map((f) => [f.loja.id, f.loja.fap ?? 1])
+    );
+
+    return NextResponse.json(
+      enrichFuncionarios(funcionarios, fapMap).map((f) => {
+        const { loja, ...rest } = f;
+        return { ...rest, loja: { id: loja.id, nome: loja.nome } };
+      })
+    );
   } catch (err) {
     console.error('[GET /api/rh/funcionarios]', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
@@ -76,14 +98,13 @@ export async function POST(req: Request) {
     const body = await req.json();
     const {
       nome,
-      cpf,
+      cpf: cpfRaw,
       email,
       telefone,
       dataNascimento,
       dataAdmissao,
       cargoId,
       lojaId,
-      salarioBruto,
       escala,
       turno,
       horarioEntrada,
@@ -92,11 +113,27 @@ export async function POST(req: Request) {
       observacoes,
     } = body;
 
+    const composicao = parseComposicaoBody(body);
+    const cpf = limparCPF(String(cpfRaw ?? ''));
+
     if (!nome?.trim()) return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 });
+    if (!cpf || !validarCPF(cpf))
+      return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
+    if (!dataNascimento)
+      return NextResponse.json({ error: 'Data de nascimento é obrigatória' }, { status: 400 });
+    const nascimento = new Date(dataNascimento);
+    const errNasc = validarDataNascimento(nascimento);
+    if (errNasc) return NextResponse.json({ error: errNasc }, { status: 400 });
     if (!cargoId) return NextResponse.json({ error: 'Cargo é obrigatório' }, { status: 400 });
     if (!lojaId) return NextResponse.json({ error: 'Loja é obrigatória' }, { status: 400 });
-    if (!salarioBruto || salarioBruto <= 0)
-      return NextResponse.json({ error: 'Salário inválido' }, { status: 400 });
+    if (!composicao.salarioBase || composicao.salarioBase <= 0)
+      return NextResponse.json({ error: 'Salário base inválido' }, { status: 400 });
+
+    const cpfExistente = await prisma.rhFuncionario.findFirst({
+      where: { userId: dbUser.id, cpf },
+    });
+    if (cpfExistente)
+      return NextResponse.json({ error: 'CPF já cadastrado' }, { status: 409 });
 
     const [cargo, loja] = await Promise.all([
       prisma.rhCargo.findFirst({ where: { id: cargoId, userId: dbUser.id } }),
@@ -112,14 +149,14 @@ export async function POST(req: Request) {
       data: {
         userId: dbUser.id,
         nome: nome.trim(),
-        cpf: cpf || null,
+        cpf,
         email: email || null,
         telefone: telefone || null,
-        dataNascimento: dataNascimento ? new Date(dataNascimento) : null,
+        dataNascimento: nascimento,
         dataAdmissao: admissao,
         cargoId,
         lojaId,
-        salarioBruto,
+        ...composicao,
         escala: escala ?? '6x1',
         turno: turno ?? 'manhã',
         horarioEntrada: horarioEntrada ?? '08:00',
@@ -139,7 +176,9 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json(funcionario, { status: 201 });
+    return NextResponse.json(enrichFuncionario(funcionario, cargo.ratPct, loja.fap), {
+      status: 201,
+    });
   } catch (err) {
     console.error('[POST /api/rh/funcionarios]', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });

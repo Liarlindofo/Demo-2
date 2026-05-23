@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
-import { calcularEncargosPatronais, FATOR_ANUAL } from '@/lib/calculos-rh';
+import {
+  calcularComposicaoSalarial,
+  calcularEncargosPatronais,
+  FATOR_ANUAL,
+} from '@/lib/calculos-rh';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,17 +44,20 @@ export async function GET() {
 
     for (const loja of lojas) {
       for (const f of loja.funcionarios) {
-        const enc = calcularEncargosPatronais(f.salarioBruto, f.cargo.ratPct, loja.fap);
+        const comp = calcularComposicaoSalarial(f);
+        const enc = calcularEncargosPatronais(comp.baseCalculoEncargos, f.cargo.ratPct, loja.fap);
+        const custoMensal =
+          comp.baseCalculoEncargos + enc.totalEncargos + comp.valorAlimentacao + comp.valorVT;
         linhas.push(
           [
             loja.nome,
             f.nome,
             f.cargo.nome,
-            f.salarioBruto.toFixed(2).replace('.', ','),
+            comp.totalBruto.toFixed(2).replace('.', ','),
             enc.totalEncargos.toFixed(2).replace('.', ','),
-            enc.percentualSobreSalario.toFixed(2).replace('.', ',') + '%',
-            enc.custoTotal.toFixed(2).replace('.', ','),
-            (enc.custoTotal * FATOR_ANUAL).toFixed(2).replace('.', ','),
+            enc.percentualSobreBase.toFixed(2).replace('.', ',') + '%',
+            custoMensal.toFixed(2).replace('.', ','),
+            (custoMensal * FATOR_ANUAL).toFixed(2).replace('.', ','),
           ].join(';')
         );
       }
