@@ -73,8 +73,9 @@ interface Funcionario {
 
 interface EncargosResult {
   salarioBruto: number; inssPatronal: number; rat: number; fgts: number;
-  sistemaS: number; custoPatronalTotal: number; inssEmpregado: number;
-  irrf: number; salarioLiquido: number; custoTotalMensal: number; custoAnual: number;
+  sistemaS: number; custoPatronalTotal: number; bonificacoesVariaveis?: number;
+  inssEmpregado: number; irrf: number; salarioLiquido: number;
+  custoTotalMensal: number; custoAnual: number;
 }
 
 interface Historico {
@@ -194,9 +195,7 @@ export default function FuncionarioDetailPage() {
           const f: Funcionario = await fRes.json();
           setFuncionario(f);
           populateForm(f);
-          setLoadingEncargos(true);
-          fetch('/api/rh/calculos/impostos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ funcionarioId: f.id }) })
-            .then(r => r.ok ? r.json() : null).then(d => d && setEncargos(d)).finally(() => setLoadingEncargos(false));
+          fetchEncargos(f.id);
         }
         if (cRes.ok) setCargos(await cRes.json());
       } finally { setLoading(false); }
@@ -214,6 +213,20 @@ export default function FuncionarioDetailPage() {
     if (res.ok) setBonificacoes(await res.json());
   }, [params.id]);
 
+  const fetchEncargos = useCallback(async (funcionarioId: string) => {
+    setLoadingEncargos(true);
+    try {
+      const res = await fetch('/api/rh/calculos/impostos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ funcionarioId }),
+      });
+      if (res.ok) setEncargos(await res.json());
+    } finally {
+      setLoadingEncargos(false);
+    }
+  }, []);
+
   const refetchFuncionario = useCallback(async () => {
     const res = await fetch(`/api/rh/funcionarios/${params.id}`);
     if (res.ok) {
@@ -223,8 +236,12 @@ export default function FuncionarioDetailPage() {
   }, [params.id]);
 
   const handleBonificacaoSaved = useCallback(async () => {
-    await Promise.all([fetchBonificacoes(), refetchFuncionario()]);
-  }, [fetchBonificacoes, refetchFuncionario]);
+    await Promise.all([
+      fetchBonificacoes(),
+      refetchFuncionario(),
+      fetchEncargos(params.id),
+    ]);
+  }, [fetchBonificacoes, refetchFuncionario, fetchEncargos, params.id]);
 
   useEffect(() => {
     if (tab === 'dados' && funcionario) fetchBonificacoes();
@@ -598,9 +615,19 @@ export default function FuncionarioDetailPage() {
                         {[{ label: 'INSS Patronal (20%)', value: encargos.inssPatronal }, { label: 'RAT', value: encargos.rat }, { label: 'FGTS (8%)', value: encargos.fgts }, { label: 'Sistema S', value: encargos.sistemaS }].map(({ label, value }) => (
                           <div key={label} className="flex justify-between text-sm"><span className="text-gray-400">{label}</span><span className="text-gray-200 font-mono">{fmt(value)}</span></div>
                         ))}
-                        <div className="flex justify-between text-sm font-semibold pt-2 border-t border-[#2a2a2e]"><span className="text-white">Custo patronal</span><span className="text-amber-400 font-mono">{fmt(encargos.custoPatronalTotal)}</span></div>
+                        <div className="flex justify-between text-sm font-semibold pt-2 border-t border-[#2a2a2e]"><span className="text-white">Total encargos (INSS, FGTS, RAT…)</span><span className="text-amber-400 font-mono">{fmt(encargos.custoPatronalTotal)}</span></div>
+                        <p className="text-[10px] text-gray-600 mt-1">Calculado só sobre a base remuneratória (salário + resp. + assiduidade do cadastro).</p>
                       </div>
                     </div>
+                    {(encargos.bonificacoesVariaveis ?? 0) > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Bonificações do mês</p>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">Custo direto (sem encargo)</span>
+                          <span className="text-emerald-400/90 font-mono">{fmt(encargos.bonificacoesVariaveis!)}</span>
+                        </div>
+                      </div>
+                    )}
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Descontos do Empregado</p>
                       <div className="space-y-2">

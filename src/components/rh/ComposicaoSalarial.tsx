@@ -132,13 +132,13 @@ export default function ComposicaoSalarialCard({
         <div className="space-y-2 text-sm">
           <Row label="Base encargos" value={composicao.baseCalculoEncargos} />
           <Row
-            label={`Encargos patronais (~${pctEnc}%)`}
+            label={`Encargos patronais (~${pctEnc}% sobre a base)`}
             value={enc.totalEncargos}
             className="text-red-400"
           />
           {temBonificacoesVariaveis && (
             <Row
-              label="Bonificações variáveis (sem encargo)"
+              label="Bonificações do mês (custo direto)"
               value={bon!.totalVariavel}
               className="text-emerald-400/90"
             />

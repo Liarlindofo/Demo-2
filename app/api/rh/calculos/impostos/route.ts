@@ -2,7 +2,13 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
-import { calcularComposicaoSalarial, calcularEncargosPatronais } from '@/lib/calculos-rh';
+import {
+  calcularComposicaoSalarial,
+  calcularEncargosPatronais,
+  custoMensalEmpresaComBonificacoes,
+  totalBrutoComBonificacoes,
+} from '@/lib/calculos-rh';
+import { carregarBonificacoesComposicao } from '@/lib/rh-bonificacoes-composicao';
 
 export const dynamic = 'force-dynamic';
 
@@ -106,11 +112,18 @@ export async function POST(req: Request) {
     const inssEmpregado = calcularINSSEmpregado(base);
     const irrf = calcularIRRF(base, inssEmpregado);
     const salarioLiquido = base - inssEmpregado - irrf;
-    const custoTotalMensal =
-      composicao.baseCalculoEncargos +
-      enc.totalEncargos +
-      composicao.valorAlimentacao +
-      composicao.valorVT;
+
+    const bonificacoesComposicao = funcionarioId
+      ? await carregarBonificacoesComposicao(funcionarioId)
+      : null;
+    const bonificacoesVariaveis = bonificacoesComposicao?.totalVariavel ?? 0;
+
+    const custoTotalMensal = bonificacoesComposicao
+      ? custoMensalEmpresaComBonificacoes(composicao, enc.totalEncargos, bonificacoesComposicao)
+      : composicao.baseCalculoEncargos +
+        enc.totalEncargos +
+        composicao.valorAlimentacao +
+        composicao.valorVT;
 
     const decimoTerceiro = composicao.baseCalculoEncargos + enc.totalEncargos;
     const ferias =
@@ -121,10 +134,16 @@ export async function POST(req: Request) {
       composicao.baseCalculoEncargos * 0.08;
     const custoAnual = custoTotalMensal * 12 + decimoTerceiro + ferias;
 
+    const salarioBruto = bonificacoesComposicao
+      ? totalBrutoComBonificacoes(composicao, bonificacoesComposicao)
+      : composicao.totalBruto;
+
     return NextResponse.json({
       composicaoSalarial: composicao,
-      salarioBruto: composicao.totalBruto,
+      salarioBruto,
       baseCalculoEncargos: base,
+      bonificacoesVariaveis,
+      bonificacoesComposicao,
       inssPatronal: enc.inssPatronal,
       rat: enc.rat,
       fgts: enc.fgts,
