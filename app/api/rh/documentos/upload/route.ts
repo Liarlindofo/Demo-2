@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 
@@ -8,7 +8,7 @@ export const maxDuration = 60;
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
-const BUCKET_NAME = 'rh-documentos';
+const DEFAULT_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'checklist';
 
 const EXT_TO_MIME: Record<string, string> = {
   pdf: 'application/pdf',
@@ -17,6 +17,19 @@ const EXT_TO_MIME: Record<string, string> = {
   png: 'image/png',
   webp: 'image/webp',
 };
+
+async function ensureBucket(supabase: SupabaseClient, bucketName: string) {
+  const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+  if (listError) throw listError;
+  if (buckets?.some((b) => b.name === bucketName)) return;
+
+  const { error: createError } = await supabase.storage.createBucket(bucketName, {
+    public: true,
+  });
+  if (createError && !/already exists/i.test(createError.message)) {
+    throw createError;
+  }
+}
 
 function resolveContentType(file: File): string | null {
   if (ALLOWED_TYPES.includes(file.type)) return file.type;
@@ -73,13 +86,27 @@ export async function POST(req: Request) {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const bucketName = process.env.SUPABASE_RH_BUCKET || DEFAULT_BUCKET;
+
+    try {
+      await ensureBucket(supabase, bucketName);
+    } catch (bucketError) {
+      console.error('[POST /api/rh/documentos/upload] ensureBucket', bucketError);
+      return NextResponse.json(
+        {
+          error:
+            'Bucket de storage não encontrado. Crie um bucket público no Supabase (ex: "checklist") ou configure SUPABASE_STORAGE_BUCKET.',
+        },
+        { status: 500 }
+      );
+    }
 
     const ext = file.name.split('.').pop()?.toLowerCase() ?? 'bin';
-    const fileName = `${dbUser.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const fileName = `rh/documentos/${dbUser.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
 
     const { error: uploadError } = await supabase.storage
-      .from(BUCKET_NAME)
+      .from(bucketName)
       .upload(fileName, buffer, {
         contentType,
         upsert: false,
@@ -93,7 +120,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(fileName);
+    const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
 
     return NextResponse.json({
       url: urlData.publicUrl,
