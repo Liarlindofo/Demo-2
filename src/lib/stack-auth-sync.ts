@@ -8,11 +8,24 @@ export interface StackAuthUser {
   primaryEmailVerified?: Date | null; // Transformado de boolean para Date quando necessário
 }
 
+// ---------------------------------------------------------------------------
+// Cache em memória para syncStackAuthUser
+// Evita 4-6 queries por requisição em rotas autenticadas (>60 rotas)
+// ---------------------------------------------------------------------------
+const _syncCache = new Map<string, {
+  result: unknown;
+  cachedAt: number;
+  primaryEmail: string | null | undefined;
+  displayName: string | null | undefined;
+  profileImageUrl: string | null | undefined;
+}>();
+const _SYNC_CACHE_TTL_MS = 60_000; // 60 segundos
+
 /**
  * Sincroniza usuário do Stack Auth com o banco de dados local
  * Cria o usuário se não existir, atualiza se já existir
  */
-export async function syncStackAuthUser(stackUser: StackAuthUser) {
+async function _syncStackAuthUserImpl(stackUser: StackAuthUser) {
   try {
     console.log('🔄 Sincronizando usuário Stack Auth:', { 
       id: stackUser.id, 
@@ -149,6 +162,35 @@ export async function syncStackAuthUser(stackUser: StackAuthUser) {
     
     throw error;
   }
+}
+
+/**
+ * Wrapper público com cache em memória (TTL 60s).
+ * Retorna o resultado cacheado quando userId, email, displayName e
+ * profileImageUrl não mudaram — ignorando o sync para economizar queries.
+ * Invalida o cache automaticamente se qualquer um desses campos mudar.
+ */
+export async function syncStackAuthUser(stackUser: StackAuthUser) {
+  const now = Date.now();
+  const hit = _syncCache.get(stackUser.id);
+
+  if (hit &&
+      now - hit.cachedAt < _SYNC_CACHE_TTL_MS &&
+      hit.primaryEmail === stackUser.primaryEmail &&
+      (hit.displayName ?? null) === (stackUser.displayName ?? null) &&
+      (hit.profileImageUrl ?? null) === (stackUser.profileImageUrl ?? null)) {
+    return hit.result as Awaited<ReturnType<typeof _syncStackAuthUserImpl>>;
+  }
+
+  const result = await _syncStackAuthUserImpl(stackUser);
+  _syncCache.set(stackUser.id, {
+    result,
+    cachedAt: Date.now(),
+    primaryEmail: stackUser.primaryEmail,
+    displayName: stackUser.displayName,
+    profileImageUrl: stackUser.profileImageUrl,
+  });
+  return result;
 }
 
 /**

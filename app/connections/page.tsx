@@ -147,7 +147,7 @@ function ConnectionsPageContent() {
   useEffect(() => {
     if (user) {
       loadConnections();
-      const interval = setInterval(loadConnections, 5000);
+      const interval = setInterval(loadConnections, 30000);
       return () => clearInterval(interval);
     }
   }, [user, loadConnections]);

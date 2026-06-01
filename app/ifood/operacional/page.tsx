@@ -1084,11 +1084,11 @@ export default function IfoodOperacionalPage() {
     }
   }, [selectedMerchant, addToast]);
 
-  // Initial load + polling a cada 15s
+  // Initial load + polling a cada 30s
   useEffect(() => {
     if (!selectedMerchant) return;
     fetchOrders(false);
-    const id = setInterval(() => fetchOrders(true), 15_000);
+    const id = setInterval(() => fetchOrders(true), 30_000);
     return () => clearInterval(id);
   }, [selectedMerchant, fetchOrders]);
 

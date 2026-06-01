@@ -25,7 +25,7 @@ import Link from "next/link";
 // ---------------------------------------------------------------------------
 const STORAGE_KEY_MERCHANT = "ifood_selected_merchant";
 const STORAGE_KEY_PERIOD = "ifood_selected_period_type";
-const POLLING_INTERVAL_MS = 60_000;
+const POLLING_INTERVAL_MS = 120_000;
 
 function getToday() {
   return new Date().toISOString().split("T")[0];

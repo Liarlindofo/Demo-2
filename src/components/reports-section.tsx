@@ -470,7 +470,7 @@ export function ReportsSection() {
             timestamp: new Date().toISOString(),
           } as RealtimeUpdate;
         }
-      }, 60000);
+      }, 120000);
     }
 
     return () => {
