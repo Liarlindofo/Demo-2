@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { X, CheckCircle2, AlertTriangle, ChevronLeft } from 'lucide-react';
+import { X, CheckCircle2, AlertTriangle, ChevronLeft, Search } from 'lucide-react';
 import type { StockSession } from '../types';
 import { ProgressBar } from '../components/ProgressBar';
 import { SessionAccordion } from '../components/SessionAccordion';
+import { StockItemRow } from '../components/StockItemRow';
 import { formatQtd } from '../utils';
 
 interface ContagemProps {
@@ -30,6 +31,16 @@ export function Contagem({
     session.sessoes.find(s => s.status === 'pendente')?.id ?? null,
   );
   const [showRevisao, setShowRevisao] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const isSearching = searchTerm.trim().length > 0;
+  const searchResults = isSearching
+    ? session.sessoes.flatMap(cat =>
+        cat.itens
+          .filter(i => i.nome.toLowerCase().includes(searchTerm.toLowerCase()))
+          .map(i => ({ item: i, categoriaId: cat.id, categoriaNome: cat.nome, icone: cat.icone })),
+      )
+    : [];
 
   const concluidas = session.sessoes.filter(s => s.status === 'concluida').length;
   const total = session.sessoes.length;
@@ -174,6 +185,26 @@ export function Contagem({
           </button>
         </div>
 
+        {/* Campo de pesquisa */}
+        <div className="relative mt-2 mb-2">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Buscar produto..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full bg-[#2a2a2e] text-white text-sm rounded-xl pl-9 pr-9 py-2.5 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
         {/* Barra de progresso */}
         <ProgressBar concluidas={concluidas} total={total} />
         <p className="text-xs text-gray-600 mt-1">
@@ -186,23 +217,52 @@ export function Contagem({
 
       {/* Lista de sessões */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 max-w-lg mx-auto w-full">
-        {session.sessoes.map((cat, idx) => (
-          <SessionAccordion
-            key={cat.id}
-            categoria={cat}
-            isActive={activeCatId === cat.id}
-            onToggle={() => toggleCategoria(cat.id)}
-            onQuantidade={onQuantidade}
-            onObservacao={onObservacao}
-            onConcluir={() => handleConcluirCategoria(cat.id)}
-            onReabrir={() => onReabrirCategoria(cat.id)}
-            onProxima={
-              idx < session.sessoes.length - 1
-                ? () => handleProxima(cat.id)
-                : undefined
-            }
-          />
-        ))}
+        {isSearching ? (
+          searchResults.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Search className="w-10 h-10 text-gray-700 mb-3" />
+              <p className="text-gray-500 text-sm">Nenhum produto encontrado</p>
+              <p className="text-gray-600 text-xs mt-1">"{searchTerm}"</p>
+            </div>
+          ) : (
+            searchResults.map(({ item, categoriaId, categoriaNome, icone }) => (
+              <div
+                key={`${categoriaId}-${item.insumoId}`}
+                className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl overflow-hidden"
+              >
+                <p className="px-4 pt-3 pb-1 text-xs text-gray-500 font-medium">
+                  {icone} {categoriaNome}
+                </p>
+                <div className="px-4 pb-3">
+                  <StockItemRow
+                    item={item}
+                    categoriaId={categoriaId}
+                    onQuantidade={onQuantidade}
+                    onObservacao={onObservacao}
+                  />
+                </div>
+              </div>
+            ))
+          )
+        ) : (
+          session.sessoes.map((cat, idx) => (
+            <SessionAccordion
+              key={cat.id}
+              categoria={cat}
+              isActive={activeCatId === cat.id}
+              onToggle={() => toggleCategoria(cat.id)}
+              onQuantidade={onQuantidade}
+              onObservacao={onObservacao}
+              onConcluir={() => handleConcluirCategoria(cat.id)}
+              onReabrir={() => onReabrirCategoria(cat.id)}
+              onProxima={
+                idx < session.sessoes.length - 1
+                  ? () => handleProxima(cat.id)
+                  : undefined
+              }
+            />
+          ))
+        )}
 
         {/* Botão finalizar */}
         <div className="pt-2 pb-8">
