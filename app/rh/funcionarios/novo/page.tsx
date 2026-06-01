@@ -3,18 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLoja } from '@/contexts/LojaContext';
-import { ArrowLeft, Plus, X, User, Briefcase, DollarSign, Clock } from 'lucide-react';
+import { ArrowLeft, Plus, X, User, Briefcase, DollarSign, Clock, AlertTriangle } from 'lucide-react';
 import {
   DadosPessoaisFields,
   ComposicaoSalarialForm,
-  validateDadosPessoais,
-  validateComposicao,
   buildComposicaoPayload,
   buildDadosPessoaisPayload,
   type ComposicaoSalarialValues,
   type DadosPessoaisValues,
 } from '@/components/rh/FuncionarioForm';
-import { limparCPF, validarCPF } from '@/lib/validacoes';
+import { limparCPF } from '@/lib/validacoes';
 
 interface Cargo {
   id: string;
@@ -50,6 +48,8 @@ export default function NovoFuncionarioPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showCargoModal, setShowCargoModal] = useState(false);
+  const [showEmptyFieldsDialog, setShowEmptyFieldsDialog] = useState(false);
+  const [emptyFieldsList, setEmptyFieldsList] = useState<string[]>([]);
   const [novoCargo, setNovoCargo] = useState('');
   const [novoCargoRat, setNovoCargoRat] = useState('2');
   const [savingCargo, setSavingCargo] = useState(false);
@@ -97,31 +97,19 @@ export default function NovoFuncionarioPage() {
 
   const parseMoney = (v: string) => parseFloat(v.replace(/[^0-9,]/g, '').replace(',', '.')) || 0;
 
-  const validate = async () => {
-    const cpfOk =
-      limparCPF(dadosPessoais.cpf).length === 11 &&
-      validarCPF(dadosPessoais.cpf) &&
-      (await fetch(
-        `/api/rh/funcionarios/verificar-cpf?cpf=${limparCPF(dadosPessoais.cpf)}`
-      )
-        .then((r) => r.json())
-        .then((d) => d.disponivel === true)
-        .catch(() => false));
-
-    const errs = {
-      ...validateDadosPessoais(dadosPessoais, cpfOk),
-      ...validateComposicao(composicao),
-    };
-    if (!cargoId) errs.cargoId = 'Cargo é obrigatório';
-    if (!lojaId) errs.lojaId = 'Loja é obrigatória';
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
+  const checkEmptyFields = (): string[] => {
+    const empty: string[] = [];
+    if (!dadosPessoais.nome.trim()) empty.push('Nome completo');
+    if (!limparCPF(dadosPessoais.cpf)) empty.push('CPF');
+    if (!dadosPessoais.dataNascimento) empty.push('Data de nascimento');
+    if (!dadosPessoais.dataAdmissao) empty.push('Data de admissão');
+    if (!cargoId) empty.push('Cargo');
+    if (!lojaId) empty.push('Loja');
+    if (parseMoney(composicao.salarioBase) <= 0) empty.push('Salário base');
+    return empty;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!(await validate())) return;
-
+  const doSubmit = async () => {
     setSubmitting(true);
     try {
       const payload = {
@@ -157,6 +145,22 @@ export default function NovoFuncionarioPage() {
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const empty = checkEmptyFields();
+    if (empty.length > 0) {
+      setEmptyFieldsList(empty);
+      setShowEmptyFieldsDialog(true);
+      return;
+    }
+    await doSubmit();
+  };
+
+  const handleConfirmContinue = async () => {
+    setShowEmptyFieldsDialog(false);
+    await doSubmit();
+  };
+
   const handleSaveCargo = async () => {
     if (!novoCargo.trim()) return;
     setSavingCargo(true);
@@ -187,6 +191,46 @@ export default function NovoFuncionarioPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
+      {/* Empty Fields Confirmation Dialog */}
+      {showEmptyFieldsDialog && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+              </div>
+              <h3 className="text-base font-semibold text-white">Campos vazios</h3>
+            </div>
+            <p className="text-sm text-gray-400 mb-3">
+              Ainda existem campos vazios. Gostaria de continuar mesmo assim?
+            </p>
+            <ul className="mb-5 space-y-1.5">
+              {emptyFieldsList.map((field) => (
+                <li key={field} className="flex items-center gap-2 text-xs text-amber-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                  {field}
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowEmptyFieldsDialog(false)}
+                className="flex-1 py-2.5 rounded-xl bg-[#2a2a2e] text-gray-300 text-sm font-medium hover:bg-[#3a3a3e] transition-colors"
+              >
+                Voltar e preencher
+              </button>
+              <button
+                onClick={handleConfirmContinue}
+                disabled={submitting}
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 disabled:opacity-60 transition-colors"
+              >
+                {submitting ? 'Cadastrando...' : 'Continuar assim'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create Cargo Modal */}
       {showCargoModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -283,14 +327,12 @@ export default function NovoFuncionarioPage() {
             />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Cargo *</label>
+                <label className={labelCls}>Cargo</label>
                 <div className="flex gap-2">
                   <select
                     value={cargoId}
                     onChange={(e) => setCargoId(e.target.value)}
-                    className={`flex-1 bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/50 ${
-                      errors.cargoId ? 'border-red-500/50' : ''
-                    }`}
+                    className="flex-1 bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/50"
                   >
                     <option value="">Selecionar...</option>
                     {cargos.map((c) => (
@@ -308,16 +350,13 @@ export default function NovoFuncionarioPage() {
                     <Plus className="w-4 h-4" />
                   </button>
                 </div>
-                {errors.cargoId && <p className="text-xs text-red-400 mt-1">{errors.cargoId}</p>}
               </div>
               <div>
-                <label className={labelCls}>Loja *</label>
+                <label className={labelCls}>Loja</label>
                 <select
                   value={lojaId}
                   onChange={(e) => setLojaId(e.target.value)}
-                  className={`w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/50 ${
-                    errors.lojaId ? 'border-red-500/50' : ''
-                  }`}
+                  className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/50"
                 >
                   <option value="">Selecionar...</option>
                   {lojas.map((l: Loja) => (
@@ -326,7 +365,6 @@ export default function NovoFuncionarioPage() {
                     </option>
                   ))}
                 </select>
-                {errors.lojaId && <p className="text-xs text-red-400 mt-1">{errors.lojaId}</p>}
               </div>
               <div className="sm:col-span-2">
                 <label className={labelCls}>Observações</label>

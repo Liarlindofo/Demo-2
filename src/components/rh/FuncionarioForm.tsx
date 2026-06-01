@@ -104,7 +104,7 @@ export function DadosPessoaisFields({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div className="sm:col-span-2">
-        <label className={labelCls}>Nome completo *</label>
+        <label className={labelCls}>Nome completo</label>
         <input
           value={values.nome}
           onChange={(e) => onChange({ nome: e.target.value })}
@@ -113,7 +113,7 @@ export function DadosPessoaisFields({
         {errors.nome && <p className="text-xs text-red-400 mt-1">{errors.nome}</p>}
       </div>
       <div>
-        <label className={labelCls}>CPF *</label>
+        <label className={labelCls}>CPF</label>
         <input
           value={values.cpf}
           onChange={(e) => onChange({ cpf: formatCPFInput(e.target.value) })}
@@ -126,7 +126,7 @@ export function DadosPessoaisFields({
         )}
       </div>
       <div>
-        <label className={labelCls}>Data de nascimento *</label>
+        <label className={labelCls}>Data de nascimento</label>
         <input
           type="date"
           value={values.dataNascimento}
@@ -156,7 +156,7 @@ export function DadosPessoaisFields({
         />
       </div>
       <div>
-        <label className={labelCls}>Data de admissão *</label>
+        <label className={labelCls}>Data de admissão</label>
         <input
           type="date"
           value={values.dataAdmissao}
