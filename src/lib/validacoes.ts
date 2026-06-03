@@ -1,10 +1,11 @@
 /** Remove máscara e retorna apenas dígitos do CPF */
-export function limparCPF(cpf: string): string {
+export function limparCPF(cpf: string | null | undefined): string {
+  if (!cpf) return '';
   return cpf.replace(/\D/g, '').slice(0, 11);
 }
 
 /** Valida CPF pelos dígitos verificadores */
-export function validarCPF(cpf: string): boolean {
+export function validarCPF(cpf: string | null | undefined): boolean {
   const digits = limparCPF(cpf);
   if (digits.length !== 11) return false;
   if (/^(\d)\1{10}$/.test(digits)) return false;
@@ -22,7 +23,8 @@ export function validarCPF(cpf: string): boolean {
   return rest === parseInt(digits[10], 10);
 }
 
-export function formatarCPF(cpf: string): string {
+export function formatarCPF(cpf: string | null | undefined): string {
+  if (!cpf) return '—';
   const d = limparCPF(cpf);
   if (d.length !== 11) return cpf;
   return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');

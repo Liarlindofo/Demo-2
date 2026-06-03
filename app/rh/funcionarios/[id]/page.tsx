@@ -25,10 +25,10 @@ interface Loja { id: string; nome: string; ativo: boolean }
 interface Funcionario {
   id: string;
   nome: string;
-  cpf: string;
+  cpf: string | null;
   email?: string | null;
   telefone?: string | null;
-  dataNascimento: string;
+  dataNascimento: string | null;
   dataAdmissao: string;
   ativo: boolean;
   cargoId: string;
