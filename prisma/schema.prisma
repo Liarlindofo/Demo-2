@@ -804,10 +804,10 @@ model RhFuncionario {
   id                    String                   @id @default(cuid())
   userId                String
   nome                  String
-  cpf                   String
+  cpf                   String?
   email                 String?
   telefone              String?
-  dataNascimento        DateTime
+  dataNascimento        DateTime?
   dataAdmissao          DateTime
   cargoId               String
   lojaId                String

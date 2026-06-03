@@ -114,26 +114,27 @@ export async function POST(req: Request) {
     } = body;
 
     const composicao = parseComposicaoBody(body);
-    const cpf = limparCPF(String(cpfRaw ?? ''));
+    const cpf = cpfRaw ? limparCPF(String(cpfRaw)) : null;
 
     if (!nome?.trim()) return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 });
-    if (!cpf || !validarCPF(cpf))
+    if (cpf && !validarCPF(cpf))
       return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
-    if (!dataNascimento)
-      return NextResponse.json({ error: 'Data de nascimento é obrigatória' }, { status: 400 });
-    const nascimento = new Date(dataNascimento);
-    const errNasc = validarDataNascimento(nascimento);
-    if (errNasc) return NextResponse.json({ error: errNasc }, { status: 400 });
+    if (dataNascimento) {
+      const errNasc = validarDataNascimento(new Date(dataNascimento));
+      if (errNasc) return NextResponse.json({ error: errNasc }, { status: 400 });
+    }
     if (!cargoId) return NextResponse.json({ error: 'Cargo é obrigatório' }, { status: 400 });
     if (!lojaId) return NextResponse.json({ error: 'Loja é obrigatória' }, { status: 400 });
     if (!composicao.salarioBase || composicao.salarioBase <= 0)
       return NextResponse.json({ error: 'Salário base inválido' }, { status: 400 });
 
-    const cpfExistente = await prisma.rhFuncionario.findFirst({
-      where: { userId: dbUser.id, cpf },
-    });
-    if (cpfExistente)
-      return NextResponse.json({ error: 'CPF já cadastrado' }, { status: 409 });
+    if (cpf) {
+      const cpfExistente = await prisma.rhFuncionario.findFirst({
+        where: { userId: dbUser.id, cpf },
+      });
+      if (cpfExistente)
+        return NextResponse.json({ error: 'CPF já cadastrado' }, { status: 409 });
+    }
 
     const [cargo, loja] = await Promise.all([
       prisma.rhCargo.findFirst({ where: { id: cargoId, userId: dbUser.id } }),
@@ -149,10 +150,10 @@ export async function POST(req: Request) {
       data: {
         userId: dbUser.id,
         nome: nome.trim(),
-        cpf,
+        cpf: cpf || null,
         email: email || null,
         telefone: telefone || null,
-        dataNascimento: nascimento,
+        dataNascimento: dataNascimento ? new Date(dataNascimento) : null,
         dataAdmissao: admissao,
         cargoId,
         lojaId,
