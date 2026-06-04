@@ -76,6 +76,7 @@ export default function NovoFuncionarioPage() {
   const [horarioEntrada, setHorarioEntrada] = useState('08:00');
   const [horarioSaida, setHorarioSaida] = useState('17:00');
   const [diasFolga, setDiasFolga] = useState<string[]>(['Dom']);
+  const [domingoFolga, setDomingoFolga] = useState<string>('1');
   const [observacoes, setObservacoes] = useState('');
 
   useEffect(() => {
@@ -122,6 +123,7 @@ export default function NovoFuncionarioPage() {
         horarioEntrada,
         horarioSaida,
         diasFolga,
+        domingoFolga: diasFolga.includes('Dom') ? domingoFolga : null,
         observacoes: observacoes || null,
       };
 
@@ -488,6 +490,35 @@ export default function NovoFuncionarioPage() {
                   ))}
                 </div>
               </div>
+
+              {/* Qual domingo do mês */}
+              {diasFolga.includes('Dom') && (
+                <div>
+                  <label className={labelCls}>Qual domingo do mês é a folga?</label>
+                  <div className="flex flex-wrap gap-2">
+                    {([
+                      { value: '1', label: '1º domingo' },
+                      { value: '2', label: '2º domingo' },
+                      { value: '3', label: '3º domingo' },
+                      { value: '4', label: '4º domingo' },
+                      { value: 'ultimo', label: 'Último domingo' },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setDomingoFolga(opt.value)}
+                        className={`px-4 py-2 rounded-xl text-sm font-medium border-2 transition-colors ${
+                          domingoFolga === opt.value
+                            ? 'border-amber-500 bg-amber-500/10 text-amber-400'
+                            : 'border-[#2a2a2e] text-gray-500 hover:border-[#3a3a3e]'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

@@ -9,10 +9,8 @@ export interface ComposicaoSalarial {
 }
 
 export interface EncargosPatronais {
-  inssPatronal: number;
   fgts: number;
   rat: number;
-  sistemaS: number;
   totalEncargos: number;
   custoTotal: number;
   custoTotalEmpresa: number;
@@ -33,8 +31,7 @@ export function calcularComposicaoSalarial(funcionario: {
 
   const baseCalculoEncargos =
     funcionario.salarioBase +
-    adicionalResponsabilidade +
-    funcionario.bonificacaoAssiduidade;
+    adicionalResponsabilidade;
 
   const totalBruto =
     baseCalculoEncargos +
@@ -52,7 +49,7 @@ export function calcularComposicaoSalarial(funcionario: {
   };
 }
 
-/** Encargos incidem apenas sobre baseCalculoEncargos (não VT/VR) */
+/** Encargos (Simples Nacional): FGTS 8% + RAT ajustado pelo FAP. Sem INSS patronal nem Sistema S. */
 export function calcularEncargosPatronais(
   baseCalculoEncargos: number,
   rat: number = 2,
@@ -60,10 +57,8 @@ export function calcularEncargosPatronais(
 ): EncargosPatronais {
   if (baseCalculoEncargos <= 0) {
     return {
-      inssPatronal: 0,
       fgts: 0,
       rat: 0,
-      sistemaS: 0,
       totalEncargos: 0,
       custoTotal: 0,
       custoTotalEmpresa: 0,
@@ -72,24 +67,15 @@ export function calcularEncargosPatronais(
     };
   }
 
-  const inssPatronal = baseCalculoEncargos * 0.2;
   const fgts = baseCalculoEncargos * 0.08;
   const ratAjustado = baseCalculoEncargos * (rat / 100) * fap;
-  const senac = baseCalculoEncargos * 0.01;
-  const sesc = baseCalculoEncargos * 0.015;
-  const sebrae = baseCalculoEncargos * 0.006;
-  const incra = baseCalculoEncargos * 0.002;
-  const salarioEducacao = baseCalculoEncargos * 0.025;
 
-  const sistemaS = senac + sesc + sebrae + incra + salarioEducacao;
-  const totalEncargos = inssPatronal + fgts + ratAjustado + sistemaS;
+  const totalEncargos = fgts + ratAjustado;
   const custoTotalEmpresa = baseCalculoEncargos + totalEncargos;
 
   return {
-    inssPatronal,
     fgts,
     rat: ratAjustado,
-    sistemaS,
     totalEncargos,
     custoTotal: custoTotalEmpresa,
     custoTotalEmpresa,

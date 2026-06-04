@@ -111,7 +111,8 @@ export async function POST(req: Request) {
     const enc = calcularEncargosPatronais(base, rat, fap);
     const inssEmpregado = calcularINSSEmpregado(base);
     const irrf = calcularIRRF(base, inssEmpregado);
-    const salarioLiquido = base - inssEmpregado - irrf;
+    const descontoVT = composicaoInput.salarioBase * 0.05;
+    const salarioLiquido = base - inssEmpregado - irrf - descontoVT;
 
     const bonificacoesComposicao = funcionarioId
       ? await carregarBonificacoesComposicao(funcionarioId)
@@ -128,9 +129,7 @@ export async function POST(req: Request) {
     const decimoTerceiro = composicao.baseCalculoEncargos + enc.totalEncargos;
     const ferias =
       composicao.baseCalculoEncargos * (4 / 3) +
-      enc.inssPatronal +
       enc.rat +
-      enc.sistemaS +
       composicao.baseCalculoEncargos * 0.08;
     const custoAnual = custoTotalMensal * 12 + decimoTerceiro + ferias;
 
@@ -144,13 +143,12 @@ export async function POST(req: Request) {
       baseCalculoEncargos: base,
       bonificacoesVariaveis,
       bonificacoesComposicao,
-      inssPatronal: enc.inssPatronal,
       rat: enc.rat,
       fgts: enc.fgts,
-      sistemaS: enc.sistemaS,
       custoPatronalTotal: enc.totalEncargos,
       inssEmpregado,
       irrf,
+      descontoVT,
       salarioLiquido,
       custoTotalMensal,
       custoAnual,

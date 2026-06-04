@@ -110,6 +110,7 @@ export async function POST(req: Request) {
       horarioEntrada,
       horarioSaida,
       diasFolga,
+      domingoFolga,
       observacoes,
     } = body;
 
@@ -163,6 +164,7 @@ export async function POST(req: Request) {
         horarioEntrada: horarioEntrada ?? '08:00',
         horarioSaida: horarioSaida ?? '17:00',
         diasFolga: diasFolga ?? [],
+        domingoFolga: domingoFolga ?? null,
         observacoes: observacoes || null,
         dataInicioExperiencia: admissao,
         dataFimExperiencia1,

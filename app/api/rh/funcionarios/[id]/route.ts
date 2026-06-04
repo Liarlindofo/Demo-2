@@ -142,6 +142,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       horarioEntrada,
       horarioSaida,
       diasFolga,
+      domingoFolga,
       observacoes,
       ativo,
       dataGozoFerias,
@@ -247,6 +248,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...(horarioEntrada !== undefined && { horarioEntrada }),
           ...(horarioSaida !== undefined && { horarioSaida }),
           ...(diasFolga !== undefined && { diasFolga }),
+          ...(domingoFolga !== undefined && { domingoFolga: domingoFolga || null }),
           ...(observacoes !== undefined && { observacoes: observacoes || null }),
           ...(ativo !== undefined && { ativo }),
           ...(dataGozoFerias !== undefined && {

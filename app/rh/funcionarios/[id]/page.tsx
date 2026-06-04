@@ -57,6 +57,7 @@ interface Funcionario {
   };
   escala: '6x1' | '5x2';
   diasFolga: string[];
+  domingoFolga?: string | null;
   turno: 'manhã' | 'tarde' | 'noite' | 'integral';
   horarioEntrada: string;
   horarioSaida: string;
@@ -72,9 +73,9 @@ interface Funcionario {
 }
 
 interface EncargosResult {
-  salarioBruto: number; inssPatronal: number; rat: number; fgts: number;
-  sistemaS: number; custoPatronalTotal: number; bonificacoesVariaveis?: number;
-  inssEmpregado: number; irrf: number; salarioLiquido: number;
+  salarioBruto: number; rat: number; fgts: number;
+  custoPatronalTotal: number; bonificacoesVariaveis?: number;
+  inssEmpregado: number; irrf: number; descontoVT: number; salarioLiquido: number;
   custoTotalMensal: number; custoAnual: number;
 }
 
@@ -153,6 +154,7 @@ export default function FuncionarioDetailPage() {
   const [horarioEntrada, setHorarioEntrada] = useState('');
   const [horarioSaida, setHorarioSaida] = useState('');
   const [diasFolga, setDiasFolga] = useState<string[]>([]);
+  const [domingoFolga, setDomingoFolga] = useState<string>('1');
   const [observacoes, setObservacoes] = useState('');
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
@@ -171,6 +173,7 @@ export default function FuncionarioDetailPage() {
     });
     setEscala(f.escala); setTurno(f.turno); setHorarioEntrada(f.horarioEntrada);
     setHorarioSaida(f.horarioSaida); setDiasFolga(Array.isArray(f.diasFolga) ? f.diasFolga : []);
+    setDomingoFolga(f.domingoFolga ?? '1');
     setObservacoes(f.observacoes ?? '');
     setDataGozoFerias(f.dataGozoFerias ? f.dataGozoFerias.split('T')[0] : '');
     setDiasFeriasGozados(f.diasFeriasGozados ?? 0);
@@ -261,7 +264,9 @@ export default function FuncionarioDetailPage() {
           nome: nome.trim(), cpf, email: email || null, telefone: telefone || null,
           dataNascimento, dataAdmissao, cargoId, lojaId,
           ...buildComposicaoPayload(composicao),
-          escala, turno, horarioEntrada, horarioSaida, diasFolga, observacoes: observacoes || null,
+          escala, turno, horarioEntrada, horarioSaida, diasFolga,
+          domingoFolga: diasFolga.includes('Dom') ? domingoFolga : null,
+          observacoes: observacoes || null,
         }),
       });
       if (res.ok) { const updated: Funcionario = await res.json(); setFuncionario(updated); setEditMode(false); showToast('Dados salvos'); }
@@ -579,6 +584,22 @@ export default function FuncionarioDetailPage() {
                         ))}
                       </div>
                     </div>
+                    {diasFolga.includes('Dom') && (
+                      <div>
+                        <label className={labelCls}>Qual domingo do mês é a folga?</label>
+                        <div className="flex flex-wrap gap-2">
+                          {([
+                            { value: '1', label: '1º domingo' },
+                            { value: '2', label: '2º domingo' },
+                            { value: '3', label: '3º domingo' },
+                            { value: '4', label: '4º domingo' },
+                            { value: 'ultimo', label: 'Último domingo' },
+                          ] as const).map(opt => (
+                            <button key={opt.value} type="button" onClick={() => setDomingoFolga(opt.value)} className={`px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-colors ${domingoFolga === opt.value ? 'border-amber-500 bg-amber-500/10 text-amber-400' : 'border-[#2a2a2e] text-gray-500'}`}>{opt.label}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -594,6 +615,14 @@ export default function FuncionarioDetailPage() {
                         }
                       </div>
                     </div>
+                    {(Array.isArray(funcionario.diasFolga) ? funcionario.diasFolga : []).includes('Dom') && funcionario.domingoFolga && (
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-gray-500 w-20">Domingo</span>
+                        <span className="text-sm text-gray-200">
+                          {funcionario.domingoFolga === 'ultimo' ? 'Último domingo' : `${funcionario.domingoFolga}º domingo`} do mês
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -612,11 +641,11 @@ export default function FuncionarioDetailPage() {
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Encargos Patronais</p>
                       <div className="space-y-2">
-                        {[{ label: 'INSS Patronal (20%)', value: encargos.inssPatronal }, { label: 'RAT', value: encargos.rat }, { label: 'FGTS (8%)', value: encargos.fgts }, { label: 'Sistema S', value: encargos.sistemaS }].map(({ label, value }) => (
+                        {[{ label: 'RAT', value: encargos.rat }, { label: 'FGTS (8%)', value: encargos.fgts }].map(({ label, value }) => (
                           <div key={label} className="flex justify-between text-sm"><span className="text-gray-400">{label}</span><span className="text-gray-200 font-mono">{fmt(value)}</span></div>
                         ))}
-                        <div className="flex justify-between text-sm font-semibold pt-2 border-t border-[#2a2a2e]"><span className="text-white">Total encargos (INSS, FGTS, RAT…)</span><span className="text-amber-400 font-mono">{fmt(encargos.custoPatronalTotal)}</span></div>
-                        <p className="text-[10px] text-gray-600 mt-1">Calculado só sobre a base remuneratória (salário + resp. + assiduidade do cadastro).</p>
+                        <div className="flex justify-between text-sm font-semibold pt-2 border-t border-[#2a2a2e]"><span className="text-white">Total encargos (FGTS + RAT)</span><span className="text-amber-400 font-mono">{fmt(encargos.custoPatronalTotal)}</span></div>
+                        <p className="text-[10px] text-gray-600 mt-1">Simples Nacional — calculado sobre salário + adicional de responsabilidade.</p>
                       </div>
                     </div>
                     {(encargos.bonificacoesVariaveis ?? 0) > 0 && (
@@ -631,7 +660,7 @@ export default function FuncionarioDetailPage() {
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Descontos do Empregado</p>
                       <div className="space-y-2">
-                        {[{ label: 'INSS', value: encargos.inssEmpregado }, { label: 'IRRF', value: encargos.irrf }].map(({ label, value }) => (
+                        {[{ label: 'INSS', value: encargos.inssEmpregado }, { label: 'IRRF', value: encargos.irrf }, { label: 'VT (5%)', value: encargos.descontoVT }].map(({ label, value }) => (
                           <div key={label} className="flex justify-between text-sm"><span className="text-gray-400">{label}</span><span className="text-red-400 font-mono">-{fmt(value)}</span></div>
                         ))}
                         <div className="flex justify-between text-sm font-semibold pt-2 border-t border-[#2a2a2e]"><span className="text-white">Salário líquido</span><span className="text-green-400 font-mono">{fmt(encargos.salarioLiquido)}</span></div>
