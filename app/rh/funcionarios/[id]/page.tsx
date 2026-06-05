@@ -84,7 +84,7 @@ interface Historico {
   alteradoPor: string; motivo: string | null; createdAt: string;
 }
 
-const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const DIAS_SEMANA = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const CAMPO_LABELS: Record<string, string> = {
   composicaoSalarial: 'Composição salarial', salarioBase: 'Salário base', cargoId: 'Cargo', lojaId: 'Loja',
   escala: 'Escala', turno: 'Turno', ativo: 'Status',
@@ -172,7 +172,8 @@ export default function FuncionarioDetailPage() {
       bonificacaoAssiduidade: f.bonificacaoAssiduidade.toFixed(2).replace('.', ','),
     });
     setEscala(f.escala); setTurno(f.turno); setHorarioEntrada(f.horarioEntrada);
-    setHorarioSaida(f.horarioSaida); setDiasFolga(Array.isArray(f.diasFolga) ? f.diasFolga : []);
+    setHorarioSaida(f.horarioSaida);
+    setDiasFolga((Array.isArray(f.diasFolga) ? f.diasFolga : []).filter((d: string) => d !== 'Dom'));
     setDomingoFolga(f.domingoFolga ?? '1');
     setObservacoes(f.observacoes ?? '');
     setDataGozoFerias(f.dataGozoFerias ? f.dataGozoFerias.split('T')[0] : '');
@@ -264,8 +265,9 @@ export default function FuncionarioDetailPage() {
           nome: nome.trim(), cpf, email: email || null, telefone: telefone || null,
           dataNascimento, dataAdmissao, cargoId, lojaId,
           ...buildComposicaoPayload(composicao),
-          escala, turno, horarioEntrada, horarioSaida, diasFolga,
-          domingoFolga: diasFolga.includes('Dom') ? domingoFolga : null,
+          escala, turno, horarioEntrada, horarioSaida,
+          diasFolga: ['Dom', ...diasFolga],
+          domingoFolga,
           observacoes: observacoes || null,
         }),
       });
@@ -577,29 +579,27 @@ export default function FuncionarioDetailPage() {
                       <div><label className={labelCls}>Saída</label><input type="time" value={horarioSaida} onChange={e => setHorarioSaida(e.target.value)} className={inputCls} /></div>
                     </div>
                     <div>
-                      <label className={labelCls}>Dias de folga</label>
+                      <label className={labelCls}>Outros dias de folga</label>
                       <div className="flex flex-wrap gap-2">
                         {DIAS_SEMANA.map(dia => (
                           <button key={dia} type="button" onClick={() => setDiasFolga(prev => prev.includes(dia) ? prev.filter(d => d !== dia) : [...prev, dia])} className={`px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-colors ${diasFolga.includes(dia) ? 'border-amber-500 bg-amber-500/10 text-amber-400' : 'border-[#2a2a2e] text-gray-500'}`}>{dia}</button>
                         ))}
                       </div>
                     </div>
-                    {diasFolga.includes('Dom') && (
-                      <div>
-                        <label className={labelCls}>Qual domingo do mês é a folga?</label>
-                        <div className="flex flex-wrap gap-2">
-                          {([
-                            { value: '1', label: '1º domingo' },
-                            { value: '2', label: '2º domingo' },
-                            { value: '3', label: '3º domingo' },
-                            { value: '4', label: '4º domingo' },
-                            { value: 'ultimo', label: 'Último domingo' },
-                          ] as const).map(opt => (
-                            <button key={opt.value} type="button" onClick={() => setDomingoFolga(opt.value)} className={`px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-colors ${domingoFolga === opt.value ? 'border-amber-500 bg-amber-500/10 text-amber-400' : 'border-[#2a2a2e] text-gray-500'}`}>{opt.label}</button>
-                          ))}
-                        </div>
+                    <div>
+                      <label className={labelCls}>Domingo de folga no mês</label>
+                      <div className="flex flex-wrap gap-2">
+                        {([
+                          { value: '1', label: '1º domingo' },
+                          { value: '2', label: '2º domingo' },
+                          { value: '3', label: '3º domingo' },
+                          { value: '4', label: '4º domingo' },
+                          { value: 'ultimo', label: 'Último domingo' },
+                        ] as const).map(opt => (
+                          <button key={opt.value} type="button" onClick={() => setDomingoFolga(opt.value)} className={`px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-colors ${domingoFolga === opt.value ? 'border-amber-500 bg-amber-500/10 text-amber-400' : 'border-[#2a2a2e] text-gray-500'}`}>{opt.label}</button>
+                        ))}
                       </div>
-                    )}
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3">
