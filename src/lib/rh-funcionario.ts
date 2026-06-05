@@ -21,14 +21,13 @@ export function enrichFuncionario<T extends CamposComposicaoSalarial>(
   fap?: number,
   bonificacoesComposicao?: BonificacoesComposicaoMes
 ) {
+  const f = funcionario as unknown as Record<string, unknown>;
   const normalized = {
     ...funcionario,
-    escala: (funcionario as { escala?: string | null }).escala ?? '6x1',
-    turno: (funcionario as { turno?: string | null }).turno ?? 'manhã',
-    diasFolga: Array.isArray((funcionario as { diasFolga?: unknown }).diasFolga)
-      ? (funcionario as { diasFolga: unknown[] }).diasFolga
-      : [],
-  } as T;
+    escala: (f.escala as string | null | undefined) ?? '6x1',
+    turno: (f.turno as string | null | undefined) ?? 'manhã',
+    diasFolga: Array.isArray(f.diasFolga) ? f.diasFolga : [],
+  } as unknown as T;
   const composicaoSalarial = calcularComposicaoSalarial(normalized);
   const encargosPatronais =
     ratPct !== undefined
