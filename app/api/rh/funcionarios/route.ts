@@ -131,7 +131,7 @@ export async function POST(req: Request) {
 
     if (cpf) {
       const cpfExistente = await prisma.rhFuncionario.findFirst({
-        where: { userId: dbUser.id, cpf },
+        where: { userId: dbUser.id, cpf, ativo: true },
       });
       if (cpfExistente)
         return NextResponse.json({ error: 'CPF já cadastrado' }, { status: 409 });

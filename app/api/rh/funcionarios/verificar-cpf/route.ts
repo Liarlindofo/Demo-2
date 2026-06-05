@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
       where: {
         userId: dbUser.id,
         cpf,
+        ativo: true,
         ...(excludeId ? { id: { not: excludeId } } : {}),
       },
       select: { id: true },

@@ -156,7 +156,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (!validarCPF(cpf))
         return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
       const dup = await prisma.rhFuncionario.findFirst({
-        where: { userId: dbUser.id, cpf, id: { not: id } },
+        where: { userId: dbUser.id, cpf, ativo: true, id: { not: id } },
       });
       if (dup) return NextResponse.json({ error: 'CPF já cadastrado' }, { status: 409 });
     }

@@ -847,7 +847,7 @@ model RhFuncionario {
   bonificacoesAssiduidade RhBonificacaoAssiduidade[]
   plrPagamentos         RhPLRPagamento[]
 
-  @@unique([userId, cpf])
+  @@index([userId, cpf])
   @@index([userId])
   @@index([lojaId])
   @@index([cargoId])

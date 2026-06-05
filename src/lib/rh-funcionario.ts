@@ -21,7 +21,15 @@ export function enrichFuncionario<T extends CamposComposicaoSalarial>(
   fap?: number,
   bonificacoesComposicao?: BonificacoesComposicaoMes
 ) {
-  const composicaoSalarial = calcularComposicaoSalarial(funcionario);
+  const normalized = {
+    ...funcionario,
+    escala: (funcionario as { escala?: string | null }).escala ?? '6x1',
+    turno: (funcionario as { turno?: string | null }).turno ?? 'manhã',
+    diasFolga: Array.isArray((funcionario as { diasFolga?: unknown }).diasFolga)
+      ? (funcionario as { diasFolga: unknown[] }).diasFolga
+      : [],
+  } as T;
+  const composicaoSalarial = calcularComposicaoSalarial(normalized);
   const encargosPatronais =
     ratPct !== undefined
       ? calcularEncargosPatronais(composicaoSalarial.baseCalculoEncargos, ratPct, fap ?? 1)
@@ -41,7 +49,7 @@ export function enrichFuncionario<T extends CamposComposicaoSalarial>(
       : undefined;
 
   return {
-    ...funcionario,
+    ...normalized,
     composicaoSalarial,
     salarioBruto,
     ...(bonificacoesComposicao ? { bonificacoesComposicao } : {}),
