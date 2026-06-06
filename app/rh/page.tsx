@@ -24,7 +24,7 @@ interface Funcionario {
   id: string;
   nome: string;
   salarioBruto: number;
-  composicaoSalarial?: { baseCalculoEncargos: number; valorAlimentacao: number; valorVT: number };
+  composicaoSalarial?: { baseCalculoEncargos: number; valorAlimentacao: number; valorVT: number; bonificacaoAssiduidade: number };
   escala: '6x1' | '5x2';
   ativo: boolean;
 }
