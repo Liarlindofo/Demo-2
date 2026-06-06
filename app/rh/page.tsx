@@ -193,19 +193,25 @@ export default function RhDashboard() {
       try {
         const params = new URLSearchParams({ ativo: 'true' });
         if (lojaSelecionada) params.set('lojaId', lojaSelecionada.id);
-        const res = await fetch(`/api/rh/funcionarios?${params}`);
-        if (!res.ok) throw new Error('Falha ao carregar');
-        const data: Funcionario[] = await res.json();
+        const [funcsRes, custosRes] = await Promise.all([
+          fetch(`/api/rh/funcionarios?${params}`),
+          fetch('/api/rh/custos/consolidado'),
+        ]);
+        if (!funcsRes.ok) throw new Error('Falha ao carregar');
+        const data: Funcionario[] = await funcsRes.json();
         const total = data.length;
-        const custoMensal = data.reduce((acc, f) => {
-          const base = f.composicaoSalarial?.baseCalculoEncargos ?? f.salarioBruto / 1.44;
-          return acc + base * 1.44
-            + (f.composicaoSalarial?.valorAlimentacao ?? 0)
-            + (f.composicaoSalarial?.valorVT ?? 0)
-            + (f.composicaoSalarial?.bonificacaoAssiduidade ?? 0);
-        }, 0);
         const escala6x1 = data.filter((f) => f.escala === '6x1').length;
         const escala5x2 = data.filter((f) => f.escala === '5x2').length;
+
+        let custoMensal = 0;
+        if (custosRes.ok) {
+          const custosData = await custosRes.json();
+          custoMensal = lojaSelecionada
+            ? (custosData.lojas?.find((l: { lojaId: string; totalCustoReal: number }) => l.lojaId === lojaSelecionada.id)?.totalCustoReal ?? 0)
+            : (custosData.rede?.totalCustoReal ?? 0);
+          setCustoTotal(custoMensal > 0 ? custoMensal : null);
+        }
+
         setStats({ total, custoMensal, escala6x1, escala5x2 });
       } catch {
         setStats({ total: 0, custoMensal: 0, escala6x1: 0, escala5x2: 0 });
@@ -243,12 +249,6 @@ export default function RhDashboard() {
     fetch(`/api/rh/ocorrencias/resumo${lojaParam}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => d && setOcorrenciasMes(d.totalMes))
-      .catch(() => {});
-    fetch('/api/rh/custos/consolidado')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => d && setCustoTotal(lojaSelecionada
-        ? (d.lojas?.find((l: { lojaId: string; totalCustoReal: number }) => l.lojaId === lojaSelecionada.id)?.totalCustoReal ?? null)
-        : d.rede?.totalCustoReal ?? null))
       .catch(() => {});
   }, [lojaSelecionada]);
 
@@ -315,7 +315,7 @@ export default function RhDashboard() {
                   <DollarSign className="w-5 h-5 text-green-400" />
                 </div>
                 <div className="text-2xl font-bold text-white">{fmt(stats?.custoMensal ?? 0)}</div>
-                <div className="text-sm text-gray-400 mt-0.5">Custo Mensal Est.</div>
+                <div className="text-sm text-gray-400 mt-0.5">Custo Mensal</div>
               </div>
               <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
                 <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center mb-3">
