@@ -34,6 +34,10 @@ export async function GET() {
           where: { userId: dbUser.id, ativo: true },
           include: { cargo: { select: { nome: true, ratPct: true } } },
         },
+        taxas: {
+          where: { ativo: true },
+          select: { id: true, nome: true, valorDiaria: true, diasPorMes: true, quantidadeIdeal: true },
+        },
       },
       orderBy: { nome: 'asc' },
     });
@@ -76,6 +80,17 @@ export async function GET() {
       const totalCustoReal = funcionariosDetalhes.reduce((s, f) => s + f.custoTotal, 0);
       const custoAnualizado = totalCustoReal * FATOR_ANUAL;
 
+      const taxasDetalhes = loja.taxas.map((t) => ({
+        id: t.id,
+        nome: t.nome,
+        valorDiaria: t.valorDiaria,
+        diasPorMes: t.diasPorMes,
+        quantidadeIdeal: t.quantidadeIdeal,
+        custoMensal: t.valorDiaria * t.diasPorMes * t.quantidadeIdeal,
+      }));
+      const totalTaxas = taxasDetalhes.reduce((s, t) => s + t.custoMensal, 0);
+      const totalCustoComTaxas = totalCustoReal + totalTaxas;
+
       return {
         lojaId: loja.id,
         lojaNome: loja.nome,
@@ -87,6 +102,9 @@ export async function GET() {
         totalEncargos,
         totalCustoReal,
         custoAnualizado,
+        totalTaxas,
+        totalCustoComTaxas,
+        taxas: taxasDetalhes,
         funcionarios: funcionariosDetalhes,
       };
     });
@@ -99,6 +117,8 @@ export async function GET() {
       totalEncargos: consolidado.reduce((s, l) => s + l.totalEncargos, 0),
       totalCustoReal: consolidado.reduce((s, l) => s + l.totalCustoReal, 0),
       custoAnualizado: consolidado.reduce((s, l) => s + l.custoAnualizado, 0),
+      totalTaxas: consolidado.reduce((s, l) => s + l.totalTaxas, 0),
+      totalCustoComTaxas: consolidado.reduce((s, l) => s + l.totalCustoComTaxas, 0),
     };
 
     return NextResponse.json({ lojas: consolidado, rede });

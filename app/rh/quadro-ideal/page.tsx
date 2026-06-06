@@ -6,7 +6,7 @@ import { useLoja, Loja } from '@/contexts/LojaContext';
 import {
   ArrowLeft, ClipboardList, Plus, Pencil, Trash2, X,
   Check, ChevronUp, ChevronDown, BarChart3, Settings,
-  Loader2, AlertTriangle, CheckCircle,
+  Loader2, AlertTriangle, CheckCircle, UserCog,
 } from 'lucide-react';
 
 interface Cargo { id: string; nome: string }
@@ -51,6 +51,15 @@ interface Comparativo {
   quadro: { id: string; nome: string | null; lojaId: string };
   setores: SetorComparativo[];
   resumo: { totalIdeal: number; totalOk: number; totalGaps: number };
+}
+
+interface TaxaLoja {
+  id: string; nome: string; valorDiaria: number; diasPorMes: number;
+  quantidadeIdeal: number; custoMensal?: number;
+}
+
+interface TaxaForm {
+  nome: string; valorDiaria: string; diasPorMes: string; quantidadeIdeal: string;
 }
 
 const TURNOS = ['manhã', 'tarde', 'noite', 'integral'];
@@ -105,6 +114,13 @@ export default function QuadroIdealPage() {
   const [epQtd, setEpQtd] = useState(1);
   const [epObs, setEpObs] = useState('');
 
+  // Taxas/freelancers
+  const [taxas, setTaxas] = useState<TaxaLoja[]>([]);
+  const [taxaForm, setTaxaForm] = useState<TaxaForm>({ nome: '', valorDiaria: '', diasPorMes: '1', quantidadeIdeal: '1' });
+  const [editandoTaxaId, setEditandoTaxaId] = useState<string | null>(null);
+  const [salvandoTaxa, setSalvandoTaxa] = useState(false);
+  const [showTaxaForm, setShowTaxaForm] = useState(false);
+
   const lojaAtiva = lojaSelecionada;
   const showToast = (msg: string) => { setToast(msg); };
 
@@ -133,12 +149,54 @@ export default function QuadroIdealPage() {
     fetch('/api/rh/cargos').then(r => r.ok ? r.json() : []).then(setCargos).catch(() => {});
   }, []);
 
+  const fetchTaxas = useCallback(async (lojaId: string) => {
+    try {
+      const res = await fetch(`/api/rh/taxas?lojaId=${lojaId}`);
+      if (res.ok) setTaxas(await res.json());
+    } catch { /* silencioso */ }
+  }, []);
+
   useEffect(() => {
     if (lojaAtiva) {
       fetchQuadro(lojaAtiva.id);
+      fetchTaxas(lojaAtiva.id);
       if (tab === 'comparativo') fetchComparativo(lojaAtiva.id);
     }
-  }, [lojaAtiva, tab, fetchQuadro, fetchComparativo]);
+  }, [lojaAtiva, tab, fetchQuadro, fetchComparativo, fetchTaxas]);
+
+  const resetTaxaForm = () => {
+    setTaxaForm({ nome: '', valorDiaria: '', diasPorMes: '1', quantidadeIdeal: '1' });
+    setEditandoTaxaId(null);
+    setShowTaxaForm(false);
+  };
+
+  const handleSalvarTaxa = async () => {
+    if (!lojaAtiva || !taxaForm.nome || !taxaForm.valorDiaria) return;
+    setSalvandoTaxa(true);
+    try {
+      const body = {
+        lojaId: lojaAtiva.id,
+        nome: taxaForm.nome,
+        valorDiaria: parseFloat(taxaForm.valorDiaria),
+        diasPorMes: parseInt(taxaForm.diasPorMes) || 1,
+        quantidadeIdeal: parseInt(taxaForm.quantidadeIdeal) || 1,
+      };
+      const url = editandoTaxaId ? `/api/rh/taxas/${editandoTaxaId}` : '/api/rh/taxas';
+      const method = editandoTaxaId ? 'PUT' : 'POST';
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (res.ok) {
+        showToast(editandoTaxaId ? 'Freelancer atualizado!' : 'Freelancer adicionado!');
+        resetTaxaForm();
+        fetchTaxas(lojaAtiva.id);
+      }
+    } finally { setSalvandoTaxa(false); }
+  };
+
+  const handleExcluirTaxa = async (taxaId: string) => {
+    if (!lojaAtiva) return;
+    const res = await fetch(`/api/rh/taxas/${taxaId}`, { method: 'DELETE' });
+    if (res.ok) { showToast('Freelancer removido!'); fetchTaxas(lojaAtiva.id); }
+  };
 
   const criarQuadro = async () => {
     if (!lojaAtiva) return;
@@ -457,6 +515,139 @@ export default function QuadroIdealPage() {
                         <Plus className="w-4 h-4" /> Novo Setor
                       </button>
                     )}
+
+                    {/* ── Seção Freelancers/Taxas ── */}
+                    <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl overflow-hidden">
+                      <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#2a2a2e] bg-[#161618]">
+                        <div className="flex items-center gap-2">
+                          <UserCog className="w-4 h-4 text-purple-400" />
+                          <h3 className="font-semibold text-white text-sm">Freelancers / Taxas</h3>
+                          {taxas.length > 0 && (
+                            <span className="text-xs bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-full">{taxas.length}</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => { setShowTaxaForm(true); setEditandoTaxaId(null); setTaxaForm({ nome: '', valorDiaria: '', diasPorMes: '1', quantidadeIdeal: '1' }); }}
+                          className="flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Adicionar
+                        </button>
+                      </div>
+
+                      <div className="divide-y divide-[#2a2a2e]">
+                        {taxas.length === 0 && !showTaxaForm && (
+                          <p className="px-5 py-4 text-sm text-gray-600 text-center">Nenhum freelancer/taxa configurado</p>
+                        )}
+
+                        {taxas.map((taxa) => (
+                          <div key={taxa.id} className="px-5 py-3 hover:bg-[#161618] transition-colors">
+                            {editandoTaxaId === taxa.id ? (
+                              <div className="space-y-2">
+                                <input placeholder="Nome" value={taxaForm.nome}
+                                  onChange={(e) => setTaxaForm(f => ({ ...f, nome: e.target.value }))}
+                                  className={inputCls} />
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div>
+                                    <label className="text-xs text-gray-500 mb-1 block">Qtd. ideal</label>
+                                    <input type="number" min="1" value={taxaForm.quantidadeIdeal}
+                                      onChange={(e) => setTaxaForm(f => ({ ...f, quantidadeIdeal: e.target.value }))}
+                                      className={inputCls} />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs text-gray-500 mb-1 block">Dias/mês</label>
+                                    <input type="number" min="1" value={taxaForm.diasPorMes}
+                                      onChange={(e) => setTaxaForm(f => ({ ...f, diasPorMes: e.target.value }))}
+                                      className={inputCls} />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs text-gray-500 mb-1 block">Diária (R$)</label>
+                                    <input type="number" min="0" step="0.01" value={taxaForm.valorDiaria}
+                                      onChange={(e) => setTaxaForm(f => ({ ...f, valorDiaria: e.target.value }))}
+                                      className={inputCls} />
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button onClick={handleSalvarTaxa} disabled={salvandoTaxa}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded-lg disabled:opacity-50 transition-colors">
+                                    {salvandoTaxa ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Salvar
+                                  </button>
+                                  <button onClick={resetTaxaForm} className="flex items-center gap-1 px-3 py-1.5 bg-[#2a2a2e] text-gray-400 text-xs rounded-lg hover:text-white transition-colors">
+                                    <X className="w-3 h-3" /> Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-sm font-medium text-white">{taxa.nome}</p>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    {taxa.quantidadeIdeal} posição{taxa.quantidadeIdeal !== 1 ? 'ões' : ''} · {taxa.diasPorMes} dias/mês · R$ {taxa.valorDiaria.toFixed(2)}/dia
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-3 ml-4">
+                                  <span className="text-sm font-semibold text-purple-400">
+                                    R$ {(taxa.valorDiaria * taxa.diasPorMes * taxa.quantidadeIdeal).toFixed(2)}/mês
+                                  </span>
+                                  <button onClick={() => {
+                                    setEditandoTaxaId(taxa.id);
+                                    setTaxaForm({ nome: taxa.nome, valorDiaria: String(taxa.valorDiaria), diasPorMes: String(taxa.diasPorMes), quantidadeIdeal: String(taxa.quantidadeIdeal) });
+                                    setShowTaxaForm(false);
+                                  }} className="w-7 h-7 rounded-lg text-gray-500 hover:text-amber-400 hover:bg-[#2a2a2e] flex items-center justify-center transition-colors">
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button onClick={() => handleExcluirTaxa(taxa.id)}
+                                    className="w-7 h-7 rounded-lg text-gray-500 hover:text-red-400 hover:bg-[#2a2a2e] flex items-center justify-center transition-colors">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+
+                        {showTaxaForm && !editandoTaxaId && (
+                          <div className="px-5 py-4 space-y-3 bg-[#0d0d0f]">
+                            <input placeholder="Nome (ex: Churrasqueiro)" value={taxaForm.nome}
+                              onChange={(e) => setTaxaForm(f => ({ ...f, nome: e.target.value }))}
+                              className={inputCls} autoFocus />
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500 mb-1 block">Qtd. ideal</label>
+                                <input type="number" min="1" value={taxaForm.quantidadeIdeal}
+                                  onChange={(e) => setTaxaForm(f => ({ ...f, quantidadeIdeal: e.target.value }))}
+                                  className={inputCls} />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500 mb-1 block">Dias/mês</label>
+                                <input type="number" min="1" value={taxaForm.diasPorMes}
+                                  onChange={(e) => setTaxaForm(f => ({ ...f, diasPorMes: e.target.value }))}
+                                  className={inputCls} />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500 mb-1 block">Diária (R$)</label>
+                                <input type="number" min="0" step="0.01" value={taxaForm.valorDiaria}
+                                  onChange={(e) => setTaxaForm(f => ({ ...f, valorDiaria: e.target.value }))}
+                                  className={inputCls} />
+                              </div>
+                            </div>
+                            {taxaForm.nome && taxaForm.valorDiaria && (
+                              <p className="text-xs text-purple-400">
+                                Custo estimado: R$ {(parseFloat(taxaForm.valorDiaria || '0') * (parseInt(taxaForm.diasPorMes) || 1) * (parseInt(taxaForm.quantidadeIdeal) || 1)).toFixed(2)}/mês
+                              </p>
+                            )}
+                            <div className="flex gap-2">
+                              <button onClick={handleSalvarTaxa} disabled={salvandoTaxa || !taxaForm.nome || !taxaForm.valorDiaria}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl disabled:opacity-50 transition-colors">
+                                {salvandoTaxa ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Adicionar
+                              </button>
+                              <button onClick={resetTaxaForm} className="w-9 h-9 rounded-xl border border-[#2a2a2e] text-gray-400 hover:text-white flex items-center justify-center">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
@@ -525,6 +716,38 @@ export default function QuadroIdealPage() {
                         </div>
                       </div>
                     ))}
+
+                    {/* Freelancers no comparativo */}
+                    {taxas.length > 0 && (
+                      <div className="bg-[#111113] border border-purple-500/20 rounded-2xl overflow-hidden">
+                        <div className="flex items-center gap-2 px-5 py-3 bg-[#161618] border-b border-[#2a2a2e]">
+                          <UserCog className="w-4 h-4 text-purple-400" />
+                          <h3 className="font-semibold text-white text-sm">Freelancers / Taxas</h3>
+                          <span className="text-xs text-gray-500 ml-1">(sem comparativo individual)</span>
+                        </div>
+                        <div className="divide-y divide-[#2a2a2e]">
+                          {taxas.map((taxa) => (
+                            <div key={taxa.id} className="px-5 py-3 flex items-center justify-between hover:bg-[#161618] transition-colors">
+                              <div>
+                                <p className="text-sm font-medium text-white">{taxa.nome}</p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  {taxa.quantidadeIdeal} posição{taxa.quantidadeIdeal !== 1 ? 'ões' : ''} · {taxa.diasPorMes} dias/mês · R$ {taxa.valorDiaria.toFixed(2)}/dia
+                                </p>
+                              </div>
+                              <span className="text-sm font-semibold text-purple-400">
+                                R$ {(taxa.valorDiaria * taxa.diasPorMes * taxa.quantidadeIdeal).toFixed(2)}/mês
+                              </span>
+                            </div>
+                          ))}
+                          <div className="px-5 py-2.5 flex justify-between bg-[#0d0d0f]">
+                            <span className="text-xs text-gray-500">Total freelancers/mês</span>
+                            <span className="text-sm font-bold text-purple-400">
+                              R$ {taxas.reduce((s, t) => s + t.valorDiaria * t.diasPorMes * t.quantidadeIdeal, 0).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </div>

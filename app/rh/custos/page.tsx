@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, DollarSign, Users, TrendingUp, BarChart3,
   Download, RefreshCw, ChevronDown, ChevronRight, Settings, Loader2,
+  UserCog, Plus, Pencil, Trash2, X, Check,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -18,11 +19,17 @@ interface FuncionarioDetalhe {
   encargos: number; percentualEncargos: number; custoTotal: number; custoAnual: number;
 }
 
+interface TaxaDetalhe {
+  id: string; nome: string; valorDiaria: number; diasPorMes: number;
+  quantidadeIdeal: number; custoMensal: number;
+}
+
 interface LojaConsolidado {
   lojaId: string; lojaNome: string; fap: number; totalFuncionarios: number;
   totalFolhaBruta?: number; totalBaseEncargos?: number;
   totalSalarioBruto: number; totalEncargos: number; totalCustoReal: number;
-  custoAnualizado: number; funcionarios: FuncionarioDetalhe[];
+  custoAnualizado: number; totalTaxas: number; totalCustoComTaxas: number;
+  taxas: TaxaDetalhe[]; funcionarios: FuncionarioDetalhe[];
 }
 
 interface Rede {
@@ -30,6 +37,11 @@ interface Rede {
   totalFolhaBruta?: number; totalBaseEncargos?: number;
   totalSalarioBruto: number;
   totalEncargos: number; totalCustoReal: number; custoAnualizado: number;
+  totalTaxas: number; totalCustoComTaxas: number;
+}
+
+interface TaxaForm {
+  nome: string; valorDiaria: string; diasPorMes: string; quantidadeIdeal: string; observacoes: string;
 }
 
 interface SnapshotHistorico {
@@ -60,8 +72,56 @@ export default function CustosPage() {
   const [editandoRat, setEditandoRat] = useState<Record<string, string>>({});
   const [salvandoConfig, setSalvandoConfig] = useState(false);
   const [toast, setToast] = useState('');
+  const [taxaLojaAberta, setTaxaLojaAberta] = useState<string | null>(null);
+  const [taxaForm, setTaxaForm] = useState<TaxaForm>({ nome: '', valorDiaria: '', diasPorMes: '1', quantidadeIdeal: '1', observacoes: '' });
+  const [salvandoTaxa, setSalvandoTaxa] = useState(false);
+  const [editandoTaxaId, setEditandoTaxaId] = useState<string | null>(null);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
+
+  const resetTaxaForm = () => {
+    setTaxaForm({ nome: '', valorDiaria: '', diasPorMes: '1', quantidadeIdeal: '1', observacoes: '' });
+    setEditandoTaxaId(null);
+  };
+
+  const handleSalvarTaxa = async (lojaId: string) => {
+    if (!taxaForm.nome || !taxaForm.valorDiaria) return;
+    setSalvandoTaxa(true);
+    try {
+      const body = {
+        lojaId,
+        nome: taxaForm.nome,
+        valorDiaria: parseFloat(taxaForm.valorDiaria),
+        diasPorMes: parseInt(taxaForm.diasPorMes) || 1,
+        quantidadeIdeal: parseInt(taxaForm.quantidadeIdeal) || 1,
+        observacoes: taxaForm.observacoes || undefined,
+      };
+      const url = editandoTaxaId ? `/api/rh/taxas/${editandoTaxaId}` : '/api/rh/taxas';
+      const method = editandoTaxaId ? 'PUT' : 'POST';
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (res.ok) {
+        showToast(editandoTaxaId ? 'Taxa atualizada!' : 'Taxa adicionada!');
+        resetTaxaForm();
+        fetchDados();
+      }
+    } finally { setSalvandoTaxa(false); }
+  };
+
+  const handleEditarTaxa = (taxa: TaxaDetalhe) => {
+    setTaxaForm({
+      nome: taxa.nome,
+      valorDiaria: String(taxa.valorDiaria),
+      diasPorMes: String(taxa.diasPorMes),
+      quantidadeIdeal: String(taxa.quantidadeIdeal),
+      observacoes: '',
+    });
+    setEditandoTaxaId(taxa.id);
+  };
+
+  const handleExcluirTaxa = async (taxaId: string) => {
+    const res = await fetch(`/api/rh/taxas/${taxaId}`, { method: 'DELETE' });
+    if (res.ok) { showToast('Taxa removida!'); fetchDados(); }
+  };
 
   const fetchDados = useCallback(async () => {
     setLoading(true);
@@ -225,7 +285,7 @@ export default function CustosPage() {
 
         {/* Card da rede */}
         {rede && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-2">
                 <Users className="w-4 h-4 text-blue-400" />
@@ -260,6 +320,14 @@ export default function CustosPage() {
             </div>
             <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-2">
+                <UserCog className="w-4 h-4 text-purple-400" />
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Custo c/ Freelancers</p>
+              </div>
+              <p className="text-xl font-bold text-purple-400">{fmt(rede.totalCustoComTaxas ?? rede.totalCustoReal)}</p>
+              <p className="text-xs text-gray-500 mt-0.5">CLT + taxas diárias</p>
+            </div>
+            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-2">
                 <BarChart3 className="w-4 h-4 text-green-400" />
                 <p className="text-xs text-gray-400 uppercase tracking-wider">Custo Anualizado</p>
               </div>
@@ -274,7 +342,7 @@ export default function CustosPage() {
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Por Loja</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {consolidado.map((loja) => (
-              <div key={loja.lojaId} className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 space-y-2">
+              <div key={loja.lojaId} className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-white">{loja.lojaNome}</h3>
                   <span className="text-xs text-gray-500">{loja.totalFuncionarios} func.</span>
@@ -293,13 +361,128 @@ export default function CustosPage() {
                     <span className="font-medium text-red-400">{fmt(loja.totalEncargos)}</span>
                   </div>
                   <div className="flex justify-between text-gray-400 border-t border-[#2a2a2e] pt-1 mt-1">
-                    <span>Custo total</span>
+                    <span>Custo total (CLT)</span>
                     <span className="font-bold text-amber-400">{fmt(loja.totalCustoReal)}</span>
                   </div>
+                  {(loja.totalTaxas ?? 0) > 0 && (
+                    <div className="flex justify-between text-gray-400">
+                      <span>Freelancers/taxas</span>
+                      <span className="font-medium text-purple-400">{fmt(loja.totalTaxas)}</span>
+                    </div>
+                  )}
+                  {(loja.totalTaxas ?? 0) > 0 && (
+                    <div className="flex justify-between text-gray-400">
+                      <span className="font-semibold text-white">Custo c/ freelancers</span>
+                      <span className="font-bold text-purple-300">{fmt(loja.totalCustoComTaxas)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-gray-400">
                     <span>Anualizado</span>
                     <span className="font-medium text-gray-300">{fmt(loja.custoAnualizado)}</span>
                   </div>
+                </div>
+
+                {/* Gerenciar freelancers */}
+                <div className="border-t border-[#2a2a2e] pt-3">
+                  <button
+                    onClick={() => {
+                      if (taxaLojaAberta === loja.lojaId) { setTaxaLojaAberta(null); resetTaxaForm(); }
+                      else { setTaxaLojaAberta(loja.lojaId); resetTaxaForm(); }
+                    }}
+                    className="flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                  >
+                    <UserCog className="w-3.5 h-3.5" />
+                    {taxaLojaAberta === loja.lojaId ? 'Fechar' : `Freelancers${loja.taxas?.length ? ` (${loja.taxas.length})` : ''}`}
+                  </button>
+
+                  {taxaLojaAberta === loja.lojaId && (
+                    <div className="mt-3 space-y-3">
+                      {/* Lista de taxas existentes */}
+                      {loja.taxas?.length > 0 && (
+                        <div className="space-y-2">
+                          {loja.taxas.map((taxa) => (
+                            <div key={taxa.id} className="flex items-center justify-between bg-[#141416] rounded-lg px-3 py-2 text-xs">
+                              <div>
+                                <span className="text-white font-medium">{taxa.nome}</span>
+                                <span className="text-gray-500 ml-2">
+                                  {taxa.quantidadeIdeal}× · {taxa.diasPorMes}d · {fmt(taxa.valorDiaria)}/dia
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 ml-2">
+                                <span className="text-purple-400 font-medium">{fmt(taxa.custoMensal)}/mês</span>
+                                <button onClick={() => { handleEditarTaxa(taxa); }} className="text-gray-500 hover:text-amber-400">
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                                <button onClick={() => handleExcluirTaxa(taxa.id)} className="text-gray-500 hover:text-red-400">
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Formulário de adição/edição */}
+                      <div className="bg-[#141416] rounded-xl p-3 space-y-2">
+                        <p className="text-xs font-semibold text-gray-400">{editandoTaxaId ? 'Editar freelancer' : 'Adicionar freelancer'}</p>
+                        <input
+                          placeholder="Nome (ex: Churrasqueiro)"
+                          value={taxaForm.nome}
+                          onChange={(e) => setTaxaForm((f) => ({ ...f, nome: e.target.value }))}
+                          className="w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-purple-500"
+                        />
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-xs text-gray-500 mb-0.5 block">Qtd.</label>
+                            <input
+                              type="number" min="1"
+                              value={taxaForm.quantidadeIdeal}
+                              onChange={(e) => setTaxaForm((f) => ({ ...f, quantidadeIdeal: e.target.value }))}
+                              className="w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500 mb-0.5 block">Dias/mês</label>
+                            <input
+                              type="number" min="1"
+                              value={taxaForm.diasPorMes}
+                              onChange={(e) => setTaxaForm((f) => ({ ...f, diasPorMes: e.target.value }))}
+                              className="w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500 mb-0.5 block">Diária (R$)</label>
+                            <input
+                              type="number" min="0" step="0.01"
+                              value={taxaForm.valorDiaria}
+                              onChange={(e) => setTaxaForm((f) => ({ ...f, valorDiaria: e.target.value }))}
+                              className="w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                            />
+                          </div>
+                        </div>
+                        {taxaForm.nome && taxaForm.valorDiaria && (
+                          <p className="text-xs text-purple-400">
+                            Custo estimado: {fmt(parseFloat(taxaForm.valorDiaria || '0') * (parseInt(taxaForm.diasPorMes) || 1) * (parseInt(taxaForm.quantidadeIdeal) || 1))}/mês
+                          </p>
+                        )}
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={() => handleSalvarTaxa(loja.lojaId)}
+                            disabled={salvandoTaxa || !taxaForm.nome || !taxaForm.valorDiaria}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs rounded-lg transition-colors"
+                          >
+                            {salvandoTaxa ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                            {editandoTaxaId ? 'Salvar' : 'Adicionar'}
+                          </button>
+                          {editandoTaxaId && (
+                            <button onClick={resetTaxaForm} className="flex items-center gap-1 px-3 py-1.5 bg-[#2a2a2e] text-gray-400 text-xs rounded-lg hover:text-white transition-colors">
+                              <X className="w-3 h-3" /> Cancelar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

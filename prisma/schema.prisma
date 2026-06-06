@@ -71,6 +71,7 @@ model User {
   rhOcorrencias          RhOcorrencia[]
   rhSnapshots            RhSnapshotCustoMensal[]
   rhTransferencias       RhTransferenciaLoja[]
+  rhTaxasLoja            RhTaxaLoja[]
 
   @@map("users")
 }
@@ -779,6 +780,7 @@ model RhLoja {
   transferenciasOrigem  RhTransferenciaLoja[]   @relation("TransferenciaOrigem")
   transferenciasDestino RhTransferenciaLoja[]   @relation("TransferenciaDestino")
   plrs                  RhPLRTrimestral[]
+  taxas                 RhTaxaLoja[]
 
   @@index([userId])
   @@map("rh_lojas")
@@ -1108,6 +1110,26 @@ model RhTransferenciaLoja {
   @@index([funcionarioId])
   @@index([userId])
   @@map("rh_transferencias_lojas")
+}
+
+model RhTaxaLoja {
+  id               String   @id @default(cuid())
+  userId           String
+  lojaId           String
+  nome             String
+  valorDiaria      Float
+  diasPorMes       Int      @default(1)
+  quantidadeIdeal  Int      @default(1)
+  observacoes      String?
+  ativo            Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loja             RhLoja   @relation(fields: [lojaId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([lojaId])
+  @@map("rh_taxas_loja")
 }
 
 // Permissões de ferramentas para usuários do sistema (stack_users)
