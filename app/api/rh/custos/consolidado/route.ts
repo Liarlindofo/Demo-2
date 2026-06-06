@@ -51,7 +51,8 @@ export async function GET() {
           composicao.baseCalculoEncargos +
           enc.totalEncargos +
           composicao.valorAlimentacao +
-          composicao.valorVT;
+          composicao.valorVT +
+          (composicao.bonificacaoAssiduidade ?? 0);
         return {
           id: f.id,
           nome: f.nome,

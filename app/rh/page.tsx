@@ -199,7 +199,10 @@ export default function RhDashboard() {
         const total = data.length;
         const custoMensal = data.reduce((acc, f) => {
           const base = f.composicaoSalarial?.baseCalculoEncargos ?? f.salarioBruto / 1.44;
-          return acc + base * 1.44 + (f.composicaoSalarial?.valorAlimentacao ?? 0) + (f.composicaoSalarial?.valorVT ?? 0);
+          return acc + base * 1.44
+            + (f.composicaoSalarial?.valorAlimentacao ?? 0)
+            + (f.composicaoSalarial?.valorVT ?? 0)
+            + (f.composicaoSalarial?.bonificacaoAssiduidade ?? 0);
         }, 0);
         const escala6x1 = data.filter((f) => f.escala === '6x1').length;
         const escala5x2 = data.filter((f) => f.escala === '5x2').length;

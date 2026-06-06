@@ -36,7 +36,8 @@ export function calcularComposicaoSalarial(funcionario: {
   const totalBruto =
     baseCalculoEncargos +
     funcionario.valorAlimentacao +
-    funcionario.valorVT;
+    funcionario.valorVT +
+    (funcionario.bonificacaoAssiduidade ?? 0);
 
   return {
     salarioBase: funcionario.salarioBase,
