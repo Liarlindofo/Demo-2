@@ -73,7 +73,10 @@ export default function MotoboiDetailPage() {
     });
     // Recarregar docs
     const res = await fetch(`/api/rh/motoboys/quinzenas/${periodId}/documentos`);
-    if (res.ok) setDocsSigned(p => ({ ...p, [periodId]: await res.json() }));
+    if (res.ok) {
+      const docs = await res.json();
+      setDocsSigned(p => ({ ...p, [periodId]: docs }));
+    }
     fetchRider();
   };
 
