@@ -18,7 +18,7 @@ export default function NovoMotoboyPage() {
   const [form, setForm] = useState({ name: '', cpf: '', email: '', phone: '', lojaId: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [sucesso, setSucesso] = useState<{ inviteToken: string } | null>(null);
+  const [sucesso, setSucesso] = useState<{ inviteToken: string; reativado?: boolean } | null>(null);
   const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
@@ -33,14 +33,20 @@ export default function NovoMotoboyPage() {
     setError('');
     setSaving(true);
     try {
-      const res = await fetch('/api/rh/motoboys', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, cpf: form.cpf.replace(/\D/g, '') }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Erro ao cadastrar'); return; }
-      setSucesso({ inviteToken: data.inviteToken });
+      let data;
+      try {
+        const res = await fetch('/api/rh/motoboys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...form, cpf: form.cpf.replace(/\D/g, '') }),
+        });
+        data = await res.json();
+        if (!res.ok) { setError(data.error ?? 'Erro ao cadastrar'); return; }
+      } catch {
+        setError('Erro de comunicação com o servidor. Tente novamente.');
+        return;
+      }
+      setSucesso({ inviteToken: data.inviteToken, reativado: !!data.reativado });
     } finally { setSaving(false); }
   };
 
@@ -61,9 +67,13 @@ export default function NovoMotoboyPage() {
           <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center mx-auto">
             <Check className="w-7 h-7 text-green-400" />
           </div>
-          <h2 className="text-xl font-bold text-white">Motoboy cadastrado!</h2>
+          <h2 className="text-xl font-bold text-white">
+            {sucesso.reativado ? 'Motoboy reativado!' : 'Motoboy cadastrado!'}
+          </h2>
           <p className="text-sm text-gray-400">
-            Envie o link abaixo para que o motoboy crie sua senha e acesse o portal:
+            {sucesso.reativado
+              ? 'O motoboy foi reativado. Envie o novo link de convite para que ele defina sua senha:'
+              : 'Envie o link abaixo para que o motoboy crie sua senha e acesse o portal:'}
           </p>
           <div className="bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-3 text-xs text-gray-300 break-all text-left">
             {inviteUrl}

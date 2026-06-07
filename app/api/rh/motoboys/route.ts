@@ -41,43 +41,70 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const dbUser = await getRhDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  try {
+    const dbUser = await getRhDbUser();
+    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
-  const body = await req.json() as {
-    name: string; cpf: string; email: string;
-    phone?: string; lojaId: string;
-  };
+    const body = await req.json() as {
+      name: string; cpf: string; email: string;
+      phone?: string; lojaId: string;
+    };
 
-  if (!body.name || !body.cpf || !body.email || !body.lojaId) {
-    return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 });
+    if (!body.name || !body.cpf || !body.email || !body.lojaId) {
+      return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 });
+    }
+
+    const cpfNums = body.cpf.replace(/\D/g, '');
+    if (!validarCPF(cpfNums)) {
+      return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
+    }
+
+    const inviteToken = generateInviteToken();
+    const inviteTokenExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    // Verificar se e-mail já existe
+    const existente = await prisma.deliveryRider.findFirst({
+      where: { userId: dbUser.id, email: body.email.toLowerCase() },
+    });
+
+    if (existente) {
+      // Se está ativo → bloquear
+      if (existente.status === 'active') {
+        return NextResponse.json({ error: 'E-mail já cadastrado e ativo' }, { status: 409 });
+      }
+      // Se está inativo → reativar com novos dados e novo token de convite
+      const reativado = await prisma.deliveryRider.update({
+        where: { id: existente.id },
+        data: {
+          name: body.name,
+          cpf: cpfNums,
+          phone: body.phone ?? existente.phone,
+          lojaId: body.lojaId,
+          status: 'active',
+          passwordHash: null,
+          inviteToken,
+          inviteTokenExpiresAt,
+        },
+      });
+      return NextResponse.json({ ...reativado, inviteToken, reativado: true }, { status: 200 });
+    }
+
+    const rider = await prisma.deliveryRider.create({
+      data: {
+        userId: dbUser.id,
+        lojaId: body.lojaId,
+        name: body.name,
+        cpf: cpfNums,
+        email: body.email.toLowerCase(),
+        phone: body.phone,
+        inviteToken,
+        inviteTokenExpiresAt,
+      },
+    });
+
+    return NextResponse.json({ ...rider, inviteToken }, { status: 201 });
+  } catch (err) {
+    console.error('[POST /api/rh/motoboys]', err);
+    return NextResponse.json({ error: 'Erro interno ao cadastrar motoboy' }, { status: 500 });
   }
-
-  const cpfNums = body.cpf.replace(/\D/g, '');
-  if (!validarCPF(cpfNums)) {
-    return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
-  }
-
-  const existente = await prisma.deliveryRider.findFirst({
-    where: { userId: dbUser.id, email: body.email.toLowerCase(), status: { not: 'deleted' } },
-  });
-  if (existente) return NextResponse.json({ error: 'E-mail já cadastrado' }, { status: 409 });
-
-  const inviteToken = generateInviteToken();
-  const inviteTokenExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
-
-  const rider = await prisma.deliveryRider.create({
-    data: {
-      userId: dbUser.id,
-      lojaId: body.lojaId,
-      name: body.name,
-      cpf: cpfNums,
-      email: body.email.toLowerCase(),
-      phone: body.phone,
-      inviteToken,
-      inviteTokenExpiresAt,
-    },
-  });
-
-  return NextResponse.json({ ...rider, inviteToken }, { status: 201 });
 }

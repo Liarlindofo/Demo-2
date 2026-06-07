@@ -6,6 +6,7 @@ import Link from 'next/link';
 import {
   ArrowLeft, Bike, Plus, Clock, CheckCircle, XCircle,
   FileText, Eye, Loader2, ChevronDown, ChevronUp, DollarSign,
+  Copy, RefreshCw, Link2,
 } from 'lucide-react';
 
 interface Document { id: string; documentType: string; status: string; fileName: string; uploadedAt: string }
@@ -40,6 +41,9 @@ export default function MotoboiDetailPage() {
   const [expandedPeriod, setExpandedPeriod] = useState<string | null>(null);
   const [loadingDocs, setLoadingDocs] = useState<Record<string, boolean>>({});
   const [docsSigned, setDocsSigned] = useState<Record<string, { id: string; documentType: string; signedUrl: string | null; status: string; fileName: string }[]>>({});
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [loadingInvite, setLoadingInvite] = useState(false);
+  const [copiado, setCopiado] = useState(false);
 
   const fetchRider = () => {
     setLoading(true);
@@ -78,6 +82,31 @@ export default function MotoboiDetailPage() {
       setDocsSigned(p => ({ ...p, [periodId]: docs }));
     }
     fetchRider();
+  };
+
+  const handleGetInvite = async (regenerar = false) => {
+    setLoadingInvite(true);
+    try {
+      const res = await fetch(
+        `/api/rh/motoboys/${id}/invite`,
+        regenerar ? { method: 'POST' } : undefined
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setInviteToken(data.inviteToken);
+      }
+    } finally { setLoadingInvite(false); }
+  };
+
+  const inviteUrl = inviteToken
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/rider/setup?token=${inviteToken}`
+    : '';
+
+  const copiarLink = () => {
+    if (!inviteUrl) return;
+    navigator.clipboard.writeText(inviteUrl);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
   };
 
   const handleStatusRider = async (newStatus: string) => {
@@ -157,6 +186,50 @@ export default function MotoboiDetailPage() {
               </span>
             </div>
           </div>
+
+          {/* Painel de convite — visível só enquanto o motoboy não definiu senha */}
+          {!rider.passwordHash && (
+            <div className="mt-4 pt-4 border-t border-[#2a2a2e]">
+              <div className="flex items-center gap-2 mb-3">
+                <Link2 className="w-4 h-4 text-amber-400" />
+                <p className="text-sm font-medium text-amber-400">Link de convite pendente</p>
+              </div>
+
+              {inviteToken ? (
+                <div className="space-y-2">
+                  <div className="bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-xs text-gray-300 break-all">
+                    {inviteUrl}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={copiarLink}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-amber-500/10 text-amber-400 text-xs rounded-lg hover:bg-amber-500/20 transition-colors"
+                    >
+                      {copiado ? <CheckCircle className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiado ? 'Copiado!' : 'Copiar link'}
+                    </button>
+                    <button
+                      onClick={() => handleGetInvite(true)}
+                      disabled={loadingInvite}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-[#2a2a2e] text-gray-400 text-xs rounded-lg hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      {loadingInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                      Gerar novo link
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleGetInvite(false)}
+                  disabled={loadingInvite}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm rounded-xl hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                >
+                  {loadingInvite ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                  Ver link de convite
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Quinzenas */}
