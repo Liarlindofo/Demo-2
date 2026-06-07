@@ -1,20 +1,42 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import jwt from 'jsonwebtoken';
+
+const RIDER_COOKIE = 'rider_token';
+
+function getRiderSession(request: NextRequest) {
+  try {
+    const token = request.cookies.get(RIDER_COOKIE)?.value;
+    if (!token) return null;
+    const secret = process.env.ADMIN_JWT_SECRET || process.env.NEXTAUTH_SECRET;
+    if (!secret) return null;
+    return jwt.verify(token, secret) as { riderId: string };
+  } catch {
+    return null;
+  }
+}
 
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
-  // Limpar parâmetros de URL após autenticação
-  // Isso remove os parâmetros visíveis como ?code=xxx e ?after_auth_return_to=...
+  // ── Proteção do portal /rider ──────────────────────────────────────────────
+  if (pathname.startsWith('/rider')) {
+    const publicRiderPaths = ['/rider/login', '/rider/setup'];
+    const isPublic = publicRiderPaths.some((p) => pathname.startsWith(p));
+
+    if (!isPublic) {
+      const session = getRiderSession(request);
+      if (!session) {
+        return NextResponse.redirect(new URL('/rider/login', request.url));
+      }
+    }
+  }
+
+  // Limpar parâmetros de URL após autenticação OAuth
   if (pathname.startsWith('/handler')) {
     const code = searchParams.get('code');
     const afterAuthReturnTo = searchParams.get('after_auth_return_to');
-
-    // Se há parâmetros de callback, limpar da URL e manter apenas o handler
     if (code || afterAuthReturnTo) {
-      const url = request.nextUrl.clone();
-      url.search = '';
-      // Não redirecionar aqui, deixar o handler processar
       return NextResponse.next();
     }
   }
@@ -36,6 +58,7 @@ export const config = {
   matcher: [
     '/handler/:path*',
     '/dashboard/:path*',
+    '/rider/:path*',
   ],
 };
 

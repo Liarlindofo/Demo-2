@@ -1,0 +1,83 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { getRhDbUser } from '@/lib/rh-api-auth';
+import { generateInviteToken } from '@/lib/rider-auth';
+
+export const dynamic = 'force-dynamic';
+
+function validarCPF(cpf: string): boolean {
+  const nums = cpf.replace(/\D/g, '');
+  if (nums.length !== 11 || /^(\d)\1{10}$/.test(nums)) return false;
+  let soma = 0;
+  for (let i = 0; i < 9; i++) soma += parseInt(nums[i]) * (10 - i);
+  let resto = (soma * 10) % 11;
+  if (resto === 10 || resto === 11) resto = 0;
+  if (resto !== parseInt(nums[9])) return false;
+  soma = 0;
+  for (let i = 0; i < 10; i++) soma += parseInt(nums[i]) * (11 - i);
+  resto = (soma * 10) % 11;
+  if (resto === 10 || resto === 11) resto = 0;
+  return resto === parseInt(nums[10]);
+}
+
+export async function GET(req: NextRequest) {
+  const dbUser = await getRhDbUser();
+  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+
+  const lojaId = req.nextUrl.searchParams.get('lojaId');
+  const status = req.nextUrl.searchParams.get('status');
+
+  const riders = await prisma.deliveryRider.findMany({
+    where: {
+      userId: dbUser.id,
+      ...(lojaId ? { lojaId } : {}),
+      ...(status ? { status } : {}),
+    },
+    include: { loja: { select: { nome: true } } },
+    orderBy: { name: 'asc' },
+  });
+
+  return NextResponse.json(riders);
+}
+
+export async function POST(req: NextRequest) {
+  const dbUser = await getRhDbUser();
+  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+
+  const body = await req.json() as {
+    name: string; cpf: string; email: string;
+    phone?: string; lojaId: string;
+  };
+
+  if (!body.name || !body.cpf || !body.email || !body.lojaId) {
+    return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 });
+  }
+
+  const cpfNums = body.cpf.replace(/\D/g, '');
+  if (!validarCPF(cpfNums)) {
+    return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
+  }
+
+  const existente = await prisma.deliveryRider.findFirst({
+    where: { userId: dbUser.id, email: body.email.toLowerCase(), status: { not: 'deleted' } },
+  });
+  if (existente) return NextResponse.json({ error: 'E-mail já cadastrado' }, { status: 409 });
+
+  const inviteToken = generateInviteToken();
+  const inviteTokenExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
+
+  const rider = await prisma.deliveryRider.create({
+    data: {
+      userId: dbUser.id,
+      lojaId: body.lojaId,
+      name: body.name,
+      cpf: cpfNums,
+      email: body.email.toLowerCase(),
+      phone: body.phone,
+      inviteToken,
+      inviteTokenExpiresAt,
+    },
+  });
+
+  return NextResponse.json({ ...rider, inviteToken }, { status: 201 });
+}

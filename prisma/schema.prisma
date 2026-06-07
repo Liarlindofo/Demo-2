@@ -72,6 +72,7 @@ model User {
   rhSnapshots            RhSnapshotCustoMensal[]
   rhTransferencias       RhTransferenciaLoja[]
   rhTaxasLoja            RhTaxaLoja[]
+  deliveryRiders         DeliveryRider[]
 
   @@map("users")
 }
@@ -781,6 +782,7 @@ model RhLoja {
   transferenciasDestino RhTransferenciaLoja[]   @relation("TransferenciaDestino")
   plrs                  RhPLRTrimestral[]
   taxas                 RhTaxaLoja[]
+  riders                DeliveryRider[]
 
   @@index([userId])
   @@map("rh_lojas")
@@ -1130,6 +1132,76 @@ model RhTaxaLoja {
   @@index([userId])
   @@index([lojaId])
   @@map("rh_taxas_loja")
+}
+
+// ─── Módulo Motoboys ────────────────────────────────────────────────────────
+
+model DeliveryRider {
+  id               String                 @id @default(cuid())
+  userId           String
+  lojaId           String
+  name             String
+  cpf              String
+  email            String
+  phone            String?
+  status           String                 @default("active")
+  passwordHash     String?
+  inviteToken      String?                @unique
+  inviteTokenExpiresAt DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loja             RhLoja                 @relation(fields: [lojaId], references: [id])
+  paymentPeriods   RiderPaymentPeriod[]
+
+  @@unique([userId, email])
+  @@unique([userId, cpf])
+  @@index([userId])
+  @@index([lojaId])
+  @@map("delivery_riders")
+}
+
+model RiderPaymentPeriod {
+  id              String           @id @default(cuid())
+  userId          String
+  riderId         String
+  lojaId          String
+  periodLabel     String
+  periodStart     DateTime
+  periodEnd       DateTime
+  deliveryCount   Int              @default(0)
+  amountCents     Int              @default(0)
+  summary         String?
+  status          String           @default("pending_documents")
+  createdBy       String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  rider           DeliveryRider    @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  documents       RiderDocument[]
+
+  @@index([riderId])
+  @@index([userId])
+  @@map("rider_payment_periods")
+}
+
+model RiderDocument {
+  id            String             @id @default(cuid())
+  userId        String
+  periodId      String
+  riderId       String
+  documentType  String
+  fileName      String
+  storagePath   String
+  uploadedAt    DateTime           @default(now())
+  status        String             @default("pending")
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  period        RiderPaymentPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@index([periodId])
+  @@index([riderId])
+  @@index([userId])
+  @@map("rider_documents")
 }
 
 // Permissões de ferramentas para usuários do sistema (stack_users)

@@ -18,6 +18,7 @@ import {
   FileText,
   ArrowRight,
   Gift,
+  Bike,
 } from 'lucide-react';
 
 interface Funcionario {
@@ -417,6 +418,19 @@ export default function RhDashboard() {
                       : 'Quadro não configurado para esta loja')
                   : 'Selecione uma loja para ver os gaps'}
               </p>
+            </div>
+          </Link>
+
+          <Link href="/rh/motoboys" className="group bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 hover:border-orange-500/30 hover:bg-[#222224] transition-all">
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center">
+                <Bike className="w-5 h-5 text-orange-400" />
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-orange-400 transition-colors" />
+            </div>
+            <div className="mt-3">
+              <h3 className="font-semibold text-white">Motoboys</h3>
+              <p className="text-sm text-gray-400 mt-1">Gestão de entregadores e quinzenas</p>
             </div>
           </Link>
 
