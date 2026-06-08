@@ -296,32 +296,24 @@ export default function CustosPage() {
             </div>
             <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-2">
-                <DollarSign className="w-4 h-4 text-amber-400" />
-                <p className="text-xs text-gray-400 uppercase tracking-wider">Folha Bruta</p>
-              </div>
-              <p className="text-xl font-bold text-amber-400">{fmt(rede.totalFolhaBruta ?? rede.totalSalarioBruto)}</p>
-              <p className="text-xs text-gray-500 mt-0.5">soma do total bruto</p>
-            </div>
-            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <DollarSign className="w-4 h-4 text-orange-400" />
-                <p className="text-xs text-gray-400 uppercase tracking-wider">Base Encargos</p>
-              </div>
-              <p className="text-xl font-bold text-orange-400">{fmt(rede.totalBaseEncargos ?? 0)}</p>
-              <p className="text-xs text-gray-500 mt-0.5">base de cálculo patronal</p>
-            </div>
-            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="w-4 h-4 text-red-400" />
-                <p className="text-xs text-gray-400 uppercase tracking-wider">Custo Total/Mês</p>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Custo Total / Mês</p>
               </div>
               <p className="text-xl font-bold text-red-400">{fmt(rede.totalCustoReal)}</p>
               <p className="text-xs text-gray-500 mt-0.5">salários + encargos</p>
             </div>
             <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-2">
+                <DollarSign className="w-4 h-4 text-orange-400" />
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Custo Encargos / Mês</p>
+              </div>
+              <p className="text-xl font-bold text-orange-400">{fmt(rede.totalEncargos)}</p>
+              <p className="text-xs text-gray-500 mt-0.5">INSS + FGTS + Sistema S + RAT</p>
+            </div>
+            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-2">
                 <UserCog className="w-4 h-4 text-purple-400" />
-                <p className="text-xs text-gray-400 uppercase tracking-wider">Custo c/ Freelancers</p>
+                <p className="text-xs text-gray-400 uppercase tracking-wider">Custo Total + Taxas / Mês</p>
               </div>
               <p className="text-xl font-bold text-purple-400">{fmt(rede.totalCustoComTaxas ?? rede.totalCustoReal)}</p>
               <p className="text-xs text-gray-500 mt-0.5">CLT + taxas diárias</p>
