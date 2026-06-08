@@ -371,7 +371,7 @@ export default function FuncionarioDetailPage() {
               <h1 className="text-2xl font-bold text-white">{funcionario.nome}</h1>
               <div className="flex items-center gap-2 mt-0.5">
                 <div className={`w-1.5 h-1.5 rounded-full ${funcionario.ativo ? 'bg-green-400' : 'bg-gray-600'}`} />
-                <span className="text-sm text-gray-400">{funcionario.ativo ? 'Ativo' : 'Inativo'} • {funcionario.cargo.nome} • {funcionario.loja.nome}</span>
+                <span className="text-sm text-gray-400">{funcionario.ativo ? 'Ativo' : 'Inativo'}{funcionario.cargo ? ` • ${funcionario.cargo.nome}` : ''}{funcionario.loja ? ` • ${funcionario.loja.nome}` : ''}</span>
               </div>
             </div>
           </div>
@@ -493,7 +493,7 @@ export default function FuncionarioDetailPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {[{ icon: Briefcase, label: 'Cargo', value: funcionario.cargo.nome }, { icon: Building2, label: 'Loja', value: funcionario.loja.nome }].map(({ icon: Icon, label, value }) => (
+                    {[{ icon: Briefcase, label: 'Cargo', value: funcionario.cargo?.nome ?? '—' }, { icon: Building2, label: 'Loja', value: funcionario.loja?.nome ?? '—' }].map(({ icon: Icon, label, value }) => (
                       <div key={label} className="flex items-center gap-3">
                         <Icon className="w-4 h-4 text-gray-600 flex-shrink-0" />
                         <span className="text-xs text-gray-500 w-16 flex-shrink-0">{label}</span>
@@ -519,8 +519,8 @@ export default function FuncionarioDetailPage() {
                     bonificacaoAssiduidade={funcionario.bonificacaoAssiduidade}
                     valorAlimentacao={funcionario.valorAlimentacao}
                     valorVT={funcionario.valorVT}
-                    ratPct={funcionario.cargo.ratPct}
-                    fap={funcionario.loja.fap ?? 1}
+                    ratPct={funcionario.cargo?.ratPct ?? 1.0}
+                    fap={funcionario.loja?.fap ?? 1}
                     bonificacoesComposicao={funcionario.bonificacoesComposicao}
                   />
                 )}
@@ -840,7 +840,7 @@ export default function FuncionarioDetailPage() {
             funcionarioId={params.id}
             funcionarioNome={funcionario.nome}
             lojaAtualId={funcionario.lojaId}
-            lojaAtualNome={funcionario.loja.nome}
+            lojaAtualNome={funcionario.loja?.nome ?? '—'}
             lojas={lojas}
             aprovadoPor=""
             onClose={() => setShowDrawerTransferencia(false)}

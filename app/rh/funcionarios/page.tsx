@@ -382,10 +382,10 @@ export default function FuncionariosPage() {
                     </div>
 
                     <span className="hidden md:block text-sm text-gray-300 truncate">
-                      {f.cargo.nome}
+                      {f.cargo?.nome ?? '—'}
                     </span>
                     <span className="hidden md:block text-sm text-gray-400 truncate">
-                      {f.loja.nome}
+                      {f.loja?.nome ?? '—'}
                     </span>
                     <span className="hidden md:block text-sm text-gray-400">
                       {TURNO_LABELS[f.turno] ?? f.turno}

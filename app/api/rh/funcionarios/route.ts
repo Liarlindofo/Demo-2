@@ -75,13 +75,15 @@ export async function GET(req: NextRequest) {
     });
 
     const fapMap = Object.fromEntries(
-      funcionarios.map((f) => [f.loja.id, f.loja.fap ?? 1])
+      funcionarios
+        .filter((f) => f.loja)
+        .map((f) => [f.loja!.id, f.loja!.fap ?? 1])
     );
 
     return NextResponse.json(
       enrichFuncionarios(funcionarios, fapMap).map((f) => {
         const { loja, ...rest } = f;
-        return { ...rest, loja: { id: loja.id, nome: loja.nome } };
+        return { ...rest, loja: loja ? { id: loja.id, nome: loja.nome } : null };
       })
     );
   } catch (err) {
