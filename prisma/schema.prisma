@@ -812,11 +812,11 @@ model RhFuncionario {
   email                 String?
   telefone              String?
   dataNascimento        DateTime?
-  dataAdmissao          DateTime
-  cargoId               String
-  lojaId                String
+  dataAdmissao          DateTime?
+  cargoId               String?
+  lojaId                String?
   // Composição salarial
-  salarioBase             Float
+  salarioBase             Float     @default(0)
   valorAlimentacao        Float                    @default(0)
   valorVT                 Float                    @default(0)
   cargoResponsabilidade   Boolean                  @default(false)
@@ -841,8 +841,8 @@ model RhFuncionario {
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
   user                  User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cargo                 RhCargo                  @relation(fields: [cargoId], references: [id])
-  loja                  RhLoja                   @relation(fields: [lojaId], references: [id])
+  cargo                 RhCargo?                 @relation(fields: [cargoId], references: [id])
+  loja                  RhLoja?                  @relation(fields: [lojaId], references: [id])
   historico             RhHistoricoFuncionario[]
   documentos            RhDocumentoFuncionario[]
   ocorrencias           RhOcorrencia[]

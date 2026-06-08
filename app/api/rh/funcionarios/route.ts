@@ -117,18 +117,15 @@ export async function POST(req: Request) {
     const composicao = parseComposicaoBody(body);
     const cpf = cpfRaw ? limparCPF(String(cpfRaw)) : null;
 
+    // Único campo verdadeiramente obrigatório
     if (!nome?.trim()) return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 });
+
     if (cpf && !validarCPF(cpf))
       return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
     if (dataNascimento) {
       const errNasc = validarDataNascimento(new Date(dataNascimento));
       if (errNasc) return NextResponse.json({ error: errNasc }, { status: 400 });
     }
-    if (!cargoId) return NextResponse.json({ error: 'Cargo é obrigatório' }, { status: 400 });
-    if (!lojaId) return NextResponse.json({ error: 'Loja é obrigatória' }, { status: 400 });
-    if (!composicao.salarioBase || composicao.salarioBase <= 0)
-      return NextResponse.json({ error: 'Salário base inválido' }, { status: 400 });
-
     if (cpf) {
       const cpfExistente = await prisma.rhFuncionario.findFirst({
         where: { userId: dbUser.id, cpf, ativo: true },
@@ -137,14 +134,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'CPF já cadastrado' }, { status: 409 });
     }
 
+    // Cargo e Loja opcionais — valida apenas se informados
     const [cargo, loja] = await Promise.all([
-      prisma.rhCargo.findFirst({ where: { id: cargoId, userId: dbUser.id } }),
-      prisma.rhLoja.findFirst({ where: { id: lojaId, userId: dbUser.id } }),
+      cargoId ? prisma.rhCargo.findFirst({ where: { id: cargoId, userId: dbUser.id } }) : null,
+      lojaId  ? prisma.rhLoja.findFirst({ where: { id: lojaId,  userId: dbUser.id } }) : null,
     ]);
-    if (!cargo) return NextResponse.json({ error: 'Cargo não encontrado' }, { status: 404 });
-    if (!loja) return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 });
+    if (cargoId && !cargo) return NextResponse.json({ error: 'Cargo não encontrado' }, { status: 404 });
+    if (lojaId  && !loja)  return NextResponse.json({ error: 'Loja não encontrada' },  { status: 404 });
 
-    const admissao = new Date(dataAdmissao);
+    // Data de admissão default = hoje
+    const admissao = dataAdmissao ? new Date(dataAdmissao) : new Date();
     const { dataFimExperiencia1, dataFimExperiencia2 } = calcDatasExperiencia(admissao);
 
     const funcionario = await prisma.rhFuncionario.create({
@@ -156,8 +155,8 @@ export async function POST(req: Request) {
         telefone: telefone || null,
         dataNascimento: dataNascimento ? new Date(dataNascimento) : null,
         dataAdmissao: admissao,
-        cargoId,
-        lojaId,
+        cargoId: cargoId || null,
+        lojaId: lojaId || null,
         ...composicao,
         escala: escala ?? '6x1',
         turno: turno ?? 'manhã',
@@ -179,9 +178,10 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json(enrichFuncionario(funcionario, cargo.ratPct, loja.fap), {
-      status: 201,
-    });
+    return NextResponse.json(
+      enrichFuncionario(funcionario, cargo?.ratPct ?? 1.0, loja?.fap ?? 1.0),
+      { status: 201 }
+    );
   } catch (err) {
     console.error('[POST /api/rh/funcionarios]', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
