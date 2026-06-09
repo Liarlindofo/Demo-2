@@ -87,13 +87,15 @@ function LojaSelector({
   );
 }
 
-function DeleteModal({
+function ConfirmModal({
   funcionario,
+  permanent,
   onConfirm,
   onCancel,
   loading,
 }: {
   funcionario: Funcionario;
+  permanent: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   loading: boolean;
@@ -102,16 +104,26 @@ function DeleteModal({
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6 max-w-sm w-full">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
-            <AlertTriangle className="w-5 h-5 text-red-400" />
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${permanent ? 'bg-red-500/20' : 'bg-red-500/10'}`}>
+            <AlertTriangle className={`w-5 h-5 ${permanent ? 'text-red-500' : 'text-red-400'}`} />
           </div>
-          <h3 className="text-lg font-semibold text-white">Desativar funcionário</h3>
+          <h3 className="text-lg font-semibold text-white">
+            {permanent ? 'Excluir permanentemente' : 'Desativar funcionário'}
+          </h3>
         </div>
-        <p className="text-gray-400 text-sm mb-6">
-          Tem certeza que deseja desativar{' '}
-          <span className="text-white font-medium">{funcionario.nome}</span>? Esta ação pode ser
-          revertida posteriormente.
+        <p className="text-gray-400 text-sm mb-2">
+          {permanent ? 'Você está prestes a excluir ' : 'Tem certeza que deseja desativar '}
+          <span className="text-white font-medium">{funcionario.nome}</span>
+          {permanent ? ' do sistema.' : '?'}
         </p>
+        {permanent && (
+          <p className="text-red-400/80 text-xs mb-4 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
+            Esta ação é irreversível. Todos os dados do funcionário serão apagados permanentemente.
+          </p>
+        )}
+        {!permanent && (
+          <p className="text-xs text-gray-500 mb-4">Esta ação pode ser revertida posteriormente.</p>
+        )}
         <div className="flex gap-3">
           <button
             onClick={onCancel}
@@ -122,9 +134,15 @@ function DeleteModal({
           <button
             onClick={onConfirm}
             disabled={loading}
-            className="flex-1 py-2.5 rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors text-sm font-medium disabled:opacity-50"
+            className={`flex-1 py-2.5 rounded-xl transition-colors text-sm font-medium disabled:opacity-50 ${
+              permanent
+                ? 'bg-red-600 text-white hover:bg-red-700'
+                : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+            }`}
           >
-            {loading ? 'Desativando...' : 'Desativar'}
+            {loading
+              ? permanent ? 'Excluindo...' : 'Desativando...'
+              : permanent ? 'Excluir' : 'Desativar'}
           </button>
         </div>
       </div>
@@ -189,8 +207,12 @@ export default function FuncionariosPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleteLoading(true);
+    const permanent = !deleteTarget.ativo;
     try {
-      await fetch(`/api/rh/funcionarios/${deleteTarget.id}`, { method: 'DELETE' });
+      const url = permanent
+        ? `/api/rh/funcionarios/${deleteTarget.id}?permanent=true`
+        : `/api/rh/funcionarios/${deleteTarget.id}`;
+      await fetch(url, { method: 'DELETE' });
       setDeleteTarget(null);
       fetchFuncionarios();
     } catch {
@@ -213,8 +235,9 @@ export default function FuncionariosPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       {deleteTarget && (
-        <DeleteModal
+        <ConfirmModal
           funcionario={deleteTarget}
+          permanent={!deleteTarget.ativo}
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
           loading={deleteLoading}
@@ -445,7 +468,12 @@ export default function FuncionariosPage() {
                           e.stopPropagation();
                           setDeleteTarget(f);
                         }}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                        title={f.ativo ? 'Desativar funcionário' : 'Excluir permanentemente'}
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                          f.ativo
+                            ? 'text-gray-600 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100'
+                            : 'text-red-500/60 hover:text-red-500 hover:bg-red-500/10'
+                        }`}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

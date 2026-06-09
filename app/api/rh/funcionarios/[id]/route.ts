@@ -294,11 +294,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+
+    const permanent = req.nextUrl.searchParams.get('permanent') === 'true';
 
     const existing = await prisma.rhFuncionario.findFirst({
       where: { id, userId: dbUser.id },
@@ -306,10 +308,21 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     if (!existing)
       return NextResponse.json({ error: 'Funcionário não encontrado' }, { status: 404 });
 
-    const alteradoPor = dbUser.fullName || dbUser.email || dbUser.id;
+    if (permanent) {
+      // Exclusão definitiva — só permitida para funcionários já inativos
+      if (existing.ativo)
+        return NextResponse.json(
+          { error: 'Desative o funcionário antes de excluir permanentemente' },
+          { status: 400 }
+        );
+      await prisma.rhFuncionario.delete({ where: { id } });
+      return NextResponse.json({ ok: true });
+    }
 
+    // Soft delete — desativar
+    const alteradoPor = dbUser.fullName || dbUser.email || dbUser.id;
     await prisma.$transaction(async (tx) => {
-      await tx.rhFuncionario.update({ where: { id }, data: { ativo: false } });
+      await tx.rhFuncionario.update({ where: { id }, data: { ativo: false, dataDemissao: new Date() } });
       await tx.rhHistoricoFuncionario.create({
         data: {
           userId: dbUser.id,
