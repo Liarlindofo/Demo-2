@@ -187,40 +187,50 @@ export default function EscalaPage() {
                   {folgaFixaDom.length + domingoGrupos.reduce((s, [, a]) => s + a.length, 0)} com folga no domingo
                 </span>
               </div>
-              <div className="p-5 space-y-4">
-
-                {/* DSR — folgas rotativas por qual domingo */}
-                {domingoGrupos.length > 0 && (
-                  <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                      DSR — Folga mensal obrigatória
-                    </p>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                      {domingoGrupos.map(([semana, pessoas]) => (
-                        <div key={semana} className="bg-[#252528] rounded-xl p-3 space-y-2">
-                          <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
-                            {DOMINGO_LABELS[semana]}
-                          </p>
-                          <div className="space-y-1.5">
-                            {pessoas.map((f) => <FolgaCard key={f.id} f={f} />)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="p-5 space-y-5">
 
                 {/* Folga fixa todo domingo (5x2) */}
                 {folgaFixaDom.length > 0 && (
                   <div className="space-y-3">
                     <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                      Folga fixa (todo domingo)
+                      Folga fixa — todo domingo
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {folgaFixaDom.map((f) => <FolgaCard key={f.id} f={f} />)}
                     </div>
                   </div>
                 )}
+
+                {/* Divisor */}
+                {folgaFixaDom.length > 0 && (
+                  <div className="border-t border-[#2a2a2e]" />
+                )}
+
+                {/* DSR — folgas rotativas por qual domingo do mês */}
+                <div className="space-y-3">
+                  <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                    DSR — Domingo de folga mensal
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                    {(['1', '2', '3', '4', 'ultimo'] as const).map((semana) => {
+                      const pessoas = domingosPorSemana[semana] ?? [];
+                      return (
+                        <div key={semana} className="bg-[#252528] rounded-xl p-3 space-y-2">
+                          <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
+                            {DOMINGO_LABELS[semana]}
+                          </p>
+                          {pessoas.length === 0 ? (
+                            <p className="text-[10px] text-gray-700 py-1">—</p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {pessoas.map((f) => <FolgaCard key={f.id} f={f} />)}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 {folgaFixaDom.length === 0 && domingoGrupos.length === 0 && (
                   <p className="text-sm text-gray-600 py-2">Nenhuma folga de domingo cadastrada</p>
