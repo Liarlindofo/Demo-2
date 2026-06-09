@@ -50,7 +50,7 @@ export function calcularComposicaoSalarial(funcionario: {
   };
 }
 
-/** Encargos (Simples Nacional): FGTS 8% + RAT ajustado pelo FAP. Sem INSS patronal nem Sistema S. */
+/** Encargos (Simples Nacional): FGTS 8% + RAT ajustado pelo FAP. Sem INSS patronal. */
 export function calcularEncargosPatronais(
   baseCalculoEncargos: number,
   rat: number = 2,

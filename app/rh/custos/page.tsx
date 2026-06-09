@@ -308,7 +308,7 @@ export default function CustosPage() {
                 <p className="text-xs text-gray-400 uppercase tracking-wider">Custo Encargos / Mês</p>
               </div>
               <p className="text-xl font-bold text-orange-400">{fmt(rede.totalEncargos)}</p>
-              <p className="text-xs text-gray-500 mt-0.5">INSS + FGTS + Sistema S + RAT</p>
+              <p className="text-xs text-gray-500 mt-0.5">FGTS + RAT (Simples Nacional)</p>
             </div>
             <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-2">

@@ -40,7 +40,7 @@ const QUICK_QUESTIONS = [
   'Migração 6x1 → 5x2 — o que muda?',
   'Salário mínimo e piso PR 2025',
   'Calcular IRRF progressivo',
-  'Encargos Sistema S alimentação',
+  'Encargos FGTS e RAT Simples Nacional',
 ];
 
 const QUICK_BONIFICACOES = [
