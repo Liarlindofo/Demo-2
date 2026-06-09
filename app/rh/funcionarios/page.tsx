@@ -141,6 +141,7 @@ export default function FuncionariosPage() {
   const [cargos, setCargos] = useState<Cargo[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterCargo, setFilterCargo] = useState('');
   const [filterEscala, setFilterEscala] = useState('');
   const [filterTurno, setFilterTurno] = useState('');
@@ -151,6 +152,11 @@ export default function FuncionariosPage() {
   const fmt = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const fetchFuncionarios = useCallback(async () => {
     setLoading(true);
     try {
@@ -160,7 +166,7 @@ export default function FuncionariosPage() {
       if (filterEscala) params.set('escala', filterEscala);
       if (filterTurno) params.set('turno', filterTurno);
       if (filterAtivo) params.set('ativo', filterAtivo);
-      if (search) params.set('search', search);
+      if (debouncedSearch) params.set('search', debouncedSearch);
       const res = await fetch(`/api/rh/funcionarios?${params}`);
       if (!res.ok) throw new Error('Falha ao carregar');
       setFuncionarios(await res.json());
@@ -169,7 +175,7 @@ export default function FuncionariosPage() {
     } finally {
       setLoading(false);
     }
-  }, [lojaSelecionada, filterCargo, filterEscala, filterTurno, filterAtivo, search]);
+  }, [lojaSelecionada, filterCargo, filterEscala, filterTurno, filterAtivo, debouncedSearch]);
 
   useEffect(() => {
     fetchFuncionarios();
