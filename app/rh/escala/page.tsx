@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLoja, Loja } from '@/contexts/LojaContext';
-import { ArrowLeft, Calendar, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Calendar } from 'lucide-react';
 
 interface Funcionario {
   id: string;
@@ -16,42 +16,29 @@ interface Funcionario {
   escala: '6x1' | '5x2';
 }
 
-const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const TURNOS = ['manhã', 'tarde', 'noite', 'integral'] as const;
-type Turno = (typeof TURNOS)[number];
+const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] as const;
+type Dia = (typeof DIAS)[number];
 
-const TURNO_LABELS: Record<Turno, string> = {
-  manhã: 'Manhã',
-  tarde: 'Tarde',
-  noite: 'Noite',
-  integral: 'Integral',
-};
-
-const TURNO_COLORS: Record<Turno, string> = {
-  manhã: 'bg-amber-500/10 border-amber-500/20',
-  tarde: 'bg-blue-500/10 border-blue-500/20',
-  noite: 'bg-purple-500/10 border-purple-500/20',
-  integral: 'bg-green-500/10 border-green-500/20',
+const DOMINGO_LABELS: Record<string, string> = {
+  '1': '1º domingo',
+  '2': '2º domingo',
+  '3': '3º domingo',
+  '4': '4º domingo',
+  ultimo: 'Último domingo',
 };
 
 const CARGO_COLORS: Record<string, string> = {
-  Gerente: 'bg-purple-500/20 text-purple-300',
-  Pizzaiolo: 'bg-orange-500/20 text-orange-300',
-  Atendente: 'bg-blue-500/20 text-blue-300',
-  Caixa: 'bg-green-500/20 text-green-300',
-  Entregador: 'bg-cyan-500/20 text-cyan-300',
-  'Auxiliar de Cozinha': 'bg-yellow-500/20 text-yellow-300',
-  Supervisor: 'bg-pink-500/20 text-pink-300',
+  Gerente: 'bg-purple-500/20 text-purple-300 border-purple-500/20',
+  Pizzaiolo: 'bg-orange-500/20 text-orange-300 border-orange-500/20',
+  Atendente: 'bg-blue-500/20 text-blue-300 border-blue-500/20',
+  Caixa: 'bg-green-500/20 text-green-300 border-green-500/20',
+  Entregador: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/20',
+  'Auxiliar de Cozinha': 'bg-yellow-500/20 text-yellow-300 border-yellow-500/20',
+  Supervisor: 'bg-pink-500/20 text-pink-300 border-pink-500/20',
 };
 
-function getCargoColor(cargo: string): string {
-  return CARGO_COLORS[cargo] ?? 'bg-gray-500/20 text-gray-300';
-}
-
-function domingoFolgaLabel(domingoFolga: string | null | undefined): string {
-  if (!domingoFolga) return '';
-  if (domingoFolga === 'ultimo') return 'f. últ. dom';
-  return `f. ${domingoFolga}º dom`;
+function getCargoColor(cargo: string) {
+  return CARGO_COLORS[cargo] ?? 'bg-gray-500/20 text-gray-300 border-gray-500/20';
 }
 
 function LojaSelector({
@@ -68,9 +55,7 @@ function LojaSelector({
       <button
         onClick={() => setLojaSelecionada(null)}
         className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-          lojaSelecionada === null
-            ? 'bg-amber-500 text-black'
-            : 'bg-[#2a2a2e] text-gray-300 hover:bg-[#3a3a3e]'
+          lojaSelecionada === null ? 'bg-amber-500 text-black' : 'bg-[#2a2a2e] text-gray-300 hover:bg-[#3a3a3e]'
         }`}
       >
         Todas as lojas
@@ -80,14 +65,25 @@ function LojaSelector({
           key={loja.id}
           onClick={() => setLojaSelecionada(loja)}
           className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-            lojaSelecionada?.id === loja.id
-              ? 'bg-amber-500 text-black'
-              : 'bg-[#2a2a2e] text-gray-300 hover:bg-[#3a3a3e]'
+            lojaSelecionada?.id === loja.id ? 'bg-amber-500 text-black' : 'bg-[#2a2a2e] text-gray-300 hover:bg-[#3a3a3e]'
           }`}
         >
           {loja.nome}
         </button>
       ))}
+    </div>
+  );
+}
+
+function FolgaCard({ f }: { f: Funcionario }) {
+  return (
+    <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border ${getCargoColor(f.cargo.nome)}`}>
+      <div className="min-w-0">
+        <p className="text-xs font-semibold text-white truncate leading-tight">
+          {f.nome.split(' ')[0]}
+        </p>
+        <p className="text-[10px] text-gray-400 truncate leading-tight">{f.cargo.nome}</p>
+      </div>
     </div>
   );
 }
@@ -114,36 +110,37 @@ export default function EscalaPage() {
     fetchFuncionarios();
   }, [fetchFuncionarios]);
 
-  // Build schedule grid: turno → dia → funcionarios[]
-  const grid: Record<Turno, Record<string, Funcionario[]>> = {
-    manhã: {},
-    tarde: {},
-    noite: {},
-    integral: {},
-  };
-  DIAS.forEach((dia) => {
-    TURNOS.forEach((turno) => {
-      grid[turno][dia] = [];
-    });
-  });
+  // Monta folgas por dia da semana (Seg–Sáb)
+  const folgasPorDia: Record<string, Funcionario[]> = {};
+  DIAS.forEach((d) => { folgasPorDia[d] = []; });
 
   funcionarios.forEach((f) => {
-    const turno = f.turno as Turno;
     const diasFolga = Array.isArray(f.diasFolga) ? f.diasFolga : [];
-    DIAS.forEach((dia) => {
-      if (!diasFolga.includes(dia)) {
-        if (grid[turno]) grid[turno][dia].push(f);
-      }
+    diasFolga.forEach((d) => {
+      if (d !== 'Dom' && folgasPorDia[d]) folgasPorDia[d].push(f);
     });
+    // Dom com folga fixa (5x2)
+    if (diasFolga.includes('Dom')) folgasPorDia['Dom'].push(f);
   });
 
-  // Collect unique cargos for legend
-  const cargosUnicos = Array.from(new Set(funcionarios.map((f) => f.cargo.nome)));
+  // Folgas de domingo agrupadas por qual domingo do mês (6x1 DSR)
+  const domingosPorSemana: Record<string, Funcionario[]> = {
+    '1': [], '2': [], '3': [], '4': [], ultimo: [],
+  };
+  funcionarios.forEach((f) => {
+    const diasFolga = Array.isArray(f.diasFolga) ? f.diasFolga : [];
+    if (!diasFolga.includes('Dom') && f.domingoFolga && domingosPorSemana[f.domingoFolga]) {
+      domingosPorSemana[f.domingoFolga].push(f);
+    }
+  });
 
+  const domingoGrupos = Object.entries(domingosPorSemana).filter(([, arr]) => arr.length > 0);
+  const folgaFixaDom = folgasPorDia['Dom'];
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+
         {/* Header */}
         <div className="flex items-center gap-3">
           <button
@@ -155,132 +152,106 @@ export default function EscalaPage() {
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
               <Calendar className="w-6 h-6 text-purple-400" />
-              Escala Semanal
+              Escala de Folgas
             </h1>
             <p className="text-sm text-gray-400">
-              Grade de turnos —{' '}
-              {loading ? '...' : `${funcionarios.length} funcionário${funcionarios.length !== 1 ? 's' : ''}`}
+              {loading ? '...' : `${funcionarios.length} funcionário${funcionarios.length !== 1 ? 's' : ''} — folgas por dia da semana`}
             </p>
           </div>
         </div>
 
         {/* Loja Selector */}
-        <LojaSelector
-          lojas={lojas}
-          lojaSelecionada={lojaSelecionada}
-          setLojaSelecionada={setLojaSelecionada}
-        />
+        <LojaSelector lojas={lojas} lojaSelecionada={lojaSelecionada} setLojaSelecionada={setLojaSelecionada} />
 
         {loading ? (
-          <div className="space-y-4">
-            {TURNOS.map((t) => (
-              <div
-                key={t}
-                className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 animate-pulse"
-              >
-                <div className="h-5 w-20 bg-[#2a2a2e] rounded mb-4" />
-                <div className="grid grid-cols-7 gap-3">
-                  {Array.from({ length: 7 }).map((_, i) => (
-                    <div key={i} className="h-16 bg-[#2a2a2e] rounded-xl" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <div key={i} className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-4 animate-pulse">
+                <div className="h-4 w-16 bg-[#2a2a2e] rounded mb-3" />
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((__, j) => (
+                    <div key={j} className="h-9 bg-[#2a2a2e] rounded-xl" />
                   ))}
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="space-y-4">
-            {TURNOS.map((turno) => {
-              const hasTurno = funcionarios.some((f) => f.turno === turno);
-              if (!hasTurno && turno !== 'manhã') return null;
+          <div className="space-y-6">
 
-              return (
-                <div
-                  key={turno}
-                  className={`bg-[#1c1c1e] border rounded-2xl overflow-hidden ${TURNO_COLORS[turno]}`}
-                >
-                  {/* Turno header */}
-                  <div className="px-5 py-3 border-b border-[#2a2a2e]/50">
-                    <h3 className="text-sm font-semibold text-white">{TURNO_LABELS[turno]}</h3>
-                  </div>
-
-                  {/* Day columns */}
-                  <div className="grid grid-cols-7 divide-x divide-[#2a2a2e]/50">
-                    {DIAS.map((dia) => {
-                      const people = grid[turno][dia];
-                      const isDom = dia === 'Dom';
-                      const isLow = people.length < 2 && people.length > 0;
-                      const isEmpty = people.length === 0;
-
-                      return (
-                        <div key={dia} className="p-2 min-h-[100px]">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] font-semibold text-gray-500 uppercase">
-                              {dia}
-                            </span>
-                            {isLow && (
-                              <AlertTriangle className="w-3 h-3 text-amber-400 flex-shrink-0" />
-                            )}
-                          </div>
-                          {isEmpty ? (
-                            <div className="flex items-center justify-center h-12">
-                              <span className="text-[10px] text-gray-700">—</span>
-                            </div>
-                          ) : (
-                            <div className="space-y-1">
-                              {people.map((f) => (
-                                <div key={f.id} className="space-y-0.5">
-                                  <div
-                                    className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium truncate ${getCargoColor(f.cargo.nome)}`}
-                                    title={`${f.nome} — ${f.cargo.nome}`}
-                                  >
-                                    {f.nome.split(' ')[0]}
-                                  </div>
-                                  {isDom && f.domingoFolga && f.domingoFolga !== 'todos' && (
-                                    <div className="px-1.5 py-0.5 rounded-md text-[9px] bg-rose-500/10 text-rose-400 border border-rose-500/20 truncate">
-                                      {domingoFolgaLabel(f.domingoFolga)}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                              {isLow && (
-                                <div className="px-1.5 py-0.5 rounded-md text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                  ⚠ Baixo
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Legend */}
-        {!loading && cargosUnicos.length > 0 && (
-          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-              Legenda de Cargos
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {cargosUnicos.map((cargo) => (
-                <span
-                  key={cargo}
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${getCargoColor(cargo)}`}
-                >
-                  {cargo}
+            {/* Domingo — card especial com subgrupos de DSR */}
+            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-[#2a2a2e] flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white">Domingo</h3>
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider">
+                  {folgaFixaDom.length + domingoGrupos.reduce((s, [, a]) => s + a.length, 0)} com folga no domingo
                 </span>
-              ))}
-              <span className="px-3 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" /> {'< 2 pessoas no turno'}
-              </span>
-              <span className="px-3 py-1 rounded-full text-xs font-medium bg-rose-500/10 text-rose-400">
-                f. Nº dom = DSR (domingo de folga mensal)
-              </span>
+              </div>
+              <div className="p-5 space-y-4">
+
+                {/* DSR — folgas rotativas por qual domingo */}
+                {domingoGrupos.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                      DSR — Folga mensal obrigatória
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                      {domingoGrupos.map(([semana, pessoas]) => (
+                        <div key={semana} className="bg-[#252528] rounded-xl p-3 space-y-2">
+                          <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
+                            {DOMINGO_LABELS[semana]}
+                          </p>
+                          <div className="space-y-1.5">
+                            {pessoas.map((f) => <FolgaCard key={f.id} f={f} />)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Folga fixa todo domingo (5x2) */}
+                {folgaFixaDom.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                      Folga fixa (todo domingo)
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {folgaFixaDom.map((f) => <FolgaCard key={f.id} f={f} />)}
+                    </div>
+                  </div>
+                )}
+
+                {folgaFixaDom.length === 0 && domingoGrupos.length === 0 && (
+                  <p className="text-sm text-gray-600 py-2">Nenhuma folga de domingo cadastrada</p>
+                )}
+              </div>
             </div>
+
+            {/* Seg–Sáb — grid de 6 colunas */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {(['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] as Dia[]).map((dia) => {
+                const pessoas = folgasPorDia[dia];
+                return (
+                  <div key={dia} className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-[#2a2a2e] flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-white">{dia}</h3>
+                      <span className="text-[10px] font-medium text-gray-500">{pessoas.length}</span>
+                    </div>
+                    <div className="p-3 space-y-1.5 min-h-[80px]">
+                      {pessoas.length === 0 ? (
+                        <div className="flex items-center justify-center h-12">
+                          <span className="text-[10px] text-gray-700">ninguém</span>
+                        </div>
+                      ) : (
+                        pessoas.map((f) => <FolgaCard key={f.id} f={f} />)
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
           </div>
         )}
 
@@ -292,12 +263,11 @@ export default function EscalaPage() {
             </div>
             <div className="text-center">
               <p className="text-gray-400 font-medium">Nenhum funcionário ativo</p>
-              <p className="text-sm text-gray-600 mt-1">
-                Selecione uma loja ou cadastre funcionários
-              </p>
+              <p className="text-sm text-gray-600 mt-1">Selecione uma loja ou cadastre funcionários</p>
             </div>
           </div>
         )}
+
       </div>
     </div>
   );
