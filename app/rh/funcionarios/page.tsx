@@ -25,11 +25,12 @@ interface Funcionario {
   nome: string;
   cpf?: string | null;
   email?: string | null;
+  dataNascimento?: string | null;
   ativo: boolean;
-  cargoId: string;
-  cargo: { id: string; nome: string; ratPct: number };
-  lojaId: string;
-  loja: { id: string; nome: string };
+  cargoId?: string | null;
+  cargo?: { id: string; nome: string; ratPct: number } | null;
+  lojaId?: string | null;
+  loja?: { id: string; nome: string } | null;
   salarioBruto: number;
   composicaoSalarial?: {
     salarioBase: number;
@@ -42,6 +43,10 @@ interface Funcionario {
   };
   escala: '6x1' | '5x2';
   turno: 'manhã' | 'tarde' | 'noite' | 'integral';
+}
+
+function cadastroIncompleto(f: Funcionario): boolean {
+  return !f.cpf || !f.dataNascimento || !f.cargoId || !f.lojaId || !f.salarioBruto;
 }
 
 function LojaSelector({
@@ -382,7 +387,17 @@ export default function FuncionariosPage() {
                         {f.nome.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-medium text-white truncate">{f.nome}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-medium text-white truncate">{f.nome}</p>
+                          {cadastroIncompleto(f) && (
+                            <span
+                              title="Cadastro incompleto"
+                              className="flex-shrink-0 w-4 h-4 rounded-full bg-red-500/15 border border-red-500/40 flex items-center justify-center"
+                            >
+                              <span className="text-[9px] font-bold text-red-400 leading-none">!</span>
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <div
                             className={`w-1.5 h-1.5 rounded-full ${f.ativo ? 'bg-green-400' : 'bg-gray-600'}`}
