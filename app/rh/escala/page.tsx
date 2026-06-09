@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLoja, Loja } from '@/contexts/LojaContext';
-import { ArrowLeft, Calendar, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Calendar, AlertTriangle, Moon } from 'lucide-react';
 
 interface Funcionario {
   id: string;
@@ -12,6 +12,7 @@ interface Funcionario {
   cargo: { id: string; nome: string };
   turno: 'manhã' | 'tarde' | 'noite' | 'integral';
   diasFolga: string[];
+  domingoFolga?: string | null;
   escala: '6x1' | '5x2';
 }
 
@@ -45,6 +46,12 @@ const CARGO_COLORS: Record<string, string> = {
 
 function getCargoColor(cargo: string): string {
   return CARGO_COLORS[cargo] ?? 'bg-gray-500/20 text-gray-300';
+}
+
+function domingoFolgaLabel(domingoFolga: string | null | undefined): string {
+  if (!domingoFolga) return '';
+  if (domingoFolga === 'ultimo') return 'f. últ. dom';
+  return `f. ${domingoFolga}º dom`;
 }
 
 function LojaSelector({
@@ -133,6 +140,11 @@ export default function EscalaPage() {
   // Collect unique cargos for legend
   const cargosUnicos = Array.from(new Set(funcionarios.map((f) => f.cargo.nome)));
 
+  // Employees with fixed Sunday off (5x2) grouped by turno
+  const folgaFixaDomingo = funcionarios.filter(
+    (f) => (Array.isArray(f.diasFolga) ? f.diasFolga : []).includes('Dom'),
+  );
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
@@ -199,6 +211,7 @@ export default function EscalaPage() {
                   <div className="grid grid-cols-7 divide-x divide-[#2a2a2e]/50">
                     {DIAS.map((dia) => {
                       const people = grid[turno][dia];
+                      const isDom = dia === 'Dom';
                       const isLow = people.length < 2 && people.length > 0;
                       const isEmpty = people.length === 0;
 
@@ -219,12 +232,18 @@ export default function EscalaPage() {
                           ) : (
                             <div className="space-y-1">
                               {people.map((f) => (
-                                <div
-                                  key={f.id}
-                                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium truncate ${getCargoColor(f.cargo.nome)}`}
-                                  title={`${f.nome} — ${f.cargo.nome}`}
-                                >
-                                  {f.nome.split(' ')[0]}
+                                <div key={f.id} className="space-y-0.5">
+                                  <div
+                                    className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium truncate ${getCargoColor(f.cargo.nome)}`}
+                                    title={`${f.nome} — ${f.cargo.nome}`}
+                                  >
+                                    {f.nome.split(' ')[0]}
+                                  </div>
+                                  {isDom && f.domingoFolga && f.domingoFolga !== 'todos' && (
+                                    <div className="px-1.5 py-0.5 rounded-md text-[9px] bg-rose-500/10 text-rose-400 border border-rose-500/20 truncate">
+                                      {domingoFolgaLabel(f.domingoFolga)}
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                               {isLow && (
@@ -241,6 +260,30 @@ export default function EscalaPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Folga fixa no domingo (5x2) */}
+        {!loading && folgaFixaDomingo.length > 0 && (
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <Moon className="w-3.5 h-3.5 text-rose-400" />
+              Folga fixa todo domingo
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {folgaFixaDomingo.map((f) => (
+                <div
+                  key={f.id}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#2a2a2e] border border-[#3a3a3e]"
+                >
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getCargoColor(f.cargo.nome)}`}>
+                    {f.cargo.nome}
+                  </span>
+                  <span className="text-xs text-gray-300">{f.nome.split(' ')[0]}</span>
+                  <span className="text-[10px] text-gray-600">{TURNO_LABELS[f.turno as Turno]}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -261,6 +304,9 @@ export default function EscalaPage() {
               ))}
               <span className="px-3 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" /> {'< 2 pessoas no turno'}
+              </span>
+              <span className="px-3 py-1 rounded-full text-xs font-medium bg-rose-500/10 text-rose-400">
+                f. Nº dom = domingo de folga no mês
               </span>
             </div>
           </div>

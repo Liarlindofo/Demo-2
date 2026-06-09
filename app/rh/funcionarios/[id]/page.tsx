@@ -174,7 +174,8 @@ export default function FuncionarioDetailPage() {
     setEscala(f.escala); setTurno(f.turno); setHorarioEntrada(f.horarioEntrada);
     setHorarioSaida(f.horarioSaida);
     setDiasFolga((Array.isArray(f.diasFolga) ? f.diasFolga : []).filter((d: string) => d !== 'Dom'));
-    setDomingoFolga(f.domingoFolga ?? '1');
+    const hasDomFolga = (Array.isArray(f.diasFolga) ? f.diasFolga : []).includes('Dom');
+    setDomingoFolga(hasDomFolga && !f.domingoFolga ? 'todos' : (f.domingoFolga ?? '1'));
     setObservacoes(f.observacoes ?? '');
     setDataGozoFerias(f.dataGozoFerias ? f.dataGozoFerias.split('T')[0] : '');
     setDiasFeriasGozados(f.diasFeriasGozados ?? 0);
@@ -266,8 +267,8 @@ export default function FuncionarioDetailPage() {
           dataNascimento, dataAdmissao, cargoId, lojaId,
           ...buildComposicaoPayload(composicao),
           escala, turno, horarioEntrada, horarioSaida,
-          diasFolga: ['Dom', ...diasFolga],
-          domingoFolga,
+          diasFolga: domingoFolga === 'todos' ? ['Dom', ...diasFolga] : diasFolga.filter((d: string) => d !== 'Dom'),
+          domingoFolga: domingoFolga === 'todos' ? null : domingoFolga,
           observacoes: observacoes || null,
         }),
       });
@@ -590,12 +591,13 @@ export default function FuncionarioDetailPage() {
                       <label className={labelCls}>Domingo de folga no mês</label>
                       <div className="flex flex-wrap gap-2">
                         {([
+                          { value: 'todos', label: 'Todo domingo' },
                           { value: '1', label: '1º domingo' },
                           { value: '2', label: '2º domingo' },
                           { value: '3', label: '3º domingo' },
                           { value: '4', label: '4º domingo' },
                           { value: 'ultimo', label: 'Último domingo' },
-                        ] as const).map(opt => (
+                        ]).map(opt => (
                           <button key={opt.value} type="button" onClick={() => setDomingoFolga(opt.value)} className={`px-3 py-1.5 rounded-xl text-sm font-medium border-2 transition-colors ${domingoFolga === opt.value ? 'border-amber-500 bg-amber-500/10 text-amber-400' : 'border-[#2a2a2e] text-gray-500'}`}>{opt.label}</button>
                         ))}
                       </div>
@@ -615,11 +617,15 @@ export default function FuncionarioDetailPage() {
                         }
                       </div>
                     </div>
-                    {(Array.isArray(funcionario.diasFolga) ? funcionario.diasFolga : []).includes('Dom') && funcionario.domingoFolga && (
+                    {(Array.isArray(funcionario.diasFolga) ? funcionario.diasFolga : []).includes('Dom') && (
                       <div className="flex items-center gap-3">
                         <span className="text-xs text-gray-500 w-20">Domingo</span>
                         <span className="text-sm text-gray-200">
-                          {funcionario.domingoFolga === 'ultimo' ? 'Último domingo' : `${funcionario.domingoFolga}º domingo`} do mês
+                          {!funcionario.domingoFolga || funcionario.domingoFolga === 'todos'
+                            ? 'Todo domingo'
+                            : funcionario.domingoFolga === 'ultimo'
+                            ? 'Último domingo do mês'
+                            : `${funcionario.domingoFolga}º domingo do mês`}
                         </span>
                       </div>
                     )}

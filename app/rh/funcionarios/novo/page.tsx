@@ -76,7 +76,7 @@ export default function NovoFuncionarioPage() {
   const [horarioEntrada, setHorarioEntrada] = useState('08:00');
   const [horarioSaida, setHorarioSaida] = useState('17:00');
   const [diasFolga, setDiasFolga] = useState<string[]>([]);
-  const [domingoFolga, setDomingoFolga] = useState<string>('1');
+  const [domingoFolga, setDomingoFolga] = useState<string>('todos');
   const [observacoes, setObservacoes] = useState('');
 
   useEffect(() => {
@@ -122,8 +122,8 @@ export default function NovoFuncionarioPage() {
         turno,
         horarioEntrada,
         horarioSaida,
-        diasFolga: ['Dom', ...diasFolga],
-        domingoFolga,
+        diasFolga: domingoFolga === 'todos' ? ['Dom', ...diasFolga] : diasFolga,
+        domingoFolga: domingoFolga === 'todos' ? null : domingoFolga,
         observacoes: observacoes || null,
       };
 
@@ -496,12 +496,13 @@ export default function NovoFuncionarioPage() {
                 <label className={labelCls}>Domingo de folga no mês</label>
                 <div className="flex flex-wrap gap-2">
                   {([
+                    { value: 'todos', label: 'Todo domingo' },
                     { value: '1', label: '1º domingo' },
                     { value: '2', label: '2º domingo' },
                     { value: '3', label: '3º domingo' },
                     { value: '4', label: '4º domingo' },
                     { value: 'ultimo', label: 'Último domingo' },
-                  ] as const).map((opt) => (
+                  ]).map((opt) => (
                     <button
                       key={opt.value}
                       type="button"
