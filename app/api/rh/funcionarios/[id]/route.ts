@@ -322,7 +322,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     // Soft delete — desativar
     const alteradoPor = dbUser.fullName || dbUser.email || dbUser.id;
     await prisma.$transaction(async (tx) => {
-      await tx.rhFuncionario.update({ where: { id }, data: { ativo: false, dataDemissao: new Date() } });
+      await tx.rhFuncionario.update({ where: { id }, data: { ativo: false } });
       await tx.rhHistoricoFuncionario.create({
         data: {
           userId: dbUser.id,
