@@ -141,7 +141,6 @@ export default function FuncionariosPage() {
   const [cargos, setCargos] = useState<Cargo[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterCargo, setFilterCargo] = useState('');
   const [filterEscala, setFilterEscala] = useState('');
   const [filterTurno, setFilterTurno] = useState('');
@@ -152,11 +151,6 @@ export default function FuncionariosPage() {
   const fmt = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(timer);
-  }, [search]);
-
   const fetchFuncionarios = useCallback(async () => {
     setLoading(true);
     try {
@@ -166,7 +160,6 @@ export default function FuncionariosPage() {
       if (filterEscala) params.set('escala', filterEscala);
       if (filterTurno) params.set('turno', filterTurno);
       if (filterAtivo) params.set('ativo', filterAtivo);
-      if (debouncedSearch) params.set('search', debouncedSearch);
       const res = await fetch(`/api/rh/funcionarios?${params}`);
       if (!res.ok) throw new Error('Falha ao carregar');
       setFuncionarios(await res.json());
@@ -175,7 +168,7 @@ export default function FuncionariosPage() {
     } finally {
       setLoading(false);
     }
-  }, [lojaSelecionada, filterCargo, filterEscala, filterTurno, filterAtivo, debouncedSearch]);
+  }, [lojaSelecionada, filterCargo, filterEscala, filterTurno, filterAtivo]);
 
   useEffect(() => {
     fetchFuncionarios();
@@ -201,6 +194,15 @@ export default function FuncionariosPage() {
       setDeleteLoading(false);
     }
   };
+
+  const searchTerm = search.trim().toLowerCase();
+  const funcionariosFiltrados = searchTerm
+    ? funcionarios.filter(
+        (f) =>
+          f.nome.toLowerCase().includes(searchTerm) ||
+          (f.cpf ?? '').replace(/\D/g, '').includes(searchTerm.replace(/\D/g, ''))
+      )
+    : funcionarios;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
@@ -229,7 +231,11 @@ export default function FuncionariosPage() {
                 Funcionários
               </h1>
               <p className="text-sm text-gray-400">
-                {loading ? '...' : `${funcionarios.length} resultado${funcionarios.length !== 1 ? 's' : ''}`}
+                {loading
+                  ? '...'
+                  : searchTerm
+                  ? `${funcionariosFiltrados.length} de ${funcionarios.length} resultado${funcionarios.length !== 1 ? 's' : ''}`
+                  : `${funcionarios.length} resultado${funcionarios.length !== 1 ? 's' : ''}`}
               </p>
             </div>
           </div>
@@ -334,7 +340,7 @@ export default function FuncionariosPage() {
                 </div>
               ))}
             </div>
-          ) : funcionarios.length === 0 ? (
+          ) : funcionariosFiltrados.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               <div className="w-16 h-16 rounded-2xl bg-[#2a2a2e] flex items-center justify-center">
                 <Users className="w-8 h-8 text-gray-600" />
@@ -364,7 +370,7 @@ export default function FuncionariosPage() {
                 <span />
               </div>
               <div className="divide-y divide-[#2a2a2e]">
-                {funcionarios.map((f) => (
+                {funcionariosFiltrados.map((f) => (
                   <div
                     key={f.id}
                     onClick={() => router.push(`/rh/funcionarios/${f.id}`)}
