@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLoja, Loja } from '@/contexts/LojaContext';
-import { ArrowLeft, Calendar, AlertTriangle, Moon } from 'lucide-react';
+import { ArrowLeft, Calendar, AlertTriangle } from 'lucide-react';
 
 interface Funcionario {
   id: string;
@@ -140,10 +140,6 @@ export default function EscalaPage() {
   // Collect unique cargos for legend
   const cargosUnicos = Array.from(new Set(funcionarios.map((f) => f.cargo.nome)));
 
-  // Employees with fixed Sunday off (5x2) grouped by turno
-  const folgaFixaDomingo = funcionarios.filter(
-    (f) => (Array.isArray(f.diasFolga) ? f.diasFolga : []).includes('Dom'),
-  );
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
@@ -263,30 +259,6 @@ export default function EscalaPage() {
           </div>
         )}
 
-        {/* Folga fixa no domingo (5x2) */}
-        {!loading && folgaFixaDomingo.length > 0 && (
-          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Moon className="w-3.5 h-3.5 text-rose-400" />
-              Folga fixa todo domingo
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {folgaFixaDomingo.map((f) => (
-                <div
-                  key={f.id}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#2a2a2e] border border-[#3a3a3e]"
-                >
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getCargoColor(f.cargo.nome)}`}>
-                    {f.cargo.nome}
-                  </span>
-                  <span className="text-xs text-gray-300">{f.nome.split(' ')[0]}</span>
-                  <span className="text-[10px] text-gray-600">{TURNO_LABELS[f.turno as Turno]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Legend */}
         {!loading && cargosUnicos.length > 0 && (
           <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
@@ -306,7 +278,7 @@ export default function EscalaPage() {
                 <AlertTriangle className="w-3 h-3" /> {'< 2 pessoas no turno'}
               </span>
               <span className="px-3 py-1 rounded-full text-xs font-medium bg-rose-500/10 text-rose-400">
-                f. Nº dom = domingo de folga no mês
+                f. Nº dom = DSR (domingo de folga mensal)
               </span>
             </div>
           </div>

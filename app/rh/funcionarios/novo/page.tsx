@@ -27,7 +27,7 @@ interface Loja {
   ativo: boolean;
 }
 
-const DIAS_SEMANA = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const DIAS_SEMANA = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
 function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
@@ -76,7 +76,7 @@ export default function NovoFuncionarioPage() {
   const [horarioEntrada, setHorarioEntrada] = useState('08:00');
   const [horarioSaida, setHorarioSaida] = useState('17:00');
   const [diasFolga, setDiasFolga] = useState<string[]>([]);
-  const [domingoFolga, setDomingoFolga] = useState<string>('todos');
+  const [domingoFolga, setDomingoFolga] = useState<string>('1');
   const [observacoes, setObservacoes] = useState('');
 
   useEffect(() => {
@@ -122,8 +122,8 @@ export default function NovoFuncionarioPage() {
         turno,
         horarioEntrada,
         horarioSaida,
-        diasFolga: domingoFolga === 'todos' ? ['Dom', ...diasFolga] : diasFolga,
-        domingoFolga: domingoFolga === 'todos' ? null : domingoFolga,
+        diasFolga,
+        domingoFolga,
         observacoes: observacoes || null,
       };
 
@@ -471,7 +471,7 @@ export default function NovoFuncionarioPage() {
               {/* Dias de Folga */}
               <div>
                 <label className={labelCls}>
-                  Outros dias de folga ({diasFolga.length} dia{diasFolga.length !== 1 ? 's' : ''})
+                  Dias de folga fixos ({diasFolga.length} dia{diasFolga.length !== 1 ? 's' : ''})
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {DIAS_SEMANA.map((dia) => (
@@ -491,12 +491,11 @@ export default function NovoFuncionarioPage() {
                 </div>
               </div>
 
-              {/* Qual domingo do mês — sempre visível */}
+              {/* Qual domingo do mês — folga mensal obrigatória por lei */}
               <div>
-                <label className={labelCls}>Domingo de folga no mês</label>
+                <label className={labelCls}>Domingo de folga no mês (DSR)</label>
                 <div className="flex flex-wrap gap-2">
                   {([
-                    { value: 'todos', label: 'Todo domingo' },
                     { value: '1', label: '1º domingo' },
                     { value: '2', label: '2º domingo' },
                     { value: '3', label: '3º domingo' },
