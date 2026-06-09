@@ -196,11 +196,12 @@ export default function FuncionariosPage() {
   };
 
   const searchTerm = search.trim().toLowerCase();
+  const cpfSearch = searchTerm.replace(/\D/g, '');
   const funcionariosFiltrados = searchTerm
     ? funcionarios.filter(
         (f) =>
           f.nome.toLowerCase().includes(searchTerm) ||
-          (f.cpf ?? '').replace(/\D/g, '').includes(searchTerm.replace(/\D/g, ''))
+          (cpfSearch.length > 0 && (f.cpf ?? '').replace(/\D/g, '').includes(cpfSearch))
       )
     : funcionarios;
 
