@@ -1,3 +1,0 @@
-{
-  "/api/ifood/merchants/[merchantId]/interruptions/[interruptionId]/route": "app/api/ifood/merchants/[merchantId]/interruptions/[interruptionId]/route.js"
-}

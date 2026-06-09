@@ -1,3 +1,0 @@
-{
-  "/api/ifood/orders/[orderId]/cancel/route": "app/api/ifood/orders/[orderId]/cancel/route.js"
-}

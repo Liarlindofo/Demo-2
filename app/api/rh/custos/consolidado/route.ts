@@ -48,7 +48,7 @@ export async function GET() {
         const composicao = calcularComposicaoSalarial(f);
         const enc = calcularEncargosPatronais(
           composicao.baseCalculoEncargos,
-          f.cargo.ratPct,
+          f.cargo?.ratPct ?? 1.0,
           loja.fap
         );
         const custoTotal =
@@ -60,7 +60,7 @@ export async function GET() {
         return {
           id: f.id,
           nome: f.nome,
-          cargo: f.cargo.nome,
+          cargo: f.cargo?.nome ?? '—',
           salarioBruto: composicao.totalBruto,
           baseCalculoEncargos: composicao.baseCalculoEncargos,
           composicaoSalarial: composicao,

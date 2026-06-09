@@ -1,3 +1,0 @@
-{
-  "/handler/[...stack]/page": "app/handler/[...stack]/page.js"
-}

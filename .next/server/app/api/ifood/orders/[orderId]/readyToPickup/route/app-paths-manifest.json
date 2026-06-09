@@ -1,3 +1,0 @@
-{
-  "/api/ifood/orders/[orderId]/readyToPickup/route": "app/api/ifood/orders/[orderId]/readyToPickup/route.js"
-}

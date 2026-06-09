@@ -71,7 +71,7 @@ export async function POST(req: Request) {
           funcionarioId,
           userId: dbUser.id,
           campo: 'loja',
-          valorAnterior: func.loja.nome,
+          valorAnterior: func.loja?.nome ?? '—',
           valorNovo: lojaDestino.nome,
           alteradoPor: aprovadoPor ?? 'Sistema',
           motivo: motivo ?? null,

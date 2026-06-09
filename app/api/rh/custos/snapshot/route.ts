@@ -48,7 +48,7 @@ export async function POST() {
       let totalCustoReal = 0;
       for (const f of funcs) {
         const comp = calcularComposicaoSalarial(f);
-        const enc = calcularEncargosPatronais(comp.baseCalculoEncargos, f.cargo.ratPct, loja.fap);
+        const enc = calcularEncargosPatronais(comp.baseCalculoEncargos, f.cargo?.ratPct ?? 1.0, loja.fap);
         totalSalarioBruto += comp.totalBruto;
         totalEncargos += enc.totalEncargos;
         totalCustoReal +=

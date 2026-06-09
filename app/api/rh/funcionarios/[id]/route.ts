@@ -99,8 +99,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(
       enrichFuncionario(
         funcionario,
-        funcionario.cargo.ratPct,
-        funcionario.loja.fap,
+        funcionario.cargo?.ratPct ?? 1.0,
+        funcionario.loja?.fap ?? 1.0,
         bonificacoesComposicao
       )
     );
@@ -283,8 +283,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json(
       enrichFuncionario(
         funcionario,
-        funcionario.cargo.ratPct,
-        funcionario.loja.fap,
+        funcionario.cargo?.ratPct ?? 1.0,
+        funcionario.loja?.fap ?? 1.0,
         bonificacoesComposicao
       )
     );

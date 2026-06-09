@@ -1,3 +1,0 @@
-{
-  "/api/rh/funcionarios/[id]/bonificacoes/[bonificacaoId]/route": "app/api/rh/funcionarios/[id]/bonificacoes/[bonificacaoId]/route.js"
-}

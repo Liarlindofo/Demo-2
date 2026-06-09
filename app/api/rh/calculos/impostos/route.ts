@@ -97,8 +97,8 @@ export async function POST(req: Request) {
         valorAlimentacao: f.valorAlimentacao,
         valorVT: f.valorVT,
       };
-      rat = f.cargo.ratPct;
-      fap = f.loja.fap;
+      rat = f.cargo?.ratPct ?? 1.0;
+      fap = f.loja?.fap ?? 1.0;
     }
 
     const composicao = calcularComposicaoSalarial(composicaoInput);

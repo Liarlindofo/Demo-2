@@ -45,14 +45,14 @@ export async function GET() {
     for (const loja of lojas) {
       for (const f of loja.funcionarios) {
         const comp = calcularComposicaoSalarial(f);
-        const enc = calcularEncargosPatronais(comp.baseCalculoEncargos, f.cargo.ratPct, loja.fap);
+        const enc = calcularEncargosPatronais(comp.baseCalculoEncargos, f.cargo?.ratPct ?? 1.0, loja.fap);
         const custoMensal =
           comp.baseCalculoEncargos + enc.totalEncargos + comp.valorAlimentacao + comp.valorVT;
         linhas.push(
           [
             loja.nome,
             f.nome,
-            f.cargo.nome,
+            f.cargo?.nome ?? '—',
             comp.totalBruto.toFixed(2).replace('.', ','),
             enc.totalEncargos.toFixed(2).replace('.', ','),
             enc.percentualSobreBase.toFixed(2).replace('.', ',') + '%',

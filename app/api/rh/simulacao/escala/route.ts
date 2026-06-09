@@ -26,11 +26,11 @@ function custoMensalFuncionario(f: {
   bonificacaoAssiduidade: number;
   valorAlimentacao: number;
   valorVT: number;
-  cargo: { ratPct: number };
+  cargo?: { ratPct: number } | null;
   fap: number;
 }) {
   const composicao = calcularComposicaoSalarial(f);
-  const enc = calcularEncargosPatronais(composicao.baseCalculoEncargos, f.cargo.ratPct, f.fap);
+  const enc = calcularEncargosPatronais(composicao.baseCalculoEncargos, f.cargo?.ratPct ?? 1.0, f.fap);
   return (
     composicao.baseCalculoEncargos +
     enc.totalEncargos +
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
         turnosMap[turnoKey].count += 1;
         turnosMap[turnoKey].totalCusto += custoMensalFuncionario({
           ...f,
-          fap: f.loja.fap,
+          fap: f.loja?.fap ?? 1.0,
         });
       }
     }
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
         ? funcionarios.reduce(
             (s, f) =>
               s +
-              custoMensalFuncionario({ ...f, fap: f.loja.fap }),
+              custoMensalFuncionario({ ...f, fap: f.loja?.fap ?? 1.0 }),
             0
           ) / funcionarios.length
         : 1518;

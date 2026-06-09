@@ -1,3 +1,0 @@
-{
-  "/api/cron/cleanup-sales/route": "app/api/cron/cleanup-sales/route.js"
-}

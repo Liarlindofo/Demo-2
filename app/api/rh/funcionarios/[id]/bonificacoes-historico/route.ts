@@ -61,7 +61,7 @@ export async function GET(
         trimestre: p.plr.trimestre,
         ano: p.plr.ano,
         valor: p.valor,
-        lojaNome: p.plr.loja.nome,
+        lojaNome: p.plr.loja?.nome ?? '—',
         tipo: 'plr_loja',
       })),
       bonificacoesTrimestrais: trimestrais,
