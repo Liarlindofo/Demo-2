@@ -336,40 +336,48 @@ export default function RhDashboard() {
           )}
         </div>
 
-        {/* Bonificações do mês */}
-        {bonificacoesResumo && (
+        {/* ── Destaque: Custo da Rede + Escala Semanal ─────────────────────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link
-            href="/rh/ia"
-            className="group block bg-[#1c1c1e] border border-amber-500/20 rounded-2xl p-5 hover:border-amber-500/40 hover:bg-[#222224] transition-all"
+            href="/rh/custos"
+            className="group bg-[#1c1c1e] border border-green-500/30 rounded-2xl p-6 hover:border-green-500/60 hover:bg-[#1e2420] transition-all"
           >
-            <div className="flex items-start justify-between">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                <Gift className="w-5 h-5 text-amber-400" />
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-11 h-11 rounded-xl bg-green-500/15 flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-green-400" />
               </div>
-              <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-amber-400 transition-colors" />
+              <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-green-400 transition-colors mt-0.5" />
             </div>
-            <h3 className="font-semibold text-white mt-3">
-              Bonificações — {bonificacoesResumo.mesLabel}
-            </h3>
-            <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
-              <div>
-                <p className="text-2xl font-bold text-green-400">{bonificacoesResumo.comAssiduidade}</p>
-                <p className="text-xs text-gray-500">com assiduidade confirmada</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-red-400">{bonificacoesResumo.semAssiduidade}</p>
-                <p className="text-xs text-gray-500">sem assiduidade</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-amber-400">{bonificacoesResumo.plrsTrimestre}</p>
-                <p className="text-xs text-gray-500">PLRs no trimestre</p>
-              </div>
-            </div>
-            <p className="text-xs text-gray-500 mt-3">Gerencie assiduidade e PLR pela IA Trabalhista →</p>
+            <h3 className="text-lg font-bold text-white">Custos da Rede</h3>
+            <p className="text-2xl font-bold text-green-400 mt-1">
+              {custoTotal !== null ? fmt(custoTotal) : '—'}
+            </p>
+            <p className="text-sm text-gray-400 mt-1">custo total / mês</p>
           </Link>
-        )}
 
-        {/* Cards de Alertas e Quadro Ideal */}
+          <Link
+            href="/rh/escala"
+            className="group bg-[#1c1c1e] border border-purple-500/30 rounded-2xl p-6 hover:border-purple-500/60 hover:bg-[#1e1b24] transition-all"
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-11 h-11 rounded-xl bg-purple-500/15 flex items-center justify-center">
+                <Calendar className="w-6 h-6 text-purple-400" />
+              </div>
+              <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-purple-400 transition-colors mt-0.5" />
+            </div>
+            <h3 className="text-lg font-bold text-white">Escala Semanal</h3>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-bold text-purple-400">{stats?.escala6x1 ?? 0}</span>
+              <span className="text-sm text-gray-500">6x1</span>
+              <span className="text-gray-600 mx-1">·</span>
+              <span className="text-2xl font-bold text-amber-400">{stats?.escala5x2 ?? 0}</span>
+              <span className="text-sm text-gray-500">5x2</span>
+            </div>
+            <p className="text-sm text-gray-400 mt-1">distribuição por turno e loja</p>
+          </Link>
+        </div>
+
+        {/* ── Cards secundários ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link href="/rh/alertas" className="group bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 hover:border-red-500/30 hover:bg-[#222224] transition-all">
             <div className="flex items-start justify-between">
@@ -434,23 +442,6 @@ export default function RhDashboard() {
             </div>
           </Link>
 
-          <Link href="/rh/custos" className="group bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 hover:border-green-500/30 hover:bg-[#222224] transition-all">
-            <div className="flex items-start justify-between">
-              <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-green-400" />
-              </div>
-              <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-green-400 transition-colors" />
-            </div>
-            <div className="mt-3">
-              <h3 className="font-semibold text-white">Custos da Rede</h3>
-              <p className="text-sm text-gray-400 mt-1">
-                {custoTotal !== null
-                  ? `Custo total: ${fmt(custoTotal)}/mês`
-                  : 'Folha de pagamento e encargos'}
-              </p>
-            </div>
-          </Link>
-
           <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
             <div className="flex items-start justify-between">
               <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
@@ -485,6 +476,39 @@ export default function RhDashboard() {
             </div>
           </div>
         </div>
+
+        {/* ── Bonificações (movida para baixo) ──────────────────────────────── */}
+        {bonificacoesResumo && (
+          <Link
+            href="/rh/ia"
+            className="group block bg-[#1c1c1e] border border-amber-500/20 rounded-2xl p-5 hover:border-amber-500/40 hover:bg-[#222224] transition-all"
+          >
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                <Gift className="w-5 h-5 text-amber-400" />
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-amber-400 transition-colors" />
+            </div>
+            <h3 className="font-semibold text-white mt-3">
+              Bonificações — {bonificacoesResumo.mesLabel}
+            </h3>
+            <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
+              <div>
+                <p className="text-2xl font-bold text-green-400">{bonificacoesResumo.comAssiduidade}</p>
+                <p className="text-xs text-gray-500">com assiduidade confirmada</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-red-400">{bonificacoesResumo.semAssiduidade}</p>
+                <p className="text-xs text-gray-500">sem assiduidade</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-amber-400">{bonificacoesResumo.plrsTrimestre}</p>
+                <p className="text-xs text-gray-500">PLRs no trimestre</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-3">Gerencie assiduidade e PLR pela IA Trabalhista →</p>
+          </Link>
+        )}
 
         {/* Navigation Grid */}
         <div>
