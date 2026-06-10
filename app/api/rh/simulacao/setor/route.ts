@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 import { calcularComposicaoSalarial } from '@/lib/calculos-rh';
+import { cargoFamilia } from '@/lib/rh-cargo-familia';
 
 function baseEncargos(f: {
   salarioBase: number;
@@ -64,17 +65,34 @@ export async function GET(req: Request) {
       return NextResponse.json({ setores: [] });
     }
 
-    // Para cada posição, busca os funcionários reais na loja com aquele cargo+turno
+    // Carregar todos os cargos do usuário para montar mapa de família
+    const todosCargos = await prisma.rhCargo.findMany({
+      where: { userId: dbUser.id },
+      select: { id: true, nome: true },
+    });
+    // familia → [cargoId, ...]
+    const familiaMap = new Map<string, string[]>();
+    for (const c of todosCargos) {
+      const f = cargoFamilia(c.nome);
+      if (!familiaMap.has(f)) familiaMap.set(f, []);
+      familiaMap.get(f)!.push(c.id);
+    }
+
+    // Para cada posição, busca os funcionários de toda a família de cargo
     const setoresComDados = await Promise.all(
       quadro.setores.map(async (setor) => {
         const posicoesComDados = await Promise.all(
           setor.posicoes.map(async (pos) => {
-            // Busca funcionários ativos na loja com o cargo desta posição
+            // Família do cargo da posição (ex: "Pizzaiolo I" → "Pizzaiolo")
+            const familia = cargoFamilia(pos.cargo?.nome ?? '');
+            const familiaIds = familiaMap.get(familia) ?? [pos.cargoId];
+
+            // Busca funcionários de qualquer nível da família no mesmo turno
             const funcionarios = await prisma.rhFuncionario.findMany({
               where: {
                 userId: dbUser.id,
                 lojaId,
-                cargoId: pos.cargoId,
+                cargoId: { in: familiaIds },
                 turno: pos.turno ?? undefined,
                 ativo: true,
               },

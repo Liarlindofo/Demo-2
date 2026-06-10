@@ -27,18 +27,8 @@ const DOMINGO_LABELS: Record<string, string> = {
   ultimo: 'Último domingo',
 };
 
-const CARGO_COLORS: Record<string, string> = {
-  Gerente: 'bg-purple-500/20 text-purple-300 border-purple-500/20',
-  Pizzaiolo: 'bg-orange-500/20 text-orange-300 border-orange-500/20',
-  Atendente: 'bg-blue-500/20 text-blue-300 border-blue-500/20',
-  Caixa: 'bg-green-500/20 text-green-300 border-green-500/20',
-  Entregador: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/20',
-  'Auxiliar de Cozinha': 'bg-yellow-500/20 text-yellow-300 border-yellow-500/20',
-  Supervisor: 'bg-pink-500/20 text-pink-300 border-pink-500/20',
-};
-
-function getCargoColor(cargo: string) {
-  return CARGO_COLORS[cargo] ?? 'bg-gray-500/20 text-gray-300 border-gray-500/20';
+function getCargoColor(_cargo: string) {
+  return 'bg-[#2a2a2e] text-gray-300 border-[#3a3a3e]';
 }
 
 function LojaSelector({

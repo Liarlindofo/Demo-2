@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { cargoFamilia } from '@/lib/rh-cargo-familia';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,16 +43,18 @@ export async function GET(req: NextRequest) {
 
     if (!quadro) return NextResponse.json({ quadro: null, setores: [], resumo: null });
 
-    // Carregar funcionários ativos da loja
+    // Carregar funcionários ativos da loja (com nome do cargo para família)
     const funcionarios = await prisma.rhFuncionario.findMany({
       where: { userId: dbUser.id, lojaId, ativo: true },
-      select: { cargoId: true, turno: true },
+      select: { cargoId: true, turno: true, cargo: { select: { nome: true } } },
     });
 
-    // Construir mapa cargoId+turno → count real
+    // Construir mapa família+turno → count real
+    // "Pizzaiolo I", "Pizzaiolo II", "Pizzaiolo III" → todos contam como família "Pizzaiolo"
     const realMap = new Map<string, number>();
     for (const f of funcionarios) {
-      const key = `${f.cargoId}::${f.turno}`;
+      const familia = f.cargo ? cargoFamilia(f.cargo.nome) : (f.cargoId ?? '');
+      const key = `${familia}::${f.turno}`;
       realMap.set(key, (realMap.get(key) ?? 0) + 1);
     }
 
@@ -63,7 +66,7 @@ export async function GET(req: NextRequest) {
       id: setor.id,
       nome: setor.nome,
       posicoes: setor.posicoes.map((p) => {
-        const key = `${p.cargoId}::${p.turno}`;
+        const key = `${cargoFamilia(p.cargo?.nome ?? '')}::${p.turno}`;
         const real = realMap.get(key) ?? 0;
         const diff = real - p.quantidadeIdeal;
         const situacao = diff >= 0 ? 'ok' : diff === -1 ? 'atencao' : 'critico';
