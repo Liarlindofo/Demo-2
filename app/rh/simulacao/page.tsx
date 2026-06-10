@@ -4,20 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLoja, Loja } from '@/contexts/LojaContext';
 import {
-  ArrowLeft,
-  BarChart3,
-  Play,
-  AlertTriangle,
-  CheckCircle,
-  Info,
-  Users,
-  Layers,
-  ChevronDown,
-  TrendingDown,
-  TrendingUp,
-  Minus,
-  DollarSign,
-  RefreshCw,
+  ArrowLeft, BarChart3, AlertTriangle, CheckCircle,
+  Users, Layers, DollarSign, RefreshCw, ArrowRight,
+  TrendingDown, Minus, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
@@ -40,35 +29,26 @@ interface SetorData {
 }
 
 interface PosicaoSimulada extends PosicaoData {
-  migrar: number; // quantos mover de 6x1 → 5x2
+  migrar: number;
   proposto6x1: number;
   proposto5x2: number;
   coberturaDiaria: number;
   coberturaMinima: number;
-  gap: number; // positivo = falta, negativo = excesso
+  gap: number;
   situacao: 'critico' | 'atencao' | 'ok' | 'excesso';
-  custoDelta: number; // custo adicional de contratação se gap > 0
+  custoDelta: number;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const ENCARGOS = 1.44;
-const FATOR_6x1 = 6 / 7; // cobertura diária de cada funcionário 6x1
-const FATOR_5x2 = 5 / 7; // cobertura diária de cada funcionário 5x2
+const FATOR_6x1 = 6 / 7;
+const FATOR_5x2 = 5 / 7;
 
-/**
- * Cobertura diária esperada (funcionários presentes em média)
- */
 function coberturaDiaria(n6x1: number, n5x2: number) {
   return n6x1 * FATOR_6x1 + n5x2 * FATOR_5x2;
 }
 
-/**
- * Cobertura mínima garantida (dia com mais folgas simultâneas,
- * distribuição ótima e rotativa)
- * - 6x1: 1 folga por semana → pior dia perde ceil(N/7) pessoas
- * - 5x2: 2 folgas por semana → pior dia perde ceil(2N/7) pessoas
- */
 function coberturaMinima(n6x1: number, n5x2: number) {
   const min6 = Math.max(0, n6x1 - Math.ceil(n6x1 / 7));
   const min5 = Math.max(0, n5x2 - Math.ceil((2 * n5x2) / 7));
@@ -92,36 +72,19 @@ function simularPosicao(pos: PosicaoData, migrar: number): PosicaoSimulada {
   const salario = pos.salarioMedioGeral || 1518;
   const custoDelta = gap > 0 ? Math.ceil(gap) * salario * ENCARGOS : 0;
 
-  return {
-    ...pos,
-    migrar: migrarClamp,
-    proposto6x1: p6x1,
-    proposto5x2: p5x2,
-    coberturaDiaria: cDiaria,
-    coberturaMinima: cMin,
-    gap,
-    situacao,
-    custoDelta,
-  };
+  return { ...pos, migrar: migrarClamp, proposto6x1: p6x1, proposto5x2: p5x2, coberturaDiaria: cDiaria, coberturaMinima: cMin, gap, situacao, custoDelta };
 }
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
 const TURNO_LABEL: Record<string, string> = {
-  manhã: 'Manhã',
-  tarde: 'Tarde',
-  noite: 'Noite',
-  integral: 'Integral',
+  manhã: 'Manhã', tarde: 'Tarde', noite: 'Noite', integral: 'Integral',
 };
 
-// ─── Sub-componentes ──────────────────────────────────────────────────────────
+// ─── Componentes ─────────────────────────────────────────────────────────────
 
-function LojaSelector({
-  lojas,
-  lojaSelecionada,
-  setLojaSelecionada,
-}: {
+function LojaSelector({ lojas, lojaSelecionada, setLojaSelecionada }: {
   lojas: Loja[];
   lojaSelecionada: Loja | null;
   setLojaSelecionada: (l: Loja | null) => void;
@@ -145,43 +108,122 @@ function LojaSelector({
   );
 }
 
-function SituacaoBadge({ situacao }: { situacao: PosicaoSimulada['situacao'] }) {
+function CoberturaBar({ atual, ideal, label }: { atual: number; ideal: number; label: string }) {
+  const pct = ideal > 0 ? Math.min(1, atual / ideal) : 0;
+  const cor = pct >= 1 ? 'bg-green-500' : pct >= 0.8 ? 'bg-amber-400' : 'bg-red-500';
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-1">
+        <span className="text-xs text-gray-500">{label}</span>
+        <span className={`text-xs font-semibold ${pct >= 1 ? 'text-green-400' : pct >= 0.8 ? 'text-amber-400' : 'text-red-400'}`}>
+          {atual.toFixed(1)} / {ideal}
+        </span>
+      </div>
+      <div className="h-2 bg-[#2a2a2e] rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-500 ${cor}`} style={{ width: `${Math.round(pct * 100)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function StatusTag({ situacao }: { situacao: PosicaoSimulada['situacao'] }) {
   const map = {
-    critico: { label: 'Gargalo', cls: 'bg-red-500/15 text-red-400 border border-red-500/30' },
-    atencao: { label: 'Atenção', cls: 'bg-amber-500/15 text-amber-400 border border-amber-500/30' },
-    ok: { label: 'OK', cls: 'bg-green-500/15 text-green-400 border border-green-500/30' },
-    excesso: { label: 'Excesso', cls: 'bg-blue-500/15 text-blue-400 border border-blue-500/30' },
+    critico: { label: 'Risco de descoberta', cls: 'bg-red-500/15 text-red-400 border-red-500/30' },
+    atencao: { label: 'Margem baixa', cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
+    ok: { label: 'Cobertura OK', cls: 'bg-green-500/15 text-green-400 border-green-500/30' },
+    excesso: { label: 'Acima do necessário', cls: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
   };
   const { label, cls } = map[situacao];
+  return <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${cls}`}>{label}</span>;
+}
+
+function GapTag({ gap }: { gap: number }) {
+  if (gap <= 0) return null;
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>{label}</span>
+    <div className="flex items-center gap-1.5 text-red-400 text-xs font-semibold mt-1.5">
+      <TrendingDown className="w-3.5 h-3.5" />
+      Falta {Math.ceil(gap)} pessoa{Math.ceil(gap) !== 1 ? 's' : ''} no pior dia
+    </div>
   );
 }
 
-function GapIcon({ gap }: { gap: number }) {
-  if (gap > 0)
-    return (
-      <span className="flex items-center gap-1 text-red-400 font-semibold text-sm">
-        <TrendingDown className="w-4 h-4" />
-        -{Math.ceil(gap)}
-      </span>
-    );
-  if (gap < -0.5)
-    return (
-      <span className="flex items-center gap-1 text-blue-400 font-semibold text-sm">
-        <TrendingUp className="w-4 h-4" />
-        +{Math.abs(Math.floor(gap))}
-      </span>
-    );
+function PosicaoCard({ atual, projetado, modoComparacao }: {
+  atual: PosicaoSimulada;
+  projetado: PosicaoSimulada | null;
+  modoComparacao: boolean;
+}) {
+  const exibir = modoComparacao && projetado ? projetado : atual;
+  const mudou = modoComparacao && projetado && (projetado.situacao !== atual.situacao);
+
   return (
-    <span className="flex items-center gap-1 text-green-400 font-semibold text-sm">
-      <Minus className="w-4 h-4" />
-      OK
-    </span>
+    <div className={`bg-[#1c1c1e] border rounded-2xl p-4 transition-all ${
+      exibir.situacao === 'critico' ? 'border-red-500/30' :
+      exibir.situacao === 'atencao' ? 'border-amber-500/30' :
+      'border-[#2a2a2e]'
+    }`}>
+      {/* Header do card */}
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <p className="text-sm font-semibold text-white">{exibir.cargo.nome}</p>
+          {exibir.turno && (
+            <p className="text-xs text-gray-500 mt-0.5">{TURNO_LABEL[exibir.turno] ?? exibir.turno}</p>
+          )}
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <StatusTag situacao={exibir.situacao} />
+          {mudou && projetado && (
+            <span className="text-xs text-gray-500">
+              era <span className={atual.situacao === 'critico' ? 'text-red-400' : atual.situacao === 'atencao' ? 'text-amber-400' : 'text-green-400'}>{
+                atual.situacao === 'critico' ? 'risco' : atual.situacao === 'atencao' ? 'margem baixa' : 'OK'
+              }</span>
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Equipe atual */}
+      <div className="flex items-center gap-3 mb-3 text-sm">
+        <Users className="w-4 h-4 text-gray-600 flex-shrink-0" />
+        {modoComparacao && projetado ? (
+          <span className="text-gray-300">
+            <span className="text-amber-400 font-medium">{projetado.proposto6x1} 6x1</span>
+            {' + '}
+            <span className="text-green-400 font-medium">{projetado.proposto5x2} 5x2</span>
+            {projetado.migrar > 0 && (
+              <span className="text-gray-500 ml-1.5">({projetado.migrar} migrado{projetado.migrar !== 1 ? 's' : ''})</span>
+            )}
+          </span>
+        ) : (
+          <span className="text-gray-300">
+            <span className="text-amber-400 font-medium">{exibir.funcionarios6x1} 6x1</span>
+            {exibir.funcionarios5x2 > 0 && (
+              <><span className="text-gray-600 mx-1">+</span><span className="text-green-400 font-medium">{exibir.funcionarios5x2} 5x2</span></>
+            )}
+            <span className="text-gray-600 ml-1.5">na equipe</span>
+          </span>
+        )}
+      </div>
+
+      {/* Barra de cobertura */}
+      <div className="space-y-2">
+        <CoberturaBar
+          atual={exibir.coberturaMinima}
+          ideal={exibir.idealMin}
+          label="Pior dia garantido"
+        />
+        <CoberturaBar
+          atual={exibir.coberturaDiaria}
+          ideal={exibir.idealMin}
+          label="Presença média/dia"
+        />
+      </div>
+
+      <GapTag gap={exibir.gap} />
+    </div>
   );
 }
 
-// ─── Página principal ─────────────────────────────────────────────────────────
+// ─── Página ───────────────────────────────────────────────────────────────────
 
 export default function SimulacaoPage() {
   const router = useRouter();
@@ -190,18 +232,14 @@ export default function SimulacaoPage() {
   const [setores, setSetores] = useState<SetorData[]>([]);
   const [setorSelecionado, setSetorSelecionado] = useState<SetorData | null>(null);
   const [loadingSetores, setLoadingSetores] = useState(false);
+  const [modo, setModo] = useState<'atual' | '5x2'>('atual');
+  const [showExplicacao, setShowExplicacao] = useState(false);
 
-  // migracoes[posicaoId] = quantidade a mover de 6x1 → 5x2
-  const [migracoes, setMigracoes] = useState<Record<string, number>>({});
-  const [simulado, setSimulado] = useState(false);
-  const [resultado, setResultado] = useState<PosicaoSimulada[]>([]);
-
-  // Carrega setores do quadro ideal quando a loja muda
   const fetchSetores = useCallback(async (lojaId: string) => {
     setLoadingSetores(true);
     setSetores([]);
     setSetorSelecionado(null);
-    setSimulado(false);
+    setModo('atual');
     try {
       const res = await fetch(`/api/rh/simulacao/setor?lojaId=${lojaId}`);
       if (!res.ok) return;
@@ -215,53 +253,49 @@ export default function SimulacaoPage() {
   }, []);
 
   useEffect(() => {
-    if (lojaSelecionada) {
-      fetchSetores(lojaSelecionada.id);
-    } else {
-      setSetores([]);
-      setSetorSelecionado(null);
-      setSimulado(false);
-    }
+    if (lojaSelecionada) fetchSetores(lojaSelecionada.id);
+    else { setSetores([]); setSetorSelecionado(null); }
   }, [lojaSelecionada, fetchSetores]);
 
-  // Ao selecionar setor, inicializa migrações com 0
   const handleSelecionarSetor = (setor: SetorData) => {
     setSetorSelecionado(setor);
-    setSimulado(false);
-    const init: Record<string, number> = {};
-    setor.posicoes.forEach((p) => (init[p.id] = 0));
-    setMigracoes(init);
+    setModo('atual');
   };
 
-  const handleSimular = () => {
-    if (!setorSelecionado) return;
-    const res = setorSelecionado.posicoes.map((pos) =>
-      simularPosicao(pos, migracoes[pos.id] ?? 0)
-    );
-    setResultado(res);
-    setSimulado(true);
-  };
+  // Calcula resultado imediatamente (sem botão)
+  const resultadoAtual: PosicaoSimulada[] = setorSelecionado
+    ? setorSelecionado.posicoes.map((p) => simularPosicao(p, 0))
+    : [];
 
-  const handleReset = () => {
-    if (!setorSelecionado) return;
-    const init: Record<string, number> = {};
-    setorSelecionado.posicoes.forEach((p) => (init[p.id] = 0));
-    setMigracoes(init);
-    setSimulado(false);
-  };
+  const resultadoProjetado: PosicaoSimulada[] = setorSelecionado
+    ? setorSelecionado.posicoes.map((p) => simularPosicao(p, p.funcionarios6x1))
+    : [];
 
-  // Totais do resultado
+  const resultado = modo === '5x2' ? resultadoProjetado : resultadoAtual;
+
   const totalGargalos = resultado.filter((r) => r.situacao === 'critico').length;
   const totalAtencao = resultado.filter((r) => r.situacao === 'atencao').length;
-  const totalOk = resultado.filter((r) => r.situacao === 'ok').length;
-  const totalExcesso = resultado.filter((r) => r.situacao === 'excesso').length;
   const custoAdicionalMensal = resultado.reduce((s, r) => s + r.custoDelta, 0);
   const custoAdicionalAnual = custoAdicionalMensal * 14.33;
-  const totalMigrar = resultado.reduce((s, r) => s + r.migrar, 0);
+  const totalMigrar = resultadoProjetado.reduce((s, r) => s + r.migrar, 0);
+
+  // Conta mudanças ao comparar modos
+  const melhoras = resultadoAtual.filter((a, i) => {
+    const p = resultadoProjetado[i];
+    if (!p) return false;
+    const ord = ['critico','atencao','ok','excesso'];
+    return ord.indexOf(p.situacao) > ord.indexOf(a.situacao);
+  }).length;
+  const pioras = resultadoAtual.filter((a, i) => {
+    const p = resultadoProjetado[i];
+    if (!p) return false;
+    const ord = ['critico','atencao','ok','excesso'];
+    return ord.indexOf(p.situacao) < ord.indexOf(a.situacao);
+  }).length;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
-      <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
 
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -277,26 +311,20 @@ export default function SimulacaoPage() {
               Simulador de Escala
             </h1>
             <p className="text-sm text-gray-400">
-              Analise o impacto de migrar funcionários de 6x1 para 5x2 por setor
+              Veja a cobertura da sua equipe e o impacto de migrar para 5x2
             </p>
           </div>
         </div>
 
         {/* Seletor de Loja */}
-        {lojas.length > 0 ? (
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-              Selecione a loja
-            </p>
-            <LojaSelector
-              lojas={lojas}
-              lojaSelecionada={lojaSelecionada}
-              setLojaSelecionada={setLojaSelecionada}
-            />
+        {lojas.length === 0 ? (
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-4 py-3 text-gray-400 text-sm">
+            Nenhuma loja cadastrada.
           </div>
         ) : (
-          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-4 py-3 text-gray-400 text-sm">
-            Nenhuma loja cadastrada. Acesse RH → Configurações para criar lojas.
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Loja</p>
+            <LojaSelector lojas={lojas} lojaSelecionada={lojaSelecionada} setLojaSelecionada={setLojaSelecionada} />
           </div>
         )}
 
@@ -304,24 +332,19 @@ export default function SimulacaoPage() {
         {lojaSelecionada && (
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-              <Layers className="w-4 h-4" />
-              Selecione o setor (Quadro Ideal)
+              <Layers className="w-4 h-4" /> Setor
             </p>
 
             {loadingSetores ? (
               <div className="text-gray-500 text-sm flex items-center gap-2">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                Carregando setores...
+                <RefreshCw className="w-4 h-4 animate-spin" /> Carregando…
               </div>
             ) : setores.length === 0 ? (
               <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl px-4 py-3 text-amber-400 text-sm flex gap-3">
                 <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <span>
                   Nenhum quadro ideal configurado para esta loja.{' '}
-                  <button
-                    className="underline hover:text-amber-300"
-                    onClick={() => router.push('/rh/quadro-ideal')}
-                  >
+                  <button className="underline hover:text-amber-300" onClick={() => router.push('/rh/quadro-ideal')}>
                     Configurar agora →
                   </button>
                 </span>
@@ -339,9 +362,7 @@ export default function SimulacaoPage() {
                     }`}
                   >
                     {setor.nome}
-                    <span className="ml-2 opacity-60 text-xs">
-                      ({setor.posicoes.length} posições)
-                    </span>
+                    <span className="ml-1.5 opacity-50 text-xs">({setor.posicoes.length})</span>
                   </button>
                 ))}
               </div>
@@ -349,461 +370,212 @@ export default function SimulacaoPage() {
           </div>
         )}
 
-        {/* Painel de simulação */}
-        {setorSelecionado && (
+        {/* Diagnóstico do setor */}
+        {setorSelecionado && setorSelecionado.posicoes.length > 0 && (
           <div className="space-y-5">
 
-            {/* Info */}
-            <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-4 flex gap-3">
-              <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-gray-300">
-                <p className="font-medium text-white mb-1">Como funciona</p>
-                <p className="text-gray-400">
-                  Ajuste quantos funcionários de cada posição deseja migrar de{' '}
-                  <span className="text-amber-400 font-medium">6x1</span> para{' '}
-                  <span className="text-green-400 font-medium">5x2</span>. O simulador calcula a{' '}
-                  <strong>cobertura diária mínima garantida</strong> e compara com o mínimo
-                  ideal do seu quadro. Gargalos ocorrem quando a cobertura mínima fica abaixo do
-                  ideal.
-                </p>
-              </div>
-            </div>
-
-            {/* Tabela de posições com controles */}
-            <div>
-              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                Setor: {setorSelecionado.nome}
-              </h2>
-
-              <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl overflow-hidden">
-                {/* Cabeçalho */}
-                <div className="grid grid-cols-12 gap-2 px-5 py-3 border-b border-[#2a2a2e] text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  <span className="col-span-3">Cargo / Turno</span>
-                  <span className="col-span-2 text-center">Atual 6x1</span>
-                  <span className="col-span-2 text-center">Atual 5x2</span>
-                  <span className="col-span-2 text-center">Ideal mín.</span>
-                  <span className="col-span-3 text-center">Migrar → 5x2</span>
-                </div>
-
-                {setorSelecionado.posicoes.length === 0 ? (
-                  <div className="px-5 py-8 text-center text-gray-500 text-sm">
-                    Nenhuma posição cadastrada neste setor.
-                  </div>
-                ) : (
-                  setorSelecionado.posicoes.map((pos) => (
-                    <div
-                      key={pos.id}
-                      className="grid grid-cols-12 gap-2 px-5 py-4 border-b border-[#2a2a2e] last:border-0 items-center hover:bg-[#222224] transition-colors"
-                    >
-                      <div className="col-span-3">
-                        <p className="text-sm font-medium text-white">{pos.cargo.nome}</p>
-                        {pos.turno && (
-                          <p className="text-xs text-gray-500">
-                            {TURNO_LABEL[pos.turno] ?? pos.turno}
-                          </p>
-                        )}
-                      </div>
-                      <div className="col-span-2 text-center">
-                        <span className="text-amber-400 font-semibold">{pos.funcionarios6x1}</span>
-                        <p className="text-xs text-gray-500">funcionários</p>
-                      </div>
-                      <div className="col-span-2 text-center">
-                        <span className="text-green-400 font-semibold">{pos.funcionarios5x2}</span>
-                        <p className="text-xs text-gray-500">funcionários</p>
-                      </div>
-                      <div className="col-span-2 text-center">
-                        <span className="text-white font-semibold">{pos.idealMin}</span>
-                        <p className="text-xs text-gray-500">mínimo/dia</p>
-                      </div>
-                      <div className="col-span-3 flex items-center justify-center gap-2">
-                        <button
-                          onClick={() =>
-                            setMigracoes((m) => ({
-                              ...m,
-                              [pos.id]: Math.max(0, (m[pos.id] ?? 0) - 1),
-                            }))
-                          }
-                          className="w-8 h-8 rounded-lg bg-[#2a2a2e] flex items-center justify-center text-gray-300 hover:bg-[#3a3a3e] transition-colors"
-                        >
-                          −
-                        </button>
-                        <div className="w-12 text-center">
-                          <span className="text-lg font-bold text-white">
-                            {migracoes[pos.id] ?? 0}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() =>
-                            setMigracoes((m) => ({
-                              ...m,
-                              [pos.id]: Math.min(
-                                pos.funcionarios6x1,
-                                (m[pos.id] ?? 0) + 1
-                              ),
-                            }))
-                          }
-                          disabled={(migracoes[pos.id] ?? 0) >= pos.funcionarios6x1}
-                          className="w-8 h-8 rounded-lg bg-[#2a2a2e] flex items-center justify-center text-gray-300 hover:bg-[#3a3a3e] disabled:opacity-30 transition-colors"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Botões de ação */}
-            <div className="flex gap-3">
+            {/* Toggle de modo */}
+            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-1 flex gap-1">
               <button
-                onClick={handleSimular}
-                disabled={setorSelecionado.posicoes.length === 0}
-                className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-amber-500 text-black font-bold text-base hover:bg-amber-400 disabled:opacity-60 transition-colors"
+                onClick={() => setModo('atual')}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all ${
+                  modo === 'atual'
+                    ? 'bg-[#2a2a2e] text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
               >
-                <Play className="w-5 h-5" />
-                Simular
+                Como está hoje
               </button>
-              {simulado && (
-                <button
-                  onClick={handleReset}
-                  className="px-5 py-3.5 rounded-2xl bg-[#1c1c1e] border border-[#2a2a2e] text-gray-300 font-medium hover:bg-[#2a2a2e] transition-colors flex items-center gap-2"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Resetar
-                </button>
-              )}
+              <button
+                onClick={() => setModo('5x2')}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                  modo === '5x2'
+                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                <ArrowRight className="w-4 h-4" />
+                E se todos fossem para 5x2?
+              </button>
             </div>
 
-            {/* Resultados da simulação */}
-            {simulado && resultado.length > 0 && (
-              <div className="space-y-5">
-
-                {/* Cards de resumo */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <AlertTriangle className="w-4 h-4 text-red-400" />
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">Gargalos</p>
-                    </div>
-                    <p className="text-2xl font-bold text-red-400">{totalGargalos}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">posições críticas</p>
-                  </div>
-                  <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <AlertTriangle className="w-4 h-4 text-amber-400" />
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">Atenção</p>
-                    </div>
-                    <p className="text-2xl font-bold text-amber-400">{totalAtencao}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">margem baixa</p>
-                  </div>
-                  <div className="bg-green-500/5 border border-green-500/20 rounded-2xl p-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <CheckCircle className="w-4 h-4 text-green-400" />
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">Saudável</p>
-                    </div>
-                    <p className="text-2xl font-bold text-green-400">{totalOk}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">posições OK</p>
-                  </div>
-                  <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <TrendingUp className="w-4 h-4 text-blue-400" />
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">Excesso</p>
-                    </div>
-                    <p className="text-2xl font-bold text-blue-400">{totalExcesso}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">acima do ideal</p>
-                  </div>
-                </div>
-
-                {/* Tabela de resultado por posição */}
-                <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl overflow-hidden">
-                  <div className="px-5 py-3 border-b border-[#2a2a2e]">
-                    <h3 className="text-sm font-semibold text-white">
-                      Resultado por posição — {setorSelecionado.nome}
-                    </h3>
-                  </div>
-                  <div className="grid grid-cols-12 gap-2 px-5 py-2.5 border-b border-[#2a2a2e] text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    <span className="col-span-3">Cargo / Turno</span>
-                    <span className="col-span-2 text-center">6x1 → 5x2</span>
-                    <span className="col-span-2 text-center">Cobert. média</span>
-                    <span className="col-span-2 text-center">Cobert. mín.</span>
-                    <span className="col-span-1 text-center">Gap</span>
-                    <span className="col-span-2 text-center">Status</span>
-                  </div>
-
-                  {resultado.map((row) => (
-                    <div
-                      key={row.id}
-                      className={`grid grid-cols-12 gap-2 px-5 py-4 border-b border-[#2a2a2e] last:border-0 items-center transition-colors ${
-                        row.situacao === 'critico'
-                          ? 'bg-red-500/5'
-                          : row.situacao === 'atencao'
-                          ? 'bg-amber-500/5'
-                          : row.situacao === 'excesso'
-                          ? 'bg-blue-500/5'
-                          : 'hover:bg-[#222224]'
-                      }`}
-                    >
-                      <div className="col-span-3">
-                        <p className="text-sm font-medium text-white">{row.cargo.nome}</p>
-                        {row.turno && (
-                          <p className="text-xs text-gray-500">
-                            {TURNO_LABEL[row.turno] ?? row.turno}
-                          </p>
-                        )}
-                      </div>
-                      <div className="col-span-2 text-center">
-                        {row.migrar > 0 ? (
-                          <div>
-                            <span className="text-amber-400 font-semibold">{row.proposto6x1}</span>
-                            <span className="text-gray-600 mx-1 text-xs">+</span>
-                            <span className="text-green-400 font-semibold">{row.proposto5x2}</span>
-                            <p className="text-xs text-gray-500">{row.migrar} migrado(s)</p>
-                          </div>
-                        ) : (
-                          <div>
-                            <span className="text-amber-400 font-semibold">{row.proposto6x1}</span>
-                            <span className="text-gray-600 mx-1 text-xs">+</span>
-                            <span className="text-green-400 font-semibold">{row.proposto5x2}</span>
-                            <p className="text-xs text-gray-500">sem mudança</p>
-                          </div>
-                        )}
-                      </div>
-                      <div className="col-span-2 text-center">
-                        <span className="text-white font-semibold">
-                          {row.coberturaDiaria.toFixed(1)}
-                        </span>
-                        <p className="text-xs text-gray-500">func/dia</p>
-                      </div>
-                      <div className="col-span-2 text-center">
-                        <span
-                          className={`font-semibold ${
-                            row.coberturaMinima >= row.idealMin
-                              ? 'text-green-400'
-                              : row.coberturaMinima >= row.idealMin * 0.8
-                              ? 'text-amber-400'
-                              : 'text-red-400'
-                          }`}
-                        >
-                          {row.coberturaMinima.toFixed(1)}
-                        </span>
-                        <p className="text-xs text-gray-500">mín. real</p>
-                      </div>
-                      <div className="col-span-1 flex items-center justify-center">
-                        <GapIcon gap={row.gap} />
-                      </div>
-                      <div className="col-span-2 flex items-center justify-center">
-                        <SituacaoBadge situacao={row.situacao} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Análise detalhada de gargalos */}
-                {(totalGargalos > 0 || totalAtencao > 0) && (
-                  <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 space-y-4">
-                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-400" />
-                      Análise de riscos
-                    </h3>
-
-                    {resultado
-                      .filter((r) => r.situacao === 'critico' || r.situacao === 'atencao')
-                      .map((row) => (
-                        <div
-                          key={row.id}
-                          className={`rounded-xl p-4 border ${
-                            row.situacao === 'critico'
-                              ? 'bg-red-500/5 border-red-500/20'
-                              : 'bg-amber-500/5 border-amber-500/20'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <p className="text-sm font-semibold text-white">
-                                {row.cargo.nome}
-                                {row.turno && (
-                                  <span className="text-gray-400 font-normal ml-2">
-                                    · {TURNO_LABEL[row.turno] ?? row.turno}
-                                  </span>
-                                )}
-                              </p>
-                              {row.situacao === 'critico' ? (
-                                <p className="text-xs text-red-300 mt-1">
-                                  Cobertura mínima{' '}
-                                  <strong>{row.coberturaMinima.toFixed(1)}</strong> está abaixo do
-                                  ideal de <strong>{row.idealMin}</strong>. Em dias com múltiplas
-                                  folgas simultâneas, faltarão{' '}
-                                  <strong>{Math.ceil(row.gap)} funcionário(s)</strong>. Risco de
-                                  operação descoberta.
-                                </p>
-                              ) : (
-                                <p className="text-xs text-amber-300 mt-1">
-                                  Cobertura mínima{' '}
-                                  <strong>{row.coberturaMinima.toFixed(1)}</strong> está próxima
-                                  do ideal ({row.idealMin}). Margem de segurança baixa — qualquer
-                                  ausência imprevista pode gerar gargalo.
-                                </p>
-                              )}
-                            </div>
-                            {row.custoDelta > 0 && (
-                              <div className="flex-shrink-0 text-right">
-                                <p className="text-xs text-gray-500">Custo de reforço</p>
-                                <p className="text-sm font-bold text-amber-400">
-                                  {fmt(row.custoDelta)}/mês
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                )}
-
-                {/* Impacto financeiro */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Users className="w-4 h-4 text-green-400" />
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">
-                        Migrar para 5x2
-                      </p>
-                    </div>
-                    <p className="text-2xl font-bold text-white">{totalMigrar}</p>
-                    <p className="text-xs text-gray-500 mt-1">funcionários no cenário proposto</p>
-                  </div>
-                  <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <DollarSign className="w-4 h-4 text-amber-400" />
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">
-                        Custo de reforço/mês
-                      </p>
-                    </div>
-                    <p className="text-2xl font-bold text-amber-400">
-                      {custoAdicionalMensal > 0 ? fmt(custoAdicionalMensal) : '—'}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {custoAdicionalMensal > 0
-                        ? 'contratações necessárias p/ cobrir gargalos'
-                        : 'nenhuma contratação necessária'}
-                    </p>
-                  </div>
-                  <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <BarChart3 className="w-4 h-4 text-blue-400" />
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">
-                        Custo de reforço/ano
-                      </p>
-                    </div>
-                    <p className="text-2xl font-bold text-blue-400">
-                      {custoAdicionalAnual > 0 ? fmt(custoAdicionalAnual) : '—'}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">13°, férias e encargos inclusos</p>
-                  </div>
-                </div>
-
-                {/* Excesso de pessoal */}
-                {totalExcesso > 0 && (
-                  <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-5">
-                    <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
-                      <TrendingUp className="w-4 h-4 text-blue-400" />
-                      Excesso de pessoal detectado
-                    </h3>
-                    <div className="space-y-2">
-                      {resultado
-                        .filter((r) => r.situacao === 'excesso')
-                        .map((row) => (
-                          <div key={row.id} className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm text-white">
-                                {row.cargo.nome}
-                                {row.turno && (
-                                  <span className="text-gray-400 ml-2">
-                                    · {TURNO_LABEL[row.turno] ?? row.turno}
-                                  </span>
-                                )}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                Cobertura média {row.coberturaDiaria.toFixed(1)} vs ideal{' '}
-                                {row.idealMin} (
-                                {Math.round((row.coberturaDiaria / row.idealMin - 1) * 100)}%
-                                acima)
-                              </p>
-                            </div>
-                            <span className="text-blue-400 text-sm font-semibold">
-                              +{Math.floor(row.coberturaDiaria - row.idealMin)} extra
-                            </span>
-                          </div>
-                        ))}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-3">
-                      Posições com excesso podem absorver mais migrações para 5x2 sem risco operacional.
-                    </p>
-                  </div>
-                )}
-
-                {/* Tudo OK */}
-                {totalGargalos === 0 && totalAtencao === 0 && totalExcesso === 0 && (
-                  <div className="bg-green-500/10 border border-green-500/30 rounded-2xl px-5 py-4 flex items-center gap-3">
+            {/* Resumo rápido de mudanças (só no modo 5x2) */}
+            {modo === '5x2' && (melhoras > 0 || pioras > 0) && (
+              <div className="grid grid-cols-2 gap-3">
+                {melhoras > 0 && (
+                  <div className="bg-green-500/5 border border-green-500/20 rounded-xl px-4 py-3 flex items-center gap-3">
                     <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
                     <div>
-                      <p className="text-green-400 font-semibold text-sm">
-                        Cenário saudável!
-                      </p>
-                      <p className="text-gray-400 text-xs mt-0.5">
-                        Todas as posições mantêm cobertura adequada com a migração proposta. Nenhum
-                        gargalo detectado.
-                      </p>
+                      <p className="text-sm font-semibold text-green-400">{melhoras} melhora{melhoras !== 1 ? 'm' : ''}</p>
+                      <p className="text-xs text-gray-500">posições ficam mais seguras</p>
                     </div>
                   </div>
                 )}
-
-                {/* Legenda */}
-                <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
-                  <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                    <ChevronDown className="w-4 h-4 text-gray-400" />
-                    Como os cálculos são feitos
-                  </h3>
-                  <div className="text-sm text-gray-400 space-y-2">
-                    <p>
-                      <span className="text-amber-400 font-medium">Escala 6x1</span>: cada
-                      funcionário trabalha 6 dias e folga 1 → cobre{' '}
-                      <strong className="text-white">85,7%</strong> dos dias (fator 6/7).
-                    </p>
-                    <p>
-                      <span className="text-green-400 font-medium">Escala 5x2</span>: trabalha 5
-                      dias e folga 2 → cobre{' '}
-                      <strong className="text-white">71,4%</strong> dos dias (fator 5/7).
-                    </p>
-                    <p>
-                      <strong className="text-white">Cobertura mínima garantida</strong>: considera
-                      o pior dia da semana com folgas simultâneas distribuídas de forma ótima e
-                      rotativa. Para 6x1 com N pessoas:{' '}
-                      <code className="bg-[#2a2a2e] px-1 rounded text-xs">N − ⌈N/7⌉</code>. Para
-                      5x2:{' '}
-                      <code className="bg-[#2a2a2e] px-1 rounded text-xs">N − ⌈2N/7⌉</code>.
-                    </p>
-                    <p>
-                      <strong className="text-white">Gargalo</strong>: cobertura mínima abaixo do
-                      mínimo ideal. <strong className="text-white">Atenção</strong>: cobertura
-                      mínima dentro do ideal mas com margem inferior a 15%. <strong className="text-white">Excesso</strong>: cobertura média superior a 150% do ideal.
-                    </p>
+                {pioras > 0 && (
+                  <div className="bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-3 flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-red-400">{pioras} piora{pioras !== 1 ? 'm' : ''}</p>
+                      <p className="text-xs text-gray-500">posições ficam em risco</p>
+                    </div>
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* Pergunta principal */}
+            <div>
+              <h2 className="text-base font-semibold text-white mb-1">
+                {modo === 'atual'
+                  ? `Como está a equipe de ${setorSelecionado.nome} hoje?`
+                  : `Se todos os ${totalMigrar} funcionários migrarem para 5x2…`}
+              </h2>
+              <p className="text-sm text-gray-400 mb-4">
+                {modo === 'atual'
+                  ? 'Cobertura no pior dia (quando mais pessoas estão de folga ao mesmo tempo).'
+                  : `Cada pessoa trabalhará 5 dias e folga 2. Veja o impacto por posição.`}
+              </p>
+
+              {/* Cards de posição */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {resultadoAtual.map((atual, i) => (
+                  <PosicaoCard
+                    key={atual.id}
+                    atual={atual}
+                    projetado={resultadoProjetado[i] ?? null}
+                    modoComparacao={modo === '5x2'}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Pontos de atenção */}
+            {totalGargalos + totalAtencao > 0 && (
+              <div className={`rounded-2xl p-4 border space-y-3 ${
+                totalGargalos > 0
+                  ? 'bg-red-500/5 border-red-500/20'
+                  : 'bg-amber-500/5 border-amber-500/20'
+              }`}>
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <AlertTriangle className={`w-4 h-4 ${totalGargalos > 0 ? 'text-red-400' : 'text-amber-400'}`} />
+                  {totalGargalos > 0
+                    ? `${totalGargalos} posição${totalGargalos !== 1 ? 'ões' : ''} com risco de operação descoberta`
+                    : `${totalAtencao} posição${totalAtencao !== 1 ? 'ões' : ''} com margem baixa`}
+                </h3>
+                {resultado.filter(r => r.situacao === 'critico' || r.situacao === 'atencao').map(row => (
+                  <div key={row.id} className="flex items-center justify-between gap-4 text-sm">
+                    <div className="min-w-0">
+                      <p className="text-white font-medium truncate">
+                        {row.cargo.nome}{row.turno ? ` · ${TURNO_LABEL[row.turno] ?? row.turno}` : ''}
+                      </p>
+                      <p className={`text-xs mt-0.5 ${row.situacao === 'critico' ? 'text-red-300' : 'text-amber-300'}`}>
+                        {row.situacao === 'critico'
+                          ? `Faltarão ${Math.ceil(row.gap)} pessoa${Math.ceil(row.gap) !== 1 ? 's' : ''} nos dias com mais folgas`
+                          : 'Qualquer falta imprevista pode gerar gargalo'}
+                      </p>
+                    </div>
+                    {row.custoDelta > 0 && (
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-xs text-gray-500">Reforço estimado</p>
+                        <p className="text-sm font-bold text-amber-400">{fmt(row.custoDelta)}/mês</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Tudo bem */}
+            {totalGargalos === 0 && totalAtencao === 0 && (
+              <div className="bg-green-500/5 border border-green-500/20 rounded-2xl px-5 py-4 flex items-center gap-3">
+                <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                <div>
+                  <p className="text-green-400 font-semibold text-sm">Cobertura adequada!</p>
+                  <p className="text-gray-400 text-xs mt-0.5">
+                    {modo === 'atual'
+                      ? 'Todas as posições têm cobertura suficiente mesmo no pior dia.'
+                      : 'A migração não gera nenhum risco operacional neste setor.'}
+                  </p>
                 </div>
               </div>
             )}
+
+            {/* Impacto financeiro (só mostra se há custo) */}
+            {custoAdicionalMensal > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <DollarSign className="w-4 h-4 text-amber-400" />
+                    <p className="text-xs text-gray-400 uppercase tracking-wider">Custo de reforço / mês</p>
+                  </div>
+                  <p className="text-2xl font-bold text-amber-400">{fmt(custoAdicionalMensal)}</p>
+                  <p className="text-xs text-gray-500 mt-1">estimativa para cobrir os gargalos</p>
+                </div>
+                <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <BarChart3 className="w-4 h-4 text-blue-400" />
+                    <p className="text-xs text-gray-400 uppercase tracking-wider">Custo de reforço / ano</p>
+                  </div>
+                  <p className="text-2xl font-bold text-blue-400">{fmt(custoAdicionalAnual)}</p>
+                  <p className="text-xs text-gray-500 mt-1">com 13°, férias e encargos</p>
+                </div>
+              </div>
+            )}
+
+            {/* Explicação técnica colapsável */}
+            <button
+              onClick={() => setShowExplicacao(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl text-sm text-gray-400 hover:text-white hover:bg-[#222224] transition-colors"
+            >
+              <span>Como esses números são calculados?</span>
+              {showExplicacao ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+
+            {showExplicacao && (
+              <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 text-sm text-gray-400 space-y-3">
+                <div className="flex gap-3">
+                  <div className="w-3 h-3 rounded-full bg-amber-500 flex-shrink-0 mt-1" />
+                  <p><span className="text-amber-400 font-medium">Escala 6x1</span>: o funcionário trabalha 6 dias e folga 1. Em média, está presente 85,7% dos dias.</p>
+                </div>
+                <div className="flex gap-3">
+                  <div className="w-3 h-3 rounded-full bg-green-500 flex-shrink-0 mt-1" />
+                  <p><span className="text-green-400 font-medium">Escala 5x2</span>: trabalha 5 dias e folga 2. Presença em 71,4% dos dias.</p>
+                </div>
+                <div className="flex gap-3">
+                  <div className="w-3 h-3 rounded-full bg-blue-500 flex-shrink-0 mt-1" />
+                  <p><span className="text-white font-medium">Pior dia garantido</span>: quantas pessoas estarão trabalhando no dia da semana com mais folgas simultâneas — assumindo distribuição ótima e rotativa.</p>
+                </div>
+                <div className="flex gap-3">
+                  <div className="w-3 h-3 rounded-full bg-red-500 flex-shrink-0 mt-1" />
+                  <p><span className="text-white font-medium">Risco de descoberta</span>: o pior dia está abaixo do mínimo definido no Quadro Ideal.</p>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 
-        {/* Estado inicial sem loja selecionada */}
+        {/* Estado inicial */}
         {!lojaSelecionada && lojas.length > 0 && (
-          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-8 text-center">
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-10 text-center">
             <Layers className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-            <p className="text-gray-400 text-sm">
-              Selecione uma loja acima para carregar os setores do Quadro Ideal.
-            </p>
+            <p className="text-gray-400 text-sm">Selecione uma loja para ver a análise de cobertura.</p>
           </div>
         )}
+
+        {setorSelecionado && setorSelecionado.posicoes.length === 0 && (
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-8 text-center">
+            <Users className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+            <p className="text-gray-400 text-sm">Nenhuma posição cadastrada neste setor.</p>
+            <button
+              className="mt-3 text-amber-400 text-sm underline hover:text-amber-300"
+              onClick={() => router.push('/rh/quadro-ideal')}
+            >
+              Configurar Quadro Ideal →
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   );
