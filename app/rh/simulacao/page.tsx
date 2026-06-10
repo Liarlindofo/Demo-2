@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useLoja, Loja } from '@/contexts/LojaContext';
 import {
   ArrowLeft, BarChart3, AlertTriangle, CheckCircle,
-  Users, Layers, DollarSign, RefreshCw, ArrowRight,
-  TrendingDown, Minus, ChevronDown, ChevronUp,
+  Users, Layers, DollarSign, RefreshCw, Plus,
+  TrendingDown, ChevronDown, ChevronUp, ArrowRight,
 } from 'lucide-react';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
@@ -39,7 +39,7 @@ interface PosicaoSimulada extends PosicaoData {
   custoDelta: number;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Cálculos ────────────────────────────────────────────────────────────────
 
 const ENCARGOS = 1.44;
 const FATOR_6x1 = 6 / 7;
@@ -59,7 +59,6 @@ function simularPosicao(pos: PosicaoData, migrar: number): PosicaoSimulada {
   const migrarClamp = Math.max(0, Math.min(migrar, pos.funcionarios6x1));
   const p6x1 = pos.funcionarios6x1 - migrarClamp;
   const p5x2 = pos.funcionarios5x2 + migrarClamp;
-
   const cDiaria = coberturaDiaria(p6x1, p5x2);
   const cMin = coberturaMinima(p6x1, p5x2);
   const gap = pos.idealMin - cMin;
@@ -82,7 +81,7 @@ const TURNO_LABEL: Record<string, string> = {
   manhã: 'Manhã', tarde: 'Tarde', noite: 'Noite', integral: 'Integral',
 };
 
-// ─── Componentes ─────────────────────────────────────────────────────────────
+// ─── Sub-componentes ──────────────────────────────────────────────────────────
 
 function LojaSelector({ lojas, lojaSelecionada, setLojaSelecionada }: {
   lojas: Loja[];
@@ -92,13 +91,9 @@ function LojaSelector({ lojas, lojaSelecionada, setLojaSelecionada }: {
   return (
     <div className="flex gap-2 overflow-x-auto pb-1">
       {lojas.map((loja) => (
-        <button
-          key={loja.id}
-          onClick={() => setLojaSelecionada(loja)}
+        <button key={loja.id} onClick={() => setLojaSelecionada(loja)}
           className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-            lojaSelecionada?.id === loja.id
-              ? 'bg-amber-500 text-black'
-              : 'bg-[#2a2a2e] text-gray-300 hover:bg-[#3a3a3e]'
+            lojaSelecionada?.id === loja.id ? 'bg-amber-500 text-black' : 'bg-[#2a2a2e] text-gray-300 hover:bg-[#3a3a3e]'
           }`}
         >
           {loja.nome}
@@ -120,7 +115,7 @@ function CoberturaBar({ atual, ideal, label }: { atual: number; ideal: number; l
         </span>
       </div>
       <div className="h-2 bg-[#2a2a2e] rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all duration-500 ${cor}`} style={{ width: `${Math.round(pct * 100)}%` }} />
+        <div className={`h-full rounded-full transition-all duration-300 ${cor}`} style={{ width: `${Math.round(pct * 100)}%` }} />
       </div>
     </div>
   );
@@ -137,88 +132,85 @@ function StatusTag({ situacao }: { situacao: PosicaoSimulada['situacao'] }) {
   return <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${cls}`}>{label}</span>;
 }
 
-function GapTag({ gap }: { gap: number }) {
-  if (gap <= 0) return null;
-  return (
-    <div className="flex items-center gap-1.5 text-red-400 text-xs font-semibold mt-1.5">
-      <TrendingDown className="w-3.5 h-3.5" />
-      Falta {Math.ceil(gap)} pessoa{Math.ceil(gap) !== 1 ? 's' : ''} no pior dia
-    </div>
-  );
-}
-
-function PosicaoCard({ atual, projetado, modoComparacao }: {
-  atual: PosicaoSimulada;
-  projetado: PosicaoSimulada | null;
-  modoComparacao: boolean;
+// Card de posição com controle de migração embutido
+function PosicaoCard({ pos, migrar, onMigrar, modoSimulacao }: {
+  pos: PosicaoData;
+  migrar: number;
+  onMigrar: (v: number) => void;
+  modoSimulacao: boolean;
 }) {
-  const exibir = modoComparacao && projetado ? projetado : atual;
-  const mudou = modoComparacao && projetado && (projetado.situacao !== atual.situacao);
+  const simulado = simularPosicao(pos, migrar);
+  const base = simularPosicao(pos, 0); // estado sem migração para comparação
+
+  const border =
+    simulado.situacao === 'critico' ? 'border-red-500/30' :
+    simulado.situacao === 'atencao' ? 'border-amber-500/30' :
+    'border-[#2a2a2e]';
 
   return (
-    <div className={`bg-[#1c1c1e] border rounded-2xl p-4 transition-all ${
-      exibir.situacao === 'critico' ? 'border-red-500/30' :
-      exibir.situacao === 'atencao' ? 'border-amber-500/30' :
-      'border-[#2a2a2e]'
-    }`}>
-      {/* Header do card */}
+    <div className={`bg-[#1c1c1e] border rounded-2xl p-4 transition-all ${border}`}>
+      {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div>
-          <p className="text-sm font-semibold text-white">{exibir.cargo.nome}</p>
-          {exibir.turno && (
-            <p className="text-xs text-gray-500 mt-0.5">{TURNO_LABEL[exibir.turno] ?? exibir.turno}</p>
-          )}
+          <p className="text-sm font-semibold text-white">{pos.cargo.nome}</p>
+          {pos.turno && <p className="text-xs text-gray-500 mt-0.5">{TURNO_LABEL[pos.turno] ?? pos.turno}</p>}
         </div>
-        <div className="flex flex-col items-end gap-1">
-          <StatusTag situacao={exibir.situacao} />
-          {mudou && projetado && (
-            <span className="text-xs text-gray-500">
-              era <span className={atual.situacao === 'critico' ? 'text-red-400' : atual.situacao === 'atencao' ? 'text-amber-400' : 'text-green-400'}>{
-                atual.situacao === 'critico' ? 'risco' : atual.situacao === 'atencao' ? 'margem baixa' : 'OK'
-              }</span>
-            </span>
-          )}
-        </div>
+        <StatusTag situacao={simulado.situacao} />
       </div>
 
-      {/* Equipe atual */}
-      <div className="flex items-center gap-3 mb-3 text-sm">
-        <Users className="w-4 h-4 text-gray-600 flex-shrink-0" />
-        {modoComparacao && projetado ? (
-          <span className="text-gray-300">
-            <span className="text-amber-400 font-medium">{projetado.proposto6x1} 6x1</span>
-            {' + '}
-            <span className="text-green-400 font-medium">{projetado.proposto5x2} 5x2</span>
-            {projetado.migrar > 0 && (
-              <span className="text-gray-500 ml-1.5">({projetado.migrar} migrado{projetado.migrar !== 1 ? 's' : ''})</span>
-            )}
-          </span>
-        ) : (
-          <span className="text-gray-300">
-            <span className="text-amber-400 font-medium">{exibir.funcionarios6x1} 6x1</span>
-            {exibir.funcionarios5x2 > 0 && (
-              <><span className="text-gray-600 mx-1">+</span><span className="text-green-400 font-medium">{exibir.funcionarios5x2} 5x2</span></>
-            )}
-            <span className="text-gray-600 ml-1.5">na equipe</span>
-          </span>
+      {/* Composição da equipe */}
+      <div className="flex items-center gap-2 mb-3 text-xs text-gray-400">
+        <Users className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" />
+        <span className="text-amber-400 font-medium">{simulado.proposto6x1} 6x1</span>
+        {simulado.proposto5x2 > 0 && (
+          <><span className="text-gray-600">+</span><span className="text-green-400 font-medium">{simulado.proposto5x2} 5x2</span></>
         )}
+        <span className="text-gray-600">na equipe</span>
       </div>
 
-      {/* Barra de cobertura */}
+      {/* Controle de migração — só aparece em modo simulação */}
+      {modoSimulacao && pos.funcionarios6x1 > 0 && (
+        <div className="flex items-center gap-2 mb-3 p-2.5 bg-[#252528] rounded-xl">
+          <span className="text-xs text-gray-400 flex-1">Migrar para 5x2</span>
+          <button
+            onClick={() => onMigrar(Math.max(0, migrar - 1))}
+            disabled={migrar <= 0}
+            className="w-7 h-7 rounded-lg bg-[#2a2a2e] flex items-center justify-center text-gray-300 hover:bg-[#3a3a3e] disabled:opacity-30 transition-colors text-base leading-none"
+          >
+            −
+          </button>
+          <span className="text-sm font-bold text-white w-6 text-center">{migrar}</span>
+          <button
+            onClick={() => onMigrar(Math.min(pos.funcionarios6x1, migrar + 1))}
+            disabled={migrar >= pos.funcionarios6x1}
+            className="w-7 h-7 rounded-lg bg-[#2a2a2e] flex items-center justify-center text-gray-300 hover:bg-[#3a3a3e] disabled:opacity-30 transition-colors text-base leading-none"
+          >
+            +
+          </button>
+          <span className="text-xs text-gray-500">de {pos.funcionarios6x1}</span>
+        </div>
+      )}
+
+      {/* Barras de cobertura */}
       <div className="space-y-2">
-        <CoberturaBar
-          atual={exibir.coberturaMinima}
-          ideal={exibir.idealMin}
-          label="Pior dia garantido"
-        />
-        <CoberturaBar
-          atual={exibir.coberturaDiaria}
-          ideal={exibir.idealMin}
-          label="Presença média/dia"
-        />
+        <CoberturaBar atual={simulado.coberturaMinima} ideal={simulado.idealMin} label="Pior dia garantido" />
+        <CoberturaBar atual={simulado.coberturaDiaria} ideal={simulado.idealMin} label="Presença média/dia" />
       </div>
 
-      <GapTag gap={exibir.gap} />
+      {/* Comparação (antes vs depois) */}
+      {modoSimulacao && migrar > 0 && base.coberturaMinima !== simulado.coberturaMinima && (
+        <p className="text-xs text-gray-500 mt-2">
+          Antes: pior dia era {base.coberturaMinima.toFixed(1)} → agora {simulado.coberturaMinima.toFixed(1)}
+        </p>
+      )}
+
+      {/* Gap alert */}
+      {simulado.gap > 0 && (
+        <div className="flex items-center gap-1.5 text-red-400 text-xs font-semibold mt-2">
+          <TrendingDown className="w-3.5 h-3.5" />
+          Falta {Math.ceil(simulado.gap)} pessoa{Math.ceil(simulado.gap) !== 1 ? 's' : ''} no pior dia
+        </div>
+      )}
     </div>
   );
 }
@@ -232,7 +224,9 @@ export default function SimulacaoPage() {
   const [setores, setSetores] = useState<SetorData[]>([]);
   const [setorSelecionado, setSetorSelecionado] = useState<SetorData | null>(null);
   const [loadingSetores, setLoadingSetores] = useState(false);
-  const [modo, setModo] = useState<'atual' | '5x2'>('atual');
+  const [modo, setModo] = useState<'atual' | 'simular'>('atual');
+  // migracoes[posicaoId] = quantas pessoas mover de 6x1 → 5x2
+  const [migracoes, setMigracoes] = useState<Record<string, number>>({});
   const [showExplicacao, setShowExplicacao] = useState(false);
 
   const fetchSetores = useCallback(async (lojaId: string) => {
@@ -240,14 +234,13 @@ export default function SimulacaoPage() {
     setSetores([]);
     setSetorSelecionado(null);
     setModo('atual');
+    setMigracoes({});
     try {
       const res = await fetch(`/api/rh/simulacao/setor?lojaId=${lojaId}`);
       if (!res.ok) return;
       const data = await res.json();
       setSetores(data.setores ?? []);
-    } catch {
-      // silencia
-    } finally {
+    } catch { /* silencia */ } finally {
       setLoadingSetores(false);
     }
   }, []);
@@ -260,38 +253,38 @@ export default function SimulacaoPage() {
   const handleSelecionarSetor = (setor: SetorData) => {
     setSetorSelecionado(setor);
     setModo('atual');
+    const init: Record<string, number> = {};
+    setor.posicoes.forEach(p => (init[p.id] = 0));
+    setMigracoes(init);
   };
 
-  // Calcula resultado imediatamente (sem botão)
-  const resultadoAtual: PosicaoSimulada[] = setorSelecionado
-    ? setorSelecionado.posicoes.map((p) => simularPosicao(p, 0))
-    : [];
+  const handleMigrar = (posId: string, v: number) =>
+    setMigracoes(m => ({ ...m, [posId]: v }));
 
-  const resultadoProjetado: PosicaoSimulada[] = setorSelecionado
-    ? setorSelecionado.posicoes.map((p) => simularPosicao(p, p.funcionarios6x1))
-    : [];
+  const migrarTodos = () => {
+    if (!setorSelecionado) return;
+    const todos: Record<string, number> = {};
+    setorSelecionado.posicoes.forEach(p => (todos[p.id] = p.funcionarios6x1));
+    setMigracoes(todos);
+  };
 
-  const resultado = modo === '5x2' ? resultadoProjetado : resultadoAtual;
+  const resetarMigracoes = () => {
+    if (!setorSelecionado) return;
+    const init: Record<string, number> = {};
+    setorSelecionado.posicoes.forEach(p => (init[p.id] = 0));
+    setMigracoes(init);
+  };
 
-  const totalGargalos = resultado.filter((r) => r.situacao === 'critico').length;
-  const totalAtencao = resultado.filter((r) => r.situacao === 'atencao').length;
-  const custoAdicionalMensal = resultado.reduce((s, r) => s + r.custoDelta, 0);
-  const custoAdicionalAnual = custoAdicionalMensal * 14.33;
-  const totalMigrar = resultadoProjetado.reduce((s, r) => s + r.migrar, 0);
+  // Calcula resultados reativos
+  const resultado: PosicaoSimulada[] = (setorSelecionado?.posicoes ?? []).map(p =>
+    simularPosicao(p, modo === 'simular' ? (migracoes[p.id] ?? 0) : 0)
+  );
 
-  // Conta mudanças ao comparar modos
-  const melhoras = resultadoAtual.filter((a, i) => {
-    const p = resultadoProjetado[i];
-    if (!p) return false;
-    const ord = ['critico','atencao','ok','excesso'];
-    return ord.indexOf(p.situacao) > ord.indexOf(a.situacao);
-  }).length;
-  const pioras = resultadoAtual.filter((a, i) => {
-    const p = resultadoProjetado[i];
-    if (!p) return false;
-    const ord = ['critico','atencao','ok','excesso'];
-    return ord.indexOf(p.situacao) < ord.indexOf(a.situacao);
-  }).length;
+  const totalGargalos = resultado.filter(r => r.situacao === 'critico').length;
+  const totalAtencao = resultado.filter(r => r.situacao === 'atencao').length;
+  const custoMensal = resultado.reduce((s, r) => s + r.custoDelta, 0);
+  const custoAnual = custoMensal * 14.33;
+  const totalMigrando = Object.values(migracoes).reduce((s, v) => s + v, 0);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
@@ -299,8 +292,7 @@ export default function SimulacaoPage() {
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push('/rh')}
+          <button onClick={() => router.push('/rh')}
             className="w-9 h-9 rounded-xl bg-[#1c1c1e] border border-[#2a2a2e] flex items-center justify-center hover:bg-[#2a2a2e] transition-colors"
           >
             <ArrowLeft className="w-4 h-4 text-gray-400" />
@@ -311,12 +303,12 @@ export default function SimulacaoPage() {
               Simulador de Escala
             </h1>
             <p className="text-sm text-gray-400">
-              Veja a cobertura da sua equipe e o impacto de migrar para 5x2
+              Veja a cobertura da equipe e simule a migração para 5x2
             </p>
           </div>
         </div>
 
-        {/* Seletor de Loja */}
+        {/* Loja */}
         {lojas.length === 0 ? (
           <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-4 py-3 text-gray-400 text-sm">
             Nenhuma loja cadastrada.
@@ -328,30 +320,42 @@ export default function SimulacaoPage() {
           </div>
         )}
 
-        {/* Seletor de Setor */}
+        {/* Setor */}
         {lojaSelecionada && (
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-              <Layers className="w-4 h-4" /> Setor
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                <Layers className="w-4 h-4" /> Setor
+              </p>
+              {/* Link para criar setores no Quadro Ideal */}
+              <button
+                onClick={() => router.push('/rh/quadro-ideal')}
+                className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Criar / editar setores
+              </button>
+            </div>
 
             {loadingSetores ? (
               <div className="text-gray-500 text-sm flex items-center gap-2">
                 <RefreshCw className="w-4 h-4 animate-spin" /> Carregando…
               </div>
             ) : setores.length === 0 ? (
-              <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl px-4 py-3 text-amber-400 text-sm flex gap-3">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <span>
-                  Nenhum quadro ideal configurado para esta loja.{' '}
-                  <button className="underline hover:text-amber-300" onClick={() => router.push('/rh/quadro-ideal')}>
-                    Configurar agora →
-                  </button>
-                </span>
+              <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl px-4 py-4 text-sm">
+                <p className="text-amber-400 font-medium mb-1">Nenhum setor configurado para esta loja.</p>
+                <p className="text-gray-400 mb-3">O simulador usa os setores e posições do Quadro Ideal. Configure-o primeiro.</p>
+                <button
+                  onClick={() => router.push('/rh/quadro-ideal')}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-black text-sm font-semibold rounded-xl hover:bg-amber-400 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Configurar Quadro Ideal
+                </button>
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {setores.map((setor) => (
+                {setores.map(setor => (
                   <button
                     key={setor.id}
                     onClick={() => handleSelecionarSetor(setor)}
@@ -370,7 +374,7 @@ export default function SimulacaoPage() {
           </div>
         )}
 
-        {/* Diagnóstico do setor */}
+        {/* Conteúdo do setor selecionado */}
         {setorSelecionado && setorSelecionado.posicoes.length > 0 && (
           <div className="space-y-5">
 
@@ -379,82 +383,66 @@ export default function SimulacaoPage() {
               <button
                 onClick={() => setModo('atual')}
                 className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all ${
-                  modo === 'atual'
-                    ? 'bg-[#2a2a2e] text-white shadow-sm'
-                    : 'text-gray-500 hover:text-gray-300'
+                  modo === 'atual' ? 'bg-[#2a2a2e] text-white' : 'text-gray-500 hover:text-gray-300'
                 }`}
               >
                 Como está hoje
               </button>
               <button
-                onClick={() => setModo('5x2')}
+                onClick={() => setModo('simular')}
                 className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                  modo === '5x2'
+                  modo === 'simular'
                     ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
                     : 'text-gray-500 hover:text-gray-300'
                 }`}
               >
                 <ArrowRight className="w-4 h-4" />
-                E se todos fossem para 5x2?
+                Simular migração para 5x2
               </button>
             </div>
 
-            {/* Resumo rápido de mudanças (só no modo 5x2) */}
-            {modo === '5x2' && (melhoras > 0 || pioras > 0) && (
-              <div className="grid grid-cols-2 gap-3">
-                {melhoras > 0 && (
-                  <div className="bg-green-500/5 border border-green-500/20 rounded-xl px-4 py-3 flex items-center gap-3">
-                    <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-semibold text-green-400">{melhoras} melhora{melhoras !== 1 ? 'm' : ''}</p>
-                      <p className="text-xs text-gray-500">posições ficam mais seguras</p>
-                    </div>
-                  </div>
-                )}
-                {pioras > 0 && (
-                  <div className="bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-3 flex items-center gap-3">
-                    <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-semibold text-red-400">{pioras} piora{pioras !== 1 ? 'm' : ''}</p>
-                      <p className="text-xs text-gray-500">posições ficam em risco</p>
-                    </div>
-                  </div>
-                )}
+            {/* Atalhos de migração (só no modo simular) */}
+            {modo === 'simular' && (
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-400">
+                  {totalMigrando > 0
+                    ? <><span className="text-amber-400 font-semibold">{totalMigrando}</span> funcionário{totalMigrando !== 1 ? 's' : ''} sendo migrado{totalMigrando !== 1 ? 's' : ''}</>
+                    : 'Ajuste quantos funcionários migrar em cada posição'}
+                </p>
+                <div className="flex gap-2">
+                  {totalMigrando > 0 && (
+                    <button onClick={resetarMigracoes}
+                      className="px-3 py-1.5 rounded-xl text-xs font-medium bg-[#2a2a2e] text-gray-400 hover:text-white hover:bg-[#3a3a3e] transition-colors"
+                    >
+                      Zerar
+                    </button>
+                  )}
+                  <button onClick={migrarTodos}
+                    className="px-3 py-1.5 rounded-xl text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition-colors"
+                  >
+                    Migrar todos →
+                  </button>
+                </div>
               </div>
             )}
 
-            {/* Pergunta principal */}
-            <div>
-              <h2 className="text-base font-semibold text-white mb-1">
-                {modo === 'atual'
-                  ? `Como está a equipe de ${setorSelecionado.nome} hoje?`
-                  : `Se todos os ${totalMigrar} funcionários migrarem para 5x2…`}
-              </h2>
-              <p className="text-sm text-gray-400 mb-4">
-                {modo === 'atual'
-                  ? 'Cobertura no pior dia (quando mais pessoas estão de folga ao mesmo tempo).'
-                  : `Cada pessoa trabalhará 5 dias e folga 2. Veja o impacto por posição.`}
-              </p>
-
-              {/* Cards de posição */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {resultadoAtual.map((atual, i) => (
-                  <PosicaoCard
-                    key={atual.id}
-                    atual={atual}
-                    projetado={resultadoProjetado[i] ?? null}
-                    modoComparacao={modo === '5x2'}
-                  />
-                ))}
-              </div>
+            {/* Cards de posição */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {setorSelecionado.posicoes.map(pos => (
+                <PosicaoCard
+                  key={pos.id}
+                  pos={pos}
+                  migrar={modo === 'simular' ? (migracoes[pos.id] ?? 0) : 0}
+                  onMigrar={v => handleMigrar(pos.id, v)}
+                  modoSimulacao={modo === 'simular'}
+                />
+              ))}
             </div>
 
             {/* Pontos de atenção */}
             {totalGargalos + totalAtencao > 0 && (
               <div className={`rounded-2xl p-4 border space-y-3 ${
-                totalGargalos > 0
-                  ? 'bg-red-500/5 border-red-500/20'
-                  : 'bg-amber-500/5 border-amber-500/20'
+                totalGargalos > 0 ? 'bg-red-500/5 border-red-500/20' : 'bg-amber-500/5 border-amber-500/20'
               }`}>
                 <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                   <AlertTriangle className={`w-4 h-4 ${totalGargalos > 0 ? 'text-red-400' : 'text-amber-400'}`} />
@@ -492,23 +480,23 @@ export default function SimulacaoPage() {
                 <div>
                   <p className="text-green-400 font-semibold text-sm">Cobertura adequada!</p>
                   <p className="text-gray-400 text-xs mt-0.5">
-                    {modo === 'atual'
-                      ? 'Todas as posições têm cobertura suficiente mesmo no pior dia.'
-                      : 'A migração não gera nenhum risco operacional neste setor.'}
+                    {modo === 'simular' && totalMigrando > 0
+                      ? 'A migração proposta não gera nenhum risco operacional.'
+                      : 'Todas as posições têm cobertura suficiente mesmo no pior dia.'}
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Impacto financeiro (só mostra se há custo) */}
-            {custoAdicionalMensal > 0 && (
+            {/* Impacto financeiro */}
+            {custoMensal > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
                   <div className="flex items-center gap-2 mb-2">
                     <DollarSign className="w-4 h-4 text-amber-400" />
                     <p className="text-xs text-gray-400 uppercase tracking-wider">Custo de reforço / mês</p>
                   </div>
-                  <p className="text-2xl font-bold text-amber-400">{fmt(custoAdicionalMensal)}</p>
+                  <p className="text-2xl font-bold text-amber-400">{fmt(custoMensal)}</p>
                   <p className="text-xs text-gray-500 mt-1">estimativa para cobrir os gargalos</p>
                 </div>
                 <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
@@ -516,13 +504,13 @@ export default function SimulacaoPage() {
                     <BarChart3 className="w-4 h-4 text-blue-400" />
                     <p className="text-xs text-gray-400 uppercase tracking-wider">Custo de reforço / ano</p>
                   </div>
-                  <p className="text-2xl font-bold text-blue-400">{fmt(custoAdicionalAnual)}</p>
+                  <p className="text-2xl font-bold text-blue-400">{fmt(custoAnual)}</p>
                   <p className="text-xs text-gray-500 mt-1">com 13°, férias e encargos</p>
                 </div>
               </div>
             )}
 
-            {/* Explicação técnica colapsável */}
+            {/* Explicação colapsável */}
             <button
               onClick={() => setShowExplicacao(v => !v)}
               className="w-full flex items-center justify-between px-4 py-3 bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl text-sm text-gray-400 hover:text-white hover:bg-[#222224] transition-colors"
@@ -535,15 +523,15 @@ export default function SimulacaoPage() {
               <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 text-sm text-gray-400 space-y-3">
                 <div className="flex gap-3">
                   <div className="w-3 h-3 rounded-full bg-amber-500 flex-shrink-0 mt-1" />
-                  <p><span className="text-amber-400 font-medium">Escala 6x1</span>: o funcionário trabalha 6 dias e folga 1. Em média, está presente 85,7% dos dias.</p>
+                  <p><span className="text-amber-400 font-medium">6x1</span>: trabalha 6 dias, folga 1. Presente em 85,7% dos dias.</p>
                 </div>
                 <div className="flex gap-3">
                   <div className="w-3 h-3 rounded-full bg-green-500 flex-shrink-0 mt-1" />
-                  <p><span className="text-green-400 font-medium">Escala 5x2</span>: trabalha 5 dias e folga 2. Presença em 71,4% dos dias.</p>
+                  <p><span className="text-green-400 font-medium">5x2</span>: trabalha 5 dias, folga 2. Presente em 71,4% dos dias.</p>
                 </div>
                 <div className="flex gap-3">
                   <div className="w-3 h-3 rounded-full bg-blue-500 flex-shrink-0 mt-1" />
-                  <p><span className="text-white font-medium">Pior dia garantido</span>: quantas pessoas estarão trabalhando no dia da semana com mais folgas simultâneas — assumindo distribuição ótima e rotativa.</p>
+                  <p><span className="text-white font-medium">Pior dia garantido</span>: quantas pessoas trabalham no dia com mais folgas simultâneas (distribuição ótima rotativa).</p>
                 </div>
                 <div className="flex gap-3">
                   <div className="w-3 h-3 rounded-full bg-red-500 flex-shrink-0 mt-1" />
@@ -566,10 +554,9 @@ export default function SimulacaoPage() {
         {setorSelecionado && setorSelecionado.posicoes.length === 0 && (
           <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-8 text-center">
             <Users className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-            <p className="text-gray-400 text-sm">Nenhuma posição cadastrada neste setor.</p>
-            <button
-              className="mt-3 text-amber-400 text-sm underline hover:text-amber-300"
-              onClick={() => router.push('/rh/quadro-ideal')}
+            <p className="text-gray-400 text-sm mb-3">Nenhuma posição cadastrada neste setor.</p>
+            <button onClick={() => router.push('/rh/quadro-ideal')}
+              className="text-amber-400 text-sm underline hover:text-amber-300"
             >
               Configurar Quadro Ideal →
             </button>
