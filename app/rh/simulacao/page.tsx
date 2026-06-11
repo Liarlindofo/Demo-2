@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useLoja, Loja } from '@/contexts/LojaContext';
 import {
   ArrowLeft, BarChart3, AlertTriangle, CheckCircle,
-  Users, RefreshCw, Plus, ChevronDown, ChevronUp,
+  Users, RefreshCw, Plus, ChevronDown, ChevronUp, TrendingUp,
 } from 'lucide-react';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -17,6 +17,14 @@ interface Funcionario {
   escala: string;
   turno: string;
   diasFolga: string[];
+  custoMensal: number;
+}
+
+interface ResultadoContratacao {
+  totalPessoas: number;
+  custoMensal: number;
+  custoAnual: number;
+  detalhePorTurno: Array<{ turno: string; qtd: number; custoMensal: number }>;
 }
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
@@ -52,6 +60,62 @@ function calcularCobertura(
   return resultado;
 }
 
+// ─── Helpers de custo para insights ──────────────────────────────────────────
+
+const FATOR_ANUAL = 14.33;
+const FMT_BRL = (v: number) =>
+  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+
+function custoMedioPorTurno(funcionarios: Funcionario[]): Record<string, number> {
+  const porTurno: Record<string, number[]> = {};
+  for (const f of funcionarios) {
+    if (!porTurno[f.turno]) porTurno[f.turno] = [];
+    if (f.custoMensal > 0) porTurno[f.turno].push(f.custoMensal);
+  }
+  const resultado: Record<string, number> = {};
+  for (const [turno, custos] of Object.entries(porTurno)) {
+    resultado[turno] = custos.length > 0
+      ? custos.reduce((a, b) => a + b, 0) / custos.length
+      : 2500;
+  }
+  return resultado;
+}
+
+function deficitMaxPorTurno(
+  cobertura: Record<string, Record<string, Funcionario[]>>,
+  ideais: Record<string, number>,
+): Record<string, number> {
+  const deficit: Record<string, number> = {};
+  for (const turno of Object.keys(ideais)) {
+    const ideal = ideais[turno] ?? 0;
+    if (ideal === 0) continue;
+    let maxDef = 0;
+    for (const dia of DIAS) {
+      const presentes = cobertura[dia]?.[turno]?.length ?? 0;
+      maxDef = Math.max(maxDef, ideal - presentes);
+    }
+    if (maxDef > 0) deficit[turno] = maxDef;
+  }
+  return deficit;
+}
+
+function calcularInsight(
+  deficit: Record<string, number>,
+  medioTurno: Record<string, number>,
+): ResultadoContratacao {
+  const CUSTO_FALLBACK = 2500;
+  let totalPessoas = 0;
+  let custoMensal = 0;
+  const detalhePorTurno: ResultadoContratacao['detalhePorTurno'] = [];
+  for (const [turno, qtd] of Object.entries(deficit)) {
+    const custo = medioTurno[turno] ?? CUSTO_FALLBACK;
+    totalPessoas += qtd;
+    custoMensal += qtd * custo;
+    detalhePorTurno.push({ turno, qtd, custoMensal: qtd * custo });
+  }
+  return { totalPessoas, custoMensal, custoAnual: custoMensal * FATOR_ANUAL, detalhePorTurno };
+}
+
 // ─── Sub-componentes ─────────────────────────────────────────────────────────
 
 function LojaSelector({ lojas, lojaSelecionada, setLojaSelecionada }: {
@@ -70,6 +134,120 @@ function LojaSelector({ lojas, lojaSelecionada, setLojaSelecionada }: {
           {loja.nome}
         </button>
       ))}
+    </div>
+  );
+}
+
+function InsightsSimulacao({
+  insightAtual,
+  insightSimulado,
+  totalMigrando,
+}: {
+  insightAtual: ResultadoContratacao;
+  insightSimulado: ResultadoContratacao | null;
+  totalMigrando: number;
+}) {
+  const delta = insightSimulado
+    ? insightSimulado.totalPessoas - insightAtual.totalPessoas
+    : 0;
+  const deltaCusto = insightSimulado
+    ? insightSimulado.custoMensal - insightAtual.custoMensal
+    : 0;
+
+  return (
+    <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-[#2a2a2e] flex items-center gap-2">
+        <TrendingUp className="w-4 h-4 text-amber-400" />
+        <h2 className="text-sm font-semibold text-white">Insights de custo</h2>
+        <span className="text-xs text-gray-500 ml-1">— estimativa baseada nos salários cadastrados</span>
+      </div>
+
+      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Card 1: Quadro ideal sem restrição (cobertura atual) */}
+        <div className="bg-[#252528] rounded-xl p-4 space-y-1">
+          <p className="text-xs font-medium text-gray-400 mb-2">
+            Para chegar ao quadro ideal hoje
+          </p>
+          {insightAtual.totalPessoas === 0 ? (
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+              <p className="text-sm text-green-400 font-medium">Quadro já está ideal</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-2xl font-bold text-white leading-none">
+                +{insightAtual.totalPessoas} contratação{insightAtual.totalPessoas !== 1 ? 'ões' : ''}
+              </p>
+              <p className="text-lg font-semibold text-amber-400">
+                {FMT_BRL(insightAtual.custoMensal)}
+                <span className="text-sm text-gray-500 font-normal">/mês</span>
+              </p>
+              <p className="text-xs text-gray-500">{FMT_BRL(insightAtual.custoAnual)}/ano</p>
+              {insightAtual.detalhePorTurno.length > 0 && (
+                <div className="pt-2 mt-2 border-t border-[#2a2a2e] space-y-1">
+                  {insightAtual.detalhePorTurno.map(d => (
+                    <div key={d.turno} className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">{TURNO_LABEL[d.turno] ?? d.turno}</span>
+                      <span className="text-gray-300">+{d.qtd} · {FMT_BRL(d.custoMensal)}/mês</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Card 2: Com a migração selecionada */}
+        <div className={`rounded-xl p-4 space-y-1 ${
+          totalMigrando > 0
+            ? 'bg-amber-500/5 border border-amber-500/20'
+            : 'bg-[#252528] opacity-60'
+        }`}>
+          <p className="text-xs font-medium text-amber-400 mb-2">
+            Para manter ideal com migração 5x2
+          </p>
+          {totalMigrando === 0 ? (
+            <p className="text-xs text-gray-500 italic">
+              Selecione funcionários acima para ver o impacto.
+            </p>
+          ) : insightSimulado === null || insightSimulado.totalPessoas === 0 ? (
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+              <p className="text-sm text-green-400 font-medium">Sem contratações necessárias</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-2xl font-bold text-white leading-none">
+                +{insightSimulado.totalPessoas} contratação{insightSimulado.totalPessoas !== 1 ? 'ões' : ''}
+              </p>
+              <p className="text-lg font-semibold text-amber-400">
+                {FMT_BRL(insightSimulado.custoMensal)}
+                <span className="text-sm text-gray-500 font-normal">/mês</span>
+              </p>
+              <p className="text-xs text-gray-500">{FMT_BRL(insightSimulado.custoAnual)}/ano</p>
+              {(delta !== 0 || deltaCusto !== 0) && (
+                <p className={`text-xs font-medium mt-1 ${delta > 0 ? 'text-red-400' : delta < 0 ? 'text-green-400' : 'text-gray-500'}`}>
+                  {delta > 0
+                    ? `+${delta} pessoa${delta !== 1 ? 's' : ''} e +${FMT_BRL(deltaCusto)}/mês a mais que sem migração`
+                    : delta < 0
+                    ? `${delta} pessoa${Math.abs(delta) !== 1 ? 's' : ''} e ${FMT_BRL(deltaCusto)}/mês a menos que sem migração`
+                    : `Mesmo custo que sem migração`}
+                </p>
+              )}
+              {insightSimulado.detalhePorTurno.length > 0 && (
+                <div className="pt-2 mt-2 border-t border-amber-500/10 space-y-1">
+                  {insightSimulado.detalhePorTurno.map(d => (
+                    <div key={d.turno} className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">{TURNO_LABEL[d.turno] ?? d.turno}</span>
+                      <span className="text-gray-300">+{d.qtd} · {FMT_BRL(d.custoMensal)}/mês</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -175,6 +353,20 @@ export default function SimulacaoPage() {
   // Funcionários 6x1 (candidatos a migrar)
   const f6x1 = funcionarios.filter(f => f.escala === '6x1');
 
+  const totalMigrando = Object.values(migrando).filter(Boolean).length;
+
+  // ─── Cálculo de insights de custo ────────────────────────────────────────
+  const temIdeais = Object.keys(ideais).length > 0;
+  const medioTurno = custoMedioPorTurno(funcionarios);
+
+  const deficitAtual = temIdeais ? deficitMaxPorTurno(coberturaAtual, ideais) : {};
+  const insightAtual = calcularInsight(deficitAtual, medioTurno);
+
+  const deficitSimulado = temIdeais && totalMigrando > 0
+    ? deficitMaxPorTurno(coberturaSimulada, ideais)
+    : null;
+  const insightSimulado = deficitSimulado ? calcularInsight(deficitSimulado, medioTurno) : null;
+
   // Conta dias com gap na cobertura simulada
   const diasComGap = modoSimulacao
     ? DIAS.filter(dia => turnos.some(t => {
@@ -195,8 +387,6 @@ export default function SimulacaoPage() {
         }),
       }
     : null;
-
-  const totalMigrando = Object.values(migrando).filter(Boolean).length;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
@@ -523,6 +713,15 @@ export default function SimulacaoPage() {
                   </div>
                 )}
               </div>
+            )}
+
+            {/* Insights de custo */}
+            {modoSimulacao && temIdeais && (
+              <InsightsSimulacao
+                insightAtual={insightAtual}
+                insightSimulado={insightSimulado}
+                totalMigrando={totalMigrando}
+              />
             )}
 
             {/* Resumo da simulação */}
