@@ -16,6 +16,8 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  Plus,
+  Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNotification } from "@/components/ui/notification";
@@ -82,6 +84,17 @@ export default function UsuariosPage() {
   const [saving, setSaving] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Estado do modal de novo usuário
+  const [showNewUserModal, setShowNewUserModal] = useState(false);
+  const [newUser, setNewUser] = useState({
+    email: "",
+    displayName: "",
+    password: "",
+    confirmPassword: "",
+    tools: [] as SystemTool[],
+  });
+  const [creatingUser, setCreatingUser] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -284,6 +297,58 @@ export default function UsuariosPage() {
     return user.toolPermissions?.find((p) => p.tool === tool)?.isEnabled ?? false;
   }
 
+  function toggleNewUserTool(tool: SystemTool) {
+    setNewUser((prev) => ({
+      ...prev,
+      tools: prev.tools.includes(tool)
+        ? prev.tools.filter((t) => t !== tool)
+        : [...prev.tools, tool],
+    }));
+  }
+
+  async function createUser() {
+    if (!newUser.email || !newUser.password) {
+      showNotification("Email e senha são obrigatórios", "error");
+      return;
+    }
+    if (newUser.password.length < 6) {
+      showNotification("Senha deve ter pelo menos 6 caracteres", "error");
+      return;
+    }
+    if (newUser.password !== newUser.confirmPassword) {
+      showNotification("Senhas não coincidem", "error");
+      return;
+    }
+
+    try {
+      setCreatingUser(true);
+      const response = await fetch("/api/calenza-adm/usuarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: newUser.email,
+          displayName: newUser.displayName || undefined,
+          password: newUser.password,
+          tools: newUser.tools,
+        }),
+      });
+
+      if (response.ok) {
+        showNotification("Usuário criado com sucesso!", "success");
+        setShowNewUserModal(false);
+        setNewUser({ email: "", displayName: "", password: "", confirmPassword: "", tools: [] });
+        loadUsers();
+      } else {
+        const error = await response.json();
+        showNotification(error.error || "Erro ao criar usuário", "error");
+      }
+    } catch {
+      showNotification("Erro ao criar usuário", "error");
+    } finally {
+      setCreatingUser(false);
+    }
+  }
+
   async function handleLogout() {
     try {
       await fetch("/api/calenza-adm/logout", { method: "POST" });
@@ -308,7 +373,16 @@ export default function UsuariosPage() {
       
       <main className="lg:ml-64 p-6">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold mb-6">Gerenciamento de Usuários</h1>
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-3xl font-bold">Gerenciamento de Usuários</h1>
+            <Button
+              onClick={() => setShowNewUserModal(true)}
+              className="bg-[#10b981] hover:bg-[#059669] text-white gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Nova Empresa
+            </Button>
+          </div>
 
           {/* Barra de busca */}
           <div className="mb-6">
@@ -534,6 +608,141 @@ export default function UsuariosPage() {
                 }}
                 variant="outline"
                 className="flex-1 border-[#374151]"
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de novo usuário/empresa */}
+      {showNewUserModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6 max-w-lg w-full my-4">
+            <div className="flex items-center gap-3 mb-6">
+              <Building2 className="h-6 w-6 text-[#10b981]" />
+              <h2 className="text-2xl font-bold">Nova Empresa / Usuário</h2>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Email <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  placeholder="empresa@exemplo.com"
+                  className="w-full px-3 py-2 bg-[#0f0f10] border border-[#374151] rounded-lg focus:outline-none focus:border-[#10b981]"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Nome / Empresa</label>
+                <input
+                  type="text"
+                  value={newUser.displayName}
+                  onChange={(e) => setNewUser({ ...newUser, displayName: e.target.value })}
+                  placeholder="Nome do responsável ou da empresa"
+                  className="w-full px-3 py-2 bg-[#0f0f10] border border-[#374151] rounded-lg focus:outline-none focus:border-[#10b981]"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Senha <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={newUser.password}
+                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full px-3 py-2 bg-[#0f0f10] border border-[#374151] rounded-lg focus:outline-none focus:border-[#10b981]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Confirmar Senha</label>
+                  <input
+                    type="password"
+                    value={newUser.confirmPassword}
+                    onChange={(e) =>
+                      setNewUser({ ...newUser, confirmPassword: e.target.value })
+                    }
+                    placeholder="Repita a senha"
+                    className="w-full px-3 py-2 bg-[#0f0f10] border border-[#374151] rounded-lg focus:outline-none focus:border-[#10b981]"
+                  />
+                </div>
+              </div>
+
+              {/* Seleção de ferramentas */}
+              <div>
+                <p className="text-sm font-medium mb-2">Ferramentas Liberadas</p>
+                <div className="space-y-3">
+                  {TOOL_GROUPS.map((group) => (
+                    <div key={group.label}>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider mb-1.5">
+                        {group.label}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {group.tools.map((tool) => {
+                          const active = newUser.tools.includes(tool);
+                          return (
+                            <button
+                              key={tool}
+                              type="button"
+                              onClick={() => toggleNewUserTool(tool)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                active
+                                  ? "bg-green-900/30 text-green-400 border border-green-700 hover:bg-green-900/50"
+                                  : "bg-gray-800 text-gray-500 border border-gray-700 hover:bg-gray-700"
+                              }`}
+                            >
+                              {active ? (
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                              ) : (
+                                <LockIcon className="h-3.5 w-3.5" />
+                              )}
+                              {TOOL_LABELS[tool]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <Button
+                onClick={createUser}
+                disabled={creatingUser}
+                className="flex-1 bg-[#10b981] hover:bg-[#059669]"
+              >
+                {creatingUser ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Criar Usuário
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowNewUserModal(false);
+                  setNewUser({
+                    email: "",
+                    displayName: "",
+                    password: "",
+                    confirmPassword: "",
+                    tools: [],
+                  });
+                }}
+                variant="outline"
+                className="flex-1 border-[#374151]"
+                disabled={creatingUser}
               >
                 Cancelar
               </Button>

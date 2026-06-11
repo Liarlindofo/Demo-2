@@ -2,8 +2,10 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAdminAuth, hasPermission } from '@/lib/auth/adminAuth';
+import { requireAdminAuth, hasPermission, createAuditLog } from '@/lib/auth/adminAuth';
 import { SystemTool, Permission } from '@/types/admin';
+import { stackServerApp } from '@/stack';
+import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 
 // GET - Listar todos os usuários
 export async function GET(request: NextRequest) {
@@ -107,6 +109,129 @@ export async function GET(request: NextRequest) {
     console.error('Erro ao listar usuários:', error);
     return NextResponse.json(
       { error: 'Erro ao listar usuários', details: error?.message },
+      { status: 500 }
+    );
+  }
+}
+
+// POST - Criar novo usuário/empresa
+export async function POST(request: NextRequest) {
+  try {
+    const session = await requireAdminAuth(request);
+    if (session instanceof NextResponse) return session;
+
+    if (!(await hasPermission(session, Permission.EDIT_USERS))) {
+      return NextResponse.json(
+        { error: 'Sem permissão para criar usuários' },
+        { status: 403 }
+      );
+    }
+
+    const body = await request.json();
+    const { email, displayName, password, tools } = body as {
+      email: string;
+      displayName?: string;
+      password: string;
+      tools?: string[];
+    };
+
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: 'Email e senha são obrigatórios' },
+        { status: 400 }
+      );
+    }
+    if (password.length < 6) {
+      return NextResponse.json(
+        { error: 'Senha deve ter pelo menos 6 caracteres' },
+        { status: 400 }
+      );
+    }
+
+    // Verificar se email já existe no banco
+    const existingStackUser = await prisma.stackUser.findFirst({
+      where: { primaryEmail: { equals: email, mode: 'insensitive' } },
+    });
+    if (existingStackUser) {
+      return NextResponse.json(
+        { error: 'Já existe um usuário com este email' },
+        { status: 409 }
+      );
+    }
+
+    // Criar usuário no Stack Auth
+    const stackUser = await stackServerApp.createUser({
+      primaryEmail: email,
+      primaryEmailAuthEnabled: true,
+      password,
+      displayName: displayName || undefined,
+      primaryEmailVerified: true,
+    });
+
+    // Sincronizar com banco local (cria StackUser + User no Prisma)
+    await syncStackAuthUser({
+      id: stackUser.id,
+      primaryEmail: stackUser.primaryEmail,
+      displayName: stackUser.displayName,
+      profileImageUrl: null,
+      primaryEmailVerified: new Date(),
+    });
+
+    // Buscar o StackUser criado no banco
+    const dbStackUser = await prisma.stackUser.findUnique({
+      where: { id: stackUser.id },
+    });
+    if (!dbStackUser) {
+      return NextResponse.json(
+        { error: 'Erro ao sincronizar usuário com banco de dados' },
+        { status: 500 }
+      );
+    }
+
+    // Criar permissões de ferramentas para o novo usuário
+    const allTools = Object.values(SystemTool);
+    const enabledTools = new Set(tools || []);
+    await prisma.userToolPermission.createMany({
+      data: allTools.map((tool) => ({
+        stackUserId: dbStackUser.id,
+        tool,
+        isEnabled: enabledTools.has(tool),
+      })),
+      skipDuplicates: true,
+    });
+
+    // Log de auditoria
+    try {
+      await createAuditLog({
+        userId: session.userId,
+        action: 'user_created',
+        entityType: 'StackUser',
+        entityId: dbStackUser.id,
+        details: { email, displayName, createdBy: session.email },
+        ipAddress:
+          request.headers.get('x-forwarded-for') ||
+          request.headers.get('x-real-ip') ||
+          null,
+        userAgent: request.headers.get('user-agent') || null,
+      });
+    } catch (logError) {
+      console.error('Erro ao criar log de auditoria:', logError);
+    }
+
+    return NextResponse.json({ success: true, userId: dbStackUser.id }, { status: 201 });
+  } catch (error: any) {
+    console.error('Erro ao criar usuário:', error);
+
+    const msg: string = error?.message || '';
+    if (msg.includes('already exists') || msg.includes('já existe')) {
+      return NextResponse.json(
+        { error: 'Já existe um usuário com este email' },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: 'Erro ao criar usuário', details: msg },
       { status: 500 }
     );
   }
