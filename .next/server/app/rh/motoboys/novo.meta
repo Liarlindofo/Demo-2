@@ -1,0 +1,17 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/rh/layout,_N_T_/rh/motoboys/layout,_N_T_/rh/motoboys/novo/layout,_N_T_/rh/motoboys/novo/page,_N_T_/rh/motoboys/novo"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/rh/motoboys/novo/__PAGE__",
+    "/rh/motoboys/novo",
+    "/rh/motoboys",
+    "/rh",
+    "/_index",
+    "/_head"
+  ]
+}

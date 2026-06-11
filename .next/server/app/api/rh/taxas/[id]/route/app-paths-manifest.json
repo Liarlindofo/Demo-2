@@ -1,0 +1,3 @@
+{
+  "/api/rh/taxas/[id]/route": "app/api/rh/taxas/[id]/route.js"
+}

@@ -1,0 +1,11 @@
+var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/saipos/sync/route.js")
+R.c("server/chunks/drin-platform_src_lib_saipos-api_ts_d2e21a51._.js")
+R.c("server/chunks/797a3_next_dist_adc3ff95._.js")
+R.c("server/chunks/[root-of-the-server]__566483d8._.js")
+R.c("server/chunks/797a3_next_8ffc8760._.js")
+R.c("server/chunks/[root-of-the-server]__174edc0b._.js")
+R.c("server/chunks/drin-platform_3df58451._.js")
+R.c("server/chunks/797a3_next_92c518d3._.js")
+R.c("server/chunks/drin-platform__next-internal_server_app_api_saipos_sync_route_actions_2c4f1261.js")
+R.m(236127)
+module.exports=R.m(236127).exports

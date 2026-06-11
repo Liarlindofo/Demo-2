@@ -1,0 +1,11 @@
+var R=require("../../../../../chunks/[turbopack]_runtime.js")("server/app/api/rider/quinzenas/[id]/route.js")
+R.c("server/chunks/[root-of-the-server]__295dacb6._.js")
+R.c("server/chunks/797a3_next_8ffc8760._.js")
+R.c("server/chunks/drin-platform_src_lib_rider-auth_ts_27b10942._.js")
+R.c("server/chunks/797a3_47fe971b._.js")
+R.c("server/chunks/[root-of-the-server]__174edc0b._.js")
+R.c("server/chunks/797a3_next_dist_adc3ff95._.js")
+R.c("server/chunks/797a3_next_92c518d3._.js")
+R.c("server/chunks/0038a__next-internal_server_app_api_rider_quinzenas_[id]_route_actions_886d396e.js")
+R.m(511510)
+module.exports=R.m(511510).exports

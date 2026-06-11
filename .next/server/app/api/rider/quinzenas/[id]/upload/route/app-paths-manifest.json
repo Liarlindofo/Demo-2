@@ -1,0 +1,3 @@
+{
+  "/api/rider/quinzenas/[id]/upload/route": "app/api/rider/quinzenas/[id]/upload/route.js"
+}

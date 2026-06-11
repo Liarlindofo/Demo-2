@@ -1,0 +1,3 @@
+{
+  "/api/rh/funcionarios/[id]/bonificacoes-historico/route": "app/api/rh/funcionarios/[id]/bonificacoes-historico/route.js"
+}

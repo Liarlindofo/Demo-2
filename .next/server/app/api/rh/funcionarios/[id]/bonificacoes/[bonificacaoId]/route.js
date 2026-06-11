@@ -1,0 +1,10 @@
+var R=require("../../../../../../../chunks/[turbopack]_runtime.js")("server/app/api/rh/funcionarios/[id]/bonificacoes/[bonificacaoId]/route.js")
+R.c("server/chunks/[root-of-the-server]__ea59dd5f._.js")
+R.c("server/chunks/797a3_next_dist_adc3ff95._.js")
+R.c("server/chunks/797a3_next_92c518d3._.js")
+R.c("server/chunks/[root-of-the-server]__174edc0b._.js")
+R.c("server/chunks/drin-platform_3df58451._.js")
+R.c("server/chunks/797a3_next_8ffc8760._.js")
+R.c("server/chunks/43509_api_rh_funcionarios_[id]_bonificacoes_[bonificacaoId]_route_actions_132e0c83.js")
+R.m(548594)
+module.exports=R.m(548594).exports

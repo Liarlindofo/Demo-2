@@ -1,0 +1,11 @@
+var R=require("../../../../../chunks/[turbopack]_runtime.js")("server/app/api/rh/documentos/upload/route.js")
+R.c("server/chunks/[root-of-the-server]__4cb1d277._.js")
+R.c("server/chunks/797a3_next_dist_adc3ff95._.js")
+R.c("server/chunks/797a3_next_92c518d3._.js")
+R.c("server/chunks/[root-of-the-server]__174edc0b._.js")
+R.c("server/chunks/797a3_@supabase_supabase-js_dist_index_mjs_f7cc282f._.js")
+R.c("server/chunks/drin-platform_3df58451._.js")
+R.c("server/chunks/797a3_next_8ffc8760._.js")
+R.c("server/chunks/0038a__next-internal_server_app_api_rh_documentos_upload_route_actions_426be322.js")
+R.m(567036)
+module.exports=R.m(567036).exports

@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/rh/layout,_N_T_/rh/quadro-ideal/layout,_N_T_/rh/quadro-ideal/page,_N_T_/rh/quadro-ideal"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/rh/quadro-ideal/__PAGE__",
+    "/rh/quadro-ideal",
+    "/rh",
+    "/_index",
+    "/_head"
+  ]
+}

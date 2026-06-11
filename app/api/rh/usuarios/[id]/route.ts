@@ -8,13 +8,14 @@ export const dynamic = 'force-dynamic';
 // GET /api/rh/usuarios/[id]
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { ctx, error } = await requireRhPermission(P.USERS_MANAGE);
   if (error) return error;
 
+  const { id } = await params;
   const member = await prisma.rhTeamMember.findFirst({
-    where: { id: params.id, tenantUserId: ctx.userId },
+    where: { id, tenantUserId: ctx.userId },
     include: { permissions: { select: { permission: true } } },
   });
 
@@ -34,20 +35,21 @@ export async function GET(
 // PATCH /api/rh/usuarios/[id] — ativar/desativar
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { ctx, error } = await requireRhPermission(P.USERS_MANAGE);
   if (error) return error;
 
+  const { id } = await params;
   const member = await prisma.rhTeamMember.findFirst({
-    where: { id: params.id, tenantUserId: ctx.userId },
+    where: { id, tenantUserId: ctx.userId },
   });
   if (!member) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
 
   const body = await req.json() as { isActive?: boolean; displayName?: string };
 
   const updated = await prisma.rhTeamMember.update({
-    where: { id: params.id },
+    where: { id },
     data: {
       ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),
       ...(body.displayName !== undefined ? { displayName: body.displayName } : {}),
@@ -60,17 +62,18 @@ export async function PATCH(
 // DELETE /api/rh/usuarios/[id] — remover convite ou membro
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { ctx, error } = await requireRhPermission(P.USERS_MANAGE);
   if (error) return error;
 
+  const { id } = await params;
   const member = await prisma.rhTeamMember.findFirst({
-    where: { id: params.id, tenantUserId: ctx.userId },
+    where: { id, tenantUserId: ctx.userId },
   });
   if (!member) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
 
-  await prisma.rhTeamMember.delete({ where: { id: params.id } });
+  await prisma.rhTeamMember.delete({ where: { id } });
 
   return NextResponse.json({ ok: true });
 }

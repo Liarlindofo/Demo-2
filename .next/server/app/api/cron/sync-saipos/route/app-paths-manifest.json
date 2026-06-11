@@ -1,0 +1,3 @@
+{
+  "/api/cron/sync-saipos/route": "app/api/cron/sync-saipos/route.js"
+}

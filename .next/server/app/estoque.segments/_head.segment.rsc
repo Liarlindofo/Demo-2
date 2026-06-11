@@ -1,0 +1,8 @@
+1:"$Sreact.fragment"
+2:I[904441,["/_next/static/chunks/84239fee70c27dfc.js","/_next/static/chunks/591589eca201f6d4.js"],"ViewportBoundary"]
+4:I[904441,["/_next/static/chunks/84239fee70c27dfc.js","/_next/static/chunks/591589eca201f6d4.js"],"MetadataBoundary"]
+5:"$Sreact.suspense"
+7:I[508737,["/_next/static/chunks/84239fee70c27dfc.js","/_next/static/chunks/591589eca201f6d4.js"],"IconMark"]
+0:{"buildId":"2DqSQ6WqIPbPs3gOX19MF","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":"$@3"}],["$","div",null,{"hidden":true,"children":["$","$L4",null,{"children":["$","$5",null,{"name":"Next.Metadata","children":"$@6"}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"loading":null,"isPartial":false}
+3:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
+6:[["$","title","0",{"children":"Plateful Estoque"}],["$","meta","1",{"name":"description","content":"Contagem semanal de insumos"}],["$","link","2",{"rel":"manifest","href":"/manifest.json"}],["$","link","3",{"rel":"shortcut icon","href":"/favicon.png","type":"image/png"}],["$","link","4",{"rel":"icon","href":"/favicon.ico?favicon.417a0608.ico","sizes":"1536x1024","type":"image/x-icon"}],["$","link","5",{"rel":"icon","href":"/favicon.png","sizes":"32x32","type":"image/png"}],["$","link","6",{"rel":"icon","href":"/icon-192.png","sizes":"192x192","type":"image/png"}],["$","link","7",{"rel":"icon","href":"/icon-512.png","sizes":"512x512","type":"image/png"}],["$","link","8",{"rel":"icon","href":"/favicon.svg","type":"image/svg+xml"}],["$","link","9",{"rel":"apple-touch-icon","href":"/apple-touch-icon.png","sizes":"180x180","type":"image/png"}],["$","$L7","10",{}]]

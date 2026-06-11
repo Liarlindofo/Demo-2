@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/etiquetagem/layout,_N_T_/etiquetagem/produtos/layout,_N_T_/etiquetagem/produtos/page,_N_T_/etiquetagem/produtos"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/etiquetagem/produtos/__PAGE__",
+    "/etiquetagem/produtos",
+    "/etiquetagem",
+    "/_index",
+    "/_head"
+  ]
+}

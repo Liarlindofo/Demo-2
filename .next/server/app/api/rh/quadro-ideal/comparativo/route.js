@@ -1,0 +1,10 @@
+var R=require("../../../../../chunks/[turbopack]_runtime.js")("server/app/api/rh/quadro-ideal/comparativo/route.js")
+R.c("server/chunks/[root-of-the-server]__838d2f31._.js")
+R.c("server/chunks/797a3_next_dist_adc3ff95._.js")
+R.c("server/chunks/797a3_next_92c518d3._.js")
+R.c("server/chunks/797a3_next_8ffc8760._.js")
+R.c("server/chunks/drin-platform_3df58451._.js")
+R.c("server/chunks/[root-of-the-server]__174edc0b._.js")
+R.c("server/chunks/0a1fd_next-internal_server_app_api_rh_quadro-ideal_comparativo_route_actions_623118cc.js")
+R.m(939009)
+module.exports=R.m(939009).exports

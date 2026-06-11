@@ -8,13 +8,14 @@ export const dynamic = 'force-dynamic';
 // GET /api/rh/usuarios/[id]/permissoes — retorna todas as permissões com estado
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { ctx, error } = await requireRhPermission(P.USERS_MANAGE);
   if (error) return error;
 
+  const { id } = await params;
   const member = await prisma.rhTeamMember.findFirst({
-    where: { id: params.id, tenantUserId: ctx.userId },
+    where: { id, tenantUserId: ctx.userId },
     include: { permissions: true },
   });
   if (!member) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
@@ -40,11 +41,12 @@ export async function GET(
 // POST /api/rh/usuarios/[id]/permissoes — toggle de uma permissão
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { ctx, error } = await requireRhPermission(P.USERS_MANAGE);
   if (error) return error;
 
+  const { id } = await params;
   const body = await req.json() as { permission: string; active: boolean };
 
   if (!body.permission) {
@@ -57,25 +59,23 @@ export async function POST(
   }
 
   const member = await prisma.rhTeamMember.findFirst({
-    where: { id: params.id, tenantUserId: ctx.userId },
+    where: { id, tenantUserId: ctx.userId },
   });
   if (!member) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
 
   if (body.active) {
-    // Ativar permissão (upsert para evitar conflito)
     await prisma.rhPermission.upsert({
-      where: { memberId_permission: { memberId: params.id, permission: body.permission } },
+      where: { memberId_permission: { memberId: id, permission: body.permission } },
       create: {
-        memberId: params.id,
+        memberId: id,
         permission: body.permission,
         grantedBy: ctx.stackUserId,
       },
       update: { grantedBy: ctx.stackUserId, grantedAt: new Date() },
     });
   } else {
-    // Desativar permissão
     await prisma.rhPermission.deleteMany({
-      where: { memberId: params.id, permission: body.permission },
+      where: { memberId: id, permission: body.permission },
     });
   }
 
