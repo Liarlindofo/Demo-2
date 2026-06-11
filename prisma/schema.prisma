@@ -73,6 +73,7 @@ model User {
   rhTransferencias       RhTransferenciaLoja[]
   rhTaxasLoja            RhTaxaLoja[]
   deliveryRiders         DeliveryRider[]
+  rhTeamMemberships      RhTeamMember[]
 
   @@map("users")
 }
@@ -1202,6 +1203,44 @@ model RiderDocument {
   @@index([riderId])
   @@index([userId])
   @@map("rider_documents")
+}
+
+// ─── Sistema de equipe RH ────────────────────────────────────────────────────
+
+// Membros da equipe de RH convidados pelo Admin (owner) para acessar seus dados
+model RhTeamMember {
+  id           String         @id @default(cuid())
+  tenantUserId String         // User.id do dono dos dados (Admin)
+  stackUserId  String?        // Stack Auth id do membro (null até aceitar convite)
+  email        String
+  displayName  String?
+  isActive     Boolean        @default(true)
+  invitedBy    String         // Stack Auth id de quem convidou
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  tenantUser   User           @relation(fields: [tenantUserId], references: [id], onDelete: Cascade)
+  permissions  RhPermission[]
+
+  @@unique([tenantUserId, email])
+  @@index([stackUserId])
+  @@index([tenantUserId])
+  @@map("rh_team_members")
+}
+
+// Permissões granulares por membro da equipe
+model RhPermission {
+  id         String       @id @default(cuid())
+  memberId   String
+  permission String
+  grantedBy  String       // Stack Auth id de quem concedeu
+  grantedAt  DateTime     @default(now())
+
+  member     RhTeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, permission])
+  @@index([memberId])
+  @@map("rh_permissions")
 }
 
 // Permissões de ferramentas para usuários do sistema (stack_users)

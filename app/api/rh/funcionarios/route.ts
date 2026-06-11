@@ -1,23 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 import { enrichFuncionario, enrichFuncionarios } from '@/lib/rh-funcionario';
 import { limparCPF, validarCPF, validarDataNascimento } from '@/lib/validacoes';
+import { requireRhPermission } from '@/lib/rh-auth';
+import { P } from '@/lib/rh-permissions';
 
 export const dynamic = 'force-dynamic';
-
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 function calcDatasExperiencia(dataAdmissao: Date) {
   const d1 = new Date(dataAdmissao);
@@ -40,8 +28,8 @@ function parseComposicaoBody(body: Record<string, unknown>) {
 
 export async function GET(req: NextRequest) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const { ctx, error } = await requireRhPermission(P.EMPLOYEES_VIEW);
+    if (error) return error;
 
     const { searchParams } = req.nextUrl;
     const lojaId = searchParams.get('lojaId');
@@ -51,7 +39,7 @@ export async function GET(req: NextRequest) {
     const ativoParam = searchParams.get('ativo');
     const search = searchParams.get('search');
 
-    const where: Record<string, unknown> = { userId: dbUser.id };
+    const where: Record<string, unknown> = { userId: ctx.userId };
 
     if (lojaId) where.lojaId = lojaId;
     if (cargoId) where.cargoId = cargoId;
@@ -94,8 +82,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: Request) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const { ctx, error: ctxError } = await requireRhPermission(P.EMPLOYEES_CREATE);
+    if (ctxError) return ctxError;
+    const dbUser = { id: ctx.userId };
 
     const body = await req.json();
     const {

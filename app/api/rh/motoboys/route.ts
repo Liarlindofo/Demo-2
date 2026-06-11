@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getRhDbUser } from '@/lib/rh-api-auth';
+import { requireRhPermission } from '@/lib/rh-auth';
+import { P } from '@/lib/rh-permissions';
 import { generateInviteToken } from '@/lib/rider-auth';
 
 export const dynamic = 'force-dynamic';
@@ -21,15 +22,15 @@ function validarCPF(cpf: string): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  const dbUser = await getRhDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const { ctx, error } = await requireRhPermission(P.RIDERS_VIEW);
+  if (error) return error;
 
   const lojaId = req.nextUrl.searchParams.get('lojaId');
   const status = req.nextUrl.searchParams.get('status');
 
   const riders = await prisma.deliveryRider.findMany({
     where: {
-      userId: dbUser.id,
+      userId: ctx.userId,
       ...(lojaId ? { lojaId } : {}),
       ...(status ? { status } : {}),
     },
@@ -42,8 +43,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const dbUser = await getRhDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const { ctx, error } = await requireRhPermission(P.RIDERS_CREATE);
+    if (error) return error;
 
     const body = await req.json() as {
       name: string; cpf: string; email: string;
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
 
     // Verificar se e-mail já existe
     const existente = await prisma.deliveryRider.findFirst({
-      where: { userId: dbUser.id, email: body.email.toLowerCase() },
+      where: { userId: ctx.userId, email: body.email.toLowerCase() },
     });
 
     if (existente) {
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest) {
 
     const rider = await prisma.deliveryRider.create({
       data: {
-        userId: dbUser.id,
+        userId: ctx.userId,
         lojaId: body.lojaId,
         name: body.name,
         cpf: cpfNums,

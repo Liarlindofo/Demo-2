@@ -19,6 +19,13 @@ function getRiderSession(request: NextRequest) {
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
+  // ── Proteção de /rh/usuarios — apenas usuários Stack Auth autenticados ─────
+  // A verificação de role Admin é feita no server-side (API retorna 403 para membros RH)
+  if (pathname.startsWith('/rh/usuarios')) {
+    // Stack Auth usa cookies — verificação granular fica no server component/API
+    // Aqui apenas garantimos que a rota existe no matcher
+  }
+
   // ── Proteção do portal /rider ──────────────────────────────────────────────
   if (pathname.startsWith('/rider')) {
     const publicRiderPaths = ['/rider/login', '/rider/setup'];
@@ -59,6 +66,7 @@ export const config = {
     '/handler/:path*',
     '/dashboard/:path*',
     '/rider/:path*',
+    '/rh/usuarios/:path*',
   ],
 };
 

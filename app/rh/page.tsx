@@ -19,6 +19,7 @@ import {
   ArrowRight,
   Gift,
   Bike,
+  Shield,
 } from 'lucide-react';
 
 interface Funcionario {
@@ -439,6 +440,19 @@ export default function RhDashboard() {
             <div className="mt-3">
               <h3 className="font-semibold text-white">Motoboys</h3>
               <p className="text-sm text-gray-400 mt-1">Gestão de entregadores e quinzenas</p>
+            </div>
+          </Link>
+
+          <Link href="/rh/usuarios" className="group bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 hover:border-amber-500/30 hover:bg-[#222224] transition-all">
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-amber-400" />
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-amber-400 transition-colors" />
+            </div>
+            <div className="mt-3">
+              <h3 className="font-semibold text-white">Usuários RH</h3>
+              <p className="text-sm text-gray-400 mt-1">Gerencie equipe e permissões de acesso</p>
             </div>
           </Link>
 
