@@ -21,10 +21,11 @@ interface Funcionario {
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
-const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'] as const;
+// Valores exatamente como armazenados no banco (form de cadastro usa abreviações)
+const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] as const;
 const DIAS_LABEL: Record<string, string> = {
-  domingo: 'Dom', segunda: 'Seg', 'terça': 'Ter',
-  quarta: 'Qua', quinta: 'Qui', sexta: 'Sex', 'sábado': 'Sáb',
+  Dom: 'Dom', Seg: 'Seg', Ter: 'Ter',
+  Qua: 'Qua', Qui: 'Qui', Sex: 'Sex', 'Sáb': 'Sáb',
 };
 const TURNO_LABEL: Record<string, string> = {
   manhã: 'Manhã', tarde: 'Tarde', noite: 'Noite', integral: 'Integral',
