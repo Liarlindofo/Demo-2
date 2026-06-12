@@ -71,6 +71,53 @@ const TOOL_GROUPS: { label: string; tools: SystemTool[] }[] = [
   },
 ];
 
+function ToolSelector({
+  selected,
+  onToggle,
+}: {
+  selected: SystemTool[];
+  onToggle: (tool: SystemTool) => void;
+}) {
+  return (
+    <div>
+      <p className="text-sm font-medium mb-2">Ferramentas Liberadas</p>
+      <div className="space-y-3">
+        {TOOL_GROUPS.map((group) => (
+          <div key={group.label}>
+            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1.5">
+              {group.label}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {group.tools.map((tool) => {
+                const active = selected.includes(tool);
+                return (
+                  <button
+                    key={tool}
+                    type="button"
+                    onClick={() => onToggle(tool)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                      active
+                        ? "bg-green-900/30 text-green-400 border border-green-700 hover:bg-green-900/50"
+                        : "bg-gray-800 text-gray-500 border border-gray-700 hover:bg-gray-700"
+                    }`}
+                  >
+                    {active ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : (
+                      <Lock className="h-3.5 w-3.5" />
+                    )}
+                    {TOOL_LABELS[tool]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function UsuariosPage() {
   const router = useRouter();
   const { showNotification, NotificationContainer } = useNotification();
@@ -85,8 +132,9 @@ export default function UsuariosPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // Estado do modal de novo usuário
+  // Estado do modal de novo usuário / vincular existente
   const [showNewUserModal, setShowNewUserModal] = useState(false);
+  const [newUserTab, setNewUserTab] = useState<"novo" | "existente">("novo");
   const [newUser, setNewUser] = useState({
     email: "",
     displayName: "",
@@ -95,6 +143,13 @@ export default function UsuariosPage() {
     tools: [] as SystemTool[],
   });
   const [creatingUser, setCreatingUser] = useState(false);
+
+  // Busca de usuário existente
+  const [existingSearch, setExistingSearch] = useState("");
+  const [existingResults, setExistingResults] = useState<UserWithPermissions[]>([]);
+  const [selectedExisting, setSelectedExisting] = useState<UserWithPermissions | null>(null);
+  const [existingTools, setExistingTools] = useState<SystemTool[]>([]);
+  const [searchingExisting, setSearchingExisting] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -297,6 +352,88 @@ export default function UsuariosPage() {
     return user.toolPermissions?.find((p) => p.tool === tool)?.isEnabled ?? false;
   }
 
+  async function searchExistingUsers(term: string) {
+    setExistingSearch(term);
+    if (!term || term.length < 2) {
+      setExistingResults([]);
+      return;
+    }
+    try {
+      setSearchingExisting(true);
+      const res = await fetch(
+        `/api/calenza-adm/usuarios?search=${encodeURIComponent(term)}&limit=10`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setExistingResults(data.users || []);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setSearchingExisting(false);
+    }
+  }
+
+  function selectExistingUser(user: UserWithPermissions) {
+    setSelectedExisting(user);
+    setExistingResults([]);
+    setExistingSearch(user.displayName || user.primaryEmail || "");
+    // pré-selecionar ferramentas já ativas
+    const active = (user.toolPermissions || [])
+      .filter((p) => p.isEnabled)
+      .map((p) => p.tool as SystemTool);
+    setExistingTools(active);
+  }
+
+  function toggleExistingTool(tool: SystemTool) {
+    setExistingTools((prev) =>
+      prev.includes(tool) ? prev.filter((t) => t !== tool) : [...prev, tool]
+    );
+  }
+
+  async function saveExistingUserTools() {
+    if (!selectedExisting) return;
+    try {
+      setCreatingUser(true);
+      const allTools = Object.values(SystemTool);
+      const enabled = new Set(existingTools);
+      const permissions = allTools.map((tool) => ({
+        tool,
+        isEnabled: enabled.has(tool),
+      }));
+      const res = await fetch(
+        `/api/calenza-adm/usuarios/${selectedExisting.id}/permissoes`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ permissions }),
+        }
+      );
+      if (res.ok) {
+        showNotification("Permissões atualizadas com sucesso!", "success");
+        closeNewUserModal();
+        loadUsers();
+      } else {
+        const err = await res.json();
+        showNotification(err.error || "Erro ao salvar permissões", "error");
+      }
+    } catch {
+      showNotification("Erro ao salvar permissões", "error");
+    } finally {
+      setCreatingUser(false);
+    }
+  }
+
+  function closeNewUserModal() {
+    setShowNewUserModal(false);
+    setNewUserTab("novo");
+    setNewUser({ email: "", displayName: "", password: "", confirmPassword: "", tools: [] });
+    setExistingSearch("");
+    setExistingResults([]);
+    setSelectedExisting(null);
+    setExistingTools([]);
+  }
+
   function toggleNewUserTool(tool: SystemTool) {
     setNewUser((prev) => ({
       ...prev,
@@ -335,8 +472,7 @@ export default function UsuariosPage() {
 
       if (response.ok) {
         showNotification("Usuário criado com sucesso!", "success");
-        setShowNewUserModal(false);
-        setNewUser({ email: "", displayName: "", password: "", confirmPassword: "", tools: [] });
+        closeNewUserModal();
         loadUsers();
       } else {
         const error = await response.json();
@@ -620,133 +756,220 @@ export default function UsuariosPage() {
       {showNewUserModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-[#1a1a1a] border border-[#374151] rounded-lg p-6 max-w-lg w-full my-4">
-            <div className="flex items-center gap-3 mb-6">
+            {/* Cabeçalho */}
+            <div className="flex items-center gap-3 mb-5">
               <Building2 className="h-6 w-6 text-[#10b981]" />
-              <h2 className="text-2xl font-bold">Nova Empresa / Usuário</h2>
+              <h2 className="text-2xl font-bold">Configurar Empresa</h2>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Email <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  placeholder="empresa@exemplo.com"
-                  className="w-full px-3 py-2 bg-[#0f0f10] border border-[#374151] rounded-lg focus:outline-none focus:border-[#10b981]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Nome / Empresa</label>
-                <input
-                  type="text"
-                  value={newUser.displayName}
-                  onChange={(e) => setNewUser({ ...newUser, displayName: e.target.value })}
-                  placeholder="Nome do responsável ou da empresa"
-                  className="w-full px-3 py-2 bg-[#0f0f10] border border-[#374151] rounded-lg focus:outline-none focus:border-[#10b981]"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+            {/* Abas */}
+            <div className="flex rounded-lg overflow-hidden border border-[#374151] mb-5">
+              <button
+                onClick={() => setNewUserTab("novo")}
+                className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                  newUserTab === "novo"
+                    ? "bg-[#10b981] text-white"
+                    : "bg-[#0f0f10] text-gray-400 hover:text-white"
+                }`}
+              >
+                Criar novo usuário
+              </button>
+              <button
+                onClick={() => setNewUserTab("existente")}
+                className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                  newUserTab === "existente"
+                    ? "bg-[#10b981] text-white"
+                    : "bg-[#0f0f10] text-gray-400 hover:text-white"
+                }`}
+              >
+                Usuário existente
+              </button>
+            </div>
+
+            {/* Aba: Criar novo */}
+            {newUserTab === "novo" && (
+              <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    Senha <span className="text-red-400">*</span>
+                    Email <span className="text-red-400">*</span>
                   </label>
                   <input
-                    type="password"
-                    value={newUser.password}
-                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                    placeholder="Mínimo 6 caracteres"
+                    type="email"
+                    value={newUser.email}
+                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                    placeholder="empresa@exemplo.com"
                     className="w-full px-3 py-2 bg-[#0f0f10] border border-[#374151] rounded-lg focus:outline-none focus:border-[#10b981]"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Confirmar Senha</label>
+                  <label className="block text-sm font-medium mb-1">Nome / Empresa</label>
                   <input
-                    type="password"
-                    value={newUser.confirmPassword}
-                    onChange={(e) =>
-                      setNewUser({ ...newUser, confirmPassword: e.target.value })
-                    }
-                    placeholder="Repita a senha"
+                    type="text"
+                    value={newUser.displayName}
+                    onChange={(e) => setNewUser({ ...newUser, displayName: e.target.value })}
+                    placeholder="Nome do responsável ou da empresa"
                     className="w-full px-3 py-2 bg-[#0f0f10] border border-[#374151] rounded-lg focus:outline-none focus:border-[#10b981]"
                   />
                 </div>
-              </div>
-
-              {/* Seleção de ferramentas */}
-              <div>
-                <p className="text-sm font-medium mb-2">Ferramentas Liberadas</p>
-                <div className="space-y-3">
-                  {TOOL_GROUPS.map((group) => (
-                    <div key={group.label}>
-                      <p className="text-xs text-gray-500 uppercase tracking-wider mb-1.5">
-                        {group.label}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {group.tools.map((tool) => {
-                          const active = newUser.tools.includes(tool);
-                          return (
-                            <button
-                              key={tool}
-                              type="button"
-                              onClick={() => toggleNewUserTool(tool)}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                                active
-                                  ? "bg-green-900/30 text-green-400 border border-green-700 hover:bg-green-900/50"
-                                  : "bg-gray-800 text-gray-500 border border-gray-700 hover:bg-gray-700"
-                              }`}
-                            >
-                              {active ? (
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                              ) : (
-                                <LockIcon className="h-3.5 w-3.5" />
-                              )}
-                              {TOOL_LABELS[tool]}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Senha <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={newUser.password}
+                      onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                      placeholder="Mínimo 6 caracteres"
+                      className="w-full px-3 py-2 bg-[#0f0f10] border border-[#374151] rounded-lg focus:outline-none focus:border-[#10b981]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Confirmar Senha</label>
+                    <input
+                      type="password"
+                      value={newUser.confirmPassword}
+                      onChange={(e) =>
+                        setNewUser({ ...newUser, confirmPassword: e.target.value })
+                      }
+                      placeholder="Repita a senha"
+                      className="w-full px-3 py-2 bg-[#0f0f10] border border-[#374151] rounded-lg focus:outline-none focus:border-[#10b981]"
+                    />
+                  </div>
+                </div>
+                <ToolSelector
+                  selected={newUser.tools}
+                  onToggle={toggleNewUserTool}
+                />
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    onClick={createUser}
+                    disabled={creatingUser}
+                    className="flex-1 bg-[#10b981] hover:bg-[#059669]"
+                  >
+                    {creatingUser ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Criar Usuário
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={closeNewUserModal}
+                    variant="outline"
+                    className="flex-1 border-[#374151]"
+                    disabled={creatingUser}
+                  >
+                    Cancelar
+                  </Button>
                 </div>
               </div>
-            </div>
+            )}
 
-            <div className="flex gap-3 mt-6">
-              <Button
-                onClick={createUser}
-                disabled={creatingUser}
-                className="flex-1 bg-[#10b981] hover:bg-[#059669]"
-              >
-                {creatingUser ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
+            {/* Aba: Usuário existente */}
+            {newUserTab === "existente" && (
+              <div className="space-y-4">
+                <div className="relative">
+                  <label className="block text-sm font-medium mb-1">
+                    Buscar usuário por nome ou email
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={existingSearch}
+                      onChange={(e) => {
+                        if (!selectedExisting) {
+                          searchExistingUsers(e.target.value);
+                        } else {
+                          setSelectedExisting(null);
+                          setExistingTools([]);
+                          searchExistingUsers(e.target.value);
+                        }
+                      }}
+                      placeholder="Digite o nome ou email..."
+                      className="w-full pl-9 pr-4 py-2 bg-[#0f0f10] border border-[#374151] rounded-lg focus:outline-none focus:border-[#10b981]"
+                    />
+                    {searchingExisting && (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
+                    )}
+                  </div>
+
+                  {/* Dropdown de resultados */}
+                  {existingResults.length > 0 && !selectedExisting && (
+                    <div className="absolute z-10 w-full mt-1 bg-[#1a1a1a] border border-[#374151] rounded-lg shadow-lg overflow-hidden">
+                      {existingResults.map((u) => (
+                        <button
+                          key={u.id}
+                          onClick={() => selectExistingUser(u)}
+                          className="w-full px-4 py-2.5 text-left hover:bg-[#252525] transition-colors flex items-center gap-3"
+                        >
+                          <UserIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium">
+                              {u.displayName || u.primaryEmail}
+                            </p>
+                            {u.displayName && (
+                              <p className="text-xs text-gray-400">{u.primaryEmail}</p>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Usuário selecionado */}
+                {selectedExisting && (
                   <>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Criar Usuário
+                    <div className="flex items-center gap-3 bg-[#252525] rounded-lg px-4 py-3">
+                      <CheckCircle2 className="h-5 w-5 text-[#10b981] flex-shrink-0" />
+                      <div>
+                        <p className="font-medium">
+                          {selectedExisting.displayName || selectedExisting.primaryEmail}
+                        </p>
+                        {selectedExisting.displayName && (
+                          <p className="text-xs text-gray-400">{selectedExisting.primaryEmail}</p>
+                        )}
+                      </div>
+                    </div>
+                    <ToolSelector
+                      selected={existingTools}
+                      onToggle={toggleExistingTool}
+                    />
+                    <div className="flex gap-3 pt-2">
+                      <Button
+                        onClick={saveExistingUserTools}
+                        disabled={creatingUser}
+                        className="flex-1 bg-[#10b981] hover:bg-[#059669]"
+                      >
+                        {creatingUser ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Salvar Permissões"
+                        )}
+                      </Button>
+                      <Button
+                        onClick={closeNewUserModal}
+                        variant="outline"
+                        className="flex-1 border-[#374151]"
+                        disabled={creatingUser}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
                   </>
                 )}
-              </Button>
-              <Button
-                onClick={() => {
-                  setShowNewUserModal(false);
-                  setNewUser({
-                    email: "",
-                    displayName: "",
-                    password: "",
-                    confirmPassword: "",
-                    tools: [],
-                  });
-                }}
-                variant="outline"
-                className="flex-1 border-[#374151]"
-                disabled={creatingUser}
-              >
-                Cancelar
-              </Button>
-            </div>
+
+                {!selectedExisting && !existingSearch && (
+                  <p className="text-sm text-gray-500 text-center py-4">
+                    Digite pelo menos 2 caracteres para buscar
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
