@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ArrowLeft, Shield, CheckCircle, XCircle, Loader2, User } from 'lucide-react';
+import { ArrowLeft, Shield, CheckCircle, XCircle, Loader2, User, ToggleRight, ToggleLeft } from 'lucide-react';
 
 interface PermissionItem {
   permission: string;
@@ -55,6 +55,27 @@ export default function PermissoesPage() {
   }, [params.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  const allPermissions = data?.groups.flatMap((g) => g.permissions) ?? [];
+  const allActive = allPermissions.length > 0 && allPermissions.every((p) => p.active);
+  const anyActive = allPermissions.some((p) => p.active);
+  const [bulkLoading, setBulkLoading] = useState(false);
+
+  const bulkToggle = async (active: boolean) => {
+    if (!data) return;
+    setBulkLoading(true);
+    const all = data.groups.flatMap((g) => g.permissions);
+    const toChange = all.filter((p) => p.active !== active);
+    for (const item of toChange) {
+      await fetch(`/api/rh/usuarios/${params.id}/permissoes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permission: item.permission, active }),
+      });
+    }
+    setBulkLoading(false);
+    load();
+  };
 
   const toggle = async (permission: string, currentActive: boolean) => {
     setToggling(t => ({ ...t, [permission]: 'loading' }));
@@ -137,6 +158,26 @@ export default function PermissoesPage() {
           </div>
         </div>
 
+        {/* Ações rápidas */}
+        <div className="flex gap-3">
+          <button
+            onClick={() => bulkToggle(true)}
+            disabled={bulkLoading || allActive}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {bulkLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ToggleRight className="w-4 h-4" />}
+            Conceder todos
+          </button>
+          <button
+            onClick={() => bulkToggle(false)}
+            disabled={bulkLoading || !anyActive}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {bulkLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ToggleLeft className="w-4 h-4" />}
+            Revogar todos
+          </button>
+        </div>
+
         {/* Grupos de permissão */}
         {data.groups.map(group => (
           <div key={group.label} className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl overflow-hidden">
@@ -181,8 +222,8 @@ export default function PermissoesPage() {
 
         {/* Nota */}
         <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-4 py-3 text-xs text-gray-500">
-          Usuários de RH começam sem nenhuma permissão. As permissões aqui configuradas
-          entram em vigor imediatamente — sem necessidade de relogin.
+          Por padrão, usuários convidados recebem <strong className="text-gray-400">acesso completo</strong>.
+          Use os toggles para revogar permissões individualmente. As alterações entram em vigor imediatamente.
         </div>
       </div>
     </div>

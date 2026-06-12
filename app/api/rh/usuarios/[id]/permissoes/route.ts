@@ -5,6 +5,8 @@ import { P, ADMIN_ONLY_PERMISSIONS, PERMISSION_GROUPS } from '@/lib/rh-permissio
 
 export const dynamic = 'force-dynamic';
 
+const ALL_MEMBER_PERMISSIONS = Object.values(P).filter((p) => !ADMIN_ONLY_PERMISSIONS.has(p));
+
 // GET /api/rh/usuarios/[id]/permissoes — retorna todas as permissões com estado
 export async function GET(
   _req: NextRequest,
@@ -19,6 +21,21 @@ export async function GET(
     include: { permissions: true },
   });
   if (!member) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
+
+  // Se o membro não tem nenhum registro explícito, criar todos como ativos (migração automática)
+  if (member.permissions.length === 0) {
+    await prisma.rhPermission.createMany({
+      data: ALL_MEMBER_PERMISSIONS.map((permission) => ({
+        memberId: member.id,
+        permission,
+        grantedBy: ctx.stackUserId,
+      })),
+      skipDuplicates: true,
+    });
+    // Recarregar permissões após migração
+    const created = await prisma.rhPermission.findMany({ where: { memberId: member.id } });
+    member.permissions.push(...created);
+  }
 
   const activePerms = new Set(member.permissions.map((p) => p.permission));
 
