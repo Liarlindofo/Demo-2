@@ -95,17 +95,33 @@ export async function getRhContext(): Promise<RhContext | null> {
 export async function requireRhPermission(
   permission?: string
 ): Promise<{ ctx: RhContext; error: null } | { ctx: null; error: NextResponse }> {
-  const ctx = await getRhContext();
+  let ctx: RhContext | null;
+  try {
+    ctx = await getRhContext();
+  } catch (err) {
+    console.error('[rh-auth] getRhContext error:', err);
+    return {
+      ctx: null,
+      error: NextResponse.json(
+        { error: 'Erro interno ao verificar autenticação', details: String(err) },
+        { status: 500 }
+      ),
+    };
+  }
+
   if (!ctx) {
     return {
       ctx: null,
-      error: NextResponse.json({ error: 'Não autorizado' }, { status: 401 }),
+      error: NextResponse.json(
+        { error: 'Sessão expirada. Por favor, faça login novamente.', code: 'UNAUTHENTICATED' },
+        { status: 401 }
+      ),
     };
   }
   if (permission && !ctx.hasPermission(permission)) {
     return {
       ctx: null,
-      error: NextResponse.json({ error: 'Sem permissão' }, { status: 403 }),
+      error: NextResponse.json({ error: 'Sem permissão para esta ação' }, { status: 403 }),
     };
   }
   return { ctx, error: null };

@@ -2,10 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@stackframe/stack';
 import { ArrowLeft, UserPlus, Mail, User, Send } from 'lucide-react';
 
 export default function ConvidarUsuarioPage() {
   const router = useRouter();
+  // Garante sessão válida e renova token automaticamente se necessário
+  useUser({ or: 'redirect' });
+
   const [form, setForm] = useState({ email: '', displayName: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +27,17 @@ export default function ConvidarUsuarioPage() {
         body: JSON.stringify({ email: form.email.trim(), displayName: form.displayName.trim() || undefined }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Erro ao convidar'); return; }
+      if (!res.ok) {
+        if (res.status === 401) {
+          setError('Sessão expirada. Redirecionando para login...');
+          setTimeout(() => {
+            router.push('/auth/login?returnTo=' + encodeURIComponent('/rh/usuarios/novo'));
+          }, 1500);
+          return;
+        }
+        setError(data.error ?? 'Erro ao convidar');
+        return;
+      }
       setSuccess(true);
     } finally {
       setLoading(false);
