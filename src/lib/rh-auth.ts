@@ -2,6 +2,9 @@ import { stackServerApp } from '@/stack';
 import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
+import { P, ADMIN_ONLY_PERMISSIONS } from '@/lib/rh-permissions';
+
+const ALL_MEMBER_PERMISSIONS = Object.values(P).filter((p) => !ADMIN_ONLY_PERMISSIONS.has(p));
 
 /**
  * Drop-in replacement for the old `getDbUser()` pattern used across RH routes.
@@ -48,13 +51,17 @@ export async function getRhContext(): Promise<RhContext | null> {
   });
 
   if (membership) {
-    const permsSet = new Set(membership.permissions.map((p) => p.permission));
+    // Se não há permissões configuradas, concede todas por padrão (acesso completo)
+    const hasExplicitPerms = membership.permissions.length > 0;
+    const permsSet = hasExplicitPerms
+      ? new Set(membership.permissions.map((p) => p.permission))
+      : new Set(ALL_MEMBER_PERMISSIONS);
     return {
       userId: membership.tenantUserId,
       stackUserId: stackUser.id,
       isAdmin: false,
       memberId: membership.id,
-      hasPermission: (p: string) => permsSet.has(p),
+      hasPermission: (p: string) => !ADMIN_ONLY_PERMISSIONS.has(p) && permsSet.has(p),
     };
   }
 
@@ -75,13 +82,16 @@ export async function getRhContext(): Promise<RhContext | null> {
         data: { stackUserId: stackUser.id, displayName: stackUser.displayName ?? undefined },
         include: { permissions: true },
       });
-      const permsSet = new Set(updated.permissions.map((p) => p.permission));
+      const hasExplicitPerms = updated.permissions.length > 0;
+      const permsSet = hasExplicitPerms
+        ? new Set(updated.permissions.map((p) => p.permission))
+        : new Set(ALL_MEMBER_PERMISSIONS);
       return {
         userId: updated.tenantUserId,
         stackUserId: stackUser.id,
         isAdmin: false,
         memberId: updated.id,
-        hasPermission: (p: string) => permsSet.has(p),
+        hasPermission: (p: string) => !ADMIN_ONLY_PERMISSIONS.has(p) && permsSet.has(p),
       };
     }
   }

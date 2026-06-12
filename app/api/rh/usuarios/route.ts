@@ -3,6 +3,11 @@ import { prisma } from '@/lib/prisma';
 import { requireRhPermission } from '@/lib/rh-auth';
 import { P, ADMIN_ONLY_PERMISSIONS } from '@/lib/rh-permissions';
 
+// Todas as permissões que podem ser concedidas a um membro RH
+const ALL_MEMBER_PERMISSIONS = Object.values(P).filter(
+  (p) => !ADMIN_ONLY_PERMISSIONS.has(p)
+);
+
 export const dynamic = 'force-dynamic';
 
 // GET /api/rh/usuarios — lista membros da equipe (apenas Admin)
@@ -15,6 +20,20 @@ export async function GET() {
     include: { permissions: { select: { permission: true } } },
     orderBy: { createdAt: 'asc' },
   });
+
+  // Migração automática: conceder todas as permissões a membros sem permissões
+  for (const m of members) {
+    if (m.isActive && m.permissions.length === 0) {
+      await prisma.rhPermission.createMany({
+        data: ALL_MEMBER_PERMISSIONS.map((permission) => ({
+          memberId: m.id,
+          permission,
+          grantedBy: ctx.stackUserId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  }
 
   return NextResponse.json(
     members.map((m) => ({
@@ -67,6 +86,16 @@ export async function POST(req: NextRequest) {
       displayName: body.displayName?.trim() || null,
       invitedBy: ctx.stackUserId,
     },
+  });
+
+  // Conceder todas as permissões por padrão (admin pode revogar individualmente)
+  await prisma.rhPermission.createMany({
+    data: ALL_MEMBER_PERMISSIONS.map((permission) => ({
+      memberId: member.id,
+      permission,
+      grantedBy: ctx.stackUserId,
+    })),
+    skipDuplicates: true,
   });
 
   return NextResponse.json({ id: member.id, email: member.email }, { status: 201 });
