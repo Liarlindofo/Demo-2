@@ -1,24 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const { id } = await params;
     const body = await req.json() as {
@@ -30,7 +18,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     };
 
     const taxa = await prisma.rhTaxaLoja.updateMany({
-      where: { id, userId: dbUser.id },
+      where: { id, userId: rh!.userId },
       data: {
         ...(body.nome !== undefined ? { nome: body.nome } : {}),
         ...(body.valorDiaria !== undefined ? { valorDiaria: body.valorDiaria } : {}),
@@ -50,12 +38,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const { id } = await params;
     const result = await prisma.rhTaxaLoja.updateMany({
-      where: { id, userId: dbUser.id },
+      where: { id, userId: rh!.userId },
       data: { ativo: false },
     });
 

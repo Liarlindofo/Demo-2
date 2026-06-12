@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 import { calcularComposicaoSalarial } from '@/lib/calculos-rh';
 import { cargoFamilia } from '@/lib/rh-cargo-familia';
 
@@ -17,22 +16,11 @@ function baseEncargos(f: {
 
 export const dynamic = 'force-dynamic';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 export async function GET(req: Request) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
     const lojaId = searchParams.get('lojaId');
@@ -43,7 +31,7 @@ export async function GET(req: Request) {
 
     // Busca o quadro ideal da loja com setores e posições ativas
     const quadro = await prisma.rhQuadroIdeal.findFirst({
-      where: { lojaId, userId: dbUser.id },
+      where: { lojaId, userId: rh!.userId },
       include: {
         setores: {
           where: { ativo: true },
@@ -67,7 +55,7 @@ export async function GET(req: Request) {
 
     // Carregar todos os cargos do usuário para montar mapa de família
     const todosCargos = await prisma.rhCargo.findMany({
-      where: { userId: dbUser.id },
+      where: { userId: rh!.userId },
       select: { id: true, nome: true },
     });
     // familia → [cargoId, ...]
@@ -90,7 +78,7 @@ export async function GET(req: Request) {
             // Busca funcionários de qualquer nível da família no mesmo turno
             const funcionarios = await prisma.rhFuncionario.findMany({
               where: {
-                userId: dbUser.id,
+                userId: rh!.userId,
                 lojaId,
                 cargoId: { in: familiaIds },
                 turno: pos.turno ?? undefined,

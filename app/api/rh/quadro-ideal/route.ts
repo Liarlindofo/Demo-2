@@ -1,21 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 
 export const dynamic = 'force-dynamic';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 const INCLUDE = {
   loja: { select: { id: true, nome: true } },
@@ -34,14 +22,14 @@ const INCLUDE = {
 
 export async function GET(req: NextRequest) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const lojaId = req.nextUrl.searchParams.get('lojaId');
     if (!lojaId) return NextResponse.json({ error: 'lojaId é obrigatório' }, { status: 400 });
 
     const quadro = await prisma.rhQuadroIdeal.findFirst({
-      where: { lojaId, userId: dbUser.id, ativo: true },
+      where: { lojaId, userId: rh!.userId, ativo: true },
       include: INCLUDE,
     });
 
@@ -54,19 +42,19 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const { lojaId, nome } = await req.json();
     if (!lojaId) return NextResponse.json({ error: 'lojaId é obrigatório' }, { status: 400 });
 
-    const loja = await prisma.rhLoja.findFirst({ where: { id: lojaId, userId: dbUser.id } });
+    const loja = await prisma.rhLoja.findFirst({ where: { id: lojaId, userId: rh!.userId } });
     if (!loja) return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 });
 
     const quadro = await prisma.rhQuadroIdeal.upsert({
       where: { lojaId },
       update: { nome: nome || null, ativo: true },
-      create: { userId: dbUser.id, lojaId, nome: nome || null },
+      create: { userId: rh!.userId, lojaId, nome: nome || null },
       include: INCLUDE,
     });
 

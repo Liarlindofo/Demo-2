@@ -1,20 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 
 export const dynamic = 'force-dynamic';
-
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 async function verifyPosicaoOwner(posicaoId: string, userId: string) {
   return prisma.rhPosicaoIdeal.findFirst({
@@ -28,10 +16,10 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
-    const posicao = await verifyPosicaoOwner(id, dbUser.id);
+    const posicao = await verifyPosicaoOwner(id, rh!.userId);
     if (!posicao) return NextResponse.json({ error: 'Posição não encontrada' }, { status: 404 });
 
     const { cargoId, turno, quantidadeIdeal, observacoes } = await req.json();
@@ -60,10 +48,10 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
-    const posicao = await verifyPosicaoOwner(id, dbUser.id);
+    const posicao = await verifyPosicaoOwner(id, rh!.userId);
     if (!posicao) return NextResponse.json({ error: 'Posição não encontrada' }, { status: 404 });
 
     await prisma.rhPosicaoIdeal.update({ where: { id }, data: { ativo: false } });

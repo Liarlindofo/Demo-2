@@ -1,23 +1,16 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
+import { rhGetUser } from '@/lib/rh-auth';
 
 export async function GET() {
   try {
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
-      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
-    }
-
-    const user = await prisma.user.findFirst({ where: { stackUserId: stackUser.id } });
-    if (!user) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
-    }
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const conversas = await prisma.rhIaConversa.findMany({
-      where: { userId: user.id },
+      where: { userId: rh.userId },
       orderBy: { updatedAt: 'desc' },
       include: {
         mensagens: {
@@ -36,21 +29,14 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
-      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
-    }
-
-    const user = await prisma.user.findFirst({ where: { stackUserId: stackUser.id } });
-    if (!user) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
-    }
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const body = await request.json().catch(() => ({}));
     const titulo = body.titulo ?? null;
 
     const conversa = await prisma.rhIaConversa.create({
-      data: { userId: user.id, titulo },
+      data: { userId: rh.userId, titulo },
     });
 
     return NextResponse.json({ conversa }, { status: 201 });

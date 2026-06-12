@@ -3,6 +3,24 @@ import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 
+/**
+ * Drop-in replacement for the old `getDbUser()` pattern used across RH routes.
+ *
+ * Returns `{ userId, isAdmin }` where `userId` is the TENANT's User.id — i.e.,
+ * for team members this is the admin's id (so they see the correct shared data),
+ * and for admins it is their own id.
+ *
+ * Usage:
+ *   const rh = await rhGetUser();
+ *   if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+ *   // use rh.userId instead of dbUser.id
+ */
+export async function rhGetUser(): Promise<{ userId: string; isAdmin: boolean } | null> {
+  const ctx = await getRhContext();
+  if (!ctx) return null;
+  return { userId: ctx.userId, isAdmin: ctx.isAdmin };
+}
+
 export interface RhContext {
   userId: string;       // tenantUserId para queries de dados
   stackUserId: string;  // ID do Stack Auth do usuário agindo

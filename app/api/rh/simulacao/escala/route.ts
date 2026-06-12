@@ -1,22 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 import { calcularComposicaoSalarial, calcularEncargosPatronais } from '@/lib/calculos-rh';
 
 export const dynamic = 'force-dynamic';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 const FATOR_6x1_PARA_5x2 = 6 / 5;
 
@@ -41,8 +29,8 @@ function custoMensalFuncionario(f: {
 
 export async function POST(req: Request) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const body = await req.json();
     const { lojaId, minimosPorTurno } = body as {
@@ -50,7 +38,7 @@ export async function POST(req: Request) {
       minimosPorTurno: { manha: number; tarde: number; noite: number };
     };
 
-    const where: Record<string, unknown> = { userId: dbUser.id, ativo: true, escala: '6x1' };
+    const where: Record<string, unknown> = { userId: rh!.userId, ativo: true, escala: '6x1' };
     if (lojaId) where.lojaId = lojaId;
 
     const funcionarios = await prisma.rhFuncionario.findMany({

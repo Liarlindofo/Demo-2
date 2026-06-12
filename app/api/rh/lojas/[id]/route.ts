@@ -2,20 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 export async function PATCH(
   req: NextRequest,
@@ -23,10 +11,10 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
-    const loja = await prisma.rhLoja.findFirst({ where: { id, userId: dbUser.id } });
+    const loja = await prisma.rhLoja.findFirst({ where: { id, userId: rh!.userId } });
     if (!loja) return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 });
 
     const body = await req.json();
@@ -55,10 +43,10 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
-    const loja = await prisma.rhLoja.findFirst({ where: { id, userId: dbUser.id } });
+    const loja = await prisma.rhLoja.findFirst({ where: { id, userId: rh!.userId } });
     if (!loja) return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 });
 
     // Verificar se há funcionários vinculados

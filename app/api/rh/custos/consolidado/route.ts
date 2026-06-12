@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 import {
   calcularComposicaoSalarial,
   calcularEncargosPatronais,
@@ -10,28 +9,17 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 export async function GET() {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const lojas = await prisma.rhLoja.findMany({
-      where: { userId: dbUser.id, ativo: true },
+      where: { userId: rh!.userId, ativo: true },
       include: {
         funcionarios: {
-          where: { userId: dbUser.id, ativo: true },
+          where: { userId: rh!.userId, ativo: true },
           include: { cargo: { select: { nome: true, ratPct: true } } },
         },
         taxas: {
@@ -130,20 +118,20 @@ export async function GET() {
 
 export async function PATCH(req: Request) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const body = await req.json() as { lojaId?: string; fap?: number; cargoId?: string; ratPct?: number };
 
     if (body.lojaId && body.fap !== undefined) {
       await prisma.rhLoja.updateMany({
-        where: { id: body.lojaId, userId: dbUser.id },
+        where: { id: body.lojaId, userId: rh!.userId },
         data: { fap: body.fap },
       });
     }
     if (body.cargoId && body.ratPct !== undefined) {
       await prisma.rhCargo.updateMany({
-        where: { id: body.cargoId, userId: dbUser.id },
+        where: { id: body.cargoId, userId: rh!.userId },
         data: { ratPct: body.ratPct },
       });
     }

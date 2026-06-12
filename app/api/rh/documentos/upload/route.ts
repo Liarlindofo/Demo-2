@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -37,22 +36,11 @@ function resolveContentType(file: File): string | null {
   return ext ? EXT_TO_MIME[ext] ?? null : null;
 }
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 export async function POST(req: Request) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -102,7 +90,7 @@ export async function POST(req: Request) {
     }
 
     const ext = file.name.split('.').pop()?.toLowerCase() ?? 'bin';
-    const fileName = `rh/documentos/${dbUser.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const fileName = `rh/documentos/${rh!.userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
 
     const { error: uploadError } = await supabase.storage

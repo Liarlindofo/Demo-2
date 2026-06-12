@@ -1,27 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 import { revalidatePath } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 export async function POST(req: Request) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const body = await req.json() as {
       funcionarioId: string;
@@ -37,7 +25,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Campos obrigatórios ausentes' }, { status: 400 });
 
     const func = await prisma.rhFuncionario.findFirst({
-      where: { id: funcionarioId, userId: dbUser.id },
+      where: { id: funcionarioId, userId: rh!.userId },
       include: { loja: true },
     });
     if (!func) return NextResponse.json({ error: 'Funcionário não encontrado' }, { status: 404 });
@@ -46,7 +34,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'O funcionário já está nesta loja' }, { status: 400 });
 
     const lojaDestino = await prisma.rhLoja.findFirst({
-      where: { id: lojaDestinoId, userId: dbUser.id },
+      where: { id: lojaDestinoId, userId: rh!.userId },
     });
     if (!lojaDestino) return NextResponse.json({ error: 'Loja de destino não encontrada' }, { status: 404 });
 
@@ -60,7 +48,7 @@ export async function POST(req: Request) {
           funcionarioId,
           lojaOrigemId: func.lojaId,
           lojaDestinoId,
-          userId: dbUser.id,
+          userId: rh!.userId,
           dataTransferencia: new Date(dataTransferencia),
           motivo: motivo ?? null,
           aprovadoPor: aprovadoPor ?? null,
@@ -69,7 +57,7 @@ export async function POST(req: Request) {
       prisma.rhHistoricoFuncionario.create({
         data: {
           funcionarioId,
-          userId: dbUser.id,
+          userId: rh!.userId,
           campo: 'loja',
           valorAnterior: func.loja?.nome ?? '—',
           valorNovo: lojaDestino.nome,

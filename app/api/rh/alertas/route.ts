@@ -1,21 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 
 export const dynamic = 'force-dynamic';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 function diffDias(a: Date, b: Date): number {
   return Math.floor((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
@@ -23,14 +11,14 @@ function diffDias(a: Date, b: Date): number {
 
 export async function GET() {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
 
     const funcionarios = await prisma.rhFuncionario.findMany({
-      where: { userId: dbUser.id, ativo: true },
+      where: { userId: rh!.userId, ativo: true },
       include: {
         cargo: { select: { id: true, nome: true } },
         loja: { select: { id: true, nome: true } },
@@ -92,7 +80,7 @@ export async function GET() {
     >`
       SELECT f.id, f.nome, f."dataNascimento", f."lojaId", f."cargoId"
       FROM "rh_funcionarios" f
-      WHERE f."userId" = ${dbUser.id}
+      WHERE f."userId" = ${rh!.userId}
         AND f.ativo = true
         AND EXTRACT(MONTH FROM f."dataNascimento") = ${mesAtual}
       ORDER BY EXTRACT(DAY FROM f."dataNascimento")

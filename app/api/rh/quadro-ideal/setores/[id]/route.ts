@@ -1,21 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 
 export const dynamic = 'force-dynamic';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 async function verifySetorOwner(setorId: string, userId: string) {
   return prisma.rhSetorIdeal.findFirst({
@@ -29,10 +17,10 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
-    const setor = await verifySetorOwner(id, dbUser.id);
+    const setor = await verifySetorOwner(id, rh!.userId);
     if (!setor) return NextResponse.json({ error: 'Setor não encontrado' }, { status: 404 });
 
     const { nome, descricao, ordem } = await req.json();
@@ -66,10 +54,10 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
-    const setor = await verifySetorOwner(id, dbUser.id);
+    const setor = await verifySetorOwner(id, rh!.userId);
     if (!setor) return NextResponse.json({ error: 'Setor não encontrado' }, { status: 404 });
 
     // Soft delete: marca setor e todas as posições como inativos

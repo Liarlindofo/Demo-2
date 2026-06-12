@@ -1,26 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 
 export const dynamic = 'force-dynamic';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 export async function POST(req: Request) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const body = await req.json();
     const {
@@ -37,13 +25,13 @@ export async function POST(req: Request) {
 
     // Verifica se o funcionário pertence ao usuário
     const func = await prisma.rhFuncionario.findFirst({
-      where: { id: funcionarioId, userId: dbUser.id },
+      where: { id: funcionarioId, userId: rh!.userId },
     });
     if (!func) return NextResponse.json({ error: 'Funcionário não encontrado' }, { status: 404 });
 
     const doc = await prisma.rhDocumentoFuncionario.create({
       data: {
-        funcionarioId, userId: dbUser.id, tipo, nome, url,
+        funcionarioId, userId: rh!.userId, tipo, nome, url,
         tamanhoBytes: tamanhoBytes ?? null,
         dataVencimento: dataVencimento ? new Date(dataVencimento) : null,
         mesReferencia: mesReferencia ?? null,

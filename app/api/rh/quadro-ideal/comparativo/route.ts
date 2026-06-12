@@ -1,32 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 import { cargoFamilia } from '@/lib/rh-cargo-familia';
 
 export const dynamic = 'force-dynamic';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
-
 export async function GET(req: NextRequest) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const lojaId = req.nextUrl.searchParams.get('lojaId');
     if (!lojaId) return NextResponse.json({ error: 'lojaId é obrigatório' }, { status: 400 });
 
     const quadro = await prisma.rhQuadroIdeal.findFirst({
-      where: { lojaId, userId: dbUser.id, ativo: true },
+      where: { lojaId, userId: rh!.userId, ativo: true },
       include: {
         setores: {
           where: { ativo: true },
@@ -45,7 +33,7 @@ export async function GET(req: NextRequest) {
 
     // Carregar funcionários ativos da loja (com nome do cargo para família)
     const funcionarios = await prisma.rhFuncionario.findMany({
-      where: { userId: dbUser.id, lojaId, ativo: true },
+      where: { userId: rh!.userId, lojaId, ativo: true },
       select: { cargoId: true, turno: true, cargo: { select: { nome: true } } },
     });
 

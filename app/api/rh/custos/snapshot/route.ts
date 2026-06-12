@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 import {
   calcularComposicaoSalarial,
   calcularEncargosPatronais,
@@ -10,32 +9,21 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 export async function POST() {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const agora = new Date();
     const mes = agora.getMonth() + 1;
     const ano = agora.getFullYear();
 
     const lojas = await prisma.rhLoja.findMany({
-      where: { userId: dbUser.id, ativo: true },
+      where: { userId: rh!.userId, ativo: true },
       include: {
         funcionarios: {
-          where: { userId: dbUser.id, ativo: true },
+          where: { userId: rh!.userId, ativo: true },
           include: { cargo: { select: { ratPct: true } } },
         },
       },
@@ -56,9 +44,9 @@ export async function POST() {
       }
 
       return prisma.rhSnapshotCustoMensal.upsert({
-        where: { lojaId_mes_ano_userId: { lojaId: loja.id, mes, ano, userId: dbUser.id } },
+        where: { lojaId_mes_ano_userId: { lojaId: loja.id, mes, ano, userId: rh!.userId } },
         create: {
-          lojaId: loja.id, userId: dbUser.id, mes, ano,
+          lojaId: loja.id, userId: rh!.userId, mes, ano,
           totalFuncionarios: funcs.length,
           totalSalarioBruto, totalEncargos, totalCustoReal,
           custoAnualizado: totalCustoReal * FATOR_ANUAL,

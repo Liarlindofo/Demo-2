@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 import {
   enrichFuncionario,
   CAMPOS_COMPOSICAO_HISTORICO,
@@ -13,17 +12,6 @@ import { limparCPF, validarCPF, validarDataNascimento } from '@/lib/validacoes';
 
 export const dynamic = 'force-dynamic';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 const INCLUDE = {
   cargo: { select: { id: true, nome: true, ratPct: true } },
@@ -83,11 +71,11 @@ function calcDatasExperiencia(dataAdmissao: Date) {
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const funcionario = await prisma.rhFuncionario.findFirst({
-      where: { id, userId: dbUser.id },
+      where: { id, userId: rh!.userId },
       include: INCLUDE,
     });
 
@@ -113,11 +101,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const existing = await prisma.rhFuncionario.findFirst({
-      where: { id, userId: dbUser.id },
+      where: { id, userId: rh!.userId },
     });
     if (!existing)
       return NextResponse.json({ error: 'Funcionário não encontrado' }, { status: 404 });
@@ -156,7 +144,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (!validarCPF(cpf))
         return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
       const dup = await prisma.rhFuncionario.findFirst({
-        where: { userId: dbUser.id, cpf, ativo: true, id: { not: id } },
+        where: { userId: rh!.userId, cpf, ativo: true, id: { not: id } },
       });
       if (dup) return NextResponse.json({ error: 'CPF já cadastrado' }, { status: 409 });
     }
@@ -220,7 +208,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       });
     }
 
-    const alteradoPor = dbUser.fullName || dbUser.email || dbUser.id;
+    const alteradoPor = rh!.userId;
 
     const funcionario = await prisma.$transaction(async (tx) => {
       const updated = await tx.rhFuncionario.update({
@@ -264,7 +252,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (alteracoes.length > 0) {
         await tx.rhHistoricoFuncionario.createMany({
           data: alteracoes.map((a) => ({
-            userId: dbUser.id,
+            userId: rh!.userId,
             funcionarioId: id,
             campo: a.campo,
             valorAnterior: a.valorAnterior,
@@ -297,13 +285,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const permanent = req.nextUrl.searchParams.get('permanent') === 'true';
 
     const existing = await prisma.rhFuncionario.findFirst({
-      where: { id, userId: dbUser.id },
+      where: { id, userId: rh!.userId },
     });
     if (!existing)
       return NextResponse.json({ error: 'Funcionário não encontrado' }, { status: 404 });
@@ -320,12 +308,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     // Soft delete — desativar
-    const alteradoPor = dbUser.fullName || dbUser.email || dbUser.id;
+    const alteradoPor = rh!.userId;
     await prisma.$transaction(async (tx) => {
       await tx.rhFuncionario.update({ where: { id }, data: { ativo: false } });
       await tx.rhHistoricoFuncionario.create({
         data: {
-          userId: dbUser.id,
+          userId: rh!.userId,
           funcionarioId: id,
           campo: 'ativo',
           valorAnterior: 'Ativo',

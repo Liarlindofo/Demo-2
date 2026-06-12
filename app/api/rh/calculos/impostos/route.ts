@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { rhGetUser } from '@/lib/rh-auth';
 import {
   calcularComposicaoSalarial,
   calcularEncargosPatronais,
@@ -12,17 +11,6 @@ import { carregarBonificacoesComposicao } from '@/lib/rh-bonificacoes-composicao
 
 export const dynamic = 'force-dynamic';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
 
 function calcularINSSEmpregado(salario: number): number {
   const faixas = [
@@ -68,8 +56,8 @@ function calcularIRRF(salario: number, inss: number): number {
 
 export async function POST(req: Request) {
   try {
-    const dbUser = await getDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const body = await req.json();
     const { funcionarioId, ratPct: ratParam } = body;
@@ -86,7 +74,7 @@ export async function POST(req: Request) {
 
     if (funcionarioId) {
       const f = await prisma.rhFuncionario.findFirst({
-        where: { id: funcionarioId, userId: dbUser.id },
+        where: { id: funcionarioId, userId: rh!.userId },
         include: { cargo: { select: { ratPct: true } }, loja: { select: { fap: true } } },
       });
       if (!f) return NextResponse.json({ error: 'Funcionário não encontrado' }, { status: 404 });

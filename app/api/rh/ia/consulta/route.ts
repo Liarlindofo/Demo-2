@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
+import { rhGetUser } from '@/lib/rh-auth';
 import { RH_TOOLS, RH_BONIFICACOES_PROMPT, executeRhTool } from '@/lib/rh-ia-tools';
 
 const DEFAULT_SYSTEM_PROMPT = `Você é um especialista em direito trabalhista brasileiro e gestão de RH para pequenas e médias empresas do setor de alimentação (CNAE 5611-2/01 — Restaurantes e similares).
@@ -105,15 +105,8 @@ async function callPerplexity(apiKey: string, messages: any[]): Promise<any> {
 
 export async function POST(request: NextRequest) {
   try {
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
-      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
-    }
-
-    const user = await prisma.user.findFirst({ where: { stackUserId: stackUser.id } });
-    if (!user) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
-    }
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const body = await request.json();
     const { pergunta, historico = [], conversaId } = body;
@@ -174,7 +167,7 @@ export async function POST(request: NextRequest) {
             toolArgs = {};
           }
 
-          const toolResult = await executeRhTool(toolName, toolArgs, user.id);
+          const toolResult = await executeRhTool(toolName, toolArgs, rh.userId);
 
           // Adicionar resultado ao contexto
           currentMessages.push({
@@ -216,7 +209,7 @@ export async function POST(request: NextRequest) {
     if (!idConversa) {
       const titulo = pergunta.trim().slice(0, 80);
       const novaConversa = await prisma.rhIaConversa.create({
-        data: { userId: user.id, titulo },
+        data: { userId: rh.userId, titulo },
       });
       idConversa = novaConversa.id;
     } else {
