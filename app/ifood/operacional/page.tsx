@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { UserProfileDropdown } from '@/components/user-profile-dropdown';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -1269,7 +1270,7 @@ export default function IfoodOperacionalPage() {
             <span className="text-gray-400 text-sm">{selectedStore.merchantName}</span>
           )}
 
-          {/* Polling status */}
+          {/* Polling status + user */}
           <div className="ml-auto flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-xs">
               {pollingOk ? (
@@ -1293,6 +1294,7 @@ export default function IfoodOperacionalPage() {
             >
               <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             </Button>
+            <UserProfileDropdown />
           </div>
         </div>
 

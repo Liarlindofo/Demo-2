@@ -9,6 +9,7 @@ import {
 } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { UserProfileDropdown } from '@/components/user-profile-dropdown';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -759,6 +760,7 @@ export default function IfoodCardapioPage() {
                 : <RefreshCw className="h-3.5 w-3.5" />}
               <span className="hidden sm:block">Sincronizar Cardápio</span>
             </Button>
+            <UserProfileDropdown />
           </div>
         </div>
 

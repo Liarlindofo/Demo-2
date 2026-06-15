@@ -1,5 +1,6 @@
 import { stackServerApp } from '@/stack';
 import { LojaProvider } from '@/contexts/LojaContext';
+import { RhClientWrapper } from '@/components/rh/RhClientWrapper';
 
 export default async function RhLayout({ children }: { children: React.ReactNode }) {
   // Garante que só usuários autenticados via Stack Auth acessam o módulo RH
@@ -7,7 +8,9 @@ export default async function RhLayout({ children }: { children: React.ReactNode
 
   return (
     <LojaProvider>
-      {children}
+      <RhClientWrapper>
+        {children}
+      </RhClientWrapper>
     </LojaProvider>
   );
 }

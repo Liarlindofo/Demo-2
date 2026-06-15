@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useApp } from '@/contexts/app-context';
+import { UserProfileDropdown } from '@/components/user-profile-dropdown';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -752,6 +753,9 @@ export default function IfoodConfiguracoesPage() {
           <div className="flex items-center gap-2">
             <ShoppingBag className="h-5 w-5 text-[#EA1D2C]" />
             <span className="font-semibold text-lg">iFood</span>
+          </div>
+          <div className="ml-auto">
+            <UserProfileDropdown />
           </div>
         </div>
 
