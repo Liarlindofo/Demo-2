@@ -47,7 +47,7 @@ interface AddModalProps {
 function AddModal({ onClose, onSaved }: AddModalProps) {
   const [nome, setNome] = useState('');
   const [unidade, setUnidade] = useState('kg');
-  const [categoriaId, setCategoriaId] = useState(CATEGORIAS_PADRAO[0].id);
+  const [categoriaId, setCategoriaId] = useState<string>(CATEGORIAS_PADRAO[0].id);
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState('');
 
