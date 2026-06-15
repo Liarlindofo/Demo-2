@@ -10,6 +10,7 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { UserProfileDropdown } from '@/components/user-profile-dropdown';
+import { Logo } from '@/components/logo';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,7 +27,6 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useApp } from '@/contexts/app-context';
 import {
-  ChevronLeft,
   ShoppingBag,
   RefreshCw,
   Search,
@@ -712,8 +712,8 @@ export default function IfoodCardapioPage() {
       {/* ── Header ── */}
       <header className="bg-[#141415]/95 backdrop-blur-sm border-b border-[#374151] sticky top-0 z-40">
         <div className="max-w-full px-4 sm:px-6 py-3 flex items-center gap-4 flex-wrap">
-          <Link href="/dashboard" className="text-gray-400 hover:text-white transition-colors flex-shrink-0">
-            <ChevronLeft className="h-5 w-5" />
+          <Link href="/dashboard" className="hover:opacity-80 transition-opacity shrink-0">
+            <Logo />
           </Link>
           <div className="flex items-center gap-2 flex-shrink-0">
             <ShoppingBag className="h-5 w-5 text-[#EA1D2C]" />

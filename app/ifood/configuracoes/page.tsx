@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useApp } from '@/contexts/app-context';
 import { UserProfileDropdown } from '@/components/user-profile-dropdown';
+import { Logo } from '@/components/logo';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +23,6 @@ import {
   Plus,
   Trash2,
   RefreshCw,
-  ChevronLeft,
   Store,
   AlertTriangle,
   Wifi,
@@ -747,8 +747,8 @@ export default function IfoodConfiguracoesPage() {
       {/* Header */}
       <header className="bg-[#141415]/95 backdrop-blur-sm border-b border-[#374151] sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center gap-4">
-          <Link href="/dashboard" className="text-gray-400 hover:text-white transition-colors">
-            <ChevronLeft className="h-5 w-5" />
+          <Link href="/dashboard" className="hover:opacity-80 transition-opacity shrink-0">
+            <Logo />
           </Link>
           <div className="flex items-center gap-2">
             <ShoppingBag className="h-5 w-5 text-[#EA1D2C]" />
