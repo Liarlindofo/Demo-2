@@ -52,6 +52,7 @@ model User {
   etiquetagemNomes     EtiquetagemNomeResponsavel[]
   etiquetagemEtiquetas EtiquetagemEtiqueta[]
   cmvStoreData         CmvStoreData[]
+  estoqueInsumos       EstoqueInsumo[]
   estoqueContagens     EstoqueContagem[]
   estoqueProdutoConfig EstoqueProdutoConfig[]
   estoqueProdutoOrdem  EstoqueProdutoOrdem?
@@ -580,6 +581,25 @@ model CmvStoreData {
 // ============================================
 // ESTOQUE - Contagem de Estoque
 // ============================================
+
+model EstoqueInsumo {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  insumoId       String   @map("insumo_id")       // slug identificador (ex: 'farinha-trigo')
+  nome           String
+  unidade        String   @default("kg")
+  categoriaId    String   @map("categoria_id")    // ex: 'materias-primas'
+  categoriaNome  String   @map("categoria_nome")
+  categoriaIcone String   @map("categoria_icone")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, insumoId])
+  @@index([userId])
+  @@index([userId, categoriaId])
+  @@map("estoque_insumos")
+}
 
 model EstoqueContagem {
   id          String   @id @default(cuid())

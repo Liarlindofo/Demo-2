@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ChevronLeft, Search, ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronLeft, Search, ChevronUp, ChevronDown, Plus, Trash2, X } from 'lucide-react';
 import type { EstoqueConfigMap } from '../hooks/useEstoqueConfig';
 import type { ProdutoEstoque } from '../hooks/useProdutosEstoque';
+import { CATEGORIAS_PADRAO } from '@/lib/estoque-insumos-padrao';
 
 interface GerenciarProdutosProps {
   produtos: ProdutoEstoque[];
@@ -36,6 +37,130 @@ function Toggle({ ativo, onChange }: { ativo: boolean; onChange: (v: boolean) =>
   );
 }
 
+// ── Modal de Adicionar Produto ────────────────────────────────────────────────
+
+interface AddModalProps {
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function AddModal({ onClose, onSaved }: AddModalProps) {
+  const [nome, setNome] = useState('');
+  const [unidade, setUnidade] = useState('kg');
+  const [categoriaId, setCategoriaId] = useState(CATEGORIAS_PADRAO[0].id);
+  const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState('');
+
+  const categoria = CATEGORIAS_PADRAO.find(c => c.id === categoriaId)!;
+
+  const handleSalvar = async () => {
+    if (!nome.trim()) { setErro('Informe o nome do produto.'); return; }
+    setSaving(true);
+    setErro('');
+    try {
+      const res = await fetch('/api/estoque/insumos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome,
+          unidade,
+          categoriaId: categoria.id,
+          categoriaNome: categoria.nome,
+          categoriaIcone: categoria.icone,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Erro ao salvar');
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Erro ao salvar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4">
+      <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl w-full max-w-sm p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-white">Novo produto</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Nome</label>
+            <input
+              autoFocus
+              value={nome}
+              onChange={e => setNome(e.target.value)}
+              placeholder="Ex: MOZZARELA EXTRA"
+              className="w-full bg-[#141416] border border-[#374151] rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/60"
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="text-xs text-gray-400 block mb-1">Unidade</label>
+              <select
+                value={unidade}
+                onChange={e => setUnidade(e.target.value)}
+                className="w-full bg-[#141416] border border-[#374151] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/60"
+              >
+                <option value="kg">kg</option>
+                <option value="un">un</option>
+                <option value="L">L</option>
+                <option value="g">g</option>
+                <option value="ml">ml</option>
+              </select>
+            </div>
+
+            <div className="flex-1">
+              <label className="text-xs text-gray-400 block mb-1">Categoria</label>
+              <select
+                value={categoriaId}
+                onChange={e => setCategoriaId(e.target.value)}
+                className="w-full bg-[#141416] border border-[#374151] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/60"
+              >
+                {CATEGORIAS_PADRAO.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.icone} {c.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {erro && <p className="text-xs text-red-400">{erro}</p>}
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-[#374151] text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSalvar}
+            disabled={saving}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Salvando…' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Componente principal ──────────────────────────────────────────────────────
+
 export function GerenciarProdutos({
   produtos,
   config,
@@ -47,18 +172,20 @@ export function GerenciarProdutos({
   onSetKgPorUnidade,
   onMoverAcima,
   onMoverAbaixo,
+  onRefetch,
 }: GerenciarProdutosProps) {
   const [search, setSearch] = useState('');
   const [reordenando, setReordenando] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const allIds = produtos.map(p => p.id);
+  const allIds = produtos.map(p => p.insumoId);
 
-  // Ordena respeintando productOrder, mantendo a ordem original como fallback
   const produtosOrdenados = useMemo(() => {
     if (productOrder.length === 0) return produtos;
     return [...produtos].sort((a, b) => {
-      const ia = productOrder.indexOf(a.id);
-      const ib = productOrder.indexOf(b.id);
+      const ia = productOrder.indexOf(a.insumoId);
+      const ib = productOrder.indexOf(b.insumoId);
       if (ia === -1 && ib === -1) return 0;
       if (ia === -1) return 1;
       if (ib === -1) return -1;
@@ -66,7 +193,6 @@ export function GerenciarProdutos({
     });
   }, [produtos, productOrder]);
 
-  // Agrupa por sessão
   const grupos = useMemo(() => {
     const map = new Map<string, { id: string; nome: string; icone: string; itens: ProdutoEstoque[] }>();
     for (const p of produtosOrdenados) {
@@ -83,12 +209,32 @@ export function GerenciarProdutos({
     : null;
 
   const totalAtivos = produtos.filter(p => {
-    const cfg = config[p.id];
+    const cfg = config[p.insumoId];
     return cfg === undefined || cfg.ativo !== false;
   }).length;
 
+  const handleDelete = async (produto: ProdutoEstoque) => {
+    if (!confirm(`Remover "${produto.nome}" da lista?`)) return;
+    setDeletingId(produto.id);
+    try {
+      await fetch(`/api/estoque/insumos/${produto.id}`, { method: 'DELETE' });
+      onRefetch();
+    } catch {
+      alert('Erro ao remover produto.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
+      {showAdd && (
+        <AddModal
+          onClose={() => setShowAdd(false)}
+          onSaved={onRefetch}
+        />
+      )}
+
       {/* Header */}
       <div className="bg-[#1c1c1e] border-b border-[#2a2a2e] px-4 pt-12 pb-4">
         <div className="flex items-center gap-3 mb-4">
@@ -111,6 +257,15 @@ export function GerenciarProdutos({
           >
             {reordenando ? 'Concluir' : 'Reordenar'}
           </button>
+          {!reordenando && (
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-black font-semibold hover:bg-amber-400 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Novo
+            </button>
+          )}
         </div>
 
         {!reordenando && (
@@ -147,7 +302,6 @@ export function GerenciarProdutos({
       {/* Lista */}
       <div className="flex-1 overflow-y-auto pb-6">
         {reordenando ? (
-          // ── Modo reordenação: lista plana ──────────────────────────────────
           <div className="px-4 pt-4 space-y-2">
             {produtosOrdenados.map((p, idx) => (
               <div
@@ -156,14 +310,14 @@ export function GerenciarProdutos({
               >
                 <div className="flex flex-col gap-0.5 shrink-0">
                   <button
-                    onClick={() => onMoverAcima(p.id, allIds)}
+                    onClick={() => onMoverAcima(p.insumoId, allIds)}
                     disabled={idx === 0}
                     className="p-1 text-gray-400 hover:text-amber-400 disabled:opacity-20 disabled:pointer-events-none transition-colors"
                   >
                     <ChevronUp className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => onMoverAbaixo(p.id, allIds)}
+                    onClick={() => onMoverAbaixo(p.insumoId, allIds)}
                     disabled={idx === produtosOrdenados.length - 1}
                     className="p-1 text-gray-400 hover:text-amber-400 disabled:opacity-20 disabled:pointer-events-none transition-colors"
                   >
@@ -179,7 +333,6 @@ export function GerenciarProdutos({
             ))}
           </div>
         ) : filtrados ? (
-          // ── Resultado de busca: lista plana ────────────────────────────────
           <div className="px-4 pt-4 space-y-2">
             {filtrados.length === 0 ? (
               <p className="text-center text-gray-500 text-sm py-8">Nenhum produto encontrado</p>
@@ -188,17 +341,18 @@ export function GerenciarProdutos({
                 <ProdutoRow
                   key={p.id}
                   produto={p}
-                  config={config[p.id]}
+                  config={config[p.insumoId]}
+                  deleting={deletingId === p.id}
                   onSetAtivo={onSetAtivo}
                   onSetMinimo={onSetMinimo}
                   onSetModoContagem={onSetModoContagem}
                   onSetKgPorUnidade={onSetKgPorUnidade}
+                  onDelete={handleDelete}
                 />
               ))
             )}
           </div>
         ) : (
-          // ── Agrupado por sessão ────────────────────────────────────────────
           grupos.map(grupo => (
             <div key={grupo.id}>
               <div className="flex items-center gap-2 px-4 pt-5 pb-2">
@@ -208,7 +362,7 @@ export function GerenciarProdutos({
                 </p>
                 <span className="text-xs text-gray-600 ml-auto">
                   {grupo.itens.filter(p => {
-                    const cfg = config[p.id];
+                    const cfg = config[p.insumoId];
                     return cfg === undefined || cfg.ativo !== false;
                   }).length}/{grupo.itens.length}
                 </span>
@@ -218,11 +372,13 @@ export function GerenciarProdutos({
                   <ProdutoRow
                     key={p.id}
                     produto={p}
-                    config={config[p.id]}
+                    config={config[p.insumoId]}
+                    deleting={deletingId === p.id}
                     onSetAtivo={onSetAtivo}
                     onSetMinimo={onSetMinimo}
                     onSetModoContagem={onSetModoContagem}
                     onSetKgPorUnidade={onSetKgPorUnidade}
+                    onDelete={handleDelete}
                   />
                 ))}
               </div>
@@ -239,39 +395,49 @@ export function GerenciarProdutos({
 interface ProdutoRowProps {
   produto: ProdutoEstoque;
   config: { ativo: boolean; estoqueMinimo?: number; modoContagem?: 'kg' | 'unidade'; kgPorUnidade?: number } | undefined;
+  deleting: boolean;
   onSetAtivo: (id: string, v: boolean) => void;
   onSetMinimo: (id: string, v: number | undefined) => void;
   onSetModoContagem: (id: string, modo: 'kg' | 'unidade') => void;
   onSetKgPorUnidade: (id: string, kg: number | undefined) => void;
+  onDelete: (p: ProdutoEstoque) => void;
 }
 
-function ProdutoRow({ produto, config, onSetAtivo, onSetMinimo, onSetModoContagem, onSetKgPorUnidade }: ProdutoRowProps) {
+function ProdutoRow({
+  produto,
+  config,
+  deleting,
+  onSetAtivo,
+  onSetMinimo,
+  onSetModoContagem,
+  onSetKgPorUnidade,
+  onDelete,
+}: ProdutoRowProps) {
   const ativo = config?.ativo !== false;
   const minimo = config?.estoqueMinimo;
   const modo = config?.modoContagem ?? 'kg';
   const kgPorUnidade = config?.kgPorUnidade;
 
   const handleMinimo = (raw: string) => {
-    if (raw === '') { onSetMinimo(produto.id, undefined); return; }
+    if (raw === '') { onSetMinimo(produto.insumoId, undefined); return; }
     const n = parseFloat(raw.replace(',', '.'));
-    if (!isNaN(n) && n >= 0) onSetMinimo(produto.id, n);
+    if (!isNaN(n) && n >= 0) onSetMinimo(produto.insumoId, n);
   };
 
   const handleKgPorUnidade = (raw: string) => {
-    if (raw === '') { onSetKgPorUnidade(produto.id, undefined); return; }
+    if (raw === '') { onSetKgPorUnidade(produto.insumoId, undefined); return; }
     const n = parseFloat(raw.replace(',', '.'));
-    if (!isNaN(n) && n > 0) onSetKgPorUnidade(produto.id, n);
+    if (!isNaN(n) && n > 0) onSetKgPorUnidade(produto.insumoId, n);
   };
 
   return (
     <div
       className={`rounded-2xl border px-4 py-3 transition-colors ${
         ativo ? 'bg-[#1c1c1e] border-[#2a2a2e]' : 'bg-[#141416] border-[#2a2a2e] opacity-50'
-      }`}
+      } ${deleting ? 'opacity-30 pointer-events-none' : ''}`}
     >
-      {/* Linha principal */}
       <div className="flex items-center gap-3">
-        <Toggle ativo={ativo} onChange={v => onSetAtivo(produto.id, v)} />
+        <Toggle ativo={ativo} onChange={v => onSetAtivo(produto.insumoId, v)} />
 
         <div className="flex-1 min-w-0">
           <p className={`text-sm font-medium truncate ${ativo ? 'text-white' : 'text-gray-500'}`}>
@@ -296,6 +462,14 @@ function ProdutoRow({ produto, config, onSetAtivo, onSetMinimo, onSetModoContage
             <span className="text-xs text-gray-600">{produto.unidade}</span>
           </div>
         )}
+
+        <button
+          onClick={() => onDelete(produto)}
+          className="ml-1 p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
+          title="Remover produto"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {ativo && (
@@ -306,7 +480,7 @@ function ProdutoRow({ produto, config, onSetAtivo, onSetMinimo, onSetModoContage
             {(['kg', 'unidade'] as const).map(m => (
               <button
                 key={m}
-                onClick={() => onSetModoContagem(produto.id, m)}
+                onClick={() => onSetModoContagem(produto.insumoId, m)}
                 className={`px-3 py-1 text-xs font-medium transition-colors ${
                   modo === m
                     ? 'bg-amber-500 text-black'

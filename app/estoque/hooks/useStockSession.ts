@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import type { StockSession, StockCategory, StockItem } from '../types';
-import { criarSessoesPadrao } from '../data/mockInsumos';
 
 export type { StockCategory };
 
@@ -75,7 +74,7 @@ export function useStockSession() {
         setSessions(prev => prev.filter(s => s.id !== existente.id));
       }
 
-      const nova = await apiPost(sessoesIniciais ?? criarSessoesPadrao(), gerente);
+      const nova = await apiPost(sessoesIniciais ?? [], gerente);
       setSessions(prev => [nova, ...prev]);
       setActiveSessionId(nova.id);
       return nova;

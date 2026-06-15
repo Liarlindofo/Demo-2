@@ -5,7 +5,7 @@ import { History, AlertTriangle, Package } from 'lucide-react';
 import { useStockSession } from '../hooks/useStockSession';
 import { useProdutosEstoque } from '../hooks/useProdutosEstoque';
 import { useEstoqueConfig } from '../hooks/useEstoqueConfig';
-import { criarSessoesPadrao } from '../data/mockInsumos';
+import { construirSessoes } from '../hooks/useProdutosEstoque';
 import { HomeScreen } from './HomeScreen';
 import { AlertBadge } from './AlertBadge';
 import { Contagem } from '../pages/Contagem';
@@ -60,8 +60,11 @@ export function EstoqueDashboard() {
   }
 
   const handleIniciar = async () => {
-    const sessoesIniciais = sessoesProdutos.length > 0 ? sessoesProdutos : criarSessoesPadrao();
-    // Se já há sessão ativa, força criação de uma nova (substitui a antiga)
+    // Aguarda produtos carregarem se ainda estiver carregando
+    const sessoesIniciais =
+      sessoesProdutos.length > 0
+        ? sessoesProdutos
+        : construirSessoes([], config, productOrder);
     const temAtiva = sessions.some(s => s.status === 'em_andamento');
     await iniciarContagem(sessoesIniciais, 'Gerente', temAtiva);
     setScreen('counting');
