@@ -179,6 +179,7 @@ export const CATEGORIAS_PADRAO = [
   { id: 'materias-primas', nome: 'Matéria Prima', icone: '🧂' },
   { id: 'embalagens',      nome: 'Embalagens',    icone: '📦' },
   { id: 'bebidas',         nome: 'Bebidas',        icone: '🥤' },
+  { id: 'receitas',        nome: 'Receitas',       icone: '📋' },
 ] as const;
 
 export const INSUMOS_PADRAO: InsumoSeed[] = [
