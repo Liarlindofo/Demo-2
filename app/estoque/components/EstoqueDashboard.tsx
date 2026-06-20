@@ -12,11 +12,14 @@ import { Contagem } from '../pages/Contagem';
 import { Historico } from '../pages/Historico';
 import { Alertas } from '../pages/Alertas';
 import { GerenciarProdutos } from '../pages/GerenciarProdutos';
+import { ContagemResultado } from './ContagemResultado';
+import type { StockSession } from '../types';
 
-type Screen = 'home' | 'counting' | 'history' | 'alerts' | 'products';
+type Screen = 'home' | 'counting' | 'history' | 'alerts' | 'products' | 'resultado';
 
 export function EstoqueDashboard() {
   const [screen, setScreen] = useState<Screen>('home');
+  const [sessaoFinalizada, setSessaoFinalizada] = useState<StockSession | null>(null);
 
   const { config, productOrder, hydrated: configHydrated, getConfig, setAtivo, setMinimo, setModoContagem, setKgPorUnidade, setProductOrder, moverProdutoAcima, moverProdutoAbaixo } = useEstoqueConfig();
 
@@ -85,7 +88,31 @@ export function EstoqueDashboard() {
         onObservacao={atualizarObservacao}
         onConcluirCategoria={concluirCategoria}
         onReabrirCategoria={reabrirCategoria}
-        onFinalizar={() => { finalizarContagem(); setScreen('home'); }}
+        onFinalizar={() => {
+          setSessaoFinalizada(activeSession);
+          finalizarContagem();
+          setScreen('resultado');
+        }}
+      />
+    );
+  }
+
+  if (screen === 'resultado' && sessaoFinalizada) {
+    const contagens = sessaoFinalizada.sessoes.flatMap(cat =>
+      cat.itens.map(item => ({
+        nome: item.nome,
+        quantidade: item.quantidadeContada,
+        unidade: item.unidade,
+      })),
+    );
+    return (
+      <ContagemResultado
+        storeId="loja"
+        storeName="Loja"
+        contagens={contagens}
+        sessoes={sessaoFinalizada.sessoes.length}
+        finalizadaEm={new Date()}
+        onVoltar={() => { setSessaoFinalizada(null); setScreen('home'); }}
       />
     );
   }
