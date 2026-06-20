@@ -10,9 +10,10 @@ interface HistoricoProps {
   onVoltar: () => void;
   onRetomar: (sessionId: string) => void;
   onExcluir: (sessionId: string) => void;
+  onVerResultado: (session: StockSession) => void;
 }
 
-export function Historico({ sessions, onVoltar, onRetomar, onExcluir }: HistoricoProps) {
+export function Historico({ sessions, onVoltar, onRetomar, onExcluir, onVerResultado }: HistoricoProps) {
   const [detalheId, setDetalheId] = useState<string | null>(null);
 
   const ordenadas = [...sessions].sort(
@@ -122,7 +123,13 @@ export function Historico({ sessions, onVoltar, onRetomar, onExcluir }: Historic
                   ? <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
                   : <Clock className="w-5 h-5 text-amber-400 shrink-0" />}
 
-                <button onClick={() => setDetalheId(s.id)} className="flex-1 text-left min-w-0">
+                <button onClick={() => {
+                    if (s.status === 'concluida') {
+                      onVerResultado(s);
+                    } else {
+                      setDetalheId(s.id);
+                    }
+                  }} className="flex-1 text-left min-w-0">
                   <p className="font-semibold text-white text-sm">
                     {new Date(s.dataCriacao).toLocaleDateString('pt-BR', {
                       weekday: 'short', day: '2-digit', month: 'short', year: 'numeric',
