@@ -31,14 +31,24 @@ export interface ContagemResultadoProps {
 
 // ── CSV export ─────────────────────────────────────────────────────────────────
 
+function formatNumberBR(value: number | null): string {
+  if (value === null) return '';
+  return value.toString().replace('.', ',');
+}
+
 function exportCSV(
   contagens: ContagemResultadoProps['contagens'],
   storeSlug: string,
   data: Date,
 ) {
-  const header = 'Insumo,Quantidade,Unidade\n';
+  const DELIM = ';';
+  const header = ['Insumo', 'Quantidade', 'Unidade'].join(DELIM) + '\n';
   const rows = contagens
-    .map(c => `"${c.nome}",${c.quantidade ?? ''},"${c.unidade}"`)
+    .map(c => [
+      `"${c.nome.replace(/"/g, '""')}"`,
+      formatNumberBR(c.quantidade),
+      `"${c.unidade}"`,
+    ].join(DELIM))
     .join('\n');
   const blob = new Blob(['\uFEFF' + header + rows], {
     type: 'text/csv;charset=utf-8;',
