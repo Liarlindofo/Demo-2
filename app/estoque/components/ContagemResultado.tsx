@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { Download, Search, Package } from 'lucide-react';
+import * as XLSX from 'xlsx-js-style';
 import {
   BarChart,
   Bar,
@@ -29,36 +30,124 @@ export interface ContagemResultadoProps {
   onVoltar?: () => void;
 }
 
-// ── CSV export ─────────────────────────────────────────────────────────────────
+// ── XLSX export ────────────────────────────────────────────────────────────────
 
-function formatNumberBR(value: number | null): string {
-  if (value === null) return '';
-  return value.toString().replace('.', ',');
+type BorderSide = { style: string; color: { rgb: string } };
+type BorderAll = { top: BorderSide; bottom: BorderSide; left: BorderSide; right: BorderSide };
+
+function borderAll(rgb: string): BorderAll {
+  const side: BorderSide = { style: 'thin', color: { rgb } };
+  return { top: side, bottom: side, left: side, right: side };
 }
 
-function exportCSV(
+function exportXLSX(
   contagens: ContagemResultadoProps['contagens'],
+  storeName: string,
   storeSlug: string,
   data: Date,
 ) {
-  const DELIM = ';';
-  const header = ['Insumo', 'Quantidade', 'Unidade'].join(DELIM) + '\n';
-  const rows = contagens
-    .map(c => [
-      `"${c.nome.replace(/"/g, '""')}"`,
-      formatNumberBR(c.quantidade),
-      `"${c.unidade}"`,
-    ].join(DELIM))
-    .join('\n');
-  const blob = new Blob(['\uFEFF' + header + rows], {
-    type: 'text/csv;charset=utf-8;',
+  const headerStyle = {
+    font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 12 },
+    fill: { fgColor: { rgb: '378ADD' } },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    border: borderAll('FFFFFF'),
+  };
+
+  const labelCellStyle = {
+    font: { sz: 11 },
+    alignment: { horizontal: 'left', vertical: 'center' },
+    border: borderAll('D9D9D9'),
+  };
+
+  const numberCellStyle = {
+    font: { sz: 11 },
+    alignment: { horizontal: 'right', vertical: 'center' },
+    numFmt: '#,##0.###',
+    border: borderAll('D9D9D9'),
+  };
+
+  const naoContadoStyle = {
+    font: { sz: 11, italic: true, color: { rgb: '999999' } },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    border: borderAll('D9D9D9'),
+  };
+
+  const zeradoFill = { fgColor: { rgb: 'FCEBEB' } };
+
+  const titleRow = [`Contagem de estoque — ${storeName}`];
+  const subtitleRow = [
+    `${data.toLocaleDateString('pt-BR')} às ${data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+  ];
+  const colHeaders = ['Insumo', 'Quantidade', 'Unidade'];
+  const dataRows = contagens.map(c => [c.nome, c.quantidade, c.unidade]);
+
+  const aoa = [titleRow, subtitleRow, [], colHeaders, ...dataRows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } },
+  ];
+
+  if (ws['A1']) {
+    ws['A1'].s = {
+      font: { bold: true, sz: 14, color: { rgb: '1A1A1A' } },
+      alignment: { horizontal: 'left' },
+    };
+  }
+  if (ws['A2']) {
+    ws['A2'].s = {
+      font: { sz: 10, color: { rgb: '666666' }, italic: true },
+      alignment: { horizontal: 'left' },
+    };
+  }
+
+  const headerRowIdx = 3;
+  (['A', 'B', 'C'] as const).forEach(col => {
+    const ref = `${col}${headerRowIdx + 1}`;
+    if (ws[ref]) ws[ref].s = headerStyle;
   });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `contagem_${storeSlug}_${data.toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+
+  contagens.forEach((c, i) => {
+    const rowNum = headerRowIdx + 1 + i + 1; // 1-indexed Excel row
+    const rA = `A${rowNum}`;
+    const rB = `B${rowNum}`;
+    const rC = `C${rowNum}`;
+
+    const isZerado = c.quantidade === 0;
+    const isNaoContado = c.quantidade === null;
+
+    if (ws[rA]) {
+      ws[rA].s = { ...labelCellStyle, fill: isZerado ? zeradoFill : undefined };
+    }
+    if (ws[rB]) {
+      if (isNaoContado) {
+        ws[rB].v = 'não contado';
+        ws[rB].t = 's';
+        ws[rB].s = naoContadoStyle;
+      } else {
+        ws[rB].s = { ...numberCellStyle, fill: isZerado ? zeradoFill : undefined };
+      }
+    }
+    if (ws[rC]) {
+      ws[rC].s = { ...labelCellStyle, fill: isZerado ? zeradoFill : undefined };
+    }
+  });
+
+  const maxNomeLen = Math.max(...contagens.map(c => c.nome.length), 'Insumo'.length);
+  ws['!cols'] = [
+    { wch: Math.min(maxNomeLen + 2, 40) },
+    { wch: 14 },
+    { wch: 10 },
+  ];
+
+  ws['!freeze'] = { xSplit: 0, ySplit: headerRowIdx + 1 };
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Contagem');
+
+  const fileName = `contagem_${storeSlug}_${data.toISOString().slice(0, 10)}.xlsx`;
+  XLSX.writeFile(wb, fileName);
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -213,11 +302,11 @@ export function ContagemResultado({
             </p>
           </div>
           <button
-            onClick={() => exportCSV(contagens, storeSlug, finalizadaEm)}
+            onClick={() => exportXLSX(contagens, storeName, storeSlug, finalizadaEm)}
             className="shrink-0 flex items-center gap-1.5 text-xs text-gray-400 hover:text-white border border-[#374151] rounded-xl px-3 py-2 transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
-            Exportar CSV
+            Exportar planilha
           </button>
         </div>
       </div>
