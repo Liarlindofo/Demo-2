@@ -1162,7 +1162,7 @@ model DeliveryRider {
   userId           String
   lojaId           String
   name             String
-  cpf              String
+  cnpj             String
   email            String
   phone            String?
   status           String                 @default("active")
@@ -1176,7 +1176,7 @@ model DeliveryRider {
   paymentPeriods   RiderPaymentPeriod[]
 
   @@unique([userId, email])
-  @@unique([userId, cpf])
+  @@unique([userId, cnpj])
   @@index([userId])
   @@index([lojaId])
   @@map("delivery_riders")

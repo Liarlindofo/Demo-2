@@ -6,19 +6,19 @@ import { generateInviteToken } from '@/lib/rider-auth';
 
 export const dynamic = 'force-dynamic';
 
-function validarCPF(cpf: string): boolean {
-  const nums = cpf.replace(/\D/g, '');
-  if (nums.length !== 11 || /^(\d)\1{10}$/.test(nums)) return false;
-  let soma = 0;
-  for (let i = 0; i < 9; i++) soma += parseInt(nums[i]) * (10 - i);
-  let resto = (soma * 10) % 11;
-  if (resto === 10 || resto === 11) resto = 0;
-  if (resto !== parseInt(nums[9])) return false;
-  soma = 0;
-  for (let i = 0; i < 10; i++) soma += parseInt(nums[i]) * (11 - i);
-  resto = (soma * 10) % 11;
-  if (resto === 10 || resto === 11) resto = 0;
-  return resto === parseInt(nums[10]);
+function validarCNPJ(cnpj: string): boolean {
+  const nums = cnpj.replace(/\D/g, '');
+  if (nums.length !== 14 || /^(\d)\1{13}$/.test(nums)) return false;
+  const calc = (n: number) => {
+    let sum = 0; let pos = n - 7;
+    for (let i = n; i >= 1; i--) {
+      sum += parseInt(nums[n - i]) * pos--;
+      if (pos < 2) pos = 9;
+    }
+    const r = sum % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  return calc(12) === parseInt(nums[12]) && calc(13) === parseInt(nums[13]);
 }
 
 export async function GET(req: NextRequest) {
@@ -47,17 +47,17 @@ export async function POST(req: NextRequest) {
     if (error) return error;
 
     const body = await req.json() as {
-      name: string; cpf: string; email: string;
+      name: string; cnpj: string; email: string;
       phone?: string; lojaId: string;
     };
 
-    if (!body.name || !body.cpf || !body.email || !body.lojaId) {
+    if (!body.name || !body.cnpj || !body.email || !body.lojaId) {
       return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 });
     }
 
-    const cpfNums = body.cpf.replace(/\D/g, '');
-    if (!validarCPF(cpfNums)) {
-      return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
+    const cnpjNums = body.cnpj.replace(/\D/g, '');
+    if (!validarCNPJ(cnpjNums)) {
+      return NextResponse.json({ error: 'CNPJ inválido' }, { status: 400 });
     }
 
     const inviteToken = generateInviteToken();
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         where: { id: existente.id },
         data: {
           name: body.name,
-          cpf: cpfNums,
+          cnpj: cnpjNums,
           phone: body.phone ?? existente.phone,
           lojaId: body.lojaId,
           status: 'active',
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
         userId: ctx.userId,
         lojaId: body.lojaId,
         name: body.name,
-        cpf: cpfNums,
+        cnpj: cnpjNums,
         email: body.email.toLowerCase(),
         phone: body.phone,
         inviteToken,

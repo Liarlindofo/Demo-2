@@ -16,7 +16,7 @@ interface Period {
   documents: Document[];
 }
 interface Rider {
-  id: string; name: string; cpf: string; email: string; phone: string | null;
+  id: string; name: string; cnpj: string; email: string; phone: string | null;
   status: string; passwordHash: string | null;
   loja: { nome: string }; paymentPeriods: Period[];
 }
@@ -28,7 +28,7 @@ const STATUS_LABEL: Record<string, { label: string; color: string; icon: React.R
   paid: { label: 'Pago', color: 'text-green-500', icon: <DollarSign className="w-4 h-4" /> },
 };
 
-const fmtCPF = (s: string) => s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+const fmtCNPJ = (s: string) => s.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
 const fmtMoney = (cents: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('pt-BR');
@@ -172,7 +172,7 @@ export default function MotoboiDetailPage() {
         <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Dados Cadastrais</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-            <div><p className="text-gray-500 text-xs mb-0.5">CPF</p><p className="text-white">{fmtCPF(rider.cpf)}</p></div>
+            <div><p className="text-gray-500 text-xs mb-0.5">CNPJ</p><p className="text-white">{fmtCNPJ(rider.cnpj)}</p></div>
             <div><p className="text-gray-500 text-xs mb-0.5">E-mail</p><p className="text-white">{rider.email}</p></div>
             <div><p className="text-gray-500 text-xs mb-0.5">Telefone</p><p className="text-white">{rider.phone ?? '—'}</p></div>
             <div><p className="text-gray-500 text-xs mb-0.5">Status</p>

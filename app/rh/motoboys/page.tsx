@@ -10,12 +10,12 @@ import {
 
 interface Loja { id: string; nome: string }
 interface Rider {
-  id: string; name: string; cpf: string; email: string;
+  id: string; name: string; cnpj: string; email: string;
   phone: string | null; status: string; passwordHash: string | null;
   lojaId: string; loja: { nome: string };
 }
 
-const fmt = (cpf: string) => cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+const fmt = (cnpj: string) => cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
 const statusColor: Record<string, string> = {
   active: 'text-green-400 bg-green-500/10',
   inactive: 'text-gray-400 bg-gray-500/10',
@@ -133,7 +133,7 @@ export default function MotoboyListPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5">
-                      <span className="text-xs text-gray-500">{fmt(rider.cpf)}</span>
+                      <span className="text-xs text-gray-500">{fmt(rider.cnpj)}</span>
                       <span className="text-xs text-gray-500 flex items-center gap-1"><Mail className="w-3 h-3" />{rider.email}</span>
                       <span className="text-xs text-gray-500">{rider.loja?.nome}</span>
                     </div>

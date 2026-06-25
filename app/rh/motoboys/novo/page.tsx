@@ -8,14 +8,19 @@ interface Loja { id: string; nome: string }
 
 const inputCls = 'w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50 transition-colors';
 
-function maskCPF(v: string) {
-  return v.replace(/\D/g, '').replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4').slice(0, 14);
+function maskCNPJ(v: string) {
+  return v.replace(/\D/g, '')
+    .replace(/(\d{2})(\d)/, '$1.$2')
+    .replace(/(\d{2}\.\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{2}\.\d{3}\.\d{3})(\d)/, '$1/$2')
+    .replace(/(\d{2}\.\d{3}\.\d{3}\/\d{4})(\d)/, '$1-$2')
+    .slice(0, 18);
 }
 
 export default function NovoMotoboyPage() {
   const router = useRouter();
   const [lojas, setLojas] = useState<Loja[]>([]);
-  const [form, setForm] = useState({ name: '', cpf: '', email: '', phone: '', lojaId: '' });
+  const [form, setForm] = useState({ name: '', cnpj: '', email: '', phone: '', lojaId: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [sucesso, setSucesso] = useState<{ inviteToken: string; reativado?: boolean } | null>(null);
@@ -38,7 +43,7 @@ export default function NovoMotoboyPage() {
         const res = await fetch('/api/rh/motoboys', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...form, cpf: form.cpf.replace(/\D/g, '') }),
+          body: JSON.stringify({ ...form, cnpj: form.cnpj.replace(/\D/g, '') }),
         });
         data = await res.json();
         if (!res.ok) { setError(data.error ?? 'Erro ao cadastrar'); return; }
@@ -89,7 +94,7 @@ export default function NovoMotoboyPage() {
             <button onClick={() => router.push('/rh/motoboys')} className="flex-1 py-2.5 border border-[#2a2a2e] text-gray-300 text-sm rounded-xl hover:bg-[#2a2a2e] transition-colors">
               Ver lista
             </button>
-            <button onClick={() => { setSucesso(null); setForm({ name: '', cpf: '', email: '', phone: '', lojaId: lojas[0]?.id ?? '' }); }}
+            <button onClick={() => { setSucesso(null); setForm({ name: '', cnpj: '', email: '', phone: '', lojaId: lojas[0]?.id ?? '' }); }}
               className="flex-1 py-2.5 bg-orange-500 text-black text-sm font-bold rounded-xl hover:bg-orange-400 transition-colors">
               Novo cadastro
             </button>
@@ -122,9 +127,9 @@ export default function NovoMotoboyPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-gray-400 mb-1.5 block">CPF *</label>
-              <input value={form.cpf} onChange={e => setForm(f => ({ ...f, cpf: maskCPF(e.target.value) }))}
-                placeholder="000.000.000-00" required className={inputCls} />
+              <label className="text-xs text-gray-400 mb-1.5 block">CNPJ *</label>
+              <input value={form.cnpj} onChange={e => setForm(f => ({ ...f, cnpj: maskCNPJ(e.target.value) }))}
+                placeholder="00.000.000/0000-00" required className={inputCls} />
             </div>
             <div>
               <label className="text-xs text-gray-400 mb-1.5 block">Telefone</label>
