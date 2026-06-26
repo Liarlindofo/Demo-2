@@ -69,11 +69,11 @@ export async function POST(req: NextRequest) {
     });
 
     if (existente) {
-      // Se está ativo → bloquear
-      if (existente.status === 'active') {
+      // Se está ativo E já tem senha → bloquear (motoboy já configurou acesso)
+      if (existente.status === 'active' && existente.passwordHash) {
         return NextResponse.json({ error: 'E-mail já cadastrado e ativo' }, { status: 409 });
       }
-      // Se está inativo → reativar com novos dados e novo token de convite
+      // Se está inativo OU nunca criou senha → reativar com novos dados e novo token de convite
       const reativado = await prisma.deliveryRider.update({
         where: { id: existente.id },
         data: {

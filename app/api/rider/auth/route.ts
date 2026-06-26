@@ -68,36 +68,41 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'E-mail e senha obrigatórios' }, { status: 400 });
   }
 
-  const rider = await prisma.deliveryRider.findFirst({
-    where: { email: body.email.toLowerCase(), status: 'active' },
-  });
+  try {
+    const rider = await prisma.deliveryRider.findFirst({
+      where: { email: body.email.toLowerCase(), status: 'active' },
+    });
 
-  if (!rider || !rider.passwordHash) {
-    return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
+    if (!rider || !rider.passwordHash) {
+      return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
+    }
+
+    const valid = await verifyPassword(body.password, rider.passwordHash);
+    if (!valid) {
+      return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
+    }
+
+    const jwtToken = createRiderToken({
+      riderId: rider.id,
+      userId: rider.userId,
+      email: rider.email,
+      name: rider.name,
+      lojaId: rider.lojaId,
+    });
+
+    const res = NextResponse.json({ ok: true, riderId: rider.id });
+    res.cookies.set(RIDER_COOKIE, jwtToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 8 * 60 * 60,
+      path: '/',
+    });
+    return res;
+  } catch (err) {
+    console.error('[POST /api/rider/auth] login error:', err);
+    return NextResponse.json({ error: 'Erro interno. Tente novamente.' }, { status: 500 });
   }
-
-  const valid = await verifyPassword(body.password, rider.passwordHash);
-  if (!valid) {
-    return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
-  }
-
-  const jwtToken = createRiderToken({
-    riderId: rider.id,
-    userId: rider.userId,
-    email: rider.email,
-    name: rider.name,
-    lojaId: rider.lojaId,
-  });
-
-  const res = NextResponse.json({ ok: true, riderId: rider.id });
-  res.cookies.set(RIDER_COOKIE, jwtToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 8 * 60 * 60,
-    path: '/',
-  });
-  return res;
 }
 
 // DELETE /api/rider/auth — logout

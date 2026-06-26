@@ -23,9 +23,12 @@ export default function RiderLoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      let data: { error?: string } = {};
+      try { data = await res.json(); } catch { /* resposta não-JSON */ }
       if (!res.ok) { setError(data.error ?? 'Credenciais inválidas'); return; }
       router.push('/rider/dashboard');
+    } catch {
+      setError('Erro de conexão. Tente novamente.');
     } finally { setLoading(false); }
   };
 
