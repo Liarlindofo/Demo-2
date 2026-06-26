@@ -2,14 +2,16 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bike, Loader2 } from 'lucide-react';
+import { Bike, Loader2, Eye, EyeOff } from 'lucide-react';
 
-const inputCls = 'w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50 transition-colors';
+const inputCls =
+  'w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50 transition-colors';
 
 export default function RiderLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -24,17 +26,21 @@ export default function RiderLoginPage() {
         body: JSON.stringify({ email, password }),
       });
       let data: { error?: string } = {};
-      try { data = await res.json(); } catch { /* resposta não-JSON */ }
+      try { data = await res.json(); } catch { /* ok */ }
       if (!res.ok) { setError(data.error ?? 'Credenciais inválidas'); return; }
-      window.location.href = '/rider/dashboard';
+      router.replace('/rider/dashboard');
     } catch {
       setError('Erro de conexão. Tente novamente.');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-8">
+
+        {/* Logo */}
         <div className="text-center">
           <div className="w-16 h-16 rounded-2xl bg-orange-500/10 flex items-center justify-center mx-auto mb-4">
             <Bike className="w-8 h-8 text-orange-400" />
@@ -43,19 +49,34 @@ export default function RiderLoginPage() {
           <p className="text-sm text-gray-500 mt-1">Acesse suas quinzenas e documentos</p>
         </div>
 
+        {/* Formulário */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-xs text-gray-400 mb-1.5 block">E-mail</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-              placeholder="seu@email.com" required autoComplete="email" className={inputCls} />
+            <input
+              type="email" value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="seu@email.com" required autoComplete="email"
+              className={inputCls}
+            />
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1.5 block">Senha</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-              placeholder="••••••" required autoComplete="current-password" className={inputCls} />
+            <div className="relative">
+              <input
+                type={showPass ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+                placeholder="••••••" required autoComplete="current-password"
+                className={`${inputCls} pr-11`}
+              />
+              <button type="button" onClick={() => setShowPass(s => !s)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
+                {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
-          {error && <p className="text-sm text-red-400 bg-red-500/10 rounded-xl px-4 py-3">{error}</p>}
+          {error && (
+            <p className="text-sm text-red-400 bg-red-500/10 rounded-xl px-4 py-3">{error}</p>
+          )}
 
           <button type="submit" disabled={loading}
             className="w-full flex items-center justify-center gap-2 py-3.5 bg-orange-500 text-black text-sm font-bold rounded-xl hover:bg-orange-400 disabled:opacity-50 transition-colors">
@@ -64,8 +85,9 @@ export default function RiderLoginPage() {
           </button>
         </form>
 
+        {/* Rodapé */}
         <p className="text-center text-xs text-gray-600">
-          Primeiro acesso? Use o link enviado pelo seu gestor.
+          Primeiro acesso? Use o link enviado por e-mail ou WhatsApp pelo seu gestor.
         </p>
       </div>
     </div>

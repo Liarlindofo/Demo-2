@@ -1,11 +1,73 @@
 'use client';
 
-import { useState, Suspense } from 'react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { Bike, Loader2, Check, Eye, EyeOff, LogIn } from 'lucide-react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Bike, Loader2, Check, Eye, EyeOff, Copy, CheckCircle2 } from 'lucide-react';
 
-const inputCls = 'w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50 transition-colors';
+const APP_URL = typeof window !== 'undefined' ? window.location.origin : '';
+const LOGIN_URL = `${APP_URL}/rider/login`;
+
+const inputCls =
+  'w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50 transition-colors';
+
+function CountdownRedirect({ email }: { email: string }) {
+  const router = useRouter();
+  const [secs, setSecs] = useState(5);
+  const [copiado, setCopiado] = useState(false);
+
+  useEffect(() => {
+    if (secs <= 0) { router.replace('/rider/dashboard'); return; }
+    const t = setTimeout(() => setSecs(s => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [secs, router]);
+
+  const copyLogin = () => {
+    navigator.clipboard.writeText(LOGIN_URL);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
+  };
+
+  return (
+    <div className="space-y-5 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center mx-auto">
+        <Check className="w-7 h-7 text-green-400" />
+      </div>
+
+      <div className="space-y-1">
+        <p className="text-white font-semibold text-lg">Tudo pronto!</p>
+        <p className="text-sm text-gray-400">Sua senha foi criada com sucesso.</p>
+      </div>
+
+      {email && (
+        <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-left space-y-1">
+          <span className="text-gray-500 text-xs block">Seu e-mail de acesso</span>
+          <span className="text-white">{email}</span>
+        </div>
+      )}
+
+      {/* Link de acesso futuro */}
+      <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-left space-y-2">
+        <p className="text-gray-400 text-xs">Guarde este link para entrar sempre no portal:</p>
+        <p className="text-orange-400 text-xs font-mono break-all">{LOGIN_URL}</p>
+        <button onClick={copyLogin}
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors">
+          {copiado ? <CheckCircle2 className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+          {copiado ? 'Copiado!' : 'Copiar link de acesso'}
+        </button>
+      </div>
+
+      <p className="text-sm text-gray-500">
+        Entrando no portal em <span className="text-white font-bold">{secs}s</span>...
+      </p>
+
+      <button
+        onClick={() => router.replace('/rider/dashboard')}
+        className="w-full flex items-center justify-center gap-2 py-3.5 bg-orange-500 text-black text-sm font-bold rounded-xl hover:bg-orange-400 transition-colors">
+        Entrar agora
+      </button>
+    </div>
+  );
+}
 
 function SetupForm() {
   const params = useSearchParams();
@@ -31,7 +93,7 @@ function SetupForm() {
         body: JSON.stringify({ action: 'setup', token, newPassword: password }),
       });
       let data: { error?: string; email?: string } = {};
-      try { data = await res.json(); } catch { /* resposta não-JSON */ }
+      try { data = await res.json(); } catch { /* ok */ }
       if (!res.ok) { setError(data.error ?? 'Erro ao configurar senha. Tente novamente.'); return; }
       setSucesso({ email: data.email ?? '' });
     } catch {
@@ -50,34 +112,7 @@ function SetupForm() {
     );
   }
 
-  if (sucesso) {
-    return (
-      <div className="space-y-5 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center mx-auto">
-          <Check className="w-7 h-7 text-green-400" />
-        </div>
-        <div className="space-y-1">
-          <p className="text-white font-semibold">Senha criada com sucesso!</p>
-          <p className="text-sm text-gray-400">
-            Agora acesse o portal com seu e-mail e a senha que você acabou de criar.
-          </p>
-        </div>
-        {sucesso.email && (
-          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-gray-300 text-left">
-            <span className="text-gray-500 text-xs block mb-0.5">Seu e-mail de acesso</span>
-            {sucesso.email}
-          </div>
-        )}
-        <Link
-          href="/rider/login"
-          className="flex items-center justify-center gap-2 w-full py-3.5 bg-orange-500 text-black text-sm font-bold rounded-xl hover:bg-orange-400 transition-colors"
-        >
-          <LogIn className="w-4 h-4" />
-          Entrar no portal
-        </Link>
-      </div>
-    );
-  }
+  if (sucesso) return <CountdownRedirect email={sucesso.email} />;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">

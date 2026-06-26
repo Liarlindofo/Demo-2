@@ -3,8 +3,11 @@ import { prisma } from '@/lib/prisma';
 import { requireRhPermission } from '@/lib/rh-auth';
 import { P } from '@/lib/rh-permissions';
 import { generateInviteToken } from '@/lib/rider-auth';
+import { buildInviteLink, sendInviteEmail } from '@/lib/rider-invite-email';
 
 export const dynamic = 'force-dynamic';
+
+const INVITE_DAYS = 30;
 
 function validarCNPJ(cnpj: string): boolean {
   const nums = cnpj.replace(/\D/g, '');
@@ -61,49 +64,66 @@ export async function POST(req: NextRequest) {
     }
 
     const inviteToken = generateInviteToken();
-    const inviteTokenExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const inviteTokenExpiresAt = new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000);
+
+    // Buscar loja para o e-mail
+    const loja = await prisma.rhLoja.findUnique({ where: { id: body.lojaId }, select: { nome: true } });
 
     // Verificar se e-mail já existe
     const existente = await prisma.deliveryRider.findFirst({
       where: { userId: ctx.userId, email: body.email.toLowerCase() },
     });
 
+    let rider: { id: string; name: string; email: string; inviteToken: string | null };
+    let reativado = false;
+
     if (existente) {
-      // Se está ativo E já tem senha → bloquear (motoboy já configurou acesso)
+      // Se está ativo E já tem senha → bloquear
       if (existente.status === 'active' && existente.passwordHash) {
         return NextResponse.json({ error: 'E-mail já cadastrado e ativo' }, { status: 409 });
       }
-      // Se está inativo OU nunca criou senha → reativar com novos dados e novo token de convite
-      const reativado = await prisma.deliveryRider.update({
+      // Inativo ou sem senha → reativar como pending_setup
+      const updated = await prisma.deliveryRider.update({
         where: { id: existente.id },
         data: {
           name: body.name,
           cnpj: cnpjNums,
           phone: body.phone ?? existente.phone,
           lojaId: body.lojaId,
-          status: 'active',
+          status: 'pending_setup',
           passwordHash: null,
           inviteToken,
           inviteTokenExpiresAt,
         },
       });
-      return NextResponse.json({ ...reativado, inviteToken, reativado: true }, { status: 200 });
+      rider = updated;
+      reativado = true;
+    } else {
+      const created = await prisma.deliveryRider.create({
+        data: {
+          userId: ctx.userId,
+          lojaId: body.lojaId,
+          name: body.name,
+          cnpj: cnpjNums,
+          email: body.email.toLowerCase(),
+          phone: body.phone,
+          status: 'pending_setup',
+          inviteToken,
+          inviteTokenExpiresAt,
+        },
+      });
+      rider = created;
     }
 
-    const rider = await prisma.deliveryRider.create({
-      data: {
-        userId: ctx.userId,
-        lojaId: body.lojaId,
-        name: body.name,
-        cnpj: cnpjNums,
-        email: body.email.toLowerCase(),
-        phone: body.phone,
-        inviteToken,
-        inviteTokenExpiresAt,
-      },
-    });
+    // Disparar e-mail — falha silenciosa (não bloqueia o cadastro)
+    sendInviteEmail({
+      to: rider.email,
+      riderName: rider.name,
+      lojaNome: loja?.nome ?? 'sua loja',
+      inviteLink: buildInviteLink(inviteToken),
+    }).catch(err => console.error('[POST /api/rh/motoboys] falha ao enviar e-mail de convite:', err));
 
-    return NextResponse.json({ ...rider, inviteToken }, { status: 201 });
+    return NextResponse.json({ ...rider, inviteToken, reativado }, { status: reativado ? 200 : 201 });
   } catch (err) {
     console.error('[POST /api/rh/motoboys]', err);
     return NextResponse.json({ error: 'Erro interno ao cadastrar motoboy' }, { status: 500 });

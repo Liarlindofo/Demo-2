@@ -7,9 +7,15 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-// POST /api/rider/auth — login
+// POST /api/rider/auth — login ou setup de senha
 export async function POST(req: NextRequest) {
-  const body = await req.json() as { email?: string; password?: string; action?: string; token?: string; newPassword?: string };
+  const body = await req.json() as {
+    email?: string;
+    password?: string;
+    action?: string;
+    token?: string;
+    newPassword?: string;
+  };
 
   // ── Setup de senha via token de convite ─────────────────────────────────────
   if (body.action === 'setup') {
@@ -25,27 +31,54 @@ export async function POST(req: NextRequest) {
         where: {
           inviteToken: body.token,
           inviteTokenExpiresAt: { gt: new Date() },
-          status: 'active',
         },
       });
 
       if (!rider) {
-        return NextResponse.json({ error: 'Token inválido ou expirado. Peça um novo convite ao seu gestor.' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Token inválido ou expirado. Peça um novo convite ao seu gestor.' },
+          { status: 400 }
+        );
       }
 
       const passwordHash = await hashPassword(body.newPassword);
-      const newToken = generateInviteToken();
+      // Token permanente para uso futuro (invalidar o de convite, manter campo único)
+      const permanentToken = generateInviteToken();
 
       await prisma.deliveryRider.update({
         where: { id: rider.id },
         data: {
           passwordHash,
-          inviteToken: newToken,
+          status: 'active',
+          inviteToken: permanentToken,
           inviteTokenExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
         },
       });
 
-      return NextResponse.json({ ok: true, email: rider.email });
+      // Gerar JWT e setar cookie imediatamente — sem exigir login duplo
+      const jwtToken = createRiderToken({
+        riderId: rider.id,
+        userId: rider.userId,
+        email: rider.email,
+        name: rider.name,
+        lojaId: rider.lojaId,
+      });
+
+      const res = NextResponse.json({
+        ok: true,
+        email: rider.email,
+        redirect: '/rider/dashboard',
+      });
+
+      res.cookies.set(RIDER_COOKIE, jwtToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 8 * 60 * 60,
+        path: '/',
+      });
+
+      return res;
     } catch (err) {
       console.error('[POST /api/rider/auth] setup error:', err);
       return NextResponse.json({ error: 'Erro interno ao configurar senha. Tente novamente.' }, { status: 500 });

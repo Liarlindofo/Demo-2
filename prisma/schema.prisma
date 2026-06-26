@@ -1165,7 +1165,7 @@ model DeliveryRider {
   cnpj             String
   email            String
   phone            String?
-  status           String                 @default("active")
+  status           String                 @default("pending_setup")
   passwordHash     String?
   inviteToken      String?                @unique
   inviteTokenExpiresAt DateTime?

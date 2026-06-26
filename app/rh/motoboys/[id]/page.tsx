@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Bike, Plus, Clock, CheckCircle, XCircle,
   FileText, Eye, Loader2, ChevronDown, ChevronUp, DollarSign,
-  Copy, RefreshCw, Link2,
+  Copy, RefreshCw, MessageCircle, CheckCircle2, ShieldCheck, ShieldOff,
 } from 'lucide-react';
 
 interface Document { id: string; documentType: string; status: string; fileName: string; uploadedAt: string }
@@ -17,15 +17,26 @@ interface Period {
 }
 interface Rider {
   id: string; name: string; cnpj: string; email: string; phone: string | null;
-  status: string; passwordHash: string | null;
+  status: string; passwordHash: string | null; createdAt: string;
   loja: { nome: string }; paymentPeriods: Period[];
 }
+interface InviteData {
+  link: string;
+  expiresAt: string;
+  whatsappLink: string | null;
+}
 
-const STATUS_LABEL: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+const PERIOD_STATUS: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   pending_documents: { label: 'Aguardando documentos', color: 'text-amber-400', icon: <Clock className="w-4 h-4" /> },
   documents_received: { label: 'Docs recebidos', color: 'text-blue-400', icon: <FileText className="w-4 h-4" /> },
   approved: { label: 'Aprovado', color: 'text-green-400', icon: <CheckCircle className="w-4 h-4" /> },
   paid: { label: 'Pago', color: 'text-green-500', icon: <DollarSign className="w-4 h-4" /> },
+};
+
+const RIDER_STATUS: Record<string, { label: string; className: string }> = {
+  active: { label: 'Ativo', className: 'text-green-400' },
+  pending_setup: { label: 'Aguardando ativação', className: 'text-amber-400' },
+  inactive: { label: 'Inativo', className: 'text-gray-400' },
 };
 
 const fmtCNPJ = (s: string) => s.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
@@ -41,20 +52,23 @@ export default function MotoboiDetailPage() {
   const [expandedPeriod, setExpandedPeriod] = useState<string | null>(null);
   const [loadingDocs, setLoadingDocs] = useState<Record<string, boolean>>({});
   const [docsSigned, setDocsSigned] = useState<Record<string, { id: string; documentType: string; signedUrl: string | null; status: string; fileName: string }[]>>({});
-  const [inviteToken, setInviteToken] = useState<string | null>(null);
+
+  // Invite state
+  const [inviteData, setInviteData] = useState<InviteData | null>(null);
   const [loadingInvite, setLoadingInvite] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [inviteError, setInviteError] = useState('');
 
-  const fetchRider = () => {
+  const fetchRider = useCallback(() => {
     setLoading(true);
     fetch(`/api/rh/motoboys/${id}`)
       .then(r => r.ok ? r.json() : null)
       .then(setRider)
       .catch(() => {})
       .finally(() => setLoading(false));
-  };
+  }, [id]);
 
-  useEffect(() => { fetchRider(); }, [id]);
+  useEffect(() => { fetchRider(); }, [fetchRider]);
 
   const togglePeriod = async (periodId: string) => {
     if (expandedPeriod === periodId) { setExpandedPeriod(null); return; }
@@ -75,36 +89,33 @@ export default function MotoboiDetailPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ documentId, status }),
     });
-    // Recarregar docs
     const res = await fetch(`/api/rh/motoboys/quinzenas/${periodId}/documentos`);
-    if (res.ok) {
-      const docs = await res.json();
-      setDocsSigned(p => ({ ...p, [periodId]: docs }));
-    }
+    if (res.ok) { const docs = await res.json(); setDocsSigned(p => ({ ...p, [periodId]: docs })); }
     fetchRider();
   };
 
   const handleGetInvite = async (regenerar = false) => {
     setLoadingInvite(true);
+    setInviteError('');
     try {
       const res = await fetch(
         `/api/rh/motoboys/${id}/invite`,
         regenerar ? { method: 'POST' } : undefined
       );
       if (res.ok) {
-        const data = await res.json();
-        setInviteToken(data.inviteToken);
+        setInviteData(await res.json());
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setInviteError(d.error ?? 'Erro ao carregar link');
       }
-    } finally { setLoadingInvite(false); }
+    } finally {
+      setLoadingInvite(false);
+    }
   };
 
-  const inviteUrl = inviteToken
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/rider/setup?token=${inviteToken}`
-    : '';
-
   const copiarLink = () => {
-    if (!inviteUrl) return;
-    navigator.clipboard.writeText(inviteUrl);
+    if (!inviteData?.link) return;
+    navigator.clipboard.writeText(inviteData.link);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2000);
   };
@@ -130,9 +141,13 @@ export default function MotoboiDetailPage() {
     </div>
   );
 
+  const riderSt = RIDER_STATUS[rider.status] ?? RIDER_STATUS.inactive;
+  const canInvite = !rider.passwordHash;
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
@@ -156,7 +171,7 @@ export default function MotoboiDetailPage() {
                 Desativar
               </button>
             ) : (
-              <button onClick={() => handleStatusRider('active')}
+              <button onClick={() => handleStatusRider('pending_setup')}
                 className="px-4 py-2 text-sm text-green-400 border border-green-500/20 rounded-xl hover:bg-green-500/10 transition-colors">
                 Reativar
               </button>
@@ -169,65 +184,96 @@ export default function MotoboiDetailPage() {
         </div>
 
         {/* Dados cadastrais */}
-        <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Dados Cadastrais</h2>
+        <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 space-y-5">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Dados Cadastrais</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
             <div><p className="text-gray-500 text-xs mb-0.5">CNPJ</p><p className="text-white">{fmtCNPJ(rider.cnpj)}</p></div>
             <div><p className="text-gray-500 text-xs mb-0.5">E-mail</p><p className="text-white">{rider.email}</p></div>
             <div><p className="text-gray-500 text-xs mb-0.5">Telefone</p><p className="text-white">{rider.phone ?? '—'}</p></div>
-            <div><p className="text-gray-500 text-xs mb-0.5">Status</p>
-              <span className={`text-xs font-medium ${rider.status === 'active' ? 'text-green-400' : 'text-gray-400'}`}>
-                {rider.status === 'active' ? 'Ativo' : 'Inativo'}
-              </span>
+            <div>
+              <p className="text-gray-500 text-xs mb-0.5">Status</p>
+              <span className={`text-xs font-medium ${riderSt.className}`}>{riderSt.label}</span>
             </div>
-            <div><p className="text-gray-500 text-xs mb-0.5">Acesso ao portal</p>
-              <span className={`text-xs font-medium ${rider.passwordHash ? 'text-green-400' : 'text-amber-400'}`}>
-                {rider.passwordHash ? 'Ativo' : 'Aguardando convite'}
-              </span>
+            <div>
+              <p className="text-gray-500 text-xs mb-0.5">Cadastrado em</p>
+              <p className="text-white text-xs">{fmtDate(rider.createdAt)}</p>
             </div>
           </div>
+        </div>
 
-          {/* Painel de convite — visível só enquanto o motoboy não definiu senha */}
-          {!rider.passwordHash && (
-            <div className="mt-4 pt-4 border-t border-[#2a2a2e]">
-              <div className="flex items-center gap-2 mb-3">
-                <Link2 className="w-4 h-4 text-amber-400" />
-                <p className="text-sm font-medium text-amber-400">Link de convite pendente</p>
-              </div>
+        {/* Acesso ao portal */}
+        <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 space-y-4">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Acesso ao Portal</h2>
 
-              {inviteToken ? (
-                <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            {rider.passwordHash ? (
+              <>
+                <div className="w-9 h-9 rounded-xl bg-green-500/10 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5 text-green-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-green-400">Acesso configurado</p>
+                  <p className="text-xs text-gray-500">O motoboy criou sua senha e pode acessar o portal em <span className="text-orange-400">/rider/login</span></p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                  <ShieldOff className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-amber-400">Aguardando ativação</p>
+                  <p className="text-xs text-gray-500">Envie o link de convite para o motoboy criar sua senha.</p>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Painel de convite */}
+          {canInvite && (
+            <div className="pt-1 space-y-3">
+              {inviteData ? (
+                <>
                   <div className="bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-xs text-gray-300 break-all">
-                    {inviteUrl}
+                    {inviteData.link}
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={copiarLink}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-amber-500/10 text-amber-400 text-xs rounded-lg hover:bg-amber-500/20 transition-colors"
-                    >
-                      {copiado ? <CheckCircle className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <p className="text-xs text-gray-500">
+                    Válido até {new Date(inviteData.expiresAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={copiarLink}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-orange-500/10 text-orange-400 text-xs rounded-lg hover:bg-orange-500/20 transition-colors">
+                      {copiado ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                       {copiado ? 'Copiado!' : 'Copiar link'}
                     </button>
-                    <button
-                      onClick={() => handleGetInvite(true)}
-                      disabled={loadingInvite}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-[#2a2a2e] text-gray-400 text-xs rounded-lg hover:text-white transition-colors disabled:opacity-50"
-                    >
+                    {inviteData.whatsappLink && (
+                      <a href={inviteData.whatsappLink} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-green-500/10 text-green-400 text-xs rounded-lg hover:bg-green-500/20 transition-colors">
+                        <MessageCircle className="w-3.5 h-3.5" /> Abrir WhatsApp
+                      </a>
+                    )}
+                    <button onClick={() => handleGetInvite(true)} disabled={loadingInvite}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-[#2a2a2e] text-gray-400 text-xs rounded-lg hover:text-white transition-colors disabled:opacity-50">
                       {loadingInvite ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                       Gerar novo link
                     </button>
                   </div>
-                </div>
+                </>
               ) : (
-                <button
-                  onClick={() => handleGetInvite(false)}
-                  disabled={loadingInvite}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm rounded-xl hover:bg-amber-500/20 transition-colors disabled:opacity-50"
-                >
-                  {loadingInvite ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
-                  Ver link de convite
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => handleGetInvite(false)} disabled={loadingInvite}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm rounded-xl hover:bg-amber-500/20 transition-colors disabled:opacity-50">
+                    {loadingInvite ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
+                    Ver link de convite
+                  </button>
+                  <button onClick={() => handleGetInvite(true)} disabled={loadingInvite}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-[#2a2a2e] border border-[#2a2a2e] text-gray-400 text-sm rounded-xl hover:text-white transition-colors disabled:opacity-50">
+                    {loadingInvite ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    Reenviar convite por e-mail
+                  </button>
+                </div>
               )}
+              {inviteError && <p className="text-xs text-red-400">{inviteError}</p>}
             </div>
           )}
         </div>
@@ -244,7 +290,7 @@ export default function MotoboiDetailPage() {
           ) : (
             <div className="space-y-3">
               {rider.paymentPeriods.map((period) => {
-                const st = STATUS_LABEL[period.status] ?? { label: period.status, color: 'text-gray-400', icon: null };
+                const st = PERIOD_STATUS[period.status] ?? { label: period.status, color: 'text-gray-400', icon: null };
                 const isOpen = expandedPeriod === period.id;
                 const docs = docsSigned[period.id] ?? [];
 
@@ -273,8 +319,6 @@ export default function MotoboiDetailPage() {
                           <div><p className="text-gray-500 text-xs mb-0.5">Entregas</p><p className="text-white">{period.deliveryCount}</p></div>
                           <div><p className="text-gray-500 text-xs mb-0.5">Valor</p><p className="text-green-400 font-bold">{fmtMoney(period.amountCents)}</p></div>
                         </div>
-
-                        {/* Documentos */}
                         <div>
                           <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Documentos</p>
                           {loadingDocs[period.id] ? (
@@ -291,11 +335,9 @@ export default function MotoboiDetailPage() {
                                     {doc ? (
                                       <div className="space-y-2">
                                         <p className="text-xs text-gray-300 truncate">{doc.fileName}</p>
-                                        <div className="flex items-center gap-2">
-                                          <span className={`text-xs font-medium ${doc.status === 'approved' ? 'text-green-400' : doc.status === 'rejected' ? 'text-red-400' : 'text-amber-400'}`}>
-                                            {doc.status === 'approved' ? '✓ Aprovado' : doc.status === 'rejected' ? '✗ Rejeitado' : '⏳ Pendente'}
-                                          </span>
-                                        </div>
+                                        <span className={`text-xs font-medium ${doc.status === 'approved' ? 'text-green-400' : doc.status === 'rejected' ? 'text-red-400' : 'text-amber-400'}`}>
+                                          {doc.status === 'approved' ? '✓ Aprovado' : doc.status === 'rejected' ? '✗ Rejeitado' : '⏳ Pendente'}
+                                        </span>
                                         <div className="flex gap-1.5">
                                           {doc.signedUrl && (
                                             <a href={doc.signedUrl} target="_blank" rel="noopener noreferrer"
