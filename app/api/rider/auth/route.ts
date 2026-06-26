@@ -20,47 +20,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Senha deve ter ao menos 6 caracteres' }, { status: 400 });
     }
 
-    const rider = await prisma.deliveryRider.findFirst({
-      where: {
-        inviteToken: body.token,
-        inviteTokenExpiresAt: { gt: new Date() },
-        status: 'active',
-      },
-    });
+    try {
+      const rider = await prisma.deliveryRider.findFirst({
+        where: {
+          inviteToken: body.token,
+          inviteTokenExpiresAt: { gt: new Date() },
+          status: 'active',
+        },
+      });
 
-    if (!rider) {
-      return NextResponse.json({ error: 'Token inválido ou expirado' }, { status: 400 });
+      if (!rider) {
+        return NextResponse.json({ error: 'Token inválido ou expirado. Peça um novo convite ao seu gestor.' }, { status: 400 });
+      }
+
+      const passwordHash = await hashPassword(body.newPassword);
+      const newToken = generateInviteToken();
+
+      await prisma.deliveryRider.update({
+        where: { id: rider.id },
+        data: {
+          passwordHash,
+          inviteToken: newToken,
+          inviteTokenExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      return NextResponse.json({ ok: true, email: rider.email });
+    } catch (err) {
+      console.error('[POST /api/rider/auth] setup error:', err);
+      return NextResponse.json({ error: 'Erro interno ao configurar senha. Tente novamente.' }, { status: 500 });
     }
-
-    const passwordHash = await hashPassword(body.newPassword);
-    const newToken = generateInviteToken();
-
-    await prisma.deliveryRider.update({
-      where: { id: rider.id },
-      data: {
-        passwordHash,
-        inviteToken: newToken,
-        inviteTokenExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-      },
-    });
-
-    const jwtToken = createRiderToken({
-      riderId: rider.id,
-      userId: rider.userId,
-      email: rider.email,
-      name: rider.name,
-      lojaId: rider.lojaId,
-    });
-
-    const res = NextResponse.json({ ok: true, riderId: rider.id });
-    res.cookies.set(RIDER_COOKIE, jwtToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 8 * 60 * 60,
-      path: '/',
-    });
-    return res;
   }
 
   // ── Login normal ────────────────────────────────────────────────────────────

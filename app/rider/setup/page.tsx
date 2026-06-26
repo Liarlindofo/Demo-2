@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Bike, Loader2, Check, Eye, EyeOff } from 'lucide-react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Bike, Loader2, Check, Eye, EyeOff, LogIn } from 'lucide-react';
 
 const inputCls = 'w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50 transition-colors';
 
 function SetupForm() {
-  const router = useRouter();
   const params = useSearchParams();
   const token = params.get('token') ?? '';
   const [password, setPassword] = useState('');
@@ -15,6 +15,7 @@ function SetupForm() {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [sucesso, setSucesso] = useState<{ email: string } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,10 +30,15 @@ function SetupForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'setup', token, newPassword: password }),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Erro ao configurar senha'); return; }
-      router.push('/rider/dashboard');
-    } finally { setLoading(false); }
+      let data: { error?: string; email?: string } = {};
+      try { data = await res.json(); } catch { /* resposta não-JSON */ }
+      if (!res.ok) { setError(data.error ?? 'Erro ao configurar senha. Tente novamente.'); return; }
+      setSucesso({ email: data.email ?? '' });
+    } catch {
+      setError('Erro de conexão. Verifique sua internet e tente novamente.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!token) {
@@ -40,6 +46,35 @@ function SetupForm() {
       <div className="text-center space-y-3">
         <p className="text-red-400">Link inválido ou expirado.</p>
         <p className="text-sm text-gray-500">Peça um novo convite ao seu gestor.</p>
+      </div>
+    );
+  }
+
+  if (sucesso) {
+    return (
+      <div className="space-y-5 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center mx-auto">
+          <Check className="w-7 h-7 text-green-400" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-white font-semibold">Senha criada com sucesso!</p>
+          <p className="text-sm text-gray-400">
+            Agora acesse o portal com seu e-mail e a senha que você acabou de criar.
+          </p>
+        </div>
+        {sucesso.email && (
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-gray-300 text-left">
+            <span className="text-gray-500 text-xs block mb-0.5">Seu e-mail de acesso</span>
+            {sucesso.email}
+          </div>
+        )}
+        <Link
+          href="/rider/login"
+          className="flex items-center justify-center gap-2 w-full py-3.5 bg-orange-500 text-black text-sm font-bold rounded-xl hover:bg-orange-400 transition-colors"
+        >
+          <LogIn className="w-4 h-4" />
+          Entrar no portal
+        </Link>
       </div>
     );
   }
@@ -68,7 +103,7 @@ function SetupForm() {
       <button type="submit" disabled={loading}
         className="w-full flex items-center justify-center gap-2 py-3.5 bg-orange-500 text-black text-sm font-bold rounded-xl hover:bg-orange-400 disabled:opacity-50 transition-colors">
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-        Criar senha e entrar
+        Criar senha
       </button>
     </form>
   );
