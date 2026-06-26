@@ -26,7 +26,7 @@ export default function RiderLoginPage() {
       let data: { error?: string } = {};
       try { data = await res.json(); } catch { /* resposta não-JSON */ }
       if (!res.ok) { setError(data.error ?? 'Credenciais inválidas'); return; }
-      router.push('/rider/dashboard');
+      window.location.href = '/rider/dashboard';
     } catch {
       setError('Erro de conexão. Tente novamente.');
     } finally { setLoading(false); }

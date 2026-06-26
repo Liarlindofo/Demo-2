@@ -27,14 +27,22 @@ export default function RiderDashboard() {
   const router = useRouter();
   const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(false);
 
   useEffect(() => {
-    fetch('/api/rider/quinzenas')
-      .then(r => { if (r.status === 401) { router.push('/rider/login'); return null; } return r.json(); })
+    fetch('/api/rider/quinzenas', { credentials: 'include' })
+      .then(r => {
+        if (r.status === 401) {
+          setAuthError(true);
+          setLoading(false);
+          return null;
+        }
+        return r.json();
+      })
       .then(d => d && setPeriods(d))
-      .catch(() => {})
+      .catch(() => setAuthError(true))
       .finally(() => setLoading(false));
-  }, [router]);
+  }, []);
 
   const handleLogout = async () => {
     await fetch('/api/rider/auth', { method: 'DELETE' });
@@ -43,6 +51,26 @@ export default function RiderDashboard() {
 
   const recentes = periods.slice(0, 5);
   const pendente = periods.find(p => p.status === 'pending_documents');
+
+  if (authError) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4">
+        <div className="w-full max-w-sm text-center space-y-5">
+          <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center mx-auto">
+            <LogOut className="w-7 h-7 text-red-400" />
+          </div>
+          <div>
+            <p className="text-white font-semibold">Sessão inválida ou expirada</p>
+            <p className="text-sm text-gray-500 mt-1">Faça login novamente para continuar.</p>
+          </div>
+          <a href="/rider/login"
+            className="block w-full py-3 bg-orange-500 text-black text-sm font-bold rounded-xl hover:bg-orange-400 transition-colors">
+            Ir para o login
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
