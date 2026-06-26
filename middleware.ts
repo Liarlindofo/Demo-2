@@ -1,22 +1,23 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import jwt from 'jsonwebtoken';
+import { jwtVerify } from 'jose';
 
 const RIDER_COOKIE = 'rider_token';
 
-function getRiderSession(request: NextRequest) {
+async function getRiderSession(request: NextRequest) {
   try {
     const token = request.cookies.get(RIDER_COOKIE)?.value;
     if (!token) return null;
     const secret = process.env.ADMIN_JWT_SECRET || process.env.NEXTAUTH_SECRET;
     if (!secret) return null;
-    return jwt.verify(token, secret) as { riderId: string };
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
+    return payload as { riderId: string };
   } catch {
     return null;
   }
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
   // ── Proteção de /rh/usuarios — apenas usuários Stack Auth autenticados ─────
@@ -32,7 +33,7 @@ export function middleware(request: NextRequest) {
     const isPublic = publicRiderPaths.some((p) => pathname.startsWith(p));
 
     if (!isPublic) {
-      const session = getRiderSession(request);
+      const session = await getRiderSession(request);
       if (!session) {
         return NextResponse.redirect(new URL('/rider/login', request.url));
       }
