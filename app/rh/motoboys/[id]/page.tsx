@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   ArrowLeft, Bike, Plus, Clock, CheckCircle, XCircle,
   FileText, Eye, Loader2, ChevronDown, ChevronUp, DollarSign,
-  Copy, RefreshCw, MessageCircle, CheckCircle2, ShieldCheck, ShieldOff,
+  Copy, RefreshCw, MessageCircle, CheckCircle2, ShieldCheck, ShieldOff, Trash2, AlertTriangle,
 } from 'lucide-react';
 
 interface Document { id: string; documentType: string; status: string; fileName: string; uploadedAt: string }
@@ -52,6 +52,11 @@ export default function MotoboiDetailPage() {
   const [expandedPeriod, setExpandedPeriod] = useState<string | null>(null);
   const [loadingDocs, setLoadingDocs] = useState<Record<string, boolean>>({});
   const [docsSigned, setDocsSigned] = useState<Record<string, { id: string; documentType: string; signedUrl: string | null; status: string; fileName: string }[]>>({});
+
+  // Delete state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   // Invite state
   const [inviteData, setInviteData] = useState<InviteData | null>(null);
@@ -120,6 +125,18 @@ export default function MotoboiDetailPage() {
     setTimeout(() => setCopiado(false), 2000);
   };
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/rh/motoboys/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        router.replace('/rh/motoboys');
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handleStatusRider = async (newStatus: string) => {
     await fetch(`/api/rh/motoboys/${id}`, {
       method: 'PUT',
@@ -165,6 +182,10 @@ export default function MotoboiDetailPage() {
             </div>
           </div>
           <div className="flex gap-2">
+            <button onClick={() => setShowDeleteModal(true)}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm text-red-400 border border-red-500/20 rounded-xl hover:bg-red-500/10 transition-colors">
+              <Trash2 className="w-4 h-4" /> Apagar
+            </button>
             {rider.status === 'active' ? (
               <button onClick={() => handleStatusRider('inactive')}
                 className="px-4 py-2 text-sm text-gray-400 border border-[#2a2a2e] rounded-xl hover:bg-[#2a2a2e] transition-colors">
@@ -377,6 +398,61 @@ export default function MotoboiDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Modal de confirmação de exclusão */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => { if (!deleting) { setShowDeleteModal(false); setDeleteConfirmText(''); } }}>
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6 w-full max-w-md space-y-5"
+            onClick={e => e.stopPropagation()}>
+
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-white">Apagar motoboy permanentemente?</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Esta ação é <strong className="text-red-400">irreversível</strong>. Serão apagados:
+                </p>
+                <ul className="text-sm text-gray-500 mt-2 space-y-0.5 list-disc list-inside">
+                  <li>Cadastro de <strong className="text-white">{rider.name}</strong></li>
+                  <li>Todas as quinzenas ({rider.paymentPeriods.length})</li>
+                  <li>Todos os documentos vinculados</li>
+                </ul>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-400 mb-1.5 block">
+                Digite <span className="text-white font-mono">APAGAR</span> para confirmar
+              </label>
+              <input
+                value={deleteConfirmText}
+                onChange={e => setDeleteConfirmText(e.target.value)}
+                placeholder="APAGAR"
+                className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-500/50 transition-colors"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowDeleteModal(false); setDeleteConfirmText(''); }}
+                disabled={deleting}
+                className="flex-1 px-4 py-2.5 text-sm text-gray-400 border border-[#2a2a2e] rounded-xl hover:bg-[#2a2a2e] transition-colors disabled:opacity-50">
+                Cancelar
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleteConfirmText !== 'APAGAR' || deleting}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-red-500 text-white rounded-xl hover:bg-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Apagar definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

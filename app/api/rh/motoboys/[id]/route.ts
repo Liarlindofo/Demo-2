@@ -50,3 +50,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (result.count === 0) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const dbUser = await getRhDbUser();
+  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+
+  const { id } = await params;
+
+  const rider = await prisma.deliveryRider.findFirst({
+    where: { id, userId: dbUser.id },
+  });
+
+  if (!rider) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
+
+  // Cascade no banco apaga paymentPeriods e documents automaticamente
+  await prisma.deliveryRider.delete({ where: { id } });
+
+  return NextResponse.json({ ok: true });
+}
