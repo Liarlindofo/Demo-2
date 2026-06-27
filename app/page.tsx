@@ -40,22 +40,31 @@ export default function Home() {
             Um novo universo para o seu negocio comeca aqui
           </h1>
 
-          <div className="pt-6 flex justify-center gap-4">
+          <div className="pt-6 flex flex-wrap justify-center gap-4">
             <Link href="/auth/login">
-              <Button 
-                size="lg" 
+              <Button
+                size="lg"
                 className="bg-[#001F05] hover:bg-[#001F05]/80 text-white px-12 py-4 text-base font-semibold rounded-full transition-all duration-300 hover:scale-105 shadow-lg border border-[#001F05]/20"
               >
                 Entrar
               </Button>
             </Link>
             <Link href="/auth/register">
-              <Button 
-                size="lg" 
+              <Button
+                size="lg"
                 variant="outline"
                 className="border-[#001F05]/50 text-white hover:bg-[#001F05]/20 px-12 py-4 text-base font-semibold rounded-full transition-all duration-300 hover:scale-105 shadow-lg"
               >
                 Cadastrar
+              </Button>
+            </Link>
+            <Link href="/rider/login">
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-orange-500/40 text-orange-400 hover:bg-orange-500/10 px-12 py-4 text-base font-semibold rounded-full transition-all duration-300 hover:scale-105 shadow-lg"
+              >
+                Motoboys
               </Button>
             </Link>
           </div>
