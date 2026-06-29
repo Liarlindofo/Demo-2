@@ -7,13 +7,17 @@ import {
   Bike, Plus, ArrowLeft, Search,
   Clock, ChevronRight, Mail,
   CheckCircle2, XCircle, Copy, MessageCircle, RefreshCw, Loader2,
+  FileText, AlertCircle, FileCheck,
 } from 'lucide-react';
 
 interface Loja { id: string; nome: string }
+type DocStatus = 'none' | 'pending' | 'partial' | 'received';
+
 interface Rider {
   id: string; name: string; cnpj: string; email: string;
   phone: string | null; status: string; passwordHash: string | null;
   lojaId: string; loja: { nome: string };
+  docStatus: DocStatus; activePeriodId: string | null;
 }
 interface InviteData {
   link: string;
@@ -43,6 +47,35 @@ const STATUS_CONFIG: Record<string, { label: string; className: string; icon: Re
 
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.inactive;
+  return (
+    <span className={`flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${cfg.className}`}>
+      {cfg.icon}{cfg.label}
+    </span>
+  );
+}
+
+const DOC_STATUS_CONFIG: Record<DocStatus, { label: string; className: string; icon: React.ReactNode } | null> = {
+  none: null,
+  pending: {
+    label: 'Docs pendentes',
+    className: 'text-red-400 bg-red-500/10',
+    icon: <AlertCircle className="w-3 h-3" />,
+  },
+  partial: {
+    label: '1/2 docs enviados',
+    className: 'text-amber-400 bg-amber-500/10',
+    icon: <FileText className="w-3 h-3" />,
+  },
+  received: {
+    label: 'Docs enviados',
+    className: 'text-blue-400 bg-blue-500/10',
+    icon: <FileCheck className="w-3 h-3" />,
+  },
+};
+
+function DocBadge({ docStatus }: { docStatus: DocStatus }) {
+  const cfg = DOC_STATUS_CONFIG[docStatus];
+  if (!cfg) return null;
   return (
     <span className={`flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${cfg.className}`}>
       {cfg.icon}{cfg.label}
@@ -188,6 +221,7 @@ export default function MotoboyListPage() {
   );
 
   const pendentes = filtrados.filter(r => r.status === 'pending_setup').length;
+  const docsPendentes = filtrados.filter(r => r.docStatus === 'pending' || r.docStatus === 'partial').length;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
@@ -215,15 +249,25 @@ export default function MotoboyListPage() {
           </Link>
         </div>
 
-        {/* Alerta de convites pendentes */}
-        {pendentes > 0 && filtroStatus !== 'active' && filtroStatus !== 'inactive' && (
-          <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
-            <Clock className="w-4 h-4 text-amber-400 flex-shrink-0" />
-            <p className="text-sm text-amber-300">
-              <strong>{pendentes}</strong> motoboy{pendentes > 1 ? 's' : ''} aguardando ativação — envie o link de convite.
-            </p>
-          </div>
-        )}
+        {/* Alertas */}
+        <div className="space-y-2">
+          {pendentes > 0 && filtroStatus !== 'active' && filtroStatus !== 'inactive' && (
+            <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
+              <Clock className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              <p className="text-sm text-amber-300">
+                <strong>{pendentes}</strong> motoboy{pendentes > 1 ? 's' : ''} aguardando ativação — envie o link de convite.
+              </p>
+            </div>
+          )}
+          {docsPendentes > 0 && (
+            <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+              <p className="text-sm text-red-300">
+                <strong>{docsPendentes}</strong> motoboy{docsPendentes > 1 ? 's' : ''} com documentos pendentes na quinzena atual.
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Filtros */}
         <div className="flex flex-wrap gap-3">
@@ -286,6 +330,7 @@ export default function MotoboyListPage() {
                 <div className="flex items-center gap-2 flex-shrink-0 ml-4">
                   <StatusBadge status={rider.status} />
                   <PortalBadge hasPassword={!!rider.passwordHash} />
+                  <DocBadge docStatus={rider.docStatus} />
 
                   {/* Botão reenviar convite — só para pending_setup */}
                   {rider.status === 'pending_setup' && !rider.passwordHash && (

@@ -37,11 +37,33 @@ export async function GET(req: NextRequest) {
       ...(lojaId ? { lojaId } : {}),
       ...(status ? { status } : {}),
     },
-    include: { loja: { select: { nome: true } } },
+    include: {
+      loja: { select: { nome: true } },
+      paymentPeriods: {
+        where: { status: { in: ['pending_documents', 'documents_received'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        include: { documents: { select: { documentType: true, status: true } } },
+      },
+    },
     orderBy: { name: 'asc' },
   });
 
-  return NextResponse.json(riders);
+  const result = riders.map(({ paymentPeriods, ...r }) => {
+    const activePeriod = paymentPeriods[0] ?? null;
+    let docStatus: 'none' | 'pending' | 'partial' | 'received' = 'none';
+    if (activePeriod) {
+      const docs = activePeriod.documents;
+      const hasNf = docs.some((d) => d.documentType === 'nf');
+      const hasBoleto = docs.some((d) => d.documentType === 'boleto');
+      if (hasNf && hasBoleto) docStatus = 'received';
+      else if (hasNf || hasBoleto) docStatus = 'partial';
+      else docStatus = 'pending';
+    }
+    return { ...r, docStatus, activePeriodId: activePeriod?.id ?? null };
+  });
+
+  return NextResponse.json(result);
 }
 
 export async function POST(req: NextRequest) {
