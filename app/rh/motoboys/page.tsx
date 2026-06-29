@@ -197,6 +197,7 @@ export default function MotoboyListPage() {
   const [search, setSearch] = useState('');
   const [filtroLoja, setFiltroLoja] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
+  const [filtroDocs, setFiltroDocs] = useState('');
   const [inviteRider, setInviteRider] = useState<Rider | null>(null);
   const [toast, setToast] = useState('');
 
@@ -216,9 +217,11 @@ export default function MotoboyListPage() {
       .finally(() => setLoading(false));
   }, [filtroLoja, filtroStatus]);
 
-  const filtrados = riders.filter(
-    (r) => r.name.toLowerCase().includes(search.toLowerCase()) || r.email.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtrados = riders.filter((r) => {
+    const matchSearch = r.name.toLowerCase().includes(search.toLowerCase()) || r.email.toLowerCase().includes(search.toLowerCase());
+    const matchDocs = !filtroDocs || r.docStatus === filtroDocs;
+    return matchSearch && matchDocs;
+  });
 
   const pendentes = filtrados.filter(r => r.status === 'pending_setup').length;
   const docsPendentes = filtrados.filter(r => r.docStatus === 'pending' || r.docStatus === 'partial').length;
@@ -290,6 +293,14 @@ export default function MotoboyListPage() {
             <option value="active">Ativos</option>
             <option value="pending_setup">Aguardando ativação</option>
             <option value="inactive">Inativos</option>
+          </select>
+          <select value={filtroDocs} onChange={(e) => setFiltroDocs(e.target.value)}
+            className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
+            <option value="">Todos os docs</option>
+            <option value="pending">Docs pendentes</option>
+            <option value="partial">1/2 docs enviados</option>
+            <option value="received">Docs enviados</option>
+            <option value="none">Sem quinzena ativa</option>
           </select>
         </div>
 
