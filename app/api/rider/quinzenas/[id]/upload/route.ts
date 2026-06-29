@@ -1,21 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getRiderSession } from '@/lib/rider-auth';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const BUCKET = 'rider-documents';
+
+async function ensureBucket(supabase: SupabaseClient) {
+  const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+  if (listError) throw listError;
+  if (buckets?.some((b) => b.name === BUCKET)) return;
+  const { error: createError } = await supabase.storage.createBucket(BUCKET, { public: false });
+  if (createError && !/already exists/i.test(createError.message)) throw createError;
+}
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getRiderSession();
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error('[upload rider doc] variáveis Supabase não configuradas');
+    return NextResponse.json(
+      { error: 'Configuração de storage ausente no servidor' },
+      { status: 500 }
+    );
+  }
+
   const { id: periodId } = await params;
 
-  // Verificar ownership do period
   const period = await prisma.riderPaymentPeriod.findFirst({
     where: { id: periodId, riderId: session.riderId, userId: session.userId },
     include: { documents: true },
@@ -41,7 +57,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Arquivo excede 10MB' }, { status: 400 });
   }
 
-  // Verificar se doc já foi aprovado
   const existingDoc = period.documents.find((d) => d.documentType === documentType);
   if (existingDoc?.status === 'approved') {
     return NextResponse.json({ error: 'Documento já aprovado, não pode substituir' }, { status: 400 });
@@ -51,13 +66,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const buffer = Buffer.from(await file.arrayBuffer());
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  try {
+    await ensureBucket(supabase);
+  } catch (bucketError) {
+    console.error('[upload rider doc] ensureBucket', bucketError);
+    return NextResponse.json(
+      { error: 'Não foi possível acessar o storage. Verifique as credenciais do Supabase.' },
+      { status: 500 }
+    );
+  }
+
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
     .upload(storagePath, buffer, { contentType: 'application/pdf', upsert: true });
 
   if (uploadError) {
     console.error('[upload rider doc]', uploadError);
-    return NextResponse.json({ error: 'Falha no upload' }, { status: 500 });
+    return NextResponse.json(
+      { error: `Falha no upload: ${uploadError.message}` },
+      { status: 500 }
+    );
   }
 
   // Criar ou atualizar registro do documento
