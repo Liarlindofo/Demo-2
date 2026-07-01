@@ -1191,7 +1191,10 @@ model RiderPaymentPeriod {
   periodStart     DateTime
   periodEnd       DateTime
   deliveryCount   Int              @default(0)
-  amountCents     Int              @default(0)
+  amountCents     Int              @default(0)   // valor total bruto (já inclui diárias)
+  dailyRateCents  Int              @default(0)   // valor por entrega/diária (informativo)
+  discountCents   Int              @default(0)   // desconto por consumo na loja
+  discountNotes   String?                        // detalhes do que foi consumido
   summary         String?
   status          String           @default("pending_documents")
   createdBy       String

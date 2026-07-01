@@ -21,6 +21,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     periodEnd: string;
     deliveryCount: number;
     amountCents: number;
+    dailyRateCents?: number;
+    discountCents?: number;
+    discountNotes?: string;
     summary?: string;
   };
 
@@ -38,7 +41,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       periodEnd: new Date(body.periodEnd),
       deliveryCount: body.deliveryCount ?? 0,
       amountCents: body.amountCents,
-      summary: body.summary,
+      dailyRateCents: body.dailyRateCents ?? 0,
+      discountCents: body.discountCents ?? 0,
+      discountNotes: body.discountNotes || null,
+      summary: body.summary || null,
       createdBy: dbUser.id,
     },
   });
