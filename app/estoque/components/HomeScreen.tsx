@@ -50,9 +50,14 @@ export function HomeScreen({ sessions, onIniciar, onRetomar }: HomeScreenProps) 
           return (
             <div key={s.id} className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
-                  Em andamento
-                </p>
+                <div>
+                  <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                    Em andamento
+                  </p>
+                  {s.lojaNome && (
+                    <p className="text-xs text-amber-300/70 mt-0.5">{s.lojaNome}</p>
+                  )}
+                </div>
                 <span className="text-xs text-gray-500">{formatarData(s.dataCriacao)}</span>
               </div>
 
@@ -131,6 +136,11 @@ export function HomeScreen({ sessions, onIniciar, onRetomar }: HomeScreenProps) 
                         {new Date(s.dataCriacao).toLocaleDateString('pt-BR', {
                           day: '2-digit', month: 'short', year: 'numeric',
                         })}
+                        {s.lojaNome && (
+                          <span className="ml-2 text-xs font-normal text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-md">
+                            {s.lojaNome}
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-gray-500 mt-0.5">
                         {s.sessoes.length} sessões

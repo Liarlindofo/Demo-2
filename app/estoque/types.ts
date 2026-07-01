@@ -23,4 +23,5 @@ export interface StockSession {
   status: 'em_andamento' | 'concluida';
   sessoes: StockCategory[];
   criadoPor: string;
+  lojaNome?: string | null;
 }

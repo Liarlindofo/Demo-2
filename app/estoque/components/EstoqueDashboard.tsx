@@ -17,10 +17,15 @@ import type { StockSession } from '../types';
 
 type Screen = 'home' | 'counting' | 'history' | 'alerts' | 'products' | 'resultado' | 'resultado-historico';
 
+interface Loja { id: string; nome: string; }
+
 export function EstoqueDashboard() {
   const [screen, setScreen] = useState<Screen>('home');
   const [sessaoFinalizada, setSessaoFinalizada] = useState<StockSession | null>(null);
   const [sessaoHistorico, setSessaoHistorico] = useState<StockSession | null>(null);
+  const [showLojaModal, setShowLojaModal] = useState(false);
+  const [lojas, setLojas] = useState<Loja[]>([]);
+  const [loadingLojas, setLoadingLojas] = useState(false);
 
   const { config, productOrder, hydrated: configHydrated, getConfig, setAtivo, setMinimo, setModoContagem, setKgPorUnidade, setProductOrder, moverProdutoAcima, moverProdutoAbaixo } = useEstoqueConfig();
 
@@ -63,14 +68,25 @@ export function EstoqueDashboard() {
     );
   }
 
-  const handleIniciar = async () => {
-    // Aguarda produtos carregarem se ainda estiver carregando
+  const abrirSelecaoLoja = async () => {
+    setLoadingLojas(true);
+    setShowLojaModal(true);
+    try {
+      const res = await fetch('/api/rh/lojas');
+      if (res.ok) setLojas(await res.json());
+    } catch { /* silencia */ } finally {
+      setLoadingLojas(false);
+    }
+  };
+
+  const handleIniciarComLoja = async (lojaNome?: string) => {
+    setShowLojaModal(false);
     const sessoesIniciais =
       sessoesProdutos.length > 0
         ? sessoesProdutos
         : construirSessoes([], config, productOrder);
     const temAtiva = sessions.some(s => s.status === 'em_andamento');
-    await iniciarContagem(sessoesIniciais, 'Gerente', temAtiva);
+    await iniciarContagem(sessoesIniciais, 'Gerente', temAtiva, lojaNome);
     setScreen('counting');
   };
 
@@ -180,9 +196,52 @@ export function EstoqueDashboard() {
   // ── Home + bottom nav ──────────────────────────────────────────────────────
   return (
     <div className="relative">
+
+      {/* Modal de seleção de loja */}
+      {showLojaModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 p-4">
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl w-full max-w-sm shadow-2xl">
+            <div className="px-5 pt-5 pb-3 border-b border-[#2a2a2e]">
+              <h3 className="text-base font-semibold text-white">Qual loja está sendo contada?</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Selecione para identificar o histórico</p>
+            </div>
+            <div className="p-3 space-y-1.5 max-h-72 overflow-y-auto">
+              {loadingLojas ? (
+                <div className="flex items-center justify-center py-6 gap-2 text-gray-500 text-sm">
+                  <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                  Carregando lojas…
+                </div>
+              ) : lojas.length > 0 ? (
+                lojas.map(loja => (
+                  <button
+                    key={loja.id}
+                    onClick={() => handleIniciarComLoja(loja.nome)}
+                    className="w-full text-left px-4 py-3 rounded-xl bg-[#2a2a2e] hover:bg-amber-500/10 hover:border-amber-500/30 border border-transparent text-white text-sm font-medium transition-all"
+                  >
+                    {loja.nome}
+                  </button>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  Nenhuma loja cadastrada no RH
+                </p>
+              )}
+            </div>
+            <div className="px-3 pb-3 pt-1 border-t border-[#2a2a2e]">
+              <button
+                onClick={() => handleIniciarComLoja(undefined)}
+                className="w-full py-2.5 rounded-xl text-sm text-gray-500 hover:text-white hover:bg-[#2a2a2e] transition-colors"
+              >
+                Continuar sem selecionar loja
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <HomeScreen
         sessions={sessions}
-        onIniciar={handleIniciar}
+        onIniciar={abrirSelecaoLoja}
         onRetomar={handleRetomar}
       />
 

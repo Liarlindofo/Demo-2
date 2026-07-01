@@ -607,6 +607,7 @@ model EstoqueContagem {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   status      String   @default("em_andamento") // "em_andamento" | "concluida"
   criadoPor   String   @default("Gerente")
+  lojaNome    String?  // nome da loja selecionada no início da contagem
   sessoes     Json     // StockCategory[] JSON
   dataCriacao DateTime @default(now()) @map("data_criacao")
   updatedAt   DateTime @updatedAt @map("updated_at")

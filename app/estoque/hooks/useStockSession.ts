@@ -13,11 +13,11 @@ async function apiGet(): Promise<StockSession[]> {
   return res.json();
 }
 
-async function apiPost(sessoes: StockCategory[], criadoPor: string): Promise<StockSession> {
+async function apiPost(sessoes: StockCategory[], criadoPor: string, lojaNome?: string): Promise<StockSession> {
   const res = await fetch('/api/estoque/contagens', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessoes, criadoPor }),
+    body: JSON.stringify({ sessoes, criadoPor, lojaNome }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
@@ -59,22 +59,20 @@ export function useStockSession() {
 
   // ── Criar nova contagem ────────────────────────────────────────────────────
   const iniciarContagem = useCallback(
-    async (sessoesIniciais?: StockCategory[], gerente = 'Gerente', forceNew = false): Promise<StockSession> => {
+    async (sessoesIniciais?: StockCategory[], gerente = 'Gerente', forceNew = false, lojaNome?: string): Promise<StockSession> => {
       const existente = sessions.find(s => s.status === 'em_andamento');
 
-      // Se existe uma em andamento e não é forçado novo, retoma
       if (existente && !forceNew) {
         setActiveSessionId(existente.id);
         return existente;
       }
 
-      // Se forçado novo e existe uma em andamento, exclui ela antes
       if (existente && forceNew) {
         await apiDelete(existente.id);
         setSessions(prev => prev.filter(s => s.id !== existente.id));
       }
 
-      const nova = await apiPost(sessoesIniciais ?? [], gerente);
+      const nova = await apiPost(sessoesIniciais ?? [], gerente, lojaNome);
       setSessions(prev => [nova, ...prev]);
       setActiveSessionId(nova.id);
       return nova;

@@ -26,6 +26,7 @@ export async function GET() {
       status: c.status as 'em_andamento' | 'concluida',
       sessoes: c.sessoes as unknown as StockSession['sessoes'],
       criadoPor: c.criadoPor,
+      lojaNome: c.lojaNome,
     }));
 
     return NextResponse.json(sessions);
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { sessoes, criadoPor = 'Gerente' } = body;
+    const { sessoes, criadoPor = 'Gerente', lojaNome } = body;
 
     if (!Array.isArray(sessoes)) {
       return NextResponse.json({ error: 'Payload inválido' }, { status: 400 });
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
       data: {
         userId: dbUser.id,
         criadoPor,
+        lojaNome: lojaNome || null,
         sessoes,
         status: 'em_andamento',
       },
@@ -65,6 +67,7 @@ export async function POST(request: NextRequest) {
       status: 'em_andamento',
       sessoes: contagem.sessoes as unknown as StockSession['sessoes'],
       criadoPor: contagem.criadoPor,
+      lojaNome: contagem.lojaNome,
     };
 
     return NextResponse.json(session, { status: 201 });
