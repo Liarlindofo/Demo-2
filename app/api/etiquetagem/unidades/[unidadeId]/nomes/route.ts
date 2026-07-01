@@ -1,9 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { getEffectiveDbUser } from '@/lib/effective-user';
 
 // GET /api/etiquetagem/unidades/[unidadeId]/nomes - Listar nomes recentes da unidade
 export async function GET(
@@ -12,18 +11,10 @@ export async function GET(
 ) {
   try {
     const { unidadeId } = await params;
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
-
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
 
     // Verificar se a unidade pertence ao usuário
     const unidade = await prisma.etiquetagemUnidade.findFirst({

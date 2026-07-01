@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { getEffectiveDbUser } from '@/lib/effective-user';
 import { SystemTool } from '@/types/admin';
 import { requireToolPermission } from '@/lib/auth/toolPermissions';
 
@@ -15,18 +14,10 @@ export async function POST(request: NextRequest) {
   if (permissionCheck) return permissionCheck;
 
   try {
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
-
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
 
     const data = await request.json();
     const evaluation = data.evaluation;
@@ -205,18 +196,10 @@ export async function GET(request: NextRequest) {
   if (permissionCheck) return permissionCheck;
 
   try {
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
-
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
 
     // Buscar rascunhos não expirados
     const drafts = await prisma.checklistDraft.findMany({
@@ -280,18 +263,10 @@ export async function DELETE(request: NextRequest) {
 // 🎯 PATCH - Atualização incremental do draft (apenas mudanças)
 export async function PATCH(request: NextRequest) {
   try {
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
-
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
 
     const data = await request.json();
     const { draftId, changes } = data;

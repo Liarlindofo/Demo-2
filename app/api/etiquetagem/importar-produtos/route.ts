@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { getEffectiveDbUser } from '@/lib/effective-user';
 import { prisma } from '@/lib/prisma';
 import * as XLSX from 'xlsx';
 
@@ -42,13 +42,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
 
     const formData = await request.formData();
     const file = formData.get('file') as File;

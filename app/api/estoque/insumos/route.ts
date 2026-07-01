@@ -1,25 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { getEffectiveDbUser } from '@/lib/effective-user';
 import { INSUMOS_PADRAO } from '@/lib/estoque-insumos-padrao';
 
 export const dynamic = 'force-dynamic';
 
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-  });
-}
-
 // ── GET: lista insumos do usuário; faz seed automático se ainda não tem nenhum ──
 export async function GET() {
   try {
-    const dbUser = await getDbUser();
+    const dbUser = await getEffectiveDbUser();
     if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     let insumos = await prisma.estoqueInsumo.findMany({
@@ -58,7 +47,7 @@ export async function GET() {
 // ── POST: cria novo insumo ────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
-    const dbUser = await getDbUser();
+    const dbUser = await getEffectiveDbUser();
     if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const body = await req.json();

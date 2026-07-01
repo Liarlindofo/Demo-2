@@ -1,9 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { getEffectiveDbUser } from '@/lib/effective-user';
 
 // Validação de nome completo
 function validarNomeCompleto(nome: string): { valido: boolean; erro?: string; nomeFormatado?: string } {
@@ -65,18 +64,10 @@ export async function POST(request: NextRequest) {
       return permissionCheck; // Retorna erro 403 se não tiver permissão
     }
 
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
-
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
 
     const body = await request.json();
     const {
@@ -266,18 +257,10 @@ export async function POST(request: NextRequest) {
 // GET /api/etiquetagem/etiquetas - Listar histórico de etiquetas
 export async function GET(request: NextRequest) {
   try {
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
-
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
 
     const { searchParams } = new URL(request.url);
     const unidadeId = searchParams.get('unidade_id');
@@ -321,18 +304,10 @@ export async function GET(request: NextRequest) {
 // DELETE /api/etiquetagem/etiquetas - Limpar histórico
 export async function DELETE(request: NextRequest) {
   try {
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
-
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
 
     const { searchParams } = new URL(request.url);
     const unidadeId = searchParams.get('unidade_id');

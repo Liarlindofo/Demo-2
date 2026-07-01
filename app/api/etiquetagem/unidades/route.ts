@@ -1,25 +1,16 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { getEffectiveDbUser } from '@/lib/effective-user';
 
 // GET /api/etiquetagem/unidades - Listar todas as unidades do usuário
 export async function GET() {
   try {
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
-
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
 
     const unidades = await prisma.etiquetagemUnidade.findMany({
       where: {
@@ -54,18 +45,10 @@ export async function GET() {
 // POST /api/etiquetagem/unidades - Criar nova unidade
 export async function POST(request: NextRequest) {
   try {
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
-
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
 
     const body = await request.json();
     const { nomeExibicao, cnpj, cnpjFormatado, cidade, codigoInterno } = body;

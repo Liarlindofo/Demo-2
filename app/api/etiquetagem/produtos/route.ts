@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { getEffectiveDbUser } from '@/lib/effective-user';
 
 // GET /api/etiquetagem/produtos - Listar produtos do usuário com categoria
 export async function GET() {
@@ -33,13 +33,8 @@ export async function GET() {
       );
     }
 
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
 
     const produtos = await prisma.etiquetagemProduto.findMany({
       where: {
@@ -90,13 +85,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
 
     const body = await request.json();
     const { nome, categoriaId, pesoPadrao, unidadeMedida, tipoArmazenamentoPadrao } = body;

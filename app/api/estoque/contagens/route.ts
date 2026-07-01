@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { getEffectiveDbUser, getEffectiveUserIds } from '@/lib/effective-user';
 import type { StockSession } from '../../../estoque/types';
 
 export const dynamic = 'force-dynamic';
@@ -9,21 +8,15 @@ export const dynamic = 'force-dynamic';
 // ── GET: listar todas as contagens do usuário ─────────────────────────────────
 export async function GET() {
   try {
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
-
+    // Inclui histórico de todos os membros do grupo (dados criados antes da migração)
+    const allUserIds = await getEffectiveUserIds(dbUser.id);
     const contagens = await prisma.estoqueContagem.findMany({
-      where: { userId: dbUser.id },
+      where: { userId: { in: allUserIds } },
       orderBy: { dataCriacao: 'desc' },
     });
 
@@ -45,18 +38,10 @@ export async function GET() {
 // ── POST: criar nova contagem ─────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
-    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-    if (!stackUser) {
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
-
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
 
     const body = await request.json();
     const { sessoes, criadoPor = 'Gerente' } = body;

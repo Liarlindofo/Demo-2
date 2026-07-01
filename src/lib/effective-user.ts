@@ -19,7 +19,6 @@ export async function getEffectiveDbUser() {
   const stackUser = await stackServerApp.getUser({ or: 'return-null' });
   if (!stackUser) return null;
 
-  // Sincroniza / cria o User do login atual
   const ownUser = await syncStackAuthUser({
     id: stackUser.id,
     primaryEmail: stackUser.primaryEmail || undefined,
@@ -28,14 +27,38 @@ export async function getEffectiveDbUser() {
     primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
   });
 
-  // Verifica se este usuário é membro de uma equipe RH ativa
+  // Se for membro de uma equipe, retorna o userId do dono (tenant)
   const membership = await prisma.rhTeamMember.findFirst({
     where: { stackUserId: stackUser.id, isActive: true },
     include: { tenantUser: true },
   });
 
-  // Se for membro, retorna o dono dos dados (tenant) para que a query use o userId correto
   if (membership?.tenantUser) return membership.tenantUser;
 
   return ownUser;
+}
+
+/**
+ * Retorna todos os userIds relevantes para queries históricas:
+ * o userId do tenant + todos os userIds dos membros da equipe.
+ * Garante que dados criados antes da migração também apareçam.
+ */
+export async function getEffectiveUserIds(tenantUserId: string): Promise<string[]> {
+  // Busca membros ativos que já fizeram login (têm stackUserId)
+  const members = await prisma.rhTeamMember.findMany({
+    where: { tenantUserId, isActive: true, stackUserId: { not: null } },
+    select: { stackUserId: true },
+  });
+
+  if (members.length === 0) return [tenantUserId];
+
+  // Resolve os User.id de cada membro pelo seu stackUserId
+  const memberUsers = await prisma.user.findMany({
+    where: {
+      stackUserId: { in: members.map(m => m.stackUserId!).filter(Boolean) },
+    },
+    select: { id: true },
+  });
+
+  return [tenantUserId, ...memberUsers.map(u => u.id)];
 }

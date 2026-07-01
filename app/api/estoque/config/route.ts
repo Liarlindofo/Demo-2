@@ -1,28 +1,14 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
-
-async function getDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-
-  return syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-}
+import { getEffectiveDbUser } from '@/lib/effective-user';
 
 // GET /api/estoque/config
 // Retorna { configs: EstoqueConfigMap, order: string[] }
 export async function GET() {
   try {
-    const dbUser = await getDbUser();
+    const dbUser = await getEffectiveDbUser();
     if (!dbUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
@@ -67,7 +53,7 @@ export async function GET() {
 //    ou { type: 'ordem', order: string[] }
 export async function PATCH(request: NextRequest) {
   try {
-    const dbUser = await getDbUser();
+    const dbUser = await getEffectiveDbUser();
     if (!dbUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }

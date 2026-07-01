@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { getEffectiveDbUser } from '@/lib/effective-user';
 
 // PUT /api/etiquetagem/produtos/[id] - Atualizar produto
 export async function PUT(
@@ -35,13 +35,8 @@ export async function PUT(
       );
     }
 
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
 
     const produto = await prisma.etiquetagemProduto.findUnique({
       where: { id },
@@ -128,13 +123,8 @@ export async function DELETE(
       );
     }
 
-    const dbUser = await syncStackAuthUser({
-      id: stackUser.id,
-      primaryEmail: stackUser.primaryEmail || undefined,
-      displayName: stackUser.displayName || undefined,
-      profileImageUrl: stackUser.profileImageUrl || undefined,
-      primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-    });
+    const dbUser = await getEffectiveDbUser();
+    if (!dbUser) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
 
     const produto = await prisma.etiquetagemProduto.findUnique({
       where: { id },
