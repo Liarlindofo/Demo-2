@@ -213,8 +213,8 @@ export default function NovaQuinzenaPage() {
               {/* Valor por diária */}
               <div>
                 <label className={labelCls}>
-                  Valor por entrega / diária
-                  <span className="text-gray-600 font-normal ml-1">(informativo para o motoboy)</span>
+                  Valor da diária
+                  <span className="text-gray-600 font-normal ml-1">(valor fixo por dia trabalhado — informativo)</span>
                 </label>
                 <div className="flex gap-2 items-center">
                   <div className="relative flex-1">
@@ -240,7 +240,7 @@ export default function NovaQuinzenaPage() {
                 {autoDaily > 0 && (
                   <p className="text-xs text-gray-600 mt-1 flex items-center gap-1">
                     <Info className="w-3 h-3" />
-                    Calculado automaticamente: {fmt(totalCents)} ÷ {deliveryCount} entregas = {fmt(autoDaily)} por entrega
+                    Sugestão automática: {fmt(totalCents)} ÷ {deliveryCount} dias = {fmt(autoDaily)} por dia
                   </p>
                 )}
               </div>
@@ -303,9 +303,9 @@ export default function NovaQuinzenaPage() {
                 {(dailyCents || autoDaily) > 0 && parseInt(deliveryCount || '0') > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500 text-xs pl-3">
-                      ↳ {deliveryCount} entregas × {fmt(dailyCents || autoDaily)}
+                      ↳ {deliveryCount} dias × {fmt(dailyCents || autoDaily)}
                     </span>
-                    <span className="text-gray-500 text-xs">(diárias)</span>
+                    <span className="text-gray-500 text-xs">(diária)</span>
                   </div>
                 )}
                 {discountCents > 0 && (
