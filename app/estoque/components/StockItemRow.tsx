@@ -72,12 +72,28 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
         {/* Nome + unidade */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-white leading-tight">{item.nome}</p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {item.unidade}
-            {item.estoqueMinimo !== undefined && (
-              <span className="ml-2 text-gray-600">mín: {item.estoqueMinimo}</span>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            {/* Badge de modo de contagem */}
+            {modoUnidade ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-blue-500/15 text-blue-400 border border-blue-500/20">
+                contar em unidade
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/20">
+                contar em kg
+              </span>
             )}
-          </p>
+            {/* Conversão (quando modo unidade) */}
+            {modoUnidade && item.kgPorUnidade && (
+              <span className="text-[10px] text-gray-600">
+                1 un = {item.kgPorUnidade} kg
+              </span>
+            )}
+            {/* Mínimo */}
+            {item.estoqueMinimo !== undefined && (
+              <span className="text-[10px] text-gray-600">mín: {item.estoqueMinimo} kg</span>
+            )}
+          </div>
         </div>
 
         {/* Alerta */}
