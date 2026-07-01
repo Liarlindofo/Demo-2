@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { ChevronDown, CheckCircle2, Circle, ArrowRight } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, CheckCircle2, Circle, ArrowRight, AlertTriangle, X } from 'lucide-react';
 import type { StockCategory } from '../types';
 import { StockItemRow } from './StockItemRow';
 
@@ -27,6 +27,7 @@ export function SessionAccordion({
   onProxima,
 }: SessionAccordionProps) {
   const [showCelebration, setShowCelebration] = useState(false);
+  const [itensFaltando, setItensFaltando] = useState<string[]>([]);
   const concluida = categoria.status === 'concluida';
 
   const totalItens = categoria.itens.length;
@@ -39,12 +40,58 @@ export function SessionAccordion({
   ).length;
 
   const handleConcluir = () => {
+    const naoPreenchidos = categoria.itens
+      .filter(i => i.quantidadeContada === null)
+      .map(i => i.nome);
+
+    if (naoPreenchidos.length > 0) {
+      setItensFaltando(naoPreenchidos);
+      return;
+    }
+
     onConcluir();
     setShowCelebration(true);
     setTimeout(() => setShowCelebration(false), 2000);
   };
 
   return (
+    <>
+    {/* Modal de itens não preenchidos */}
+    {itensFaltando.length > 0 && (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-white">Itens não preenchidos</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Preencha todos antes de concluir</p>
+              </div>
+            </div>
+            <button onClick={() => setItensFaltando([])} className="text-gray-600 hover:text-white transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <ul className="space-y-1.5 max-h-60 overflow-y-auto mb-5">
+            {itensFaltando.map(nome => (
+              <li key={nome} className="flex items-center gap-2 text-sm text-gray-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                {nome}
+              </li>
+            ))}
+          </ul>
+          <button
+            onClick={() => setItensFaltando([])}
+            className="w-full py-2.5 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 transition-colors"
+          >
+            Entendido, vou preencher
+          </button>
+        </div>
+      </div>
+    )}
+
     <div
       className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
         concluida
@@ -150,5 +197,6 @@ export function SessionAccordion({
         </div>
       )}
     </div>
+    </>
   );
 }

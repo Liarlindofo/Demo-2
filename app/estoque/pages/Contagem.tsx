@@ -32,6 +32,7 @@ export function Contagem({
   );
   const [showRevisao, setShowRevisao] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [itensFaltandoGlobal, setItensFaltandoGlobal] = useState<{ categoria: string; nome: string }[]>([]);
 
   const isSearching = searchTerm.trim().length > 0;
   const searchResults = isSearching
@@ -77,6 +78,19 @@ export function Contagem({
     const idx = session.sessoes.findIndex(s => s.id === catId);
     const proxima = session.sessoes[idx + 1];
     if (proxima) setActiveCatId(proxima.id);
+  };
+
+  const handleAbrirRevisao = () => {
+    const faltando = session.sessoes.flatMap(cat =>
+      cat.itens
+        .filter(i => i.quantidadeContada === null)
+        .map(i => ({ categoria: cat.nome, nome: i.nome })),
+    );
+    if (faltando.length > 0) {
+      setItensFaltandoGlobal(faltando);
+      return;
+    }
+    setShowRevisao(true);
   };
 
   // ── Tela de revisão ───────────────────────────────────────────────────────
@@ -169,6 +183,46 @@ export function Contagem({
   // ── Tela principal de contagem ────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
+      {/* Modal global — itens não preenchidos */}
+      {itensFaltandoGlobal.length > 0 && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-white">
+                    {itensFaltandoGlobal.length} {itensFaltandoGlobal.length === 1 ? 'item não preenchido' : 'itens não preenchidos'}
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Todos os itens precisam ser preenchidos</p>
+                </div>
+              </div>
+              <button onClick={() => setItensFaltandoGlobal([])} className="text-gray-600 hover:text-white transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <ul className="space-y-1.5 max-h-64 overflow-y-auto mb-5">
+              {itensFaltandoGlobal.map((item, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0 mt-1.5" />
+                  <span>
+                    <span className="text-gray-500 text-xs">{item.categoria} · </span>
+                    <span className="text-gray-300">{item.nome}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={() => setItensFaltandoGlobal([])}
+              className="w-full py-2.5 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-sm font-semibold hover:bg-red-500/30 transition-colors"
+            >
+              Voltar e preencher
+            </button>
+          </div>
+        </div>
+      )}
       {/* Header fixo */}
       <div className="bg-[#1c1c1e] border-b border-[#2a2a2e] px-4 pt-12 pb-3 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-2">
@@ -268,7 +322,7 @@ export function Contagem({
         <div className="pt-2 pb-8">
           {todasConcluidas ? (
             <button
-              onClick={() => setShowRevisao(true)}
+              onClick={handleAbrirRevisao}
               className="w-full py-4 rounded-2xl bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-base transition-colors"
             >
               ✓ Revisar e finalizar
