@@ -28,15 +28,23 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao, fa
   const modoUnidade = item.modoContagem === 'unidade';
   const kgPorUn = item.kgPorUnidade ?? 1;
   const puroUnidade = modoUnidade && !item.kgPorUnidade;
+  // Para itens cuja unidade é 'un', nunca exibe 'kg' — independente do modoContagem salvo
+  const isItemUnidade = item.unidade === 'un';
   const unidadeDisplay = (modoUnidade && item.kgPorUnidade) ? 'kg' : item.unidade;
 
   const handleAdicionar = () => {
     const num = parseFloat(addValue.replace(',', '.'));
     if (isNaN(num) || num < 0) return;
-    const qtdBase = modoUnidade ? num * kgPorUn : num;
-    const qtdAdicionada = puroUnidade ? num * fardoSize : qtdBase;
-    const novoTotal = parseFloat(((item.quantidadeContada ?? 0) + qtdAdicionada).toFixed(3));
-    onQuantidade(categoriaId, item.insumoId, novoTotal);
+    // fardoSize > 1 apenas chega para bebidas — multiplica diretamente em unidades
+    if (fardoSize > 1) {
+      const novoTotal = (item.quantidadeContada ?? 0) + num * fardoSize;
+      onQuantidade(categoriaId, item.insumoId, novoTotal);
+    } else {
+      const qtdBase = modoUnidade ? num * kgPorUn : num;
+      const qtdAdicionada = puroUnidade ? num : qtdBase;
+      const novoTotal = parseFloat(((item.quantidadeContada ?? 0) + qtdAdicionada).toFixed(3));
+      onQuantidade(categoriaId, item.insumoId, novoTotal);
+    }
     setAddValue('');
     setTimeout(() => inputRef.current?.focus(), 50);
   };
@@ -77,8 +85,8 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao, fa
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-white leading-tight">{item.nome}</p>
           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-            {/* Badge de modo de contagem — só exibe para kg ou quando há conversão */}
-            {!puroUnidade && (
+            {/* Badge de modo de contagem — nunca exibe para itens de unidade 'un' */}
+            {!isItemUnidade && (
               modoUnidade ? (
                 <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-blue-500/15 text-blue-400 border border-blue-500/20">
                   contar em unidade
@@ -123,7 +131,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao, fa
                 ≈ {formatQtd(item.quantidadeContada! / kgPorUn)} un
               </p>
             )}
-            {puroUnidade && fardoSize > 1 && (
+            {isItemUnidade && fardoSize > 1 && (
               <p className="text-xs text-gray-600 leading-tight">
                 {formatQtd(item.quantidadeContada! / fardoSize)} fardo{item.quantidadeContada! / fardoSize !== 1 ? 's' : ''} de {fardoSize}
               </p>
@@ -167,12 +175,8 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao, fa
           onChange={e => setAddValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={
-            puroUnidade
-              ? fardoSize > 1
-                ? contado ? `+ fardo de ${fardoSize}` : `qtd em fardos de ${fardoSize}`
-                : contado ? `+ adicionar ${item.unidade}` : `quantidade em ${item.unidade}`
-              : modoUnidade
-              ? contado ? '+ adicionar un' : 'quantidade em un'
+            isItemUnidade && fardoSize > 1
+              ? contado ? `+ fardo de ${fardoSize}` : `qtd em fardos de ${fardoSize}`
               : contado ? `+ adicionar ${item.unidade}` : `quantidade em ${item.unidade}`
           }
           className="flex-1 bg-[#2a2a2e] border border-[#374151] rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/60 transition-colors"
@@ -187,7 +191,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao, fa
           }`}
         >
           <Plus className="w-4 h-4" />
-          {contado ? 'Somar' : 'Add'}{puroUnidade && fardoSize > 1 ? ` fardo ${fardoSize}` : ` ${unidadeDisplay}`}
+          {contado ? 'Somar' : 'Add'}{isItemUnidade && fardoSize > 1 ? ` fardo ${fardoSize}` : ` ${unidadeDisplay}`}
         </button>
       </div>
 
