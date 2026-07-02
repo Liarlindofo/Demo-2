@@ -61,7 +61,7 @@ export function construirSessoes(
             unidade: p.unidade,
             quantidadeContada: null,
             estoqueMinimo: cfg?.estoqueMinimo,
-            modoContagem: cfg?.modoContagem ?? 'kg',
+            modoContagem: cfg?.modoContagem ?? (p.unidade === 'un' ? 'unidade' : 'kg'),
             kgPorUnidade: cfg?.kgPorUnidade,
             observacao: undefined,
           };

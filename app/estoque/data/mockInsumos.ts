@@ -192,6 +192,7 @@ export const SESSOES_PADRAO: Omit<StockCategory, 'status'>[] = [
       nome: p.nome,
       unidade: p.unidade,
       quantidadeContada: null,
+      modoContagem: 'unidade' as const,
     })),
   },
   {
@@ -203,6 +204,7 @@ export const SESSOES_PADRAO: Omit<StockCategory, 'status'>[] = [
       nome: p.nome,
       unidade: p.unidade,
       quantidadeContada: null,
+      modoContagem: 'unidade' as const,
     })),
   },
 ];

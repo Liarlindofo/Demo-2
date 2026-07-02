@@ -10,9 +10,10 @@ interface StockItemRowProps {
   categoriaId: string;
   onQuantidade: (categoriaId: string, insumoId: string, qty: number | null) => void;
   onObservacao: (categoriaId: string, insumoId: string, obs: string) => void;
+  fardoSize?: number;
 }
 
-export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: StockItemRowProps) {
+export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao, fardoSize = 1 }: StockItemRowProps) {
   const [showObs, setShowObs] = useState(!!item.observacao);
   const [obsLocal, setObsLocal] = useState(item.observacao ?? '');
   const [addValue, setAddValue] = useState('');
@@ -26,12 +27,15 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
 
   const modoUnidade = item.modoContagem === 'unidade';
   const kgPorUn = item.kgPorUnidade ?? 1;
+  const puroUnidade = modoUnidade && !item.kgPorUnidade;
+  const unidadeDisplay = (modoUnidade && item.kgPorUnidade) ? 'kg' : item.unidade;
 
   const handleAdicionar = () => {
     const num = parseFloat(addValue.replace(',', '.'));
     if (isNaN(num) || num < 0) return;
-    const kgAdicionados = modoUnidade ? num * kgPorUn : num;
-    const novoTotal = parseFloat(((item.quantidadeContada ?? 0) + kgAdicionados).toFixed(3));
+    const qtdBase = modoUnidade ? num * kgPorUn : num;
+    const qtdAdicionada = puroUnidade ? num * fardoSize : qtdBase;
+    const novoTotal = parseFloat(((item.quantidadeContada ?? 0) + qtdAdicionada).toFixed(3));
     onQuantidade(categoriaId, item.insumoId, novoTotal);
     setAddValue('');
     setTimeout(() => inputRef.current?.focus(), 50);
@@ -73,17 +77,19 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-white leading-tight">{item.nome}</p>
           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-            {/* Badge de modo de contagem */}
-            {modoUnidade ? (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-blue-500/15 text-blue-400 border border-blue-500/20">
-                contar em unidade
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/20">
-                contar em kg
-              </span>
+            {/* Badge de modo de contagem — só exibe para kg ou quando há conversão */}
+            {!puroUnidade && (
+              modoUnidade ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-blue-500/15 text-blue-400 border border-blue-500/20">
+                  contar em unidade
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/20">
+                  contar em kg
+                </span>
+              )
             )}
-            {/* Conversão (quando modo unidade) */}
+            {/* Conversão (quando modo unidade com fator kg) */}
             {modoUnidade && item.kgPorUnidade && (
               <span className="text-[10px] text-gray-600">
                 1 un = {item.kgPorUnidade} kg
@@ -91,7 +97,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
             )}
             {/* Mínimo */}
             {item.estoqueMinimo !== undefined && (
-              <span className="text-[10px] text-gray-600">mín: {item.estoqueMinimo} kg</span>
+              <span className="text-[10px] text-gray-600">mín: {item.estoqueMinimo} {unidadeDisplay}</span>
             )}
           </div>
         </div>
@@ -110,11 +116,16 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
               >
                 {formatQtd(item.quantidadeContada)}
               </span>
-              <span className="text-xs text-gray-500">kg</span>
+              <span className="text-xs text-gray-500">{unidadeDisplay}</span>
             </div>
             {modoUnidade && item.kgPorUnidade && (
               <p className="text-xs text-gray-600 leading-tight">
                 ≈ {formatQtd(item.quantidadeContada! / kgPorUn)} un
+              </p>
+            )}
+            {puroUnidade && fardoSize > 1 && (
+              <p className="text-xs text-gray-600 leading-tight">
+                {formatQtd(item.quantidadeContada! / fardoSize)} fardo{item.quantidadeContada! / fardoSize !== 1 ? 's' : ''} de {fardoSize}
               </p>
             )}
           </div>
@@ -151,12 +162,16 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
           type="number"
           inputMode="decimal"
           min="0"
-          step="0.1"
+          step={puroUnidade ? '1' : '0.1'}
           value={addValue}
           onChange={e => setAddValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={
-            modoUnidade
+            puroUnidade
+              ? fardoSize > 1
+                ? contado ? `+ fardo de ${fardoSize}` : `qtd em fardos de ${fardoSize}`
+                : contado ? `+ adicionar ${item.unidade}` : `quantidade em ${item.unidade}`
+              : modoUnidade
               ? contado ? '+ adicionar un' : 'quantidade em un'
               : contado ? `+ adicionar ${item.unidade}` : `quantidade em ${item.unidade}`
           }
@@ -172,7 +187,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
           }`}
         >
           <Plus className="w-4 h-4" />
-          {contado ? 'Somar' : 'Adicionar'} {modoUnidade ? 'un' : item.unidade}
+          {contado ? 'Somar' : 'Add'}{puroUnidade && fardoSize > 1 ? ` fardo ${fardoSize}` : ` ${unidadeDisplay}`}
         </button>
       </div>
 
@@ -203,7 +218,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
         <div className="px-3 pb-3">
           <p className="text-xs text-amber-400 flex items-center gap-1.5">
             <AlertTriangle className="w-3 h-3" />
-            Abaixo do mínimo ({formatQtd(item.estoqueMinimo ?? null)} {item.unidade})
+            Abaixo do mínimo ({formatQtd(item.estoqueMinimo ?? null)} {unidadeDisplay})
           </p>
         </div>
       )}
