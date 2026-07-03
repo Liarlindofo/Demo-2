@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { X, CheckCircle2, AlertTriangle, ChevronLeft, Search } from 'lucide-react';
 import type { StockSession } from '../types';
 import { ProgressBar } from '../components/ProgressBar';
-import { SessionAccordion } from '../components/SessionAccordion';
+import { SessionAccordion, FARDO_OPCOES } from '../components/SessionAccordion';
 import { StockItemRow } from '../components/StockItemRow';
 import { formatQtd } from '../utils';
 
@@ -33,6 +33,7 @@ export function Contagem({
   const [showRevisao, setShowRevisao] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [itensFaltandoGlobal, setItensFaltandoGlobal] = useState<{ categoria: string; nome: string }[]>([]);
+  const [fardoSize, setFardoSize] = useState(1);
 
   const isSearching = searchTerm.trim().length > 0;
   const searchResults = isSearching
@@ -42,6 +43,8 @@ export function Contagem({
           .map(i => ({ item: i, categoriaId: cat.id, categoriaNome: cat.nome, icone: cat.icone })),
       )
     : [];
+
+  const searchHasBebidas = searchResults.some(r => r.categoriaId === 'bebidas');
 
   const concluidas = session.sessoes.filter(s => s.status === 'concluida').length;
   const total = session.sessoes.length;
@@ -279,24 +282,48 @@ export function Contagem({
               <p className="text-gray-600 text-xs mt-1">"{searchTerm}"</p>
             </div>
           ) : (
-            searchResults.map(({ item, categoriaId, categoriaNome, icone }) => (
-              <div
-                key={`${categoriaId}-${item.insumoId}`}
-                className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl overflow-hidden"
-              >
-                <p className="px-4 pt-3 pb-1 text-xs text-gray-500 font-medium">
-                  {icone} {categoriaNome}
-                </p>
-                <div className="px-4 pb-3">
-                  <StockItemRow
-                    item={item}
-                    categoriaId={categoriaId}
-                    onQuantidade={onQuantidade}
-                    onObservacao={onObservacao}
-                  />
+            <>
+              {/* Seletor de fardos fixo no topo quando há bebidas nos resultados */}
+              {searchHasBebidas && (
+                <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl px-4 py-3">
+                  <p className="text-[10px] text-gray-500 font-medium mb-2">🥤 Bebidas — contar por</p>
+                  <div className="flex gap-1.5 bg-[#0a0a0a] rounded-xl p-1.5">
+                    {FARDO_OPCOES.map(({ size, label }) => (
+                      <button
+                        key={size}
+                        onClick={() => setFardoSize(size)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                          fardoSize === size
+                            ? 'bg-amber-500 text-black'
+                            : 'text-gray-500 hover:text-white hover:bg-[#2a2a2e]'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))
+              )}
+              {searchResults.map(({ item, categoriaId, categoriaNome, icone }) => (
+                <div
+                  key={`${categoriaId}-${item.insumoId}`}
+                  className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl overflow-hidden"
+                >
+                  <p className="px-4 pt-3 pb-1 text-xs text-gray-500 font-medium">
+                    {icone} {categoriaNome}
+                  </p>
+                  <div className="px-4 pb-3">
+                    <StockItemRow
+                      item={item}
+                      categoriaId={categoriaId}
+                      onQuantidade={onQuantidade}
+                      onObservacao={onObservacao}
+                      fardoSize={categoriaId === 'bebidas' ? fardoSize : undefined}
+                    />
+                  </div>
+                </div>
+              ))}
+            </>
           )
         ) : (
           session.sessoes.map((cat, idx) => (
@@ -314,6 +341,8 @@ export function Contagem({
                   ? () => handleProxima(cat.id)
                   : undefined
               }
+              fardoSize={cat.id === 'bebidas' ? fardoSize : undefined}
+              onFardoChange={cat.id === 'bebidas' ? setFardoSize : undefined}
             />
           ))
         )}

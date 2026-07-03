@@ -14,9 +14,11 @@ interface SessionAccordionProps {
   onConcluir: () => void;
   onReabrir: () => void;
   onProxima?: () => void;
+  fardoSize?: number;
+  onFardoChange?: (size: number) => void;
 }
 
-const FARDO_OPCOES = [
+export const FARDO_OPCOES = [
   { size: 1, label: 'un' },
   { size: 6, label: 'fardo 6' },
   { size: 8, label: 'fardo 8' },
@@ -32,10 +34,11 @@ export function SessionAccordion({
   onConcluir,
   onReabrir,
   onProxima,
+  fardoSize = 1,
+  onFardoChange,
 }: SessionAccordionProps) {
   const [showCelebration, setShowCelebration] = useState(false);
   const [itensFaltando, setItensFaltando] = useState<string[]>([]);
-  const [fardoSize, setFardoSize] = useState(1);
 
   const isBebidas = categoria.id === 'bebidas';
   const concluida = categoria.status === 'concluida';
@@ -172,7 +175,7 @@ export function SessionAccordion({
               {FARDO_OPCOES.map(({ size, label }) => (
                 <button
                   key={size}
-                  onClick={() => setFardoSize(size)}
+                  onClick={() => onFardoChange?.(size)}
                   className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                     fardoSize === size
                       ? 'bg-amber-500 text-black'
