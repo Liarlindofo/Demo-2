@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getRhDbUser } from '@/lib/rh-api-auth';
+import { rhGetUser } from '@/lib/rh-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const dbUser = await getRhDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const rh = await rhGetUser();
+  if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id: riderId } = await params;
 
   const rider = await prisma.deliveryRider.findFirst({
-    where: { id: riderId, userId: dbUser.id },
+    where: { id: riderId, userId: rh.userId },
   });
   if (!rider) return NextResponse.json({ error: 'Motoboy não encontrado' }, { status: 404 });
 
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const period = await prisma.riderPaymentPeriod.create({
     data: {
-      userId: dbUser.id,
+      userId: rh.userId,
       riderId,
       lojaId: rider.lojaId,
       periodLabel: body.periodLabel,
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       discountCents: body.discountCents ?? 0,
       discountNotes: body.discountNotes || null,
       summary: body.summary || null,
-      createdBy: dbUser.id,
+      createdBy: rh.userId,
     },
   });
 

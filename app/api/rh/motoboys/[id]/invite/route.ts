@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getRhDbUser } from '@/lib/rh-api-auth';
+import { rhGetUser } from '@/lib/rh-auth';
 import { generateInviteToken } from '@/lib/rider-auth';
 import { buildInviteLink, buildWhatsAppLink, sendInviteEmail } from '@/lib/rider-invite-email';
 
@@ -24,12 +24,12 @@ function buildResponse(token: string, expiresAt: Date, phone: string | null, loj
 // GET — retorna token existente (se ainda válido) ou gera novo
 export async function GET(_req: NextRequest, { params }: RouteContext) {
   try {
-    const dbUser = await getRhDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const { id } = await params;
     const rider = await prisma.deliveryRider.findFirst({
-      where: { id, userId: dbUser.id },
+      where: { id, userId: rh.userId },
       include: { loja: { select: { nome: true } } },
     });
 
@@ -62,12 +62,12 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
 // POST — força geração de novo token e reenvia e-mail
 export async function POST(_req: NextRequest, { params }: RouteContext) {
   try {
-    const dbUser = await getRhDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const { id } = await params;
     const rider = await prisma.deliveryRider.findFirst({
-      where: { id, userId: dbUser.id },
+      where: { id, userId: rh.userId },
       include: { loja: { select: { nome: true } } },
     });
 

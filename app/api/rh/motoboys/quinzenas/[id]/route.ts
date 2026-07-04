@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getRhDbUser } from '@/lib/rh-api-auth';
+import { rhGetUser } from '@/lib/rh-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const dbUser = await getRhDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const rh = await rhGetUser();
+  if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
   const period = await prisma.riderPaymentPeriod.findFirst({
-    where: { id, userId: dbUser.id },
+    where: { id, userId: rh.userId },
     include: {
       rider: { select: { name: true, email: true, lojaId: true } },
       documents: {
@@ -24,14 +24,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const dbUser = await getRhDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const rh = await rhGetUser();
+  if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
   const body = await req.json() as { status?: string };
 
   const result = await prisma.riderPaymentPeriod.updateMany({
-    where: { id, userId: dbUser.id },
+    where: { id, userId: rh.userId },
     data: { ...(body.status ? { status: body.status } : {}) },
   });
 

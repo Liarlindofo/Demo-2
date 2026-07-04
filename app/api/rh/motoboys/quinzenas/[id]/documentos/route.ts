@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getRhDbUser } from '@/lib/rh-api-auth';
+import { rhGetUser } from '@/lib/rh-auth';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
@@ -10,12 +10,12 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const BUCKET = 'rider-documents';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const dbUser = await getRhDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const rh = await rhGetUser();
+  if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id: periodId } = await params;
   const period = await prisma.riderPaymentPeriod.findFirst({
-    where: { id: periodId, userId: dbUser.id },
+    where: { id: periodId, userId: rh.userId },
     include: { documents: true },
   });
 
@@ -36,21 +36,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const dbUser = await getRhDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const rh = await rhGetUser();
+  if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id: periodId } = await params;
   const body = await req.json() as { documentId: string; status: 'approved' | 'rejected' };
 
-  // Verificar que o period pertence ao usuário
   const period = await prisma.riderPaymentPeriod.findFirst({
-    where: { id: periodId, userId: dbUser.id },
+    where: { id: periodId, userId: rh.userId },
   });
   if (!period) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
 
   await prisma.riderDocument.update({
     where: { id: body.documentId },
-    data: { status: body.status, reviewedBy: dbUser.id, reviewedAt: new Date() },
+    data: { status: body.status, reviewedBy: rh.userId, reviewedAt: new Date() },
   });
 
   // Se ambos os docs foram aprovados → marcar quinzena como approved

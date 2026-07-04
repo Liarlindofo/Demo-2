@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getRhDbUser } from '@/lib/rh-api-auth';
+import { rhGetUser } from '@/lib/rh-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const dbUser = await getRhDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const rh = await rhGetUser();
+  if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
   const rider = await prisma.deliveryRider.findFirst({
-    where: { id, userId: dbUser.id },
+    where: { id, userId: rh.userId },
     include: {
       loja: { select: { nome: true } },
       paymentPeriods: {
@@ -29,8 +29,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const dbUser = await getRhDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const rh = await rhGetUser();
+  if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
   const body = await req.json() as {
@@ -38,7 +38,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   };
 
   const result = await prisma.deliveryRider.updateMany({
-    where: { id, userId: dbUser.id },
+    where: { id, userId: rh.userId },
     data: {
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...(body.phone !== undefined ? { phone: body.phone } : {}),
@@ -52,13 +52,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const dbUser = await getRhDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const rh = await rhGetUser();
+  if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
 
   const rider = await prisma.deliveryRider.findFirst({
-    where: { id, userId: dbUser.id },
+    where: { id, userId: rh.userId },
   });
 
   if (!rider) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
