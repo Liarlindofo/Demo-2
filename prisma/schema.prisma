@@ -75,6 +75,8 @@ model User {
   rhTaxasLoja            RhTaxaLoja[]
   deliveryRiders         DeliveryRider[]
   rhTeamMemberships      RhTeamMember[]
+  tarefaTemplates        TarefaTemplate[]
+  tarefasAtribuidas      TarefaAtribuida[]
 
   @@map("users")
 }
@@ -803,6 +805,8 @@ model RhLoja {
   transferenciasOrigem  RhTransferenciaLoja[]   @relation("TransferenciaOrigem")
   transferenciasDestino RhTransferenciaLoja[]   @relation("TransferenciaDestino")
   plrs                  RhPLRTrimestral[]
+  tarefaTemplates       TarefaTemplate[]
+  tarefasAtribuidas     TarefaAtribuida[]
   taxas                 RhTaxaLoja[]
   riders                DeliveryRider[]
 
@@ -819,8 +823,9 @@ model RhCargo {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  funcionarios  RhFuncionario[]
-  posicoesIdeais RhPosicaoIdeal[]
+  funcionarios    RhFuncionario[]
+  posicoesIdeais  RhPosicaoIdeal[]
+  tarefaTemplates TarefaTemplate[]
 
   @@index([userId])
   @@map("rh_cargos")
@@ -871,7 +876,8 @@ model RhFuncionario {
   transferencias        RhTransferenciaLoja[]
   bonificacoesTrimestrais RhBonificacaoTrimestral[]
   bonificacoesAssiduidade RhBonificacaoAssiduidade[]
-  plrPagamentos         RhPLRPagamento[]
+  plrPagamentos           RhPLRPagamento[]
+  tarefasAtribuidas       TarefaAtribuida[]
 
   @@index([userId, cpf])
   @@index([userId])
@@ -1295,3 +1301,103 @@ model SystemConfig {
 
   @@map("system_configs")
 }
+
+// ── MÓDULO TAREFAS ─────────────────────────────────────────────────────────
+
+enum StatusTarefa {
+  AGENDADA
+  ENVIADA
+  AGUARDANDO_EVIDENCIA
+  CONCLUIDA
+  CONCLUIDA_COM_ATRASO
+  NAO_CONCLUIDA
+}
+
+enum TipoEvidencia {
+  FOTO
+  CONFIRMACAO_TEXTO
+  LOCALIZACAO
+  ARQUIVO
+}
+
+/// Template reutilizável de tarefa operacional
+model TarefaTemplate {
+  id                    String   @id @default(cuid())
+  userId                String   // tenant owner
+  titulo                String
+  descricao             String   @db.Text
+  exigeFoto             Boolean  @default(false)
+  exigeConfirmacaoTexto Boolean  @default(false)
+  exigeLocalizacao      Boolean  @default(false)
+  exigeArquivo          Boolean  @default(false)
+  /// Metadados para validação por visão: { objeto_esperado, extrair, faixa_ok: { min, max }, unidade }
+  validacaoIA           Json?
+  lojaId                String?  // null = global
+  cargoId               String?  // null = todos os cargos
+  ativo                 Boolean  @default(true)
+  criadoPor             String   // Stack Auth userId
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loja        RhLoja?           @relation(fields: [lojaId], references: [id])
+  cargo       RhCargo?          @relation(fields: [cargoId], references: [id])
+  atribuicoes TarefaAtribuida[]
+
+  @@index([userId])
+  @@index([lojaId])
+  @@index([userId, ativo])
+  @@map("tarefa_templates")
+}
+
+/// Instância de tarefa atribuída a um funcionário em data/hora específica
+model TarefaAtribuida {
+  id            String       @id @default(cuid())
+  userId        String       // tenant owner
+  templateId    String
+  funcionarioId String
+  lojaId        String
+  dataAgendada  DateTime     // data + horário limite de conclusão
+  status        StatusTarefa @default(AGENDADA)
+  enviadaEm     DateTime?
+  concluidaEm   DateTime?
+  minutosAtraso Int          @default(0)
+  /// true quando a IA detectar divergência entre texto e imagem
+  emRevisaoAdm  Boolean      @default(false)
+  revisadaPor   String?
+  revisadaEm    DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template    TarefaTemplate    @relation(fields: [templateId], references: [id])
+  funcionario RhFuncionario     @relation(fields: [funcionarioId], references: [id])
+  loja        RhLoja            @relation(fields: [lojaId], references: [id])
+  evidencias  TarefaEvidencia[]
+
+  @@index([funcionarioId, dataAgendada])
+  @@index([lojaId, dataAgendada])
+  @@index([userId])
+  @@index([userId, status])
+  @@map("tarefa_atribuidas")
+}
+
+/// Evidência recebida para uma tarefa atribuída
+model TarefaEvidencia {
+  id                String        @id @default(cuid())
+  tarefaAtribuidaId String
+  tipo              TipoEvidencia
+  conteudoTexto     String?       @db.Text
+  urlArquivo        String?
+  latitude          Float?
+  longitude         Float?
+  /// Resposta estruturada da LLM: { objeto_identificado, corresponde_ao_esperado, valor_lido, legivel, confianca, observacao, divergencia }
+  analiseIA         Json?
+  recebidaEm        DateTime      @default(now())
+
+  tarefaAtribuida TarefaAtribuida @relation(fields: [tarefaAtribuidaId], references: [id], onDelete: Cascade)
+
+  @@index([tarefaAtribuidaId])
+  @@map("tarefa_evidencias")
+}
+

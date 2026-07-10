@@ -24,6 +24,7 @@ const TOOL_LABELS: Record<SystemTool, string> = {
   [SystemTool.ESTOQUE]: "Estoque",
   [SystemTool.IFOOD]: "iFood",
   [SystemTool.RH]: "RH",
+  [SystemTool.TAREFAS]: "Tarefas",
 };
 
 export default function ToolProtection({ tool, toolName, children }: ToolProtectionProps) {

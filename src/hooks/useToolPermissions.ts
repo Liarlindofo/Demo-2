@@ -23,6 +23,7 @@ export function useToolPermissions() {
     [SystemTool.ESTOQUE]: false,
     [SystemTool.IFOOD]: false,
     [SystemTool.RH]: false,
+    [SystemTool.TAREFAS]: false,
   });
   const [loading, setLoading] = useState(true);
 
@@ -75,6 +76,7 @@ export function useToolPermissions() {
         [SystemTool.ESTOQUE]: false,
         [SystemTool.IFOOD]: false,
         [SystemTool.RH]: false,
+        [SystemTool.TAREFAS]: false,
       };
 
       permissionChecks.forEach(({ tool, hasPermission }) => {

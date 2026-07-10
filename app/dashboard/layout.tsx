@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Settings, User, Moon, Sun, LogOut, Menu, Link2, Calendar, MessageSquare, ClipboardCheck, Tag, Lock, Package, BarChart2, Warehouse, ShoppingBag, ChevronDown, ChevronRight, Users } from 'lucide-react';
+import { Settings, User, Moon, Sun, LogOut, Menu, Link2, Calendar, MessageSquare, ClipboardCheck, Tag, Lock, Package, BarChart2, Warehouse, ShoppingBag, ChevronDown, ChevronRight, Users, ListChecks } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import { AppProvider } from '@/contexts/app-context';
 import { useRouter } from 'next/navigation';
@@ -256,6 +256,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 cursor-not-allowed">
                               <Lock className="h-5 w-5" />
                               <span className="font-medium">RH</span>
+                            </div>
+                          )}
+
+                          {/* Tarefas */}
+                          {permissions[SystemTool.TAREFAS] ? (
+                            <Link
+                              href="/tarefas"
+                              onClick={() => setIsSidebarOpen(false)}
+                              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                                pathname?.startsWith('/tarefas')
+                                  ? 'bg-amber-500/15 text-amber-400'
+                                  : 'text-gray-300 hover:bg-[#374151] hover:text-white'
+                              }`}
+                            >
+                              <ListChecks className="h-5 w-5" />
+                              <span className="font-medium">Tarefas</span>
+                            </Link>
+                          ) : (
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 cursor-not-allowed">
+                              <Lock className="h-5 w-5" />
+                              <span className="font-medium">Tarefas</span>
                             </div>
                           )}
 

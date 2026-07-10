@@ -36,6 +36,7 @@ export enum SystemTool {
   ESTOQUE = 'estoque',
   IFOOD = 'ifood',
   RH = 'rh',
+  TAREFAS = 'tarefas',
 }
 
 export interface StackUser {
