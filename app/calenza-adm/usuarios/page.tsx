@@ -63,8 +63,8 @@ const TOOL_GROUPS: { label: string; tools: SystemTool[] }[] = [
     ],
   },
   {
-    label: "RH",
-    tools: [SystemTool.RH],
+    label: "RH & Tarefas",
+    tools: [SystemTool.RH, SystemTool.TAREFAS],
   },
   {
     label: "Outros",
