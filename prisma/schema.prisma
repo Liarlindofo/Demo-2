@@ -1382,6 +1382,30 @@ model TarefaAtribuida {
   @@map("tarefa_atribuidas")
 }
 
+/// Sessão de conversa de tarefa por telefone (máquina de estados do bot WhatsApp).
+/// Persiste reinicializações do PM2; uma sessão por tarefa/telefone.
+model SessaoTarefa {
+  id                  String   @id @default(cuid())
+  /// ID da TarefaAtribuida correspondente (sem FK explícita para desacoplar do fluxo Next.js)
+  tarefaId            String
+  /// Telefone do funcionário em dígitos puros, ex: "5511999999999"
+  telefone            String
+  /// Array dos tipos de evidência exigidos, ex: ["FOTO","CONFIRMACAO_TEXTO"]
+  evidenciasExigidas  Json
+  /// Array dos tipos de evidência já recebidos e registrados
+  evidenciasRecebidas Json     @default("[]")
+  /// AGUARDANDO | CONCLUIDA | EXPIRADA
+  estado              String   @default("AGUARDANDO")
+  /// Momento em que o bot enviou a mensagem de cobrança
+  enviadaEm           DateTime
+  criadaEm            DateTime @default(now())
+  atualizadaEm        DateTime @updatedAt
+
+  @@index([telefone, estado])
+  @@index([estado, criadaEm])
+  @@map("sessoes_tarefa")
+}
+
 /// Evidência recebida para uma tarefa atribuída
 model TarefaEvidencia {
   id                String        @id @default(cuid())

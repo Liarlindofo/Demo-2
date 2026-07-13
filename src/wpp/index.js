@@ -6,6 +6,7 @@ import sessionManager from './sessionManager.js';
 import { onQRCode, onStatusChange, extractPhoneNumber } from './qrHandler.js';
 import { WhatsAppBotModel, BotSettingsModel } from '../db/models.js';
 import { sendToGPT, formatConversationHistory } from '../ai/chat.js';
+import * as tarefaHandler from '../tarefas/tarefaHandler.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -310,30 +311,96 @@ function setupMessageListener(client, userId, slot) {
 }
 
 /**
- * Processa mensagem recebida
+ * Processa mensagem recebida.
+ *
+ * Ordem de roteamento:
+ *  1. Descarte: grupos, status/stories
+ *  2. Comandos do atendente (fromMe): #boa noite / #voltar
+ *  3. Verificação de modo manual → descartar se ativo
+ *  4. 🎯 SESSÃO DE TAREFA — antes do filtro de tipo e do GPT.
+ *     Mensagens de funcionários com tarefa aberta (foto, localização,
+ *     documento, texto) são roteadas aqui e não passam para o GPT.
+ *  5. Filtro de tipo para o GPT (apenas chat/text)
+ *  6. Fluxo GPT normal
  */
 async function handleIncomingMessage(message, client, userId, slot) {
     try {
-      // LOG CRÍTICO: Detectar quando mensagem chega
       logger.info(`[📨 MENSAGEM RECEBIDA] userId: ${userId}, slot: ${slot}`);
       logger.info(`[📨 MENSAGEM] De: ${message.from}, Tipo: ${message.type}, fromMe: ${message.fromMe}, isGroup: ${message.isGroupMsg}`);
       logger.info(`[📨 MENSAGEM] Corpo: "${message.body || message.text || '(vazio)'}"`);
-      
+
+      // ── 1. Descartes imediatos ────────────────────────────────────────────
       if (message.isGroupMsg) {
         logger.info(`[setupMessageListener] Ignorando mensagem de grupo`);
         return;
       }
 
-      // Ignora mensagens de stories/status do WhatsApp
-      if (message.isStatus || message.isStory || 
-          (message.from && (message.from.includes('status') || message.from.includes('broadcast'))) ||
-          message.type === 'status') {
+      if (
+        message.isStatus || message.isStory ||
+        (message.from && (message.from.includes('status') || message.from.includes('broadcast'))) ||
+        message.type === 'status'
+      ) {
         logger.info(`[setupMessageListener] Ignorando mensagem de story/status`);
         return;
       }
 
+      // ── 2. Comandos do atendente (fromMe: text only) ──────────────────────
+      if (message.fromMe) {
+        const rawTextFromMe = (message.body || message.text || '').trim().toLowerCase();
+
+        const phoneRawFromMe = message.to || message.chatId || (message.chat && message.chat.id) || message.from;
+        const phoneFromMe = extractPhoneNumber(phoneRawFromMe) || phoneRawFromMe;
+
+        logger.info(`[setupMessageListener] Mensagem fromMe | phone: ${phoneFromMe} | texto: "${rawTextFromMe}"`);
+
+        if (rawTextFromMe === '#boa noite') {
+          logger.wpp(userId, slot, `🛑 Comando #boa noite recebido para ${phoneFromMe}`);
+          pauseChat(userId, slot, phoneFromMe);
+          sessionManager.setManualMode(userId, slot, phoneFromMe, true);
+          return;
+        }
+
+        if (rawTextFromMe === '#voltar') {
+          logger.wpp(userId, slot, `✅ Comando #voltar recebido para ${phoneFromMe}`);
+          resumeChat(userId, slot, phoneFromMe);
+          sessionManager.setManualMode(userId, slot, phoneFromMe, false);
+          return;
+        }
+
+        logger.info(`[setupMessageListener] Atendente humano digitando normalmente, bot não responderá.`);
+        return;
+      }
+
+      // ── 3. Telefone do remetente externo ──────────────────────────────────
+      const phone = extractPhoneNumber(message.from) || message.from;
+      logger.info(`[📱 PROCESSANDO] Telefone: ${phone}, tipo: ${message.type}`);
+
+      // ── 4. Modo manual (atendente humano assumiu esta conversa) ───────────
+      const isPaused = sessionManager.isManualMode(userId, slot, phone);
+      if (isPaused) {
+        logger.wpp(userId, slot, `🔕 Chat ${phone} em MODO MANUAL. Bot não responderá.`);
+        return;
+      }
+
+      // ── 5. 🎯 Roteamento de TAREFA (ANTES do filtro de tipo e do GPT) ─────
+      // Permite que imagens, localizações e documentos de funcionários
+      // sejam processados sem interferir no fluxo GPT dos demais clientes.
+      const telefoneLimpo = phone.split('@')[0]; // dígitos puros sem @c.us
+      try {
+        const sessaoAtiva = await tarefaHandler.getSessaoAtiva(telefoneLimpo);
+        if (sessaoAtiva) {
+          logger.info(`[🎯 TAREFA] Sessão ativa para ${telefoneLimpo} → roteando para handler de tarefas.`);
+          await tarefaHandler.processarMensagem(message, client, telefoneLimpo, sessaoAtiva);
+          return;
+        }
+      } catch (tarefaErr) {
+        // Erro no módulo de tarefas não deve derrubar o fluxo normal
+        logger.error(`[🎯 TAREFA] Erro ao consultar sessão de tarefa:`, tarefaErr?.message);
+      }
+
+      // ── 6. Filtro de tipo para o fluxo GPT ───────────────────────────────
       if (message.type !== 'chat' && message.type !== 'text') {
-        logger.info(`[setupMessageListener] Ignorando mensagem do tipo: ${message.type}`);
+        logger.info(`[setupMessageListener] Ignorando tipo "${message.type}" (sem sessão de tarefa ativa)`);
         return;
       }
 
@@ -343,96 +410,20 @@ async function handleIncomingMessage(message, client, userId, slot) {
         return;
       }
 
-      const text = rawText.toLowerCase();
-
-      const phoneRaw = message.fromMe
-        ? (message.to || message.chatId || (message.chat && message.chat.id) || message.from)
-        : message.from;
-
-      const phone = extractPhoneNumber(phoneRaw) || phoneRaw;
-      
-      logger.info(`[📱 PROCESSANDO] Telefone: ${phone}, fromMe: ${message.fromMe}, texto: "${rawText}"`);
-
-      // LOG: sempre que alguém mandar #boa noite ou #voltar, registramos,
-      // independente de ser fromMe ou não (para facilitar debug).
-      if (text === '#boa noite' || text === '#voltar') {
-        logger.info(
-          `[setupMessageListener] Comando detectado: "${text}" | fromMe=${message.fromMe} | phone=${phone}`
-        );
-      }
-
-      // comandos do atendente (apenas quando for mensagem do próprio número / WhatsApp Web)
-      if (message.fromMe) {
-        logger.info(`[setupMessageListener] Mensagem fromMe (atendente humano)`);
-        logger.info(`[setupMessageListener] Texto recebido: "${text}"`);
-        logger.info(`[setupMessageListener] message.from (chat): ${message.from}`);
-
-        // 🛑 COMANDO #boa noite → PAUSAR BOT PARA ESTE NÚMERO
-        if (text === '#boa noite') {
-          logger.wpp(userId, slot, `🛑 Comando #boa noite recebido para ${phone}`);
-
-          // Marca como pausado em memória
-          pauseChat(userId, slot, phone);
-
-          // Marca como manual no SessionManager (modo atendente)
-          sessionManager.setManualMode(userId, slot, phone, true);
-
-          logger.success(
-            `[setupMessageListener] ✅ Chat ${phone} pausado (modo manual ATIVADO). Atendente assumiu.`
-          );
-          return;
-        }
-
-        // 🤖 COMANDO #voltar → RETOMAR BOT PARA ESTE NÚMERO
-        if (text === '#voltar') {
-          logger.wpp(userId, slot, `✅ Comando #voltar recebido para ${phone}`);
-
-          // Remove pausa em memória
-          resumeChat(userId, slot, phone);
-
-          // Desativa modo manual no SessionManager
-          sessionManager.setManualMode(userId, slot, phone, false);
-
-          logger.success(
-            `[setupMessageListener] ✅ Chat ${phone} reativado (modo manual DESATIVADO). Bot voltou.`
-          );
-          return;
-        }
-
-        // atendente digitando normal -> bot não responde (por design)
-        logger.info(
-          `[setupMessageListener] Atendente humano digitando normalmente, bot não responderá (sem comando).`
-        );
-        return;
-      }
-
-      logger.info(`[🤖 BOT] Processando mensagem de cliente externo: ${phone}`);
-
-      // 🔒 VERIFICAÇÃO DE MODO MANUAL (PAUSADO)
-      // Modo simples: usamos apenas o SessionManager como fonte da verdade.
-      const isPaused = sessionManager.isManualMode(userId, slot, phone);
-      if (isPaused) {
-        logger.wpp(
-          userId,
-          slot,
-          `🔕 Chat ${phone} está em MODO MANUAL (atendente humano). Bot não responderá.`
-        );
-        return;
-      }
-
+      // ── 7. Fluxo GPT normal ───────────────────────────────────────────────
       logger.info(`[🤖 BOT] Buscando configurações do bot...`);
       const botSettings = await BotSettingsModel.findByUser(userId).catch(() => null);
-      
+
       if (!botSettings) {
         logger.warn(`[setupMessageListener] Bot settings não encontrado para userId: ${userId}`);
         return;
       }
-      
+
       if (!botSettings.isActive) {
         logger.warn(`[setupMessageListener] Bot está INATIVO para userId: ${userId}`);
         return;
       }
-      
+
       logger.info(`[🤖 BOT] Bot ativo! Nome: ${botSettings.botName}, Tipo: ${botSettings.storeType}`);
 
       const conversationHistory = sessionManager.getConversation(
@@ -445,34 +436,27 @@ async function handleIncomingMessage(message, client, userId, slot) {
       const formattedHistory = formatConversationHistory(conversationHistory, botSettings.contextLimit || 10);
 
       const gptSettings = {
-        botName: botSettings.botName || 'Assistente',
-        storeType: botSettings.storeType || 'restaurant',
-        lineLimit: botSettings.lineLimit || 5,
+        botName:    botSettings.botName    || 'Assistente',
+        storeType:  botSettings.storeType  || 'restaurant',
+        lineLimit:  botSettings.lineLimit  || 5,
         basePrompt: botSettings.basePrompt || '',
       };
 
-      // salva msg usuário
       sessionManager.addMessage(userId, slot, phone, {
-        body: rawText,
-        fromMe: false,
-        timestamp: Date.now(),
+        body: rawText, fromMe: false, timestamp: Date.now(),
       });
 
       logger.info(`[🤖 BOT] Enviando para GPT: "${rawText}"`);
       const aiResponse = await sendToGPT(rawText, formattedHistory, gptSettings);
       logger.info(`[🤖 BOT] Resposta GPT: "${aiResponse}"`);
 
-      logger.info(`[🤖 BOT] Enviando resposta para ${message.from}...`);
       await client.sendText(message.from, aiResponse);
 
-      // salva resposta bot
       sessionManager.addMessage(userId, slot, phone, {
-        body: aiResponse,
-        fromMe: true,
-        timestamp: Date.now(),
+        body: aiResponse, fromMe: true, timestamp: Date.now(),
       });
 
-      logger.success(`✅ Resposta enviada para ${phone} (${message.from})`);
+      logger.success(`✅ Resposta GPT enviada para ${phone} (${message.from})`);
     } catch (error) {
       logger.error(`❌ Erro ao processar mensagem [${userId}:${slot}]:`, error?.message || error);
       logger.error(`❌ Stack trace:`, error?.stack);

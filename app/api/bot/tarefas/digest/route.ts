@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
   const map = new Map<
     string,
     {
+      userId: string;
       funcionario: { id: string; nome: string; telefone: string | null };
       loja: { id: string; nome: string };
       tarefas: object[];
@@ -66,6 +67,7 @@ export async function GET(req: NextRequest) {
   for (const a of atribuicoes) {
     if (!map.has(a.funcionarioId)) {
       map.set(a.funcionarioId, {
+        userId: a.userId,
         funcionario: a.funcionario,
         loja: a.loja,
         tarefas: [],

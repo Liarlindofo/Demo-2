@@ -48,6 +48,8 @@ if (apiKey) {
 }
 
 import { startClient, stopClient } from "../src/wpp/index.js";
+import { initScheduler } from "../src/tarefas/scheduler.js";
+import sessionManager from "../src/wpp/sessionManager.js";
 import logger from "../src/utils/logger.js";
 
 const arg = process.argv.find((a) => a.startsWith("--userId="));
@@ -117,12 +119,19 @@ try {
   logger.success(`[whatsapp-worker] ✅ startClient() retornou com sucesso para userId: "${userId}"`);
   logger.info(`[whatsapp-worker] 📦 Resultado:`, result);
   logger.success(`[whatsapp-worker] ✅ Cliente iniciado com sucesso para userId: "${userId}"`);
-  
+
+  // Inicializar scheduler de tarefas para este worker/tenant.
+  // getClient retorna o cliente WPPConnect ativo (slot 1 por padrão).
+  // Se ainda não está conectado, as chamadas do scheduler simplesmente
+  // retornarão null e serão silenciadas até a próxima execução.
+  initScheduler(userId, () => sessionManager.getClient(userId, 1));
+  logger.info(`[whatsapp-worker] ✅ Scheduler de tarefas inicializado para userId: "${userId}"`);
+
   // IMPORTANTE: Não sair do processo! O startClient é assíncrono e o WPPConnect
   // continua rodando em background. O worker deve ficar vivo para manter o processo.
   // O WPPConnect cria event listeners que mantêm o processo vivo automaticamente.
   logger.info(`[whatsapp-worker] ✅ Worker mantido vivo. WPPConnect rodando em background.`);
-  
+
 } catch (error) {
   logger.error(`[whatsapp-worker] ❌ ERRO ao iniciar cliente para userId: "${userId}"`);
   logger.error(`[whatsapp-worker] ❌ Tipo do erro: ${error.constructor.name}`);
