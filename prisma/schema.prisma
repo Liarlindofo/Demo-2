@@ -1396,6 +1396,12 @@ model SessaoTarefa {
   evidenciasRecebidas Json     @default("[]")
   /// AGUARDANDO | CONCLUIDA | EXPIRADA
   estado              String   @default("AGUARDANDO")
+  /// Descrição da tarefa (descricao do template) — usada no prompt de validação por IA
+  descricaoTarefa     String?  @db.Text
+  /// Config de validação por IA do template (objeto_esperado, extrair, min, max, unidade)
+  validacaoIA         Json?
+  /// Quantas vezes pedimos nova foto por baixa qualidade (máx 2 pedidos antes de aceitar)
+  tentativasFoto      Int      @default(0)
   /// Momento em que o bot enviou a mensagem de cobrança
   enviadaEm           DateTime
   criadaEm            DateTime @default(now())

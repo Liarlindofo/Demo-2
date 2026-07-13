@@ -211,12 +211,14 @@ async function jobPendentes(userId, getClient) {
           enviadaEm: agora.toISOString(),
         });
 
-        // 3. Criar sessão local de evidências
+        // 3. Criar sessão local de evidências (inclui config IA para validação de fotos)
         await criarSessao(
           tarefa.id,
           apenasDigitos(funcionario.telefone),
           evidenciasExigidas,
           agora,
+          template?.descricao ?? '',
+          template?.validacaoIA ?? null,
         );
 
         jaDisparados.add(tarefa.id);
