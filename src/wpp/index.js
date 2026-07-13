@@ -1,4 +1,5 @@
 import wppconnect from '@wppconnect-team/wppconnect';
+import { handleJobFlow } from './jobApplicationFlow.js';
 import config from '../../config.js';
 import logger from '../utils/logger.js';
 import prisma from '../db/index.js';
@@ -299,6 +300,15 @@ export async function getClientStatus(userId, slot = 1) {
 function setupMessageListener(client, userId, slot) {
   logger.info(`[setupMessageListener] Configurando listeners para [${userId}:${slot}]`);
 
+  // 🛡️ Guarda contra listener duplicado: se este mesmo objeto client já
+  // recebeu um listener (ex: reconexão que reaproveita o client), não
+  // registra de novo — evita respostas repetidas para a mesma mensagem.
+  if (client.__listenerRegistrado) {
+    logger.warn(`[setupMessageListener] Listener JÁ registrado para [${userId}:${slot}], ignorando novo registro.`);
+    return;
+  }
+  client.__listenerRegistrado = true;
+
   // Usamos APENAS onAnyMessage, pois em muitos ambientes o WPPConnect
   // dispara este evento para todas as mensagens (inclusive fromMe),
   // enquanto onMessage pode não ser chamado de forma consistente.
@@ -316,12 +326,15 @@ function setupMessageListener(client, userId, slot) {
  * Ordem de roteamento:
  *  1. Descarte: grupos, status/stories
  *  2. Comandos do atendente (fromMe): #boa noite / #voltar
- *  3. Verificação de modo manual → descartar se ativo
- *  4. 🎯 SESSÃO DE TAREFA — antes do filtro de tipo e do GPT.
+ *  3. Telefone do remetente externo
+ *  4. Verificação de modo manual → descartar se ativo
+ *  5. 🎯 SESSÃO DE TAREFA — antes do filtro de tipo e do GPT.
  *     Mensagens de funcionários com tarefa aberta (foto, localização,
  *     documento, texto) são roteadas aqui e não passam para o GPT.
- *  5. Filtro de tipo para o GPT (apenas chat/text)
- *  6. Fluxo GPT normal
+ *  6. 💼 FLUXO DE CANDIDATURA A VAGA — o handleJobFlow gerencia a própria
+ *     sessão e detecção de intenção; devolve true quando assume a mensagem.
+ *  7. Filtro de tipo para o GPT (apenas chat/text)
+ *  8. Fluxo GPT normal
  */
 async function handleIncomingMessage(message, client, userId, slot) {
     try {
@@ -398,7 +411,29 @@ async function handleIncomingMessage(message, client, userId, slot) {
         logger.error(`[🎯 TAREFA] Erro ao consultar sessão de tarefa:`, tarefaErr?.message);
       }
 
-      // ── 6. Filtro de tipo para o fluxo GPT ───────────────────────────────
+      // ── 6. 💼 Fluxo de candidatura a vaga ─────────────────────────────────
+      // O handleJobFlow detecta a intenção ("quero trabalhar", "vaga", etc),
+      // gerencia a própria sessão de perguntas e devolve true quando assume
+      // a mensagem. O adaptador abaixo traduz o controle de modo manual do
+      // sessionManager para a interface .has(contactId) que o fluxo espera.
+      try {
+        const humanSessions = {
+          has: (contactId) => {
+            const phoneVaga = extractPhoneNumber(contactId) || contactId;
+            return sessionManager.isManualMode(userId, slot, phoneVaga) === true;
+          },
+        };
+        const assumidoPeloFluxoDeVagas = await handleJobFlow(client, message, humanSessions);
+        if (assumidoPeloFluxoDeVagas) {
+          logger.info(`[💼 VAGA] Mensagem de ${phone} tratada pelo fluxo de candidatura.`);
+          return;
+        }
+      } catch (vagaErr) {
+        // Erro no fluxo de vagas não deve derrubar o fluxo normal
+        logger.error(`[💼 VAGA] Erro no fluxo de candidatura:`, vagaErr?.message);
+      }
+
+      // ── 7. Filtro de tipo para o fluxo GPT ───────────────────────────────
       if (message.type !== 'chat' && message.type !== 'text') {
         logger.info(`[setupMessageListener] Ignorando tipo "${message.type}" (sem sessão de tarefa ativa)`);
         return;
@@ -410,7 +445,7 @@ async function handleIncomingMessage(message, client, userId, slot) {
         return;
       }
 
-      // ── 7. Fluxo GPT normal ───────────────────────────────────────────────
+      // ── 8. Fluxo GPT normal ───────────────────────────────────────────────
       logger.info(`[🤖 BOT] Buscando configurações do bot...`);
       const botSettings = await BotSettingsModel.findByUser(userId).catch(() => null);
 
