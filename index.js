@@ -138,7 +138,7 @@ app.use((err, req, res, next) => {
 // ============================================
 const PORT = config.port;
 
-app.listen(PORT, async () => {
+app.listen(PORT, '127.0.0.1', async () => {
   // Log de inicialização
   logger.success(`
 ╔═══════════════════════════════════════════════════╗
