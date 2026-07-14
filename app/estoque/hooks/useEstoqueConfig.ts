@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 
 export interface ProdutoConfig {
   ativo: boolean;
@@ -42,6 +42,10 @@ export function useEstoqueConfig() {
   const [productOrder, setProductOrderState] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
+  // Ref sempre atualizado com o config mais recente — evita closure stale no debounce
+  const configRef = useRef<EstoqueConfigMap>({});
+  useLayoutEffect(() => { configRef.current = config; });
+
   // Debounce refs — evitam request por keystroke
   const debounceMap = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -74,18 +78,22 @@ export function useEstoqueConfig() {
         [insumoId]: { ...(prev[insumoId] ?? { ativo: true }), ...partial },
       }));
 
-      // Cancela debounce anterior para este produto
-      if (debounceMap.current[insumoId]) {
-        clearTimeout(debounceMap.current[insumoId]);
+      // Usa chave por produto+campo para evitar que uma mudança de campo cancele outra
+      const fieldKey = `${insumoId}::${Object.keys(partial).join(',')}`;
+      if (debounceMap.current[fieldKey]) {
+        clearTimeout(debounceMap.current[fieldKey]);
       }
-      debounceMap.current[insumoId] = setTimeout(() => {
-        const current = config[insumoId] ?? { ativo: true };
+      debounceMap.current[fieldKey] = setTimeout(() => {
+        // Lê configRef.current no momento do disparo para sempre usar o estado mais recente,
+        // evitando closure stale e perda de campos salvos em paralelo
+        const current = configRef.current[insumoId] ?? { ativo: true };
         patchProduto(insumoId, { ...current, ...partial }).catch(err =>
           console.warn('[useEstoqueConfig] Falha ao salvar config:', err.message),
         );
       }, debounceMs);
     },
-    [config],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
 
   const setAtivo = useCallback(

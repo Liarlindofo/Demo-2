@@ -415,7 +415,8 @@ function ProdutoRow({
 }: ProdutoRowProps) {
   const ativo = config?.ativo !== false;
   const minimo = config?.estoqueMinimo;
-  const modo = config?.modoContagem ?? 'kg';
+  // Padrão alinhado com construirSessoes: itens com unidade 'un' são contados por unidade por padrão
+  const modo = config?.modoContagem ?? (produto.unidade === 'un' ? 'unidade' : 'kg');
   const kgPorUnidade = config?.kgPorUnidade;
 
   const handleMinimo = (raw: string) => {

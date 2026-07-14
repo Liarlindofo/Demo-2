@@ -159,9 +159,8 @@ export function SessionAccordion({
         </div>
       </button>
 
-      {/* Conteúdo expandido */}
-      {isActive && (
-        <div className="px-4 pb-4 space-y-2">
+      {/* Conteúdo expandido — mantido no DOM para preservar estado local dos itens */}
+      <div className={`px-4 pb-4 space-y-2 ${isActive ? '' : 'hidden'}`}>
           {/* Celebração ao concluir */}
           {showCelebration && (
             <div className="bg-green-500/15 border border-green-500/30 rounded-xl p-3 text-center animate-pulse">
@@ -228,7 +227,6 @@ export function SessionAccordion({
             )}
           </div>
         </div>
-      )}
     </div>
     </>
   );
