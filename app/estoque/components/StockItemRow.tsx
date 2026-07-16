@@ -5,20 +5,38 @@ import { AlertTriangle, MessageSquare, X, Check, Plus } from 'lucide-react';
 import type { StockItem } from '../types';
 import { formatQtd } from '../utils';
 
+const FARDO_OPCOES_BEBIDAS = [
+  { size: 1, label: 'un' },
+  { size: 6, label: 'fardo 6' },
+  { size: 8, label: 'fardo 8' },
+  { size: 12, label: 'fardo 12' },
+];
+
+const FARDO_OPCOES_EMBALAGENS = [
+  { size: 1, label: 'un' },
+  { size: 50, label: 'fardo 50' },
+];
+
+function getFardoOpcoes(categoriaId: string) {
+  if (categoriaId === 'bebidas') return FARDO_OPCOES_BEBIDAS;
+  if (categoriaId === 'embalagens') return FARDO_OPCOES_EMBALAGENS;
+  return null;
+}
+
 interface StockItemRowProps {
   item: StockItem;
   categoriaId: string;
   onQuantidade: (categoriaId: string, insumoId: string, qty: number | null) => void;
   onObservacao: (categoriaId: string, insumoId: string, obs: string) => void;
-  fardoSize?: number;
 }
 
-export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao, fardoSize = 1 }: StockItemRowProps) {
+export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: StockItemRowProps) {
   // ── Todos os hooks no topo ─────────────────────────────────────────────────
   const [showObs, setShowObs] = useState(!!item.observacao);
   const [obsLocal, setObsLocal] = useState(item.observacao ?? '');
   const [addValue, setAddValue] = useState('');
   const [contarEmKgLocal, setContarEmKgLocal] = useState(false);
+  const [fardoIdx, setFardoIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // ── Derivações ─────────────────────────────────────────────────────────────
@@ -35,14 +53,33 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao, fa
   // Toggle kg/un: disponível para itens configurados como "unidade" com fator de conversão
   const hasKgConversion = modoUnidade && !!item.kgPorUnidade;
   const contarEmKg = hasKgConversion && contarEmKgLocal;
+
+  const fardoOpcoes = getFardoOpcoes(categoriaId);
+  const hasFardoToggle = !!fardoOpcoes && !hasKgConversion;
+  const fardoSize = hasFardoToggle ? fardoOpcoes[fardoIdx % fardoOpcoes.length].size : 1;
+  const fardoLabel = hasFardoToggle ? fardoOpcoes[fardoIdx % fardoOpcoes.length].label : 'un';
+  const contarEmFardo = hasFardoToggle && fardoSize > 1;
+
   const unidadeDisplay = (modoUnidade && item.kgPorUnidade) ? 'kg' : item.unidade;
-  const inputUnidade = contarEmKg ? 'kg' : modoUnidade ? 'un' : item.unidade;
+  const inputUnidade = contarEmKg
+    ? 'kg'
+    : contarEmFardo
+    ? fardoLabel
+    : modoUnidade || isItemUnidade
+    ? 'un'
+    : item.unidade;
+
+  const cycleFardo = () => {
+    if (!fardoOpcoes) return;
+    setFardoIdx(i => (i + 1) % fardoOpcoes.length);
+    setAddValue('');
+  };
 
   const handleAdicionar = () => {
     const num = parseFloat(addValue.replace(',', '.'));
     if (isNaN(num) || num < 0) return;
-    // fardoSize > 1 apenas chega para bebidas — multiplica diretamente em unidades
-    if (fardoSize > 1) {
+    // Fardo: multiplica diretamente em unidades
+    if (contarEmFardo) {
       const novoTotal = (item.quantidadeContada ?? 0) + num * fardoSize;
       onQuantidade(categoriaId, item.insumoId, novoTotal);
     } else if (contarEmKg) {
@@ -110,6 +147,20 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao, fa
                 {contarEmKg ? '⚖ kg' : '# un'}
                 <span className="text-[9px] opacity-60 ml-0.5">trocar</span>
               </button>
+            ) : hasFardoToggle ? (
+              // Toggle clicável: cicla entre unidade e fardos (bebidas / embalagens)
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); cycleFardo(); }}
+                className={`cursor-pointer inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all active:scale-95 ${
+                  contarEmFardo
+                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30'
+                    : 'bg-blue-500/20 text-blue-400 border-blue-500/40 hover:bg-blue-500/30'
+                }`}
+              >
+                # {fardoLabel}
+                <span className="text-[9px] opacity-60 ml-0.5">trocar</span>
+              </button>
             ) : !isItemUnidade && (
               // Badge estático (sem conversão)
               modoUnidade ? (
@@ -126,6 +177,12 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao, fa
             {modoUnidade && item.kgPorUnidade && (
               <span className="text-[10px] text-gray-600">
                 1 un = {item.kgPorUnidade} kg
+              </span>
+            )}
+            {/* Conversão de fardo */}
+            {contarEmFardo && (
+              <span className="text-[10px] text-gray-600">
+                1 fardo = {fardoSize} un
               </span>
             )}
             {/* Mínimo */}
@@ -156,7 +213,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao, fa
                 ≈ {formatQtd(item.quantidadeContada! / kgPorUn)} un
               </p>
             )}
-            {isItemUnidade && fardoSize > 1 && (
+            {contarEmFardo && (
               <p className="text-xs text-gray-600 leading-tight">
                 {formatQtd(item.quantidadeContada! / fardoSize)} fardo{item.quantidadeContada! / fardoSize !== 1 ? 's' : ''} de {fardoSize}
               </p>
@@ -195,15 +252,11 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao, fa
           type="number"
           inputMode="decimal"
           min="0"
-          step={puroUnidade ? '1' : '0.1'}
+          step={puroUnidade || hasFardoToggle ? '1' : '0.1'}
           value={addValue}
           onChange={e => setAddValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={
-            isItemUnidade && fardoSize > 1
-              ? contado ? `+ fardo de ${fardoSize}` : `qtd em fardos de ${fardoSize}`
-              : contado ? `+ adicionar ${inputUnidade}` : `quantidade em ${inputUnidade}`
-          }
+          placeholder={contado ? `+ adicionar ${inputUnidade}` : `quantidade em ${inputUnidade}`}
           className="flex-1 bg-[#2a2a2e] border border-[#374151] rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/60 transition-colors"
         />
         <button
@@ -216,7 +269,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao, fa
           }`}
         >
           <Plus className="w-4 h-4" />
-          {contado ? 'Somar' : 'Add'}{isItemUnidade && fardoSize > 1 ? ` fardo ${fardoSize}` : ` ${inputUnidade}`}
+          {contado ? 'Somar' : 'Add'} {inputUnidade}
         </button>
       </div>
 

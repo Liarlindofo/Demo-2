@@ -14,16 +14,7 @@ interface SessionAccordionProps {
   onConcluir: () => void;
   onReabrir: () => void;
   onProxima?: () => void;
-  fardoSize?: number;
-  onFardoChange?: (size: number) => void;
 }
-
-export const FARDO_OPCOES = [
-  { size: 1, label: 'un' },
-  { size: 6, label: 'fardo 6' },
-  { size: 8, label: 'fardo 8' },
-  { size: 12, label: 'fardo 12' },
-];
 
 export function SessionAccordion({
   categoria,
@@ -34,13 +25,10 @@ export function SessionAccordion({
   onConcluir,
   onReabrir,
   onProxima,
-  fardoSize = 1,
-  onFardoChange,
 }: SessionAccordionProps) {
   const [showCelebration, setShowCelebration] = useState(false);
   const [itensFaltando, setItensFaltando] = useState<string[]>([]);
 
-  const isBebidas = categoria.id === 'bebidas';
   const concluida = categoria.status === 'concluida';
 
   const totalItens = categoria.itens.length;
@@ -168,25 +156,6 @@ export function SessionAccordion({
             </div>
           )}
 
-          {/* Seletor de fardos — apenas para a categoria bebidas */}
-          {isBebidas && (
-            <div className="flex gap-1.5 bg-[#0a0a0a] rounded-xl p-1.5 mb-1">
-              {FARDO_OPCOES.map(({ size, label }) => (
-                <button
-                  key={size}
-                  onClick={() => onFardoChange?.(size)}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                    fardoSize === size
-                      ? 'bg-amber-500 text-black'
-                      : 'text-gray-500 hover:text-white hover:bg-[#2a2a2e]'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Itens */}
           {categoria.itens.map(item => (
             <StockItemRow
@@ -195,7 +164,6 @@ export function SessionAccordion({
               categoriaId={categoria.id}
               onQuantidade={onQuantidade}
               onObservacao={onObservacao}
-              fardoSize={isBebidas ? fardoSize : undefined}
             />
           ))}
 
