@@ -79,13 +79,6 @@ function paraWpp(telefone) {
 }
 
 /**
- * Remove não-dígitos de um número de telefone.
- */
-function apenasDigitos(telefone) {
-  return String(telefone || '').replace(/\D/g, '');
-}
-
-/**
  * Resolve o JID correto de um destinatário via checkNumberStatus.
  *
  * Problema: JIDs montados manualmente ("55...@c.us") falham com "No LID for user"
@@ -317,7 +310,7 @@ async function jobPendentes(userId, getClient) {
         // 3. Criar sessão local de evidências (inclui config IA para validação de fotos)
         await criarSessao(
           tarefa.id,
-          apenasDigitos(funcionario.telefone),
+          funcionario.telefone,   // canonicalizarTelefone vive em tarefaHandler — um lugar só
           evidenciasExigidas,
           agora,
           template?.descricao ?? '',

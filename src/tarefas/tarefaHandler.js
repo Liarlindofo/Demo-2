@@ -50,6 +50,40 @@ function apenasDigitos(phone) {
   return String(phone || '').replace(/\D/g, '');
 }
 
+/**
+ * Canonicaliza um número de telefone BR para DDD + 8 dígitos (10 dígitos).
+ *
+ * Problema resolvido: gravação usa telefone do cadastro RH (sem DDI 55) e
+ * consulta usa JID do WhatsApp (com DDI 55, podendo ter ou não o nono dígito).
+ * A forma canônica elimina as duas fontes de variação.
+ *
+ * Exemplos — todos produzem "4196420791":
+ *   "5541996420791"   → remove 55 → "41996420791" → remove 9 → "4196420791"
+ *   "41996420791"     → sem 55 → remove 9 → "4196420791"
+ *   "554196420791"    → remove 55 → "4196420791"  (sem 9 a remover)
+ *   "(41) 99642-0791" → remove não-dígitos → "41996420791" → remove 9 → "4196420791"
+ *
+ * @param {string|null|undefined} telefone
+ * @returns {string}  10 dígitos canônicos (DDD + 8 dígitos) ou string de dígitos bruta como fallback
+ */
+export function canonicalizarTelefone(telefone) {
+  let d = apenasDigitos(telefone);
+  if (!d) return d;
+
+  // Remove o prefixo DDI "55" se resultar em 10 ou 11 dígitos úteis
+  if ((d.length === 12 || d.length === 13) && d.startsWith('55')) {
+    d = d.slice(2);
+  }
+
+  // Remove o nono dígito: 11 dígitos com "9" na posição 2 (logo após o DDD de 2 dígitos)
+  // Ex: "41 9 96420791" → "41 96420791"
+  if (d.length === 11 && d[2] === '9') {
+    d = d.slice(0, 2) + d.slice(3);
+  }
+
+  return d; // forma canônica: DDD(2) + número(8) = 10 dígitos
+}
+
 // ─── Tipo de evidência ─────────────────────────────────────────────────────
 
 function tipoEvidenciaDeMsg(message) {
@@ -74,7 +108,7 @@ function tipoEvidenciaDeMsg(message) {
 
 export async function getSessoesAtivas(telefone) {
   return prisma.sessaoTarefa.findMany({
-    where: { telefone: apenasDigitos(telefone), estado: 'AGUARDANDO' },
+    where: { telefone: canonicalizarTelefone(telefone), estado: 'AGUARDANDO' },
     orderBy: { criadaEm: 'asc' },
   });
 }
@@ -105,7 +139,7 @@ export async function criarSessao(
   return prisma.sessaoTarefa.create({
     data: {
       tarefaId,
-      telefone:           apenasDigitos(telefone),
+      telefone:           canonicalizarTelefone(telefone),
       evidenciasExigidas,
       evidenciasRecebidas: [],
       estado:             'AGUARDANDO',
