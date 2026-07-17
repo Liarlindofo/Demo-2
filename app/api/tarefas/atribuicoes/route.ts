@@ -19,8 +19,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Parâmetro data é obrigatório (YYYY-MM-DD).' }, { status: 400 });
     }
 
-    const inicio = new Date(`${data}T00:00:00`);
-    const fim = new Date(`${data}T23:59:59.999`);
+    // Interpreta como meia-noite e fim do dia em America/Sao_Paulo (UTC-3 fixo)
+    const inicio = new Date(`${data}T00:00:00-03:00`);
+    const fim = new Date(`${data}T23:59:59.999-03:00`);
 
     const atribuicoes = await prisma.tarefaAtribuida.findMany({
       where: {
@@ -62,34 +63,49 @@ interface SlotInput {
   };
 }
 
+/**
+ * Gera os instantes UTC para cada ocorrência do slot.
+ * dataBase e horario são interpretados como America/Sao_Paulo (UTC-3 fixo;
+ * Brasil aboliu horário de verão em 2019, portanto o offset é constante).
+ */
 function gerarDatas(slot: SlotInput): Date[] {
-  const [hh, mm] = slot.horario.split(':').map(Number);
   const tipo = slot.recorrencia?.tipo ?? 'unica';
-  const dataInicio = new Date(`${slot.dataBase}T00:00:00`);
 
   if (tipo === 'unica') {
-    const d = new Date(dataInicio);
-    d.setHours(hh, mm, 0, 0);
-    return [d];
+    // Converte diretamente: "YYYY-MM-DDTHH:mm:00-03:00" → UTC correto
+    return [new Date(`${slot.dataBase}T${slot.horario}:00-03:00`)];
   }
 
+  // Meia-noite BRT do dia de início em UTC
+  const dataInicioMs = new Date(`${slot.dataBase}T00:00:00-03:00`).getTime();
+
   const dataFimStr = slot.recorrencia?.dataFim;
-  const dataFimBase = dataFimStr ? new Date(`${dataFimStr}T23:59:59`) : null;
-  const maxDataFim = new Date(dataInicio.getTime() + 90 * 24 * 60 * 60 * 1000);
-  const efetiveFim = dataFimBase && dataFimBase < maxDataFim ? dataFimBase : maxDataFim;
+  const dataFimBaseMs = dataFimStr
+    ? new Date(`${dataFimStr}T23:59:59.999-03:00`).getTime()
+    : null;
+  const maxMs = dataInicioMs + 90 * 24 * 60 * 60 * 1000;
+  const efetiveFimMs = dataFimBaseMs !== null && dataFimBaseMs < maxMs
+    ? dataFimBaseMs
+    : maxMs;
+
   const diasSemana = slot.recorrencia?.diasSemana ?? [];
-
   const datas: Date[] = [];
-  const current = new Date(dataInicio);
 
-  while (current <= efetiveFim) {
-    const dow = current.getDay();
+  // Itera adicionando 24h exatas por dia (sem DST → seguro)
+  let currentMs = dataInicioMs;
+  while (currentMs <= efetiveFimMs) {
+    // Obtém a string de data no fuso BRT a partir do timestamp UTC
+    // (currentMs está em meia-noite BRT = 03:00 UTC, então slice(0,10) dá a data BRT)
+    const dateStrBRT = new Date(currentMs).toISOString().slice(0, 10);
+    // Monta o instante exato no fuso BRT
+    const d = new Date(`${dateStrBRT}T${slot.horario}:00-03:00`);
+    // getDay() em UTC no servidor retorna o dia da data BRT
+    // porque currentMs está em T03:00Z, que é T00:00 BRT do mesmo dia
+    const dow = d.getUTCDay(); // dia da semana da data BRT (sem ambiguidade)
     if (tipo === 'diaria' || (tipo === 'semanal' && diasSemana.includes(dow))) {
-      const d = new Date(current);
-      d.setHours(hh, mm, 0, 0);
       datas.push(d);
     }
-    current.setDate(current.getDate() + 1);
+    currentMs += 24 * 60 * 60 * 1000;
   }
 
   return datas;
@@ -120,6 +136,8 @@ export async function POST(req: Request) {
     if (!loja) return NextResponse.json({ error: 'Loja não encontrada.' }, { status: 404 });
 
     const agora = new Date();
+    // Tolerância de 60s para acomodar latência entre browser e servidor
+    const limitePassado = new Date(agora.getTime() - 60_000);
     const registros: Array<{
       userId: string;
       templateId: string;
@@ -155,10 +173,10 @@ export async function POST(req: Request) {
       }
 
       for (const d of datas) {
-        if (d <= agora) {
+        if (d <= limitePassado) {
           return NextResponse.json(
             {
-              error: `A data/hora ${d.toLocaleString('pt-BR')} está no passado. Ajuste o horário ou a data de início.`,
+              error: `A data/hora ${d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} está no passado. Ajuste o horário ou a data de início.`,
             },
             { status: 400 },
           );

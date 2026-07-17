@@ -28,8 +28,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Parâmetros inicio e fim são obrigatórios.' }, { status: 400 });
   }
 
-  const dataInicio = new Date(`${inicio}T00:00:00`);
-  const dataFim = new Date(`${fim}T23:59:59.999`);
+  // Interpreta como meia-noite e fim do dia em America/Sao_Paulo (UTC-3 fixo)
+  const dataInicio = new Date(`${inicio}T00:00:00-03:00`);
+  const dataFim = new Date(`${fim}T23:59:59.999-03:00`);
 
   const atribuicoes = await prisma.tarefaAtribuida.findMany({
     where: {

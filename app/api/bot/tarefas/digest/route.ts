@@ -25,8 +25,9 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const inicio = new Date(`${data}T00:00:00`);
-  const fim = new Date(`${data}T23:59:59.999`);
+  // Interpreta como meia-noite e fim do dia em America/Sao_Paulo (UTC-3 fixo)
+  const inicio = new Date(`${data}T00:00:00-03:00`);
+  const fim = new Date(`${data}T23:59:59.999-03:00`);
 
   const atribuicoes = await prisma.tarefaAtribuida.findMany({
     where: {

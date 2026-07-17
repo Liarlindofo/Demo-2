@@ -130,8 +130,9 @@ const WIZARD_STEPS = ['Funcionário', 'Templates', 'Horário', 'Confirmar'];
 
 // ── Utils ──────────────────────────────────────────────────────────────────
 
+/** Retorna "YYYY-MM-DD" no fuso America/Sao_Paulo (evita virar o dia às 21h BRT). */
 function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d);
 }
 
 function addDays(dateStr: string, n: number): string {
@@ -147,7 +148,7 @@ function ptDate(dateStr: string): string {
 
 function ptHorario(isoStr: string): string {
   const d = new Date(isoStr);
-  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 }
 
 function ptDataCurta(isoStr: string): string {
@@ -156,6 +157,7 @@ function ptDataCurta(isoStr: string): string {
     weekday: 'short',
     day: '2-digit',
     month: '2-digit',
+    timeZone: 'America/Sao_Paulo',
   });
 }
 
@@ -454,7 +456,9 @@ export default function AtribuicoesPage() {
           return;
         }
         const dt = new Date(`${slot.data}T${slot.horario}:00`);
-        if (isNaN(dt.getTime()) || dt <= new Date()) {
+        // Tolerância de 60s para acomodar latência de rede
+        const limitePassado = new Date(Date.now() - 60_000);
+        if (isNaN(dt.getTime()) || dt <= limitePassado) {
           setWError(
             `O horário ${slot.horario} em ${ptDate(slot.data)} está no passado ou é inválido.`,
           );
@@ -538,16 +542,22 @@ export default function AtribuicoesPage() {
   function openReagendar(item: TarefaItem) {
     const d = new Date(item.dataAgendada);
     setReagendarData(isoDate(d));
-    setReagendarHorario(
-      `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
-    );
+    // Extrai hora:minuto no fuso BRT explicitamente
+    const brtTime = d.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'America/Sao_Paulo',
+    });
+    setReagendarHorario(brtTime);
     setReagendarItem(item);
   }
 
   async function handleReagendar() {
     if (!reagendarItem || !reagendarData || !reagendarHorario) return;
     const novaData = new Date(`${reagendarData}T${reagendarHorario}:00`);
-    if (novaData <= new Date()) {
+    // Tolerância de 60s para acomodar latência de rede
+    if (novaData <= new Date(Date.now() - 60_000)) {
       alert('A nova data/hora não pode estar no passado.');
       return;
     }

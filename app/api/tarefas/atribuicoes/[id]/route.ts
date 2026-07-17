@@ -33,7 +33,9 @@ export async function PATCH(
     if (isNaN(novaData.getTime())) {
       return NextResponse.json({ error: 'Data inválida.' }, { status: 400 });
     }
-    if (novaData <= new Date()) {
+    // Tolerância de 60s para acomodar latência entre browser e servidor
+    const limitePassado = new Date(Date.now() - 60_000);
+    if (novaData <= limitePassado) {
       return NextResponse.json(
         { error: 'A nova data/hora não pode estar no passado.' },
         { status: 400 },

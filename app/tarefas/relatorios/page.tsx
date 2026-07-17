@@ -74,18 +74,23 @@ const STATUS_COLORS: Record<string, string> = {
   NAO_CONCLUIDA: 'bg-red-500/20 text-red-300',
 };
 
+/** Retorna "YYYY-MM-DD" no fuso America/Sao_Paulo (evita virar o dia às 21h BRT). */
 function isoData(d: Date) {
-  return d.toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d);
 }
 
 function ptDataHora(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  });
 }
 
 function ptHorario(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 }
 
 function exportarCSV(itens: ItemRelatorio[]) {
