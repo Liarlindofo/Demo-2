@@ -86,6 +86,62 @@ function apenasDigitos(telefone) {
 }
 
 /**
+ * Resolve o JID correto de um destinatário via checkNumberStatus.
+ *
+ * Problema: JIDs montados manualmente ("55...@c.us") falham com "No LID for user"
+ * porque o WhatsApp usa o sistema LID e o número pode estar registrado sem o nono
+ * dígito. checkNumberStatus retorna o JID resolvido pelo próprio WhatsApp.
+ *
+ * Estratégia:
+ *   1. Normaliza os dígitos (mesma lógica de paraWpp, sem o "@c.us").
+ *   2. Tenta checkNumberStatus com o número completo.
+ *   3. Se falhar e for 13 dígitos com 9º dígito após o DDD, tenta sem o 9
+ *      (números antigos cadastrados com 8 dígitos).
+ *   4. Retorna result.id._serialized (JID real) ou null.
+ *
+ * @param {object}            client    Cliente WPPConnect ativo
+ * @param {string|null}       telefone  Telefone bruto do funcionário
+ * @returns {Promise<string|null>}      JID resolvido ou null se não localizado
+ */
+async function resolverDestino(client, telefone) {
+  if (!telefone) return null;
+  const raw = String(telefone).replace(/\D/g, '');
+  if (!raw) return null;
+
+  // Normaliza para 12–13 dígitos com prefixo 55 (mesma lógica de paraWpp)
+  let digits;
+  if (raw.length === 10 || raw.length === 11) {
+    digits = `55${raw}`;
+  } else if ((raw.length === 12 || raw.length === 13) && raw.startsWith('55')) {
+    digits = raw;
+  } else {
+    return null; // tamanho inesperado
+  }
+
+  // Tentativa 1: número como está
+  try {
+    const result = await client.checkNumberStatus(`${digits}@c.us`);
+    if ((result?.numberExists || result?.canReceiveMessage) && result?.id?._serialized) {
+      return result.id._serialized;
+    }
+  } catch { /* segue para fallback */ }
+
+  // Tentativa 2: 13 dígitos (55 + DDD + 9 + 8 dígitos) → remove o nono dígito
+  // ex: "5541996420791" → "554196420791"
+  if (digits.length === 13 && digits.startsWith('55') && digits[4] === '9') {
+    const semNono = digits.slice(0, 4) + digits.slice(5);
+    try {
+      const result = await client.checkNumberStatus(`${semNono}@c.us`);
+      if ((result?.numberExists || result?.canReceiveMessage) && result?.id?._serialized) {
+        return result.id._serialized;
+      }
+    } catch { /* número não localizado */ }
+  }
+
+  return null; // WhatsApp não reconheceu o número em nenhuma forma
+}
+
+/**
  * Pausa entre envios (3–8 s aleatório) para evitar padrão de disparo em massa.
  */
 function delayAleatorio() {
@@ -143,18 +199,19 @@ async function jobDigest(userId, getClient) {
     for (const grupo of meusGrupos) {
       try {
         const { funcionario, tarefas } = grupo;
-        const wppPhone = paraWpp(funcionario?.telefone);
-        if (!wppPhone) {
-          logger.warn(
-            `[scheduler:digest] Funcionário ${funcionario.nome} sem telefone válido — valor: "${funcionario.telefone}".`,
-          );
-          continue;
-        }
 
         const client = getClient();
         if (!client) {
           logger.warn('[scheduler:digest] Cliente WPP não conectado, abortando digest.');
           break;
+        }
+
+        const destino = await resolverDestino(client, funcionario?.telefone);
+        if (!destino) {
+          logger.warn(
+            `[scheduler:digest] Funcionário ${funcionario.nome} — telefone não localizado no WhatsApp (valor: "${funcionario?.telefone}").`,
+          );
+          continue;
         }
 
         const linhas = tarefas.map((t, i) =>
@@ -166,14 +223,14 @@ async function jobDigest(userId, getClient) {
           linhas.join('\n') +
           `\n\nNo horário de cada uma eu te aviso por aqui. 👊`;
 
-        await client.sendText(wppPhone, mensagem);
-        logger.info(`[scheduler:digest] ✅ Digest enviado para ${funcionario.nome} (${wppPhone})`);
+        await client.sendText(destino, mensagem);
+        logger.info(`[scheduler:digest] ✅ Digest enviado para ${funcionario.nome} (${destino})`);
 
         await delayAleatorio(); // 3–8 s entre funcionários
       } catch (err) {
         logger.error(
           `[scheduler:digest] Erro ao enviar para ${grupo.funcionario?.nome}:`,
-          err?.message,
+          err?.stack || JSON.stringify(err),
         );
       }
     }
@@ -218,18 +275,19 @@ async function jobPendentes(userId, getClient) {
     for (const tarefa of minhas) {
       try {
         const { funcionario, template } = tarefa;
-        const wppPhone = paraWpp(funcionario?.telefone);
-        if (!wppPhone) {
-          logger.warn(
-            `[scheduler:pendentes] Tarefa ${tarefa.id} (${template?.titulo}): telefone inválido ou ausente — valor: "${funcionario?.telefone}".`,
-          );
-          continue;
-        }
 
         const client = getClient();
         if (!client) {
           logger.warn('[scheduler:pendentes] Cliente WPP não conectado, abortando ciclo.');
           break;
+        }
+
+        const destino = await resolverDestino(client, funcionario?.telefone);
+        if (!destino) {
+          logger.warn(
+            `[scheduler:pendentes] Tarefa ${tarefa.id} (${template?.titulo}) — telefone não localizado no WhatsApp (valor: "${funcionario?.telefone}").`,
+          );
+          continue;
         }
 
         // Montar lista de evidências exigidas
@@ -246,7 +304,7 @@ async function jobPendentes(userId, getClient) {
           (instrucao ? `\n${instrucao}` : '');
 
         // 1. Enviar mensagem
-        await client.sendText(wppPhone, mensagem.trim());
+        await client.sendText(destino, mensagem.trim());
 
         const agora = new Date();
 
@@ -269,7 +327,7 @@ async function jobPendentes(userId, getClient) {
         jaDisparados.add(tarefa.id);
 
         logger.info(
-          `[scheduler:pendentes] ✅ "${template?.titulo}" → ${funcionario?.nome} (${wppPhone})`,
+          `[scheduler:pendentes] ✅ "${template?.titulo}" → ${funcionario?.nome} (${destino})`,
         );
       } catch (err) {
         // Transição inválida (409) = tarefa já foi enviada por outro meio → ignorar
@@ -277,7 +335,7 @@ async function jobPendentes(userId, getClient) {
           logger.warn(`[scheduler:pendentes] Tarefa ${tarefa.id} já foi enviada, pulando.`);
           jaDisparados.add(tarefa.id);
         } else {
-          logger.error(`[scheduler:pendentes] Erro na tarefa ${tarefa.id}:`, err?.message);
+          logger.error(`[scheduler:pendentes] Erro na tarefa ${tarefa.id}:`, err?.stack || JSON.stringify(err));
         }
       }
     }
