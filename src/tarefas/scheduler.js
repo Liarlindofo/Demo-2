@@ -47,12 +47,35 @@ function dataHojeBrasilia() {
 }
 
 /**
- * Converte telefone para formato WPP: "5511999999999" → "5511999999999@c.us"
+ * Normaliza um número de telefone brasileiro para o formato WPP "@c.us".
+ *
+ * Exemplos:
+ *   "41996420791"       → "5541996420791@c.us"   (11 dígitos sem DDI → prefixo 55)
+ *   "(41) 99642-0791"   → "5541996420791@c.us"   (formatação removida, DDI adicionado)
+ *   "5541996420791"     → "5541996420791@c.us"   (DDI já presente, mantido)
+ *   "4199642079"        → "55419964207@c.us"     (10 dígitos sem DDI → prefixo 55)
+ *   "123"               → null                   (tamanho inválido)
+ *
+ * @param {string|null|undefined} telefone
+ * @returns {string|null}
  */
 function paraWpp(telefone) {
   if (!telefone) return null;
   const digits = String(telefone).replace(/\D/g, '');
-  return digits ? `${digits}@c.us` : null;
+  if (!digits) return null;
+
+  // 10–11 dígitos: DDD + número sem DDI → adiciona "55"
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}@c.us`;
+  }
+
+  // 12–13 dígitos iniciando com "55": formato completo já correto
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
+    return `${digits}@c.us`;
+  }
+
+  // Tamanho inesperado → retorna null para que o chamador possa logar
+  return null;
 }
 
 /**
@@ -108,16 +131,23 @@ async function jobDigest(userId, getClient) {
       return;
     }
 
-    // Filtrar grupos do nosso tenant
-    const meusGrupos = grupos.filter((g) => !userId || g.userId === userId);
-    logger.info(`[scheduler:digest] ${meusGrupos.length} funcionário(s) do tenant ${userId} com tarefas hoje.`);
+    // NOTA: O filtro de tenant por userId foi removido.
+    // O userId recebido pelo bot é o UUID de sessão WPPConnect, enquanto
+    // os registros da API usam o cuid da tabela stack_users — domínios
+    // incompatíveis que nunca batem. Todos os grupos retornados pela API
+    // já pertencem ao tenant autenticado via BOT_SECRET.
+    // Se o setup virar multi-tenant, a API deverá retornar o ID de sessão do bot.
+    const meusGrupos = grupos;
+    logger.info(`[scheduler:digest] ${meusGrupos.length} funcionário(s) com tarefas hoje.`);
 
     for (const grupo of meusGrupos) {
       try {
         const { funcionario, tarefas } = grupo;
-        const wppPhone = paraWpp(funcionario.telefone);
+        const wppPhone = paraWpp(funcionario?.telefone);
         if (!wppPhone) {
-          logger.warn(`[scheduler:digest] Funcionário ${funcionario.nome} sem telefone cadastrado.`);
+          logger.warn(
+            `[scheduler:digest] Funcionário ${funcionario.nome} sem telefone válido — valor: "${funcionario.telefone}".`,
+          );
           continue;
         }
 
@@ -166,10 +196,20 @@ async function jobPendentes(userId, getClient) {
     const pendentes = await getPendentes();
     if (!Array.isArray(pendentes) || pendentes.length === 0) return;
 
-    // Filtrar pelo tenant e pelos não-disparados neste processo
-    const minhas = pendentes.filter(
-      (t) => (!userId || t.userId === userId) && !jaDisparados.has(t.id),
-    );
+    logger.info(`[scheduler:pendentes] API retornou ${pendentes.length} pendente(s).`);
+
+    // NOTA: O filtro de tenant por userId foi removido.
+    // O userId recebido pelo bot é o UUID de sessão WPPConnect; os registros
+    // da API usam o cuid da tabela stack_users — domínios incompatíveis.
+    // A API já filtra pelo tenant autenticado via BOT_SECRET.
+    // Se o setup virar multi-tenant, a API deverá expor o ID de sessão do bot.
+    const minhas = pendentes.filter((t) => {
+      if (jaDisparados.has(t.id)) {
+        logger.warn(`[scheduler:pendentes] Tarefa ${t.id} já disparada neste processo, pulando.`);
+        return false;
+      }
+      return true;
+    });
 
     if (minhas.length === 0) return;
 
@@ -179,7 +219,12 @@ async function jobPendentes(userId, getClient) {
       try {
         const { funcionario, template } = tarefa;
         const wppPhone = paraWpp(funcionario?.telefone);
-        if (!wppPhone) continue;
+        if (!wppPhone) {
+          logger.warn(
+            `[scheduler:pendentes] Tarefa ${tarefa.id} (${template?.titulo}): telefone inválido ou ausente — valor: "${funcionario?.telefone}".`,
+          );
+          continue;
+        }
 
         const client = getClient();
         if (!client) {
