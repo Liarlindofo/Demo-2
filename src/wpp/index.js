@@ -21,6 +21,100 @@ const execAsync = promisify(exec);
  */
 const pausedChats = new Set();
 
+// ─── Resolução de telefone real a partir de LIDs ──────────────────────────
+
+/** Cache LID → dígitos do telefone real (sobrevive enquanto o processo estiver vivo). */
+const lidToPhoneCache = new Map();
+/** LIDs cujo diagnóstico já foi logado (evita repetição). */
+const lidSemResolucao = new Set();
+
+/**
+ * Devolve os dígitos do telefone real do remetente, mesmo quando message.from
+ * é um LID ("173233210945673@lid") em vez de um JID de telefone ("5541...@c.us").
+ *
+ * Estratégia:
+ *   @c.us → dígitos direto do JID.
+ *   @lid  → (a) campos diretos do payload, (b) getContact, (c) log + null.
+ *
+ * O retorno é sempre apenas dígitos (sem "@..."), compatível com
+ * canonicalizarTelefone em tarefaHandler.
+ *
+ * @param {object} client   Cliente WPPConnect ativo
+ * @param {object} message  Mensagem recebida
+ * @returns {Promise<string|null>}
+ */
+async function resolverTelefoneReal(client, message) {
+  const from = message?.from || '';
+
+  // JID de telefone normal: dígitos antes do "@"
+  if (from.endsWith('@c.us')) {
+    return from.split('@')[0];
+  }
+
+  // LID: requer resolução
+  if (from.endsWith('@lid')) {
+    if (lidToPhoneCache.has(from)) {
+      return lidToPhoneCache.get(from); // pode ser null (já tentamos e falhou)
+    }
+
+    // (a) Campos diretos do payload — algumas versões do WPPConnect já expõem
+    const candidatos = [
+      message.senderPn,
+      message.sender?.phoneNumber,
+      message.sender?.id?._serialized?.endsWith('@c.us')
+        ? message.sender.id._serialized.split('@')[0]
+        : null,
+      typeof message.author === 'string' && message.author.endsWith('@c.us')
+        ? message.author.split('@')[0]
+        : null,
+    ];
+
+    for (const c of candidatos) {
+      if (c && /^\d{7,15}$/.test(String(c))) {
+        lidToPhoneCache.set(from, String(c));
+        return String(c);
+      }
+    }
+
+    // (b) getContact — consulta o próprio WhatsApp
+    try {
+      const contato = await client.getContact(from);
+      const camposContato = [
+        contato?.phoneNumber,
+        contato?.id?.user,
+        contato?.id?._serialized?.endsWith('@c.us')
+          ? contato.id._serialized.split('@')[0]
+          : null,
+      ];
+      for (const c of camposContato) {
+        if (c && /^\d{7,15}$/.test(String(c))) {
+          lidToPhoneCache.set(from, String(c));
+          return String(c);
+        }
+      }
+    } catch { /* getContact falhou — segue para o log */ }
+
+    // (c) Nada resolveu: loga UMA VEZ para diagnóstico e retorna null
+    if (!lidSemResolucao.has(from)) {
+      lidSemResolucao.add(from);
+      const diag = JSON.stringify({
+        from:   message.from,
+        sender: message.sender,
+        author: message.author,
+      });
+      logger.warn(
+        `[resolverTelefoneReal] Não foi possível resolver LID ${from}. Diagnóstico: ${diag.slice(0, 2000)}`,
+      );
+    }
+
+    lidToPhoneCache.set(from, null); // cacheia null → evita nova tentativa getContact
+    return null;
+  }
+
+  // Formato desconhecido: retorna os dígitos antes do "@" como fallback
+  return from.split('@')[0] || null;
+}
+
 /**
  * Normaliza número de telefone removendo sufixos do WhatsApp
  * Ex: "5511999999999@c.us" -> "5511999999999"
@@ -386,19 +480,23 @@ async function handleIncomingMessage(message, client, userId, slot) {
 
       // ── 3. Telefone do remetente externo ──────────────────────────────────
       const phone = extractPhoneNumber(message.from) || message.from;
-      logger.info(`[📱 PROCESSANDO] Telefone: ${phone}, tipo: ${message.type}`);
+      logger.info(`[📱 PROCESSANDO] Telefone (raw): ${phone}, tipo: ${message.type}`);
+
+      // Resolve o telefone real — trata LIDs (@lid) que o WhatsApp envia em
+      // vez do JID de telefone normal (@c.us). Fallback: dígitos do raw phone.
+      const telefoneLimpo = await resolverTelefoneReal(client, message) ?? phone.split('@')[0];
+      logger.info(`[📱 PROCESSANDO] Telefone (resolvido): ${telefoneLimpo}`);
 
       // ── 4. Modo manual (atendente humano assumiu esta conversa) ───────────
-      const isPaused = sessionManager.isManualMode(userId, slot, phone);
+      const isPaused = sessionManager.isManualMode(userId, slot, telefoneLimpo);
       if (isPaused) {
-        logger.wpp(userId, slot, `🔕 Chat ${phone} em MODO MANUAL. Bot não responderá.`);
+        logger.wpp(userId, slot, `🔕 Chat ${telefoneLimpo} em MODO MANUAL. Bot não responderá.`);
         return;
       }
 
       // ── 5. 🎯 Roteamento de TAREFA (ANTES do filtro de tipo e do GPT) ─────
       // Permite que imagens, localizações e documentos de funcionários
       // sejam processados sem interferir no fluxo GPT dos demais clientes.
-      const telefoneLimpo = phone.split('@')[0]; // dígitos puros sem @c.us
       try {
         const sessaoAtiva = await tarefaHandler.getSessaoAtiva(telefoneLimpo);
         if (sessaoAtiva) {
@@ -464,7 +562,7 @@ async function handleIncomingMessage(message, client, userId, slot) {
       const conversationHistory = sessionManager.getConversation(
         userId,
         slot,
-        phone,
+        telefoneLimpo,
         botSettings.contextLimit || 10
       );
 
@@ -477,7 +575,7 @@ async function handleIncomingMessage(message, client, userId, slot) {
         basePrompt: botSettings.basePrompt || '',
       };
 
-      sessionManager.addMessage(userId, slot, phone, {
+      sessionManager.addMessage(userId, slot, telefoneLimpo, {
         body: rawText, fromMe: false, timestamp: Date.now(),
       });
 
@@ -487,11 +585,11 @@ async function handleIncomingMessage(message, client, userId, slot) {
 
       await client.sendText(message.from, aiResponse);
 
-      sessionManager.addMessage(userId, slot, phone, {
+      sessionManager.addMessage(userId, slot, telefoneLimpo, {
         body: aiResponse, fromMe: true, timestamp: Date.now(),
       });
 
-      logger.success(`✅ Resposta GPT enviada para ${phone} (${message.from})`);
+      logger.success(`✅ Resposta GPT enviada para ${telefoneLimpo} (${message.from})`);
     } catch (error) {
       logger.error(`❌ Erro ao processar mensagem [${userId}:${slot}]:`, error?.message || error);
       logger.error(`❌ Stack trace:`, error?.stack);
