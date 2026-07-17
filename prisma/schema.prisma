@@ -1390,6 +1390,8 @@ model SessaoTarefa {
   tarefaId            String
   /// Telefone do funcionário em dígitos puros, ex: "5511999999999"
   telefone            String
+  /// LID do WhatsApp capturado no momento do envio (só dígitos, sem "@lid")
+  lid                 String?  @db.VarChar(32)
   /// Array dos tipos de evidência exigidos, ex: ["FOTO","CONFIRMACAO_TEXTO"]
   evidenciasExigidas  Json
   /// Array dos tipos de evidência já recebidos e registrados
@@ -1408,6 +1410,7 @@ model SessaoTarefa {
   atualizadaEm        DateTime @updatedAt
 
   @@index([telefone, estado])
+  @@index([lid, estado])
   @@index([estado, criadaEm])
   @@map("sessoes_tarefa")
 }

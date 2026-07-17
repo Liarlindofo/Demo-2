@@ -78,8 +78,41 @@ function paraWpp(telefone) {
   return null;
 }
 
+/** Numbers already logged for diagnostic (evita spam de log). */
+const resolverDiagnosticado = new Set();
+
 /**
- * Resolve o JID correto de um destinatário via checkNumberStatus.
+ * Extrai dígitos do LID a partir dos campos retornados por checkNumberStatus.
+ * Tenta result.lid._serialized, result.lid (string) e result.id.lid.
+ * Retorna apenas os dígitos numéricos (sem "@lid"), ou null se não encontrar.
+ *
+ * @param {object} result  Resultado de client.checkNumberStatus(...)
+ * @param {string} key     Chave de diagnóstico (digits usados na chamada)
+ * @returns {string|null}
+ */
+function extrairLid(result, key) {
+  const candidatos = [
+    result?.lid?._serialized,
+    typeof result?.lid === 'string' ? result.lid : null,
+    result?.id?.lid,
+  ];
+  for (const c of candidatos) {
+    if (typeof c !== 'string') continue;
+    // Formato "@lid": extrai dígitos antes do @
+    if (c.includes('@lid')) return c.split('@')[0];
+    // Já só dígitos (algumas versões retornam assim)
+    if (/^\d{8,25}$/.test(c)) return c;
+  }
+  // LID não encontrado: loga uma vez para diagnóstico
+  if (!resolverDiagnosticado.has(key)) {
+    resolverDiagnosticado.add(key);
+    logger.info(`[resolverDestino][DIAGNOSTICO] ${JSON.stringify(result).slice(0, 1500)}`);
+  }
+  return null;
+}
+
+/**
+ * Resolve o JID e o LID de um destinatário via checkNumberStatus.
  *
  * Problema: JIDs montados manualmente ("55...@c.us") falham com "No LID for user"
  * porque o WhatsApp usa o sistema LID e o número pode estar registrado sem o nono
@@ -90,11 +123,13 @@ function paraWpp(telefone) {
  *   2. Tenta checkNumberStatus com o número completo.
  *   3. Se falhar e for 13 dígitos com 9º dígito após o DDD, tenta sem o 9
  *      (números antigos cadastrados com 8 dígitos).
- *   4. Retorna result.id._serialized (JID real) ou null.
+ *   4. Retorna { jid, lid } ou null.
+ *      jid: result.id._serialized (JID real para sendText).
+ *      lid: dígitos do LID (para gravar na SessaoTarefa), ou null.
  *
- * @param {object}            client    Cliente WPPConnect ativo
- * @param {string|null}       telefone  Telefone bruto do funcionário
- * @returns {Promise<string|null>}      JID resolvido ou null se não localizado
+ * @param {object}      client    Cliente WPPConnect ativo
+ * @param {string|null} telefone  Telefone bruto do funcionário
+ * @returns {Promise<{ jid: string, lid: string|null }|null>}
  */
 async function resolverDestino(client, telefone) {
   if (!telefone) return null;
@@ -115,7 +150,7 @@ async function resolverDestino(client, telefone) {
   try {
     const result = await client.checkNumberStatus(`${digits}@c.us`);
     if ((result?.numberExists || result?.canReceiveMessage) && result?.id?._serialized) {
-      return result.id._serialized;
+      return { jid: result.id._serialized, lid: extrairLid(result, digits) };
     }
   } catch { /* segue para fallback */ }
 
@@ -126,7 +161,7 @@ async function resolverDestino(client, telefone) {
     try {
       const result = await client.checkNumberStatus(`${semNono}@c.us`);
       if ((result?.numberExists || result?.canReceiveMessage) && result?.id?._serialized) {
-        return result.id._serialized;
+        return { jid: result.id._serialized, lid: extrairLid(result, semNono) };
       }
     } catch { /* número não localizado */ }
   }
@@ -216,8 +251,8 @@ async function jobDigest(userId, getClient) {
           linhas.join('\n') +
           `\n\nNo horário de cada uma eu te aviso por aqui. 👊`;
 
-        await client.sendText(destino, mensagem);
-        logger.info(`[scheduler:digest] ✅ Digest enviado para ${funcionario.nome} (${destino})`);
+        await client.sendText(destino.jid, mensagem);
+        logger.info(`[scheduler:digest] ✅ Digest enviado para ${funcionario.nome} (${destino.jid})`);
 
         await delayAleatorio(); // 3–8 s entre funcionários
       } catch (err) {
@@ -297,7 +332,7 @@ async function jobPendentes(userId, getClient) {
           (instrucao ? `\n${instrucao}` : '');
 
         // 1. Enviar mensagem
-        await client.sendText(destino, mensagem.trim());
+        await client.sendText(destino.jid, mensagem.trim());
 
         const agora = new Date();
 
@@ -315,12 +350,13 @@ async function jobPendentes(userId, getClient) {
           agora,
           template?.descricao ?? '',
           template?.validacaoIA ?? null,
+          destino.lid,            // LID capturado no momento do envio para match na recepção
         );
 
         jaDisparados.add(tarefa.id);
 
         logger.info(
-          `[scheduler:pendentes] ✅ "${template?.titulo}" → ${funcionario?.nome} (${destino})`,
+          `[scheduler:pendentes] ✅ "${template?.titulo}" → ${funcionario?.nome} (${destino.jid}${destino.lid ? ` / LID:${destino.lid}` : ''})`,
         );
       } catch (err) {
         // Transição inválida (409) = tarefa já foi enviada por outro meio → ignorar

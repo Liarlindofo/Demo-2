@@ -111,8 +111,10 @@ async function resolverTelefoneReal(client, message) {
     return null;
   }
 
-  // Formato desconhecido: retorna os dígitos antes do "@" como fallback
-  return from.split('@')[0] || null;
+  // Formato desconhecido (@g.us, @s.whatsapp.net, etc.): fallback seguro
+  // Nunca retornar dígitos de um @lid — eles não são números de telefone
+  if (from.includes('@')) return null;
+  return /^\d+$/.test(from) ? from : null;
 }
 
 /**
@@ -482,15 +484,27 @@ async function handleIncomingMessage(message, client, userId, slot) {
       const phone = extractPhoneNumber(message.from) || message.from;
       logger.info(`[📱 PROCESSANDO] Telefone (raw): ${phone}, tipo: ${message.type}`);
 
-      // Resolve o telefone real — trata LIDs (@lid) que o WhatsApp envia em
-      // vez do JID de telefone normal (@c.us). Fallback: dígitos do raw phone.
-      const telefoneLimpo = await resolverTelefoneReal(client, message) ?? phone.split('@')[0];
-      logger.info(`[📱 PROCESSANDO] Telefone (resolvido): ${telefoneLimpo}`);
+      // Resolve o telefone real — null se message.from for @lid não traduzível.
+      // NUNCA usar dígitos de um @lid como número de telefone.
+      const telefoneLimpo = await resolverTelefoneReal(client, message);
+
+      // Dígitos do LID quando message.from termina em "@lid" (para busca paralela)
+      const lidDigits = message.from?.endsWith('@lid')
+        ? message.from.split('@')[0]
+        : null;
+
+      // Chave de sessão para manual mode / histórico GPT
+      // Prefere telefone resolvido; se LID não traduzido, usa raw phone como fallback
+      const chaveConversa = telefoneLimpo ?? phone.split('@')[0];
+
+      logger.info(
+        `[📱 PROCESSANDO] Telefone resolvido: ${telefoneLimpo ?? '(nulo)'}, LID: ${lidDigits ?? '(nenhum)'}`,
+      );
 
       // ── 4. Modo manual (atendente humano assumiu esta conversa) ───────────
-      const isPaused = sessionManager.isManualMode(userId, slot, telefoneLimpo);
+      const isPaused = sessionManager.isManualMode(userId, slot, chaveConversa);
       if (isPaused) {
-        logger.wpp(userId, slot, `🔕 Chat ${telefoneLimpo} em MODO MANUAL. Bot não responderá.`);
+        logger.wpp(userId, slot, `🔕 Chat ${chaveConversa} em MODO MANUAL. Bot não responderá.`);
         return;
       }
 
@@ -498,10 +512,12 @@ async function handleIncomingMessage(message, client, userId, slot) {
       // Permite que imagens, localizações e documentos de funcionários
       // sejam processados sem interferir no fluxo GPT dos demais clientes.
       try {
-        const sessaoAtiva = await tarefaHandler.getSessaoAtiva(telefoneLimpo);
+        // Busca por telefone resolvido OU por LID gravado no momento do envio
+        const sessaoAtiva = await tarefaHandler.getSessaoAtiva(telefoneLimpo, lidDigits);
         if (sessaoAtiva) {
-          logger.info(`[🎯 TAREFA] Sessão ativa para ${telefoneLimpo} → roteando para handler de tarefas.`);
-          await tarefaHandler.processarMensagem(message, client, telefoneLimpo, sessaoAtiva);
+          const telefoneParaHandler = telefoneLimpo ?? chaveConversa;
+          logger.info(`[🎯 TAREFA] Sessão ativa → roteando (tel=${telefoneParaHandler}, lid=${lidDigits ?? '—'})`);
+          await tarefaHandler.processarMensagem(message, client, telefoneParaHandler, sessaoAtiva);
           return;
         }
       } catch (tarefaErr) {
@@ -562,7 +578,7 @@ async function handleIncomingMessage(message, client, userId, slot) {
       const conversationHistory = sessionManager.getConversation(
         userId,
         slot,
-        telefoneLimpo,
+        chaveConversa,
         botSettings.contextLimit || 10
       );
 
@@ -575,7 +591,7 @@ async function handleIncomingMessage(message, client, userId, slot) {
         basePrompt: botSettings.basePrompt || '',
       };
 
-      sessionManager.addMessage(userId, slot, telefoneLimpo, {
+      sessionManager.addMessage(userId, slot, chaveConversa, {
         body: rawText, fromMe: false, timestamp: Date.now(),
       });
 
@@ -585,11 +601,11 @@ async function handleIncomingMessage(message, client, userId, slot) {
 
       await client.sendText(message.from, aiResponse);
 
-      sessionManager.addMessage(userId, slot, telefoneLimpo, {
+      sessionManager.addMessage(userId, slot, chaveConversa, {
         body: aiResponse, fromMe: true, timestamp: Date.now(),
       });
 
-      logger.success(`✅ Resposta GPT enviada para ${telefoneLimpo} (${message.from})`);
+      logger.success(`✅ Resposta GPT enviada para ${chaveConversa} (${message.from})`);
     } catch (error) {
       logger.error(`❌ Erro ao processar mensagem [${userId}:${slot}]:`, error?.message || error);
       logger.error(`❌ Stack trace:`, error?.stack);

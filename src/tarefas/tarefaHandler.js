@@ -106,15 +106,39 @@ function tipoEvidenciaDeMsg(message) {
 
 // ─── Acesso ao banco de sessões ────────────────────────────────────────────
 
-export async function getSessoesAtivas(telefone) {
+/**
+ * Retorna sessões AGUARDANDO que correspondam ao telefone canonicalizado
+ * OU ao LID gravado no momento do envio (match por qualquer um dos dois).
+ *
+ * @param {string|null}  telefone   Telefone bruto (será canonicalizado internamente)
+ * @param {string|null}  [lidDigits] Dígitos do LID (sem "@lid"), opcional
+ */
+export async function getSessoesAtivas(telefone, lidDigits) {
+  const telefoneCanon = telefone ? canonicalizarTelefone(telefone) : null;
+
+  // Monta filtros disponíveis para o OR
+  const orFiltros = [];
+  if (telefoneCanon) orFiltros.push({ telefone: telefoneCanon });
+  if (lidDigits)     orFiltros.push({ lid: lidDigits });
+
+  if (orFiltros.length === 0) return [];
+
   return prisma.sessaoTarefa.findMany({
-    where: { telefone: canonicalizarTelefone(telefone), estado: 'AGUARDANDO' },
+    where: {
+      estado: 'AGUARDANDO',
+      // Se apenas um filtro, evita OR desnecessário; se dois, usa OR
+      ...(orFiltros.length === 1 ? orFiltros[0] : { OR: orFiltros }),
+    },
     orderBy: { criadaEm: 'asc' },
   });
 }
 
-export async function getSessaoAtiva(telefone) {
-  const sessoes = await getSessoesAtivas(telefone);
+/**
+ * @param {string|null}  telefone
+ * @param {string|null}  [lidDigits]
+ */
+export async function getSessaoAtiva(telefone, lidDigits) {
+  const sessoes = await getSessoesAtivas(telefone, lidDigits);
   return sessoes[0] ?? null;
 }
 
@@ -122,11 +146,12 @@ export async function getSessaoAtiva(telefone) {
  * Cria uma nova sessão de tarefa.
  *
  * @param {string}      tarefaId
- * @param {string}      telefone            Será normalizado para dígitos puros
+ * @param {string}      telefone            Será canonicalizado internamente
  * @param {string[]}    evidenciasExigidas  Ex: ['FOTO', 'CONFIRMACAO_TEXTO']
  * @param {Date}        enviadaEm
  * @param {string}      [descricaoTarefa]   Descrição do template (para prompt IA)
  * @param {object|null} [validacaoIA]       Config de validação IA do template
+ * @param {string|null} [lid]               Dígitos do LID capturado no envio (sem "@lid")
  */
 export async function criarSessao(
   tarefaId,
@@ -135,11 +160,13 @@ export async function criarSessao(
   enviadaEm,
   descricaoTarefa = '',
   validacaoIA = null,
+  lid = null,
 ) {
   return prisma.sessaoTarefa.create({
     data: {
       tarefaId,
       telefone:           canonicalizarTelefone(telefone),
+      lid:                lid ?? null,
       evidenciasExigidas,
       evidenciasRecebidas: [],
       estado:             'AGUARDANDO',
