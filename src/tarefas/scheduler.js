@@ -86,7 +86,8 @@ function paraWpp(telefone) {
  * dígito. checkNumberStatus retorna o JID resolvido pelo próprio WhatsApp.
  *
  * Nota: checkNumberStatus NÃO retorna o LID nesta versão do WPPConnect.
- * O LID é capturado a partir do retorno de client.sendText() — ver extrairLidDoEnvio.
+ * O LID é capturado pelo eco da mensagem enviada — ver vincularLidASessaoRecente
+ * em tarefaHandler.js.
  *
  * @param {object}      client    Cliente WPPConnect ativo
  * @param {string|null} telefone  Telefone bruto do funcionário
@@ -128,44 +129,6 @@ async function resolverDestino(client, telefone) {
   }
 
   return null; // WhatsApp não reconheceu o número em nenhuma forma
-}
-
-/** IDs de tarefas cujo diagnóstico de sendText já foi logado (evita spam). */
-const sendTextDiagnosticado = new Set();
-
-/**
- * Extrai os dígitos do LID a partir do objeto retornado por client.sendText().
- *
- * O campo de destino da mensagem enviada aponta para o chat real do contato,
- * que pode ser um "@lid" (sistema LID do WhatsApp) em vez de "@c.us".
- * Inspeciona resultado.to, resultado.id.remote, resultado.chatId em ordem.
- *
- * @param {object}  resultado  Retorno de client.sendText(...)
- * @param {string}  tarefaId   Para log de diagnóstico (uma vez por tarefa)
- * @returns {string|null}  Dígitos do LID (sem "@lid") ou null
- */
-function extrairLidDoEnvio(resultado, tarefaId) {
-  const candidatos = [
-    resultado?.to,
-    resultado?.to?._serialized,
-    resultado?.id?.remote,
-    resultado?.id?.remote?._serialized,
-    resultado?.chatId,
-    resultado?.chatId?._serialized,
-  ];
-
-  for (const c of candidatos) {
-    if (typeof c !== 'string') continue;
-    if (c.endsWith('@lid')) return c.split('@')[0];
-    if (c.endsWith('@c.us')) return null; // JID normal — sem LID
-  }
-
-  // Nenhum campo útil encontrado: loga UMA VEZ para diagnóstico
-  if (!sendTextDiagnosticado.has(tarefaId)) {
-    sendTextDiagnosticado.add(tarefaId);
-    logger.info(`[sendText][DIAGNOSTICO] ${JSON.stringify(resultado).slice(0, 1500)}`);
-  }
-  return null;
 }
 
 /**
@@ -330,12 +293,9 @@ async function jobPendentes(userId, getClient) {
           `${template?.descricao}\n` +
           (instrucao ? `\n${instrucao}` : '');
 
-        // 1. Enviar mensagem — captura retorno para extrair o LID do chat real
-        const resultado = await client.sendText(destino, mensagem.trim());
-
-        // O campo de destino do objeto retornado pode ser "@lid" para contatos
-        // com sistema LID ativo — capturamos agora para gravar na sessão.
-        const lidDigits = extrairLidDoEnvio(resultado, tarefa.id);
+        // 1. Enviar mensagem (o LID será capturado pelo eco em onAnyMessage →
+        //    vincularLidASessaoRecente, pois o retorno do sendText não é confiável)
+        await client.sendText(destino, mensagem.trim());
 
         const agora = new Date();
 
@@ -346,6 +306,7 @@ async function jobPendentes(userId, getClient) {
         });
 
         // 3. Criar sessão local de evidências (inclui config IA para validação de fotos)
+        //    lid=null pois o LID é vinculado depois pelo eco em onAnyMessage
         await criarSessao(
           tarefa.id,
           funcionario.telefone,   // canonicalizarTelefone vive em tarefaHandler — um lugar só
@@ -353,13 +314,13 @@ async function jobPendentes(userId, getClient) {
           agora,
           template?.descricao ?? '',
           template?.validacaoIA ?? null,
-          lidDigits,              // LID capturado do retorno do sendText para match na recepção
+          null,
         );
 
         jaDisparados.add(tarefa.id);
 
         logger.info(
-          `[scheduler:pendentes] ✅ "${template?.titulo}" → ${funcionario?.nome} (${destino}${lidDigits ? ` / LID:${lidDigits}` : ''})`,
+          `[scheduler:pendentes] ✅ "${template?.titulo}" → ${funcionario?.nome} (${destino})`,
         );
       } catch (err) {
         // Transição inválida (409) = tarefa já foi enviada por outro meio → ignorar

@@ -462,6 +462,25 @@ async function handleIncomingMessage(message, client, userId, slot) {
 
         logger.info(`[setupMessageListener] Mensagem fromMe | phone: ${phoneFromMe} | texto: "${rawTextFromMe}"`);
 
+        // ── Eco da mensagem de cobrança: vincula LID à sessão recente ──────
+        // O onAnyMessage recebe de volta a própria mensagem enviada pelo bot
+        // com fromMe=true. Quando o destinatário usa o sistema LID, message.to
+        // / message.chatId termina em "@lid" — esse é o LID real do chat.
+        if (rawTextFromMe.startsWith('⏰ hora da tarefa:')) {
+          const destinoRaw = message.to || message.chatId;
+          const destinoStr = typeof destinoRaw === 'object'
+            ? (destinoRaw?._serialized ?? '')
+            : String(destinoRaw ?? '');
+          if (destinoStr.endsWith('@lid')) {
+            const lidEco = destinoStr.split('@')[0];
+            try {
+              await tarefaHandler.vincularLidASessaoRecente(lidEco);
+            } catch (ecoErr) {
+              logger.warn(`[onAnyMessage/eco] Falha ao vincular LID ${lidEco}: ${ecoErr?.message}`);
+            }
+          }
+        }
+
         if (rawTextFromMe === '#boa noite') {
           logger.wpp(userId, slot, `🛑 Comando #boa noite recebido para ${phoneFromMe}`);
           pauseChat(userId, slot, phoneFromMe);

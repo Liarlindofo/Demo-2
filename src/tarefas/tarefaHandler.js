@@ -469,6 +469,42 @@ export async function processarMensagem(message, client, telefone, sessao) {
   }
 }
 
+// ─── Vinculação de LID pelo eco da mensagem enviada ───────────────────────
+
+/**
+ * Vincula um LID à sessão AGUARDANDO mais recente que ainda não tem LID.
+ *
+ * Chamado quando o onAnyMessage recebe o eco (fromMe=true) da mensagem de
+ * cobrança de tarefa e o destino termina em "@lid". A janela de 90 s cobre
+ * o tempo entre criarSessao() e a chegada do eco no listener.
+ *
+ * @param {string} lidDigits  Dígitos do LID (sem "@lid")
+ */
+export async function vincularLidASessaoRecente(lidDigits) {
+  const limite = new Date(Date.now() - 90_000); // agora - 90 s
+
+  const sessao = await prisma.sessaoTarefa.findFirst({
+    where: {
+      estado:   'AGUARDANDO',
+      lid:      null,
+      criadaEm: { gte: limite },
+    },
+    orderBy: { criadaEm: 'desc' },
+  });
+
+  if (!sessao) {
+    logger.info(`[TAREFA] LID ${lidDigits} — nenhuma sessão recente sem LID encontrada.`);
+    return;
+  }
+
+  await prisma.sessaoTarefa.update({
+    where: { id: sessao.id },
+    data:  { lid: lidDigits },
+  });
+
+  logger.info(`[TAREFA] LID ${lidDigits} vinculado à sessão ${sessao.id}`);
+}
+
 // ─── Expiração de fim de dia ───────────────────────────────────────────────
 
 export async function expirarSessoesAntigas() {
