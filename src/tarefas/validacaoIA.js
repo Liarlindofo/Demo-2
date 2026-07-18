@@ -8,13 +8,13 @@
  *  - Parse falhou? → { erro: true } → evidência salva sem análise, emRevisaoAdm = true.
  *  - Foto ilegível? → pede nova (máx 2 pedidos); na 3ª tentativa aceita e marca revisão.
  *
- * Env: OPENAI_API_KEY
+ * Env: OPENROUTER_API_KEY
  */
 
 import logger from '../utils/logger.js';
 
-const OPENAI_URL  = 'https://api.openai.com/v1/chat/completions';
-const MODEL       = 'gpt-4o-mini';
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const MODEL          = 'openai/gpt-4o-mini';
 const MAX_TOKENS  = 350;
 
 // ─── System prompt ─────────────────────────────────────────────────────────
@@ -57,14 +57,16 @@ function construirUserText(descricaoTarefa, validacaoIA, textoFuncionario) {
 /**
  * Chama a API OpenAI com a imagem e retorna texto bruto + metadados de uso.
  */
-async function chamarOpenAI(imagemBase64, mimeType, userText) {
+async function chamarOpenRouter(imagemBase64, mimeType, userText) {
   const inicio = Date.now();
 
-  const res = await fetch(OPENAI_URL, {
+  const res = await fetch(OPENROUTER_URL, {
     method:  'POST',
     headers: {
       'Content-Type':  'application/json',
-      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY?.trim()}`,
+      'HTTP-Referer':  'https://platefull.com.br',
+      'X-Title':       'Platefull WhatsApp Bot',
     },
     body: JSON.stringify({
       model:      MODEL,
@@ -90,7 +92,7 @@ async function chamarOpenAI(imagemBase64, mimeType, userText) {
 
   if (!res.ok) {
     const corpo = await res.text().catch(() => '');
-    throw new Error(`OpenAI HTTP ${res.status}: ${corpo}`);
+    throw new Error(`OpenRouter HTTP ${res.status}: ${corpo}`);
   }
 
   const data   = await res.json();
@@ -178,8 +180,8 @@ export async function validarFoto({
   tarefaId = '',
   tentativaAnterior = 0,
 }) {
-  if (!process.env.OPENAI_API_KEY) {
-    logger.warn('[validacaoIA] OPENAI_API_KEY não configurada — pulando validação por IA.');
+  if (!process.env.OPENROUTER_API_KEY?.trim()) {
+    logger.warn('[validacaoIA] OPENROUTER_API_KEY não configurada — pulando validação por IA.');
     return { analise: null, foraDaFaixa: false, precisaNovaFoto: false, erro: false };
   }
 
@@ -191,7 +193,7 @@ export async function validarFoto({
 
   // ── Tentativa 1 ──────────────────────────────────────────────────────────
   try {
-    const r1 = await chamarOpenAI(imagemBase64, mimeType, userText);
+    const r1 = await chamarOpenRouter(imagemBase64, mimeType, userText);
     totalTokens += r1.tokens;
     totalLatMs  += r1.latMs;
     analise      = tentarParseJSON(r1.texto);
@@ -200,7 +202,7 @@ export async function validarFoto({
       logger.warn(`[validacaoIA] Parse JSON falhou na 1ª tentativa (tarefa=${tarefaId}), texto="${r1.texto.slice(0, 120)}"`);
     }
   } catch (err) {
-    logger.error(`[validacaoIA] Erro na chamada OpenAI (tarefa=${tarefaId}):`, err?.message);
+    logger.error(`[validacaoIA] Erro na chamada OpenRouter (tarefa=${tarefaId}):`, err?.message);
     return { analise: null, foraDaFaixa: false, precisaNovaFoto: false, erro: true };
   }
 
@@ -208,7 +210,7 @@ export async function validarFoto({
   if (!analise) {
     try {
       const userTextRetry = userText + '\n\nATENÇÃO: responda APENAS o JSON válido, sem markdown nem texto extra.';
-      const r2 = await chamarOpenAI(imagemBase64, mimeType, userTextRetry);
+      const r2 = await chamarOpenRouter(imagemBase64, mimeType, userTextRetry);
       totalTokens += r2.tokens;
       totalLatMs  += r2.latMs;
       analise      = tentarParseJSON(r2.texto);
@@ -217,7 +219,7 @@ export async function validarFoto({
         logger.error(`[validacaoIA] Parse JSON falhou após retry (tarefa=${tarefaId}), texto="${r2.texto.slice(0, 120)}"`);
       }
     } catch (err) {
-      logger.error(`[validacaoIA] Erro no retry OpenAI (tarefa=${tarefaId}):`, err?.message);
+      logger.error(`[validacaoIA] Erro no retry OpenRouter (tarefa=${tarefaId}):`, err?.message);
     }
   }
 
