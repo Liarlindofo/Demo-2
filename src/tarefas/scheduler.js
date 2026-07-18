@@ -15,7 +15,7 @@
 import cron from 'node-cron';
 import logger from '../utils/logger.js';
 import { getDigest, getPendentes, patchStatus } from './platefulApi.js';
-import { criarSessao, expirarSessoesAntigas } from './tarefaHandler.js';
+import { criarSessao, marcarSessaoExpirada, expirarSessoesAntigas } from './tarefaHandler.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -293,21 +293,12 @@ async function jobPendentes(userId, getClient) {
           `${template?.descricao}\n` +
           (instrucao ? `\n${instrucao}` : '');
 
-        // 1. Enviar mensagem (o LID será capturado pelo eco em onAnyMessage →
-        //    vincularLidASessaoRecente, pois o retorno do sendText não é confiável)
-        await client.sendText(destino, mensagem.trim());
-
         const agora = new Date();
 
-        // 2. Sinalizar ENVIADA no Plateful (transição atômica — rejeita duplicatas)
-        await patchStatus(tarefa.id, {
-          status:    'ENVIADA',
-          enviadaEm: agora.toISOString(),
-        });
-
-        // 3. Criar sessão local de evidências (inclui config IA para validação de fotos)
-        //    lid=null pois o LID é vinculado depois pelo eco em onAnyMessage
-        await criarSessao(
+        // 1. Criar sessão ANTES do envio — o eco do WPPConnect chega em ~0,5 s
+        //    e precisa encontrar a sessão já persistida para vincular o LID.
+        //    lid=null; será preenchido depois pelo eco em onAnyMessage.
+        const sessaoCriada = await criarSessao(
           tarefa.id,
           funcionario.telefone,   // canonicalizarTelefone vive em tarefaHandler — um lugar só
           evidenciasExigidas,
@@ -316,6 +307,25 @@ async function jobPendentes(userId, getClient) {
           template?.validacaoIA ?? null,
           null,
         );
+
+        // 2. Enviar mensagem + sinalizar ENVIADA no Plateful.
+        //    Se qualquer um falhar, reverte a sessão para EXPIRADA antes de
+        //    propagar o erro (evita sessão órfã no estado AGUARDANDO).
+        try {
+          await client.sendText(destino, mensagem.trim());
+
+          await patchStatus(tarefa.id, {
+            status:    'ENVIADA',
+            enviadaEm: agora.toISOString(),
+          });
+        } catch (envioErr) {
+          await marcarSessaoExpirada(sessaoCriada.id).catch((rbErr) => {
+            logger.warn(
+              `[scheduler:pendentes] Falha no rollback da sessão ${sessaoCriada.id}: ${rbErr?.message}`,
+            );
+          });
+          throw envioErr; // propaga para o catch externo (log + 409 guard)
+        }
 
         jaDisparados.add(tarefa.id);
 

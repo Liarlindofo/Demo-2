@@ -483,26 +483,59 @@ export async function processarMensagem(message, client, telefone, sessao) {
 export async function vincularLidASessaoRecente(lidDigits) {
   const limite = new Date(Date.now() - 90_000); // agora - 90 s
 
-  const sessao = await prisma.sessaoTarefa.findFirst({
-    where: {
-      estado:   'AGUARDANDO',
-      lid:      null,
-      criadaEm: { gte: limite },
-    },
-    orderBy: { criadaEm: 'desc' },
-  });
+  async function tentarVincular(retentativa = false) {
+    const sessao = await prisma.sessaoTarefa.findFirst({
+      where: {
+        estado:   'AGUARDANDO',
+        lid:      null,
+        criadaEm: { gte: limite },
+      },
+      orderBy: { criadaEm: 'desc' },
+    });
 
-  if (!sessao) {
-    logger.info(`[TAREFA] LID ${lidDigits} — nenhuma sessão recente sem LID encontrada.`);
-    return;
+    if (!sessao) return false;
+
+    await prisma.sessaoTarefa.update({
+      where: { id: sessao.id },
+      data:  { lid: lidDigits },
+    });
+
+    if (retentativa) {
+      logger.info(`[TAREFA] LID ${lidDigits} vinculado na retentativa à sessão ${sessao.id}`);
+    } else {
+      logger.info(`[TAREFA] LID ${lidDigits} vinculado à sessão ${sessao.id}`);
+    }
+    return true;
   }
 
-  await prisma.sessaoTarefa.update({
-    where: { id: sessao.id },
-    data:  { lid: lidDigits },
-  });
+  const vinculado = await tentarVincular(false);
+  if (!vinculado) {
+    logger.info(`[TAREFA] LID ${lidDigits} — nenhuma sessão recente sem LID encontrada.`);
+    // Rede de segurança: eco pode chegar antes de criarSessao concluir.
+    // Agenda UMA retentativa fire-and-forget após 3 s.
+    setTimeout(() => {
+      tentarVincular(true)
+        .then((ok) => {
+          if (!ok) logger.warn(`[TAREFA] LID ${lidDigits} — retentativa sem sessão encontrada; desistindo.`);
+        })
+        .catch((err) => {
+          logger.warn(`[TAREFA] LID ${lidDigits} — erro na retentativa: ${err?.message}`);
+        });
+    }, 3000);
+  }
+}
 
-  logger.info(`[TAREFA] LID ${lidDigits} vinculado à sessão ${sessao.id}`);
+/**
+ * Marca uma sessão como EXPIRADA pelo seu id.
+ * Usada pelo scheduler para rollback quando o envio falha após criarSessao.
+ *
+ * @param {string} id  ID da SessaoTarefa
+ */
+export async function marcarSessaoExpirada(id) {
+  await prisma.sessaoTarefa.update({
+    where: { id },
+    data:  { estado: 'EXPIRADA' },
+  });
 }
 
 // ─── Expiração de fim de dia ───────────────────────────────────────────────
