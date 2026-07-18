@@ -392,6 +392,23 @@ export async function processarMensagem(message, client, telefone, sessao) {
     // ── Enviar evidência para o Plateful ───────────────────────────────────
     await postEvidencia(sessao.tarefaId, evidenciaBody);
 
+    // ── Transição ENVIADA → AGUARDANDO_EVIDENCIA na primeira evidência ─────
+    // A máquina de estados do servidor exige essa passagem antes de CONCLUIDA.
+    // Feito aqui, após postEvidencia, para não bloquear o registro em caso de falha.
+    if (recebidas.length === 0) {
+      try {
+        await patchStatus(sessao.tarefaId, { status: 'AGUARDANDO_EVIDENCIA' });
+      } catch (transErr) {
+        if (transErr?.message?.includes('409')) {
+          // Já estava em AGUARDANDO_EVIDENCIA (retry ou corrida) — ignorar
+          logger.info(`[tarefaHandler] Sessão ${sessao.id} já em AGUARDANDO_EVIDENCIA — seguindo.`);
+        } else {
+          // Outros erros não bloqueiam o registro da evidência
+          logger.warn(`[tarefaHandler] Falha ao avançar para AGUARDANDO_EVIDENCIA (sessão=${sessao.id}): ${transErr?.message} — seguindo.`);
+        }
+      }
+    }
+
     // ── Atualizar evidenciasRecebidas ──────────────────────────────────────
     const novasRecebidas = [...recebidas, tipoMsg];
     await prisma.sessaoTarefa.update({
@@ -408,14 +425,29 @@ export async function processarMensagem(message, client, telefone, sessao) {
       const minutosAtraso = Math.max(0, Math.round((agora.getTime() - prazo.getTime()) / 60_000));
       const statusFinal  = minutosAtraso > 0 ? 'CONCLUIDA_COM_ATRASO' : 'CONCLUIDA';
 
-      await patchStatus(sessao.tarefaId, {
-        status:     statusFinal,
+      // ── Patch final com rede de segurança para sessões presas em ENVIADA ──
+      // Manter emRevisaoAdm = true se alguma evidência sinalizou revisão.
+      // O servidor só reseta se emRevisaoAdm for explicitamente false.
+      // Não enviamos nada aqui para não sobrescrever o flag setado pelo postEvidencia.
+      const patchFinalPayload = {
+        status:      statusFinal,
         concluidaEm: agora.toISOString(),
         minutosAtraso,
-        // Manter emRevisaoAdm = true se alguma evidência sinalizou revisão.
-        // O servidor só reseta se emRevisaoAdm for explicitamente false.
-        // Não enviamos nada aqui para não sobrescrever o flag setado pelo postEvidencia.
-      });
+      };
+
+      try {
+        await patchStatus(sessao.tarefaId, patchFinalPayload);
+      } catch (patchErr) {
+        if (patchErr?.message?.includes('409') && patchErr?.message?.includes('ENVIADA')) {
+          // Sessão antiga ficou presa em ENVIADA (sem AGUARDANDO_EVIDENCIA).
+          // Força a transição intermediária e repete o patch final uma vez.
+          logger.warn(`[tarefaHandler] Sessão ${sessao.id} presa em ENVIADA — forçando transição intermediária.`);
+          await patchStatus(sessao.tarefaId, { status: 'AGUARDANDO_EVIDENCIA' });
+          await patchStatus(sessao.tarefaId, patchFinalPayload);
+        } else {
+          throw patchErr; // outros erros → outer catch → mensagem de erro ao funcionário
+        }
+      }
 
       await prisma.sessaoTarefa.update({
         where: { id: sessao.id },
@@ -424,6 +456,7 @@ export async function processarMensagem(message, client, telefone, sessao) {
 
       // ── REGRA CRÍTICA: mensagem ao funcionário é sempre a mesma ──────────
       // Divergência, faixas, emRevisaoAdm → NUNCA mencionado aqui.
+      // Enviado APENAS após confirmação do patch final com sucesso.
       const msgConcluida = minutosAtraso > 0
         ? `✅ Tarefa registrada, obrigado! _(${minutosAtraso} min de atraso)_`
         : '✅ Tarefa registrada, obrigado!';
