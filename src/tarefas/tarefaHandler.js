@@ -110,27 +110,67 @@ function tipoEvidenciaDeMsg(message) {
  * Retorna sessões AGUARDANDO que correspondam ao telefone canonicalizado
  * OU ao LID gravado no momento do envio (match por qualquer um dos dois).
  *
+ * Só considera sessões criadas nas últimas 12 horas (janela de validade).
+ * Ordem: mais recente primeiro (DESC) — a sessão relevante é sempre a nova.
+ *
  * @param {string|null}  telefone   Telefone bruto (será canonicalizado internamente)
  * @param {string|null}  [lidDigits] Dígitos do LID (sem "@lid"), opcional
  */
 export async function getSessoesAtivas(telefone, lidDigits) {
   const telefoneCanon = telefone ? canonicalizarTelefone(telefone) : null;
 
-  // Monta filtros disponíveis para o OR
   const orFiltros = [];
   if (telefoneCanon) orFiltros.push({ telefone: telefoneCanon });
   if (lidDigits)     orFiltros.push({ lid: lidDigits });
 
   if (orFiltros.length === 0) return [];
 
+  const janela12h = new Date(Date.now() - 12 * 60 * 60 * 1000);
+
   return prisma.sessaoTarefa.findMany({
     where: {
-      estado: 'AGUARDANDO',
+      estado:    'AGUARDANDO',
+      criadaEm:  { gte: janela12h },
       // Se apenas um filtro, evita OR desnecessário; se dois, usa OR
       ...(orFiltros.length === 1 ? orFiltros[0] : { OR: orFiltros }),
     },
-    orderBy: { criadaEm: 'asc' },
+    orderBy: { criadaEm: 'desc' },
   });
+}
+
+/**
+ * Higiene contínua: expira (AGUARDANDO → EXPIRADA) todas as sessões do
+ * mesmo telefone/lid que já ultrapassaram 12 horas de idade.
+ * Executada a cada chamada de getSessaoAtiva, sem depender de cron.
+ *
+ * @param {string|null} telefone  já canonicalizado
+ * @param {string|null} lidDigits
+ */
+async function _expirarSessoesVelhas(telefone, lidDigits) {
+  const telefoneCanon = telefone ? canonicalizarTelefone(telefone) : null;
+
+  const orFiltros = [];
+  if (telefoneCanon) orFiltros.push({ telefone: telefoneCanon });
+  if (lidDigits)     orFiltros.push({ lid: lidDigits });
+
+  if (orFiltros.length === 0) return;
+
+  const limite = new Date(Date.now() - 12 * 60 * 60 * 1000);
+
+  const { count } = await prisma.sessaoTarefa.updateMany({
+    where: {
+      estado:    'AGUARDANDO',
+      criadaEm:  { lt: limite },
+      ...(orFiltros.length === 1 ? orFiltros[0] : { OR: orFiltros }),
+    },
+    data: { estado: 'EXPIRADA' },
+  });
+
+  if (count > 0) {
+    logger.info(
+      `[tarefaHandler] ${count} sessão(ões) obsoleta(s) expirada(s) automaticamente (tel=${telefoneCanon ?? lidDigits ?? '?'})`,
+    );
+  }
 }
 
 /**
@@ -138,6 +178,13 @@ export async function getSessoesAtivas(telefone, lidDigits) {
  * @param {string|null}  [lidDigits]
  */
 export async function getSessaoAtiva(telefone, lidDigits) {
+  // Higiene contínua antes de consultar: descarta sessões fora da janela de 12h
+  try {
+    await _expirarSessoesVelhas(telefone, lidDigits);
+  } catch (err) {
+    logger.warn(`[tarefaHandler] Erro ao expirar sessões velhas: ${err?.message}`);
+  }
+
   const sessoes = await getSessoesAtivas(telefone, lidDigits);
   return sessoes[0] ?? null;
 }
@@ -162,18 +209,32 @@ export async function criarSessao(
   validacaoIA = null,
   lid = null,
 ) {
+  const telefoneCanon = canonicalizarTelefone(telefone);
+
+  // Unicidade: garante no máximo uma sessão AGUARDANDO por funcionário.
+  // Expira qualquer sessão anterior antes de abrir a nova.
+  const { count: expiradas } = await prisma.sessaoTarefa.updateMany({
+    where: { telefone: telefoneCanon, estado: 'AGUARDANDO' },
+    data:  { estado: 'EXPIRADA' },
+  });
+  if (expiradas > 0) {
+    logger.info(
+      `[tarefaHandler/criarSessao] ${expiradas} sessão(ões) anterior(es) expirada(s) para tel=${telefoneCanon}`,
+    );
+  }
+
   return prisma.sessaoTarefa.create({
     data: {
       tarefaId,
-      telefone:           canonicalizarTelefone(telefone),
-      lid:                lid ?? null,
+      telefone:            telefoneCanon,
+      lid:                 lid ?? null,
       evidenciasExigidas,
       evidenciasRecebidas: [],
-      estado:             'AGUARDANDO',
-      enviadaEm:          enviadaEm instanceof Date ? enviadaEm : new Date(enviadaEm),
-      descricaoTarefa:    descricaoTarefa || null,
-      validacaoIA:        validacaoIA || null,
-      tentativasFoto:     0,
+      estado:              'AGUARDANDO',
+      enviadaEm:           enviadaEm instanceof Date ? enviadaEm : new Date(enviadaEm),
+      descricaoTarefa:     descricaoTarefa || null,
+      validacaoIA:         validacaoIA || null,
+      tentativasFoto:      0,
     },
   });
 }
