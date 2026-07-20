@@ -100,18 +100,12 @@ const shutdown = async (signal) => {
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-// Garantir que erros não capturados sejam logados, mas NÃO matar a sessão
-process.on('uncaughtException', async (error) => {
-  logger.error(`[whatsapp-worker] ❌ Exceção não capturada (sessão mantida):`, error);
-  // NÃO chamar stopClient() - apenas log do erro
-  // A sessão continua ativa para não interromper atendimento
-});
+// Rede de segurança global — apenas logar, nunca encerrar o processo
+process.on('unhandledRejection', (reason) =>
+  logger.error('[unhandledRejection]', reason?.stack || String(reason)));
 
-process.on('unhandledRejection', async (reason) => {
-  logger.error(`[whatsapp-worker] ❌ Promise rejection não tratada (sessão mantida):`, reason);
-  // NÃO chamar stopClient() - apenas log do erro
-  // A sessão continua ativa para não interromper atendimento
-});
+process.on('uncaughtException', (err) =>
+  logger.error('[uncaughtException]', err?.stack || String(err)));
 
 try {
   logger.info(`[whatsapp-worker] 🚀 Chamando startClient(${userId})...`);

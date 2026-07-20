@@ -180,14 +180,26 @@ export async function criarSessao(
 
 // ─── Download de mídia ────────────────────────────────────────────────────
 
+const TIMEOUT_MIDIA_MS = 30_000;
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`timeout ${label} ${ms / 1000}s`)), ms)),
+  ]);
+}
+
 async function baixarMidia(message, client) {
   try {
-    const buf = await client.decryptFile(message);
+    const buf = await withTimeout(client.decryptFile(message), TIMEOUT_MIDIA_MS, 'decryptFile');
     if (Buffer.isBuffer(buf) && buf.length > 0) return buf;
-  } catch {}
+  } catch (err) {
+    logger.warn(`[tarefaHandler/baixarMidia] decryptFile falhou: ${err?.message}`);
+  }
 
   try {
-    const resultado = await client.downloadMedia(message);
+    const resultado = await withTimeout(client.downloadMedia(message), TIMEOUT_MIDIA_MS, 'downloadMedia');
     if (!resultado) return null;
     if (Buffer.isBuffer(resultado)) return resultado;
     if (typeof resultado === 'string') {
@@ -195,7 +207,9 @@ async function baixarMidia(message, client) {
       const b64    = partes.length > 1 ? partes[1] : partes[0];
       return Buffer.from(b64, 'base64');
     }
-  } catch {}
+  } catch (err) {
+    logger.warn(`[tarefaHandler/baixarMidia] downloadMedia falhou: ${err?.message}`);
+  }
 
   return null;
 }
@@ -314,6 +328,7 @@ async function processarFoto(message, client, wppFrom, sessao, buffer) {
  */
 export async function processarMensagem(message, client, telefone, sessao) {
   const wppFrom = message.from;
+  const sid     = sessao.id;
 
   try {
     const tipoMsg   = tipoEvidenciaDeMsg(message);
@@ -328,10 +343,16 @@ export async function processarMensagem(message, client, telefone, sessao) {
     // ── Tipo não esperado ──────────────────────────────────────────────────
     if (!exigidas.includes(tipoMsg)) {
       if (faltando.length > 0) {
-        await client.sendText(
-          wppFrom,
-          `Ainda preciso de ${faltando.map((t) => `${ICONE[t]} ${DESCRICAO[t]}`).join(' e ')} pra concluir essa tarefa. 😊`,
-        );
+        logger.info(`[tarefaHandler][passo] sendText tipo-nao-esperado — início (sid=${sid})`);
+        try {
+          await client.sendText(
+            wppFrom,
+            `Ainda preciso de ${faltando.map((t) => `${ICONE[t]} ${DESCRICAO[t]}`).join(' e ')} pra concluir essa tarefa. 😊`,
+          );
+          logger.info(`[tarefaHandler][passo] sendText tipo-nao-esperado — ok (sid=${sid})`);
+        } catch (err) {
+          logger.error(`[tarefaHandler][passo] sendText tipo-nao-esperado — erro (sid=${sid})`, err?.stack);
+        }
       }
       return;
     }
@@ -340,10 +361,16 @@ export async function processarMensagem(message, client, telefone, sessao) {
     if (recebidas.includes(tipoMsg)) {
       const restante = faltando.filter((t) => t !== tipoMsg);
       if (restante.length > 0) {
-        await client.sendText(
-          wppFrom,
-          `Já recebi ${ICONE[tipoMsg]} ${DESCRICAO[tipoMsg]}! Ainda preciso de ${restante.map((t) => `${ICONE[t]} ${DESCRICAO[t]}`).join(' e ')}. 😊`,
-        );
+        logger.info(`[tarefaHandler][passo] sendText duplicata — início (sid=${sid})`);
+        try {
+          await client.sendText(
+            wppFrom,
+            `Já recebi ${ICONE[tipoMsg]} ${DESCRICAO[tipoMsg]}! Ainda preciso de ${restante.map((t) => `${ICONE[t]} ${DESCRICAO[t]}`).join(' e ')}. 😊`,
+          );
+          logger.info(`[tarefaHandler][passo] sendText duplicata — ok (sid=${sid})`);
+        } catch (err) {
+          logger.error(`[tarefaHandler][passo] sendText duplicata — erro (sid=${sid})`, err?.stack);
+        }
       }
       return;
     }
@@ -361,14 +388,44 @@ export async function processarMensagem(message, client, telefone, sessao) {
 
     } else if (tipoMsg === 'FOTO') {
       // FOTO: baixar mídia + validação por IA
-      const buffer = await baixarMidia(message, client);
+      logger.info(`[tarefaHandler][passo] decryptFile/downloadMedia (FOTO) — início (sid=${sid})`);
+      let buffer;
+      try {
+        buffer = await baixarMidia(message, client);
+        logger.info(`[tarefaHandler][passo] decryptFile/downloadMedia (FOTO) — ok, bytes=${buffer?.length ?? 0} (sid=${sid})`);
+      } catch (err) {
+        logger.error(`[tarefaHandler][passo] decryptFile/downloadMedia (FOTO) — erro (sid=${sid})`, err?.stack);
+        buffer = null;
+      }
+
       if (!buffer || buffer.length === 0) {
-        logger.warn('[tarefaHandler] Não foi possível baixar a foto.');
-        await client.sendText(wppFrom, 'Não consegui receber a foto, tenta mandar de novo? 😊');
+        logger.warn(`[tarefaHandler][passo] decryptFile/downloadMedia (FOTO) — sem buffer, pedindo reenvio (sid=${sid})`);
+        try {
+          await client.sendText(wppFrom, 'Não consegui baixar a foto, envia de novo? 😊');
+        } catch (err) {
+          logger.error(`[tarefaHandler][passo] sendText sem-foto — erro (sid=${sid})`, err?.stack);
+        }
         return;
       }
 
-      const resultadoFoto = await processarFoto(message, client, wppFrom, sessao, buffer);
+      logger.info(`[tarefaHandler][passo] validação IA (FOTO) — início (sid=${sid})`);
+      let resultadoFoto;
+      try {
+        resultadoFoto = await processarFoto(message, client, wppFrom, sessao, buffer);
+        logger.info(`[tarefaHandler][passo] validação IA (FOTO) — ok, resultado=${resultadoFoto === null ? 'recusada' : 'aceita'} (sid=${sid})`);
+      } catch (err) {
+        logger.error(`[tarefaHandler][passo] validação IA (FOTO) — erro (sid=${sid})`, err?.stack);
+        // Aceitar com flag de revisão para não perder a evidência
+        resultadoFoto = {
+          evidenciaBody: {
+            tipo:          'FOTO',
+            arquivoBase64: buffer.toString('base64'),
+            mimeType:      message.mimetype || 'image/jpeg',
+            analiseIA:     { divergencia: true, observacao: 'Erro interno na validação por IA.' },
+          },
+          emRevisaoAdm: true,
+        };
+      }
 
       if (resultadoFoto === null) {
         // Foto recusada por baixa qualidade — pedimos nova foto; saímos sem marcar
@@ -380,50 +437,74 @@ export async function processarMensagem(message, client, telefone, sessao) {
 
     } else {
       // ARQUIVO (document/audio/video/ptt)
-      const buffer = await baixarMidia(message, client);
+      logger.info(`[tarefaHandler][passo] decryptFile/downloadMedia (ARQUIVO) — início (sid=${sid})`);
+      let buffer;
+      try {
+        buffer = await baixarMidia(message, client);
+        logger.info(`[tarefaHandler][passo] decryptFile/downloadMedia (ARQUIVO) — ok, bytes=${buffer?.length ?? 0} (sid=${sid})`);
+      } catch (err) {
+        logger.error(`[tarefaHandler][passo] decryptFile/downloadMedia (ARQUIVO) — erro (sid=${sid})`, err?.stack);
+        buffer = null;
+      }
+
       if (buffer && buffer.length > 0) {
         evidenciaBody.arquivoBase64 = buffer.toString('base64');
         evidenciaBody.mimeType = message.mimetype || 'application/octet-stream';
       } else {
-        logger.warn('[tarefaHandler] Não foi possível baixar o arquivo, continuando sem ele.');
+        logger.warn(`[tarefaHandler][passo] decryptFile/downloadMedia (ARQUIVO) — sem buffer, continuando sem ele (sid=${sid})`);
       }
     }
 
     // ── Enviar evidência para o Plateful ───────────────────────────────────
-    await postEvidencia(sessao.tarefaId, evidenciaBody);
+    logger.info(`[tarefaHandler][passo] postEvidencia — início (sid=${sid})`);
+    try {
+      await postEvidencia(sessao.tarefaId, evidenciaBody);
+      logger.info(`[tarefaHandler][passo] postEvidencia — ok (sid=${sid})`);
+    } catch (err) {
+      logger.error(`[tarefaHandler][passo] postEvidencia — erro (sid=${sid})`, err?.stack);
+      throw err;
+    }
 
     // ── Transição ENVIADA → AGUARDANDO_EVIDENCIA na primeira evidência ─────
     // A máquina de estados do servidor exige essa passagem antes de CONCLUIDA.
-    // Feito aqui, após postEvidencia, para não bloquear o registro em caso de falha.
+    // Feito aqui, após postEvidencia; falha NÃO interrompe o restante do fluxo.
     if (recebidas.length === 0) {
+      logger.info(`[tarefaHandler][passo] patchStatus AGUARDANDO_EVIDENCIA — início (sid=${sid})`);
       try {
         await patchStatus(sessao.tarefaId, { status: 'AGUARDANDO_EVIDENCIA' });
+        logger.info(`[tarefaHandler][passo] patchStatus AGUARDANDO_EVIDENCIA — ok (sid=${sid})`);
       } catch (transErr) {
         if (transErr?.message?.includes('409')) {
-          // Já estava em AGUARDANDO_EVIDENCIA (retry ou corrida) — ignorar
-          logger.info(`[tarefaHandler] Sessão ${sessao.id} já em AGUARDANDO_EVIDENCIA — seguindo.`);
+          logger.info(`[tarefaHandler][passo] patchStatus AGUARDANDO_EVIDENCIA — 409 já estava, seguindo (sid=${sid})`);
         } else {
-          // Outros erros não bloqueiam o registro da evidência
-          logger.warn(`[tarefaHandler] Falha ao avançar para AGUARDANDO_EVIDENCIA (sessão=${sessao.id}): ${transErr?.message} — seguindo.`);
+          logger.error(`[tarefaHandler][passo] patchStatus AGUARDANDO_EVIDENCIA — erro (sid=${sid}): ${transErr?.message}`, transErr?.stack);
+          // não relança: persistência e resposta ao funcionário continuam
         }
       }
     }
 
     // ── Atualizar evidenciasRecebidas ──────────────────────────────────────
     const novasRecebidas = [...recebidas, tipoMsg];
-    await prisma.sessaoTarefa.update({
-      where: { id: sessao.id },
-      data:  { evidenciasRecebidas: novasRecebidas },
-    });
+    logger.info(`[tarefaHandler][passo] persistência banco evidenciasRecebidas — início (sid=${sid})`);
+    try {
+      await prisma.sessaoTarefa.update({
+        where: { id: sessao.id },
+        data:  { evidenciasRecebidas: novasRecebidas },
+      });
+      logger.info(`[tarefaHandler][passo] persistência banco evidenciasRecebidas — ok (sid=${sid})`);
+    } catch (err) {
+      logger.error(`[tarefaHandler][passo] persistência banco evidenciasRecebidas — erro (sid=${sid})`, err?.stack);
+      throw err;
+    }
 
     const todasRecebidas = exigidas.every((t) => novasRecebidas.includes(t));
 
     if (todasRecebidas) {
       // ── Calcular atraso ──────────────────────────────────────────────────
-      const agora        = new Date();
-      const prazo        = new Date(new Date(sessao.enviadaEm).getTime() + 5 * 60 * 1000);
+      const agora         = new Date();
+      const prazo         = new Date(new Date(sessao.enviadaEm).getTime() + 5 * 60 * 1000);
       const minutosAtraso = Math.max(0, Math.round((agora.getTime() - prazo.getTime()) / 60_000));
-      const statusFinal  = minutosAtraso > 0 ? 'CONCLUIDA_COM_ATRASO' : 'CONCLUIDA';
+      const statusFinal   = minutosAtraso > 0 ? 'CONCLUIDA_COM_ATRASO' : 'CONCLUIDA';
 
       // ── Patch final com rede de segurança para sessões presas em ENVIADA ──
       // Manter emRevisaoAdm = true se alguma evidência sinalizou revisão.
@@ -435,24 +516,35 @@ export async function processarMensagem(message, client, telefone, sessao) {
         minutosAtraso,
       };
 
+      logger.info(`[tarefaHandler][passo] patch final ${statusFinal} — início (sid=${sid})`);
       try {
         await patchStatus(sessao.tarefaId, patchFinalPayload);
+        logger.info(`[tarefaHandler][passo] patch final ${statusFinal} — ok (sid=${sid})`);
       } catch (patchErr) {
         if (patchErr?.message?.includes('409') && patchErr?.message?.includes('ENVIADA')) {
           // Sessão antiga ficou presa em ENVIADA (sem AGUARDANDO_EVIDENCIA).
           // Força a transição intermediária e repete o patch final uma vez.
-          logger.warn(`[tarefaHandler] Sessão ${sessao.id} presa em ENVIADA — forçando transição intermediária.`);
+          logger.warn(`[tarefaHandler][passo] patch final — sessão presa em ENVIADA, forçando transição (sid=${sid})`);
           await patchStatus(sessao.tarefaId, { status: 'AGUARDANDO_EVIDENCIA' });
           await patchStatus(sessao.tarefaId, patchFinalPayload);
+          logger.info(`[tarefaHandler][passo] patch final ${statusFinal} — ok após forçar transição (sid=${sid})`);
         } else {
-          throw patchErr; // outros erros → outer catch → mensagem de erro ao funcionário
+          logger.error(`[tarefaHandler][passo] patch final — erro (sid=${sid})`, patchErr?.stack);
+          throw patchErr; // outer catch → mensagem de erro ao funcionário
         }
       }
 
-      await prisma.sessaoTarefa.update({
-        where: { id: sessao.id },
-        data:  { estado: 'CONCLUIDA' },
-      });
+      logger.info(`[tarefaHandler][passo] persistência banco estado=CONCLUIDA — início (sid=${sid})`);
+      try {
+        await prisma.sessaoTarefa.update({
+          where: { id: sessao.id },
+          data:  { estado: 'CONCLUIDA' },
+        });
+        logger.info(`[tarefaHandler][passo] persistência banco estado=CONCLUIDA — ok (sid=${sid})`);
+      } catch (err) {
+        logger.error(`[tarefaHandler][passo] persistência banco estado=CONCLUIDA — erro (sid=${sid})`, err?.stack);
+        throw err;
+      }
 
       // ── REGRA CRÍTICA: mensagem ao funcionário é sempre a mesma ──────────
       // Divergência, faixas, emRevisaoAdm → NUNCA mencionado aqui.
@@ -461,7 +553,14 @@ export async function processarMensagem(message, client, telefone, sessao) {
         ? `✅ Tarefa registrada, obrigado! _(${minutosAtraso} min de atraso)_`
         : '✅ Tarefa registrada, obrigado!';
 
-      await client.sendText(wppFrom, msgConcluida);
+      logger.info(`[tarefaHandler][passo] sendText conclusão — início (sid=${sid})`);
+      try {
+        await client.sendText(wppFrom, msgConcluida);
+        logger.info(`[tarefaHandler][passo] sendText conclusão — ok (sid=${sid})`);
+      } catch (err) {
+        logger.error(`[tarefaHandler][passo] sendText conclusão — erro (sid=${sid})`, err?.stack);
+      }
+
       logger.info(
         `[tarefaHandler] ✅ Sessão ${sessao.id} concluída | atraso=${minutosAtraso}min | emRevisao=${emRevisaoAdmExtra}`,
       );
@@ -471,7 +570,7 @@ export async function processarMensagem(message, client, telefone, sessao) {
         try {
           const proximas = await getSessoesAtivas(telefone);
           if (proximas.length > 0) {
-            const proxima   = proximas[0];
+            const proxima    = proximas[0];
             const prFaltando = (proxima.evidenciasExigidas || []).filter(
               (t) => !(proxima.evidenciasRecebidas || []).includes(t),
             );
@@ -488,10 +587,16 @@ export async function processarMensagem(message, client, telefone, sessao) {
     } else {
       // Ainda faltam evidências — informar o que falta
       const ainda = exigidas.filter((t) => !novasRecebidas.includes(t));
-      await client.sendText(
-        wppFrom,
-        `Recebi! Ainda preciso de ${ainda.map((t) => `${ICONE[t]} ${DESCRICAO[t]}`).join(' e ')}. 😊`,
-      );
+      logger.info(`[tarefaHandler][passo] sendText falta-evidencias — início (sid=${sid})`);
+      try {
+        await client.sendText(
+          wppFrom,
+          `Recebi! Ainda preciso de ${ainda.map((t) => `${ICONE[t]} ${DESCRICAO[t]}`).join(' e ')}. 😊`,
+        );
+        logger.info(`[tarefaHandler][passo] sendText falta-evidencias — ok (sid=${sid})`);
+      } catch (err) {
+        logger.error(`[tarefaHandler][passo] sendText falta-evidencias — erro (sid=${sid})`, err?.stack);
+      }
     }
 
   } catch (err) {
