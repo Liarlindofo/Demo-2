@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
       inviteLink: buildInviteLink(inviteToken),
     }).catch(err => console.error('[POST /api/rh/motoboys] falha ao enviar e-mail de convite:', err));
 
-    return NextResponse.json({ ...rider, inviteToken, reativado }, { status: reativado ? 200 : 201 });
+    return NextResponse.json({ ...rider, inviteToken, inviteLink: buildInviteLink(inviteToken), reativado }, { status: reativado ? 200 : 201 });
   } catch (err) {
     console.error('[POST /api/rh/motoboys]', err);
     return NextResponse.json({ error: 'Erro interno ao cadastrar motoboy' }, { status: 500 });

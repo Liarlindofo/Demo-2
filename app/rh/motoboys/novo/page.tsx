@@ -23,7 +23,7 @@ export default function NovoMotoboyPage() {
   const [form, setForm] = useState({ name: '', cnpj: '', email: '', phone: '', lojaId: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [sucesso, setSucesso] = useState<{ inviteToken: string; reativado?: boolean } | null>(null);
+  const [sucesso, setSucesso] = useState<{ inviteToken: string; inviteLink?: string; reativado?: boolean } | null>(null);
   const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
@@ -51,12 +51,12 @@ export default function NovoMotoboyPage() {
         setError('Erro de comunicação com o servidor. Tente novamente.');
         return;
       }
-      setSucesso({ inviteToken: data.inviteToken, reativado: !!data.reativado });
+      setSucesso({ inviteToken: data.inviteToken, inviteLink: data.inviteLink, reativado: !!data.reativado });
     } finally { setSaving(false); }
   };
 
   const inviteUrl = sucesso
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/rider/setup?token=${sucesso.inviteToken}`
+    ? (sucesso.inviteLink ?? `${process.env.NEXT_PUBLIC_APP_URL ?? (typeof window !== 'undefined' ? window.location.origin : '')}/rider/setup?token=${sucesso.inviteToken}`)
     : '';
 
   const copiarLink = () => {
