@@ -1,8 +1,11 @@
 const FROM = 'Drin Platform <noreply@drin.com>';
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://drin.com';
+
+function getAppUrl(): string {
+  return process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? 'https://platefull.com.br';
+}
 
 export function buildInviteLink(token: string): string {
-  return `${APP_URL}/rider/setup?token=${token}`;
+  return `${getAppUrl()}/rider/setup?token=${token}`;
 }
 
 export function buildWhatsAppLink(phone: string | null | undefined, inviteLink: string): string | null {
@@ -67,7 +70,7 @@ export async function sendInviteEmail(params: {
 
           <p style="margin:0;font-size:13px;color:#9ca3af;">
             ⏳ Este link é válido por <strong>30 dias</strong>. Após acessar, você poderá entrar sempre em:
-            <br><a href="${APP_URL}/rider/login" style="color:#f97316;">${APP_URL}/rider/login</a>
+            <br><a href="${getAppUrl()}/rider/login" style="color:#f97316;">${getAppUrl()}/rider/login</a>
           </p>
         </td></tr>
 

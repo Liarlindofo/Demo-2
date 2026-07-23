@@ -91,10 +91,18 @@ export async function POST(req: NextRequest) {
     // Buscar loja para o e-mail
     const loja = await prisma.rhLoja.findUnique({ where: { id: body.lojaId }, select: { nome: true } });
 
-    // Verificar se e-mail já existe
-    const existente = await prisma.deliveryRider.findFirst({
-      where: { userId: ctx.userId, email: body.email.toLowerCase() },
-    });
+    // Verificar se e-mail ou CNPJ já existem
+    const [existentePorEmail, existentePorCnpj] = await Promise.all([
+      prisma.deliveryRider.findFirst({ where: { userId: ctx.userId, email: body.email.toLowerCase() } }),
+      prisma.deliveryRider.findFirst({ where: { userId: ctx.userId, cnpj: cnpjNums } }),
+    ]);
+
+    // CNPJ já usado por outro cadastro com e-mail diferente → conflito
+    if (existentePorCnpj && (!existentePorEmail || existentePorCnpj.id !== existentePorEmail.id)) {
+      return NextResponse.json({ error: 'CNPJ já cadastrado para outro motoboy' }, { status: 409 });
+    }
+
+    const existente = existentePorEmail ?? existentePorCnpj ?? null;
 
     let rider: { id: string; name: string; email: string; inviteToken: string | null };
     let reativado = false;
