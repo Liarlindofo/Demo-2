@@ -1,4 +1,4 @@
-const FROM = 'Drin Platform <noreply@drin.com>';
+const FROM = 'Platefull <noreply@send.platefull.com.br>';
 
 function getAppUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? 'https://platefull.com.br';
@@ -41,7 +41,7 @@ export async function sendInviteEmail(params: {
 
         <!-- Header -->
         <tr><td style="background:#0a0a0a;padding:32px 40px;text-align:center;">
-          <p style="margin:0;font-size:22px;font-weight:700;color:#f97316;">Drin Platform</p>
+          <p style="margin:0;font-size:22px;font-weight:700;color:#f97316;">Platefull</p>
           <p style="margin:6px 0 0;font-size:13px;color:#9ca3af;">Portal do Motoboy</p>
         </td></tr>
 
