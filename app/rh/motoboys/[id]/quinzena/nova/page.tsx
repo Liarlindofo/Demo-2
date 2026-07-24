@@ -50,6 +50,7 @@ export default function NovaQuinzenaPage() {
   const [rider, setRider] = useState<Rider | null>(null);
 
   const [periodStart, setPeriodStart] = useState(defaultStart());
+  const [periodEnd, setPeriodEnd] = useState(() => periodFromStart(defaultStart()).end);
   const [deliveryCount, setDeliveryCount] = useState('');
 
   const [deliveriesDisplay, setDeliveriesDisplay] = useState('');
@@ -87,7 +88,7 @@ export default function NovaQuinzenaPage() {
     setError('');
     if (totalBrutoCents <= 0) { setError('Informe ao menos o valor das entregas ou das diárias'); return; }
     setSaving(true);
-    const { label, end } = periodFromStart(periodStart);
+    const { label } = periodFromStart(periodStart);
     try {
       const res = await fetch(`/api/rh/motoboys/${id}/quinzenas`, {
         method: 'POST',
@@ -95,7 +96,7 @@ export default function NovaQuinzenaPage() {
         body: JSON.stringify({
           periodLabel: label,
           periodStart,
-          periodEnd: end,
+          periodEnd,
           deliveryCount: parseInt(deliveryCount || '0', 10),
           amountCents: totalBrutoCents,
           dailyRateCents: dailyCents,
@@ -108,7 +109,12 @@ export default function NovaQuinzenaPage() {
     } finally { setSaving(false); }
   };
 
-  const { label: previewLabel, end: previewEnd } = periodFromStart(periodStart);
+  const { label: previewLabel } = periodFromStart(periodStart);
+
+  const handleStartChange = (v: string) => {
+    setPeriodStart(v);
+    setPeriodEnd(periodFromStart(v).end);
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
@@ -136,16 +142,22 @@ export default function NovaQuinzenaPage() {
           {/* Campos principais */}
           <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 space-y-4">
 
-            {/* Data de início */}
-            <div>
-              <label className={labelCls}>Data de início *</label>
-              <input type="date" value={periodStart}
-                onChange={e => setPeriodStart(e.target.value)}
-                required className={inputCls} />
-              <p className="text-xs text-gray-600 mt-1.5">
-                {previewLabel} · até {new Date(previewEnd + 'T12:00:00').toLocaleDateString('pt-BR')}
-              </p>
+            {/* Data de início + Data fim */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Data de início *</label>
+                <input type="date" value={periodStart}
+                  onChange={e => handleStartChange(e.target.value)}
+                  required className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Data fim *</label>
+                <input type="date" value={periodEnd}
+                  onChange={e => setPeriodEnd(e.target.value)}
+                  required className={inputCls} />
+              </div>
             </div>
+            <p className="text-xs text-gray-600 -mt-2">{previewLabel}</p>
 
             <div className="border-t border-[#2a2a2e]" />
 
