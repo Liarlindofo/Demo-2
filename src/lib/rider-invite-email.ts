@@ -1,4 +1,4 @@
-const FROM = 'Platefull <noreply@send.platefull.com.br>';
+const FROM = 'Platefull <noreply@platefull.com.br>';
 
 function getAppUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? 'https://platefull.com.br';
