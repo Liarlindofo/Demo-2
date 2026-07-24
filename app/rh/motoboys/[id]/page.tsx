@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   ArrowLeft, Bike, Plus, Clock, CheckCircle, XCircle,
   FileText, Eye, Loader2, ChevronDown, ChevronUp, DollarSign,
-  Copy, RefreshCw, MessageCircle, CheckCircle2, ShieldCheck, ShieldOff, Trash2, AlertTriangle,
+  Copy, RefreshCw, MessageCircle, CheckCircle2, ShieldCheck, ShieldOff, Trash2, AlertTriangle, Pencil,
 } from 'lucide-react';
 
 interface Document { id: string; documentType: string; status: string; fileName: string; uploadedAt: string }
@@ -18,13 +18,14 @@ interface Period {
 interface Rider {
   id: string; name: string; cnpj: string; email: string; phone: string | null;
   status: string; passwordHash: string | null; createdAt: string;
-  loja: { nome: string }; paymentPeriods: Period[];
+  lojaId: string; loja: { nome: string }; paymentPeriods: Period[];
 }
 interface InviteData {
   link: string;
   expiresAt: string;
   whatsappLink: string | null;
 }
+interface Loja { id: string; nome: string }
 
 const PERIOD_STATUS: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   pending_documents: { label: 'Aguardando documentos', color: 'text-amber-400', icon: <Clock className="w-4 h-4" /> },
@@ -44,6 +45,15 @@ const fmtMoney = (cents: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('pt-BR');
 
+function maskCNPJ(v: string) {
+  return v.replace(/\D/g, '')
+    .replace(/(\d{2})(\d)/, '$1.$2')
+    .replace(/(\d{2}\.\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{2}\.\d{3}\.\d{3})(\d)/, '$1/$2')
+    .replace(/(\d{2}\.\d{3}\.\d{3}\/\d{4})(\d)/, '$1-$2')
+    .slice(0, 18);
+}
+
 export default function MotoboiDetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
@@ -57,6 +67,13 @@ export default function MotoboiDetailPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+
+  // Edit state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', cnpj: '', lojaId: '' });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [lojas, setLojas] = useState<Loja[]>([]);
 
   // Invite state
   const [inviteData, setInviteData] = useState<InviteData | null>(null);
@@ -146,6 +163,48 @@ export default function MotoboiDetailPage() {
     fetchRider();
   };
 
+  const openEditModal = async () => {
+    if (!rider) return;
+    setEditForm({
+      name: rider.name,
+      email: rider.email,
+      phone: rider.phone ?? '',
+      cnpj: fmtCNPJ(rider.cnpj),
+      lojaId: rider.lojaId,
+    });
+    setEditError('');
+    if (lojas.length === 0) {
+      const res = await fetch('/api/rh/lojas');
+      if (res.ok) setLojas(await res.json());
+    }
+    setShowEditModal(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!editForm.name.trim()) { setEditError('Nome é obrigatório'); return; }
+    setEditSaving(true);
+    setEditError('');
+    try {
+      const res = await fetch(`/api/rh/motoboys/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          email: editForm.email.trim(),
+          phone: editForm.phone.trim() || null,
+          cnpj: editForm.cnpj,
+          lojaId: editForm.lojaId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setEditError(data.error ?? 'Erro ao salvar'); return; }
+      setShowEditModal(false);
+      fetchRider();
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   if (loading) return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
       <Loader2 className="w-8 h-8 text-orange-400 animate-spin" />
@@ -185,6 +244,10 @@ export default function MotoboiDetailPage() {
             <button onClick={() => setShowDeleteModal(true)}
               className="flex items-center gap-1.5 px-4 py-2 text-sm text-red-400 border border-red-500/20 rounded-xl hover:bg-red-500/10 transition-colors">
               <Trash2 className="w-4 h-4" /> Apagar
+            </button>
+            <button onClick={openEditModal}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm text-gray-300 border border-[#2a2a2e] rounded-xl hover:bg-[#2a2a2e] transition-colors">
+              <Pencil className="w-4 h-4" /> Editar
             </button>
             {rider.status === 'active' ? (
               <button onClick={() => handleStatusRider('inactive')}
@@ -448,6 +511,107 @@ export default function MotoboiDetailPage() {
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-red-500 text-white rounded-xl hover:bg-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                 {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                 Apagar definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de edição */}
+      {showEditModal && rider && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => { if (!editSaving) setShowEditModal(false); }}>
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6 w-full max-w-lg space-y-5"
+            onClick={e => e.stopPropagation()}>
+
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-orange-500/10 flex items-center justify-center">
+                <Pencil className="w-4 h-4 text-orange-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-white">Editar motoboy</p>
+                <p className="text-xs text-gray-500">Atualize os dados cadastrais</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {/* Nome */}
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">Nome completo</label>
+                <input
+                  value={editForm.name}
+                  onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50 transition-colors"
+                />
+              </div>
+
+              {/* CNPJ */}
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">
+                  CNPJ {rider.passwordHash && <span className="text-amber-400">(bloqueado — senha já criada)</span>}
+                </label>
+                <input
+                  value={editForm.cnpj}
+                  onChange={e => setEditForm(f => ({ ...f, cnpj: maskCNPJ(e.target.value) }))}
+                  disabled={!!rider.passwordHash}
+                  className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                />
+              </div>
+
+              {/* E-mail */}
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">
+                  E-mail {rider.passwordHash && <span className="text-amber-400">(bloqueado — senha já criada)</span>}
+                </label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                  disabled={!!rider.passwordHash}
+                  className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                />
+              </div>
+
+              {/* Telefone */}
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">Telefone</label>
+                <input
+                  value={editForm.phone}
+                  onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                  placeholder="(00) 00000-0000"
+                  className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50 transition-colors"
+                />
+              </div>
+
+              {/* Loja */}
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">Loja vinculada</label>
+                <select
+                  value={editForm.lojaId}
+                  onChange={e => setEditForm(f => ({ ...f, lojaId: e.target.value }))}
+                  className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors">
+                  {lojas.map(l => (
+                    <option key={l.id} value={l.id}>{l.nome}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {editError && <p className="text-xs text-red-400">{editError}</p>}
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowEditModal(false)}
+                disabled={editSaving}
+                className="flex-1 px-4 py-2.5 text-sm text-gray-400 border border-[#2a2a2e] rounded-xl hover:bg-[#2a2a2e] transition-colors disabled:opacity-50">
+                Cancelar
+              </button>
+              <button
+                onClick={handleEditSave}
+                disabled={editSaving}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-orange-500 text-black rounded-xl hover:bg-orange-400 transition-colors disabled:opacity-50">
+                {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
+                Salvar alterações
               </button>
             </div>
           </div>

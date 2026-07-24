@@ -35,19 +35,51 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const body = await req.json() as {
     name?: string; phone?: string; lojaId?: string; status?: string;
+    email?: string; cnpj?: string;
   };
 
-  const result = await prisma.deliveryRider.updateMany({
-    where: { id, userId: rh.userId },
+  // Buscar o rider para verificar restrições
+  const rider = await prisma.deliveryRider.findFirst({ where: { id, userId: rh.userId } });
+  if (!rider) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
+
+  // E-mail e CNPJ só podem ser alterados se o motoboy ainda não definiu senha
+  if ((body.email !== undefined || body.cnpj !== undefined) && rider.passwordHash) {
+    return NextResponse.json(
+      { error: 'E-mail e CNPJ não podem ser alterados após o motoboy criar sua senha' },
+      { status: 409 }
+    );
+  }
+
+  // Verificar unicidade de e-mail (excluindo o próprio registro)
+  if (body.email !== undefined) {
+    const emailNorm = body.email.toLowerCase();
+    const existente = await prisma.deliveryRider.findFirst({
+      where: { userId: rh.userId, email: emailNorm, NOT: { id } },
+    });
+    if (existente) return NextResponse.json({ error: 'E-mail já cadastrado para outro motoboy' }, { status: 409 });
+  }
+
+  // Verificar unicidade de CNPJ (excluindo o próprio registro)
+  if (body.cnpj !== undefined) {
+    const cnpjNums = body.cnpj.replace(/\D/g, '');
+    const existente = await prisma.deliveryRider.findFirst({
+      where: { userId: rh.userId, cnpj: cnpjNums, NOT: { id } },
+    });
+    if (existente) return NextResponse.json({ error: 'CNPJ já cadastrado para outro motoboy' }, { status: 409 });
+  }
+
+  await prisma.deliveryRider.update({
+    where: { id },
     data: {
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...(body.phone !== undefined ? { phone: body.phone } : {}),
       ...(body.lojaId !== undefined ? { lojaId: body.lojaId } : {}),
       ...(body.status !== undefined ? { status: body.status } : {}),
+      ...(body.email !== undefined ? { email: body.email.toLowerCase() } : {}),
+      ...(body.cnpj !== undefined ? { cnpj: body.cnpj.replace(/\D/g, '') } : {}),
     },
   });
 
-  if (result.count === 0) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
 
