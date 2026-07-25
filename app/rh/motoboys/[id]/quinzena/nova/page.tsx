@@ -51,8 +51,6 @@ export default function NovaQuinzenaPage() {
 
   const [periodStart, setPeriodStart] = useState(defaultStart());
   const [periodEnd, setPeriodEnd] = useState(() => periodFromStart(defaultStart()).end);
-  const [deliveryCount, setDeliveryCount] = useState('');
-
   const [deliveriesDisplay, setDeliveriesDisplay] = useState('');
   const [deliveriesCents, setDeliveriesCents] = useState(0);
 
@@ -97,7 +95,6 @@ export default function NovaQuinzenaPage() {
           periodLabel: label,
           periodStart,
           periodEnd,
-          deliveryCount: parseInt(deliveryCount || '0', 10),
           amountCents: totalBrutoCents,
           dailyRateCents: dailyCents,
           discountCents,
@@ -160,14 +157,6 @@ export default function NovaQuinzenaPage() {
             <p className="text-xs text-gray-600 -mt-2">{previewLabel}</p>
 
             <div className="border-t border-[#2a2a2e]" />
-
-            {/* Qtd. de entregas */}
-            <div>
-              <label className={labelCls}>Qtd. de entregas</label>
-              <input type="number" min="0" value={deliveryCount}
-                onChange={e => setDeliveryCount(e.target.value)}
-                placeholder="0" className={inputCls} />
-            </div>
 
             {/* Valor total das entregas */}
             <div>
