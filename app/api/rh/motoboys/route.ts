@@ -40,7 +40,6 @@ export async function GET(req: NextRequest) {
     include: {
       loja: { select: { nome: true } },
       paymentPeriods: {
-        where: { status: { in: ['pending_documents', 'documents_received'] } },
         orderBy: { createdAt: 'desc' },
         take: 1,
         include: { documents: { select: { documentType: true, status: true } } },
