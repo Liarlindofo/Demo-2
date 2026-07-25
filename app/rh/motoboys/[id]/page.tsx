@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Bike, Plus, Clock, CheckCircle, XCircle,
-  FileText, Eye, Loader2, ChevronDown, ChevronUp, DollarSign,
+  FileText, Eye, Download, Loader2, ChevronDown, ChevronUp, DollarSign,
   Copy, RefreshCw, MessageCircle, CheckCircle2, ShieldCheck, ShieldOff, Trash2, AlertTriangle, Pencil,
 } from 'lucide-react';
 
@@ -62,6 +62,26 @@ export default function MotoboiDetailPage() {
   const [expandedPeriod, setExpandedPeriod] = useState<string | null>(null);
   const [loadingDocs, setLoadingDocs] = useState<Record<string, boolean>>({});
   const [docsSigned, setDocsSigned] = useState<Record<string, { id: string; documentType: string; signedUrl: string | null; status: string; fileName: string }[]>>({});
+
+  const [downloadingDoc, setDownloadingDoc] = useState<string | null>(null);
+
+  const handleDownloadDoc = async (signedUrl: string, fileName: string, docId: string) => {
+    setDownloadingDoc(docId);
+    try {
+      const res = await fetch(signedUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingDoc(null);
+    }
+  };
 
   // Delete state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -424,10 +444,21 @@ export default function MotoboiDetailPage() {
                                         </span>
                                         <div className="flex gap-1.5">
                                           {doc.signedUrl && (
-                                            <a href={doc.signedUrl} target="_blank" rel="noopener noreferrer"
-                                              className="flex items-center gap-1 px-2 py-1 bg-[#2a2a2e] text-gray-300 text-xs rounded-lg hover:text-white">
-                                              <Eye className="w-3 h-3" /> Ver
-                                            </a>
+                                            <>
+                                              <a href={doc.signedUrl} target="_blank" rel="noopener noreferrer"
+                                                className="flex items-center gap-1 px-2 py-1 bg-[#2a2a2e] text-gray-300 text-xs rounded-lg hover:text-white">
+                                                <Eye className="w-3 h-3" /> Ver
+                                              </a>
+                                              <button
+                                                onClick={() => handleDownloadDoc(doc.signedUrl!, doc.fileName, doc.id)}
+                                                disabled={downloadingDoc === doc.id}
+                                                className="flex items-center gap-1 px-2 py-1 bg-[#2a2a2e] text-gray-300 text-xs rounded-lg hover:text-white disabled:opacity-50">
+                                                {downloadingDoc === doc.id
+                                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                                  : <Download className="w-3 h-3" />}
+                                                Baixar
+                                              </button>
+                                            </>
                                           )}
                                           {doc.status === 'pending' && (
                                             <>
