@@ -12,8 +12,13 @@ import {
 interface Document { id: string; documentType: string; status: string; fileName: string; uploadedAt: string }
 interface Period {
   id: string; periodLabel: string; periodStart: string; periodEnd: string;
-  deliveryCount: number; amountCents: number; status: string;
+  deliveryCount: number; amountCents: number; dailyRateCents?: number;
+  discountCents?: number; status: string;
   documents: Document[];
+}
+
+function netCents(p: Period) {
+  return Math.max(0, p.amountCents - (p.discountCents ?? 0));
 }
 interface Rider {
   id: string; name: string; cnpj: string; email: string; phone: string | null;
@@ -412,16 +417,45 @@ export default function MotoboiDetailPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
-                        <span className="font-bold text-green-400 text-sm">{fmtMoney(period.amountCents)}</span>
+                        <span className="font-bold text-green-400 text-sm">{fmtMoney(netCents(period))}</span>
                         {isOpen ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
                       </div>
                     </button>
 
                     {isOpen && (
                       <div className="border-t border-[#2a2a2e] px-5 py-4 space-y-4">
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div><p className="text-gray-500 text-xs mb-0.5">Entregas</p><p className="text-white">{period.deliveryCount}</p></div>
-                          <div><p className="text-gray-500 text-xs mb-0.5">Valor</p><p className="text-green-400 font-bold">{fmtMoney(period.amountCents)}</p></div>
+                        <div className="space-y-2 text-sm">
+                          {(() => {
+                            const daily = period.dailyRateCents ?? 0;
+                            const discount = period.discountCents ?? 0;
+                            const deliveries = Math.max(0, period.amountCents - daily);
+                            return (
+                              <>
+                                {deliveries > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-500">Entregas</span>
+                                    <span className="text-white">{fmtMoney(deliveries)}</span>
+                                  </div>
+                                )}
+                                {daily > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-500">Diárias</span>
+                                    <span className="text-white">+ {fmtMoney(daily)}</span>
+                                  </div>
+                                )}
+                                {discount > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-500">Desconto</span>
+                                    <span className="text-red-400">− {fmtMoney(discount)}</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between border-t border-[#2a2a2e] pt-2">
+                                  <span className="text-gray-400 font-medium">A receber</span>
+                                  <span className="text-green-400 font-bold">{fmtMoney(netCents(period))}</span>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
                         <div>
                           <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Documentos</p>

@@ -8,8 +8,12 @@ import { Bike, LogOut, Clock, FileText, CheckCircle, DollarSign, ChevronRight, H
 interface Document { documentType: string; status: string }
 interface Period {
   id: string; periodLabel: string; periodStart: string; periodEnd: string;
-  deliveryCount: number; amountCents: number; status: string;
+  deliveryCount: number; amountCents: number; discountCents?: number; status: string;
   documents: Document[];
+}
+
+function netCents(p: Period) {
+  return Math.max(0, p.amountCents - (p.discountCents ?? 0));
 }
 
 const STATUS_CONFIG = {
@@ -103,7 +107,7 @@ export default function RiderDashboard() {
             </div>
             <p className="text-white font-medium">{pendente.periodLabel}</p>
             <p className="text-sm text-gray-400 mt-1">
-              {fmtDate(pendente.periodStart)} – {fmtDate(pendente.periodEnd)} · {pendente.deliveryCount} entregas · {fmtMoney(pendente.amountCents)}
+              {fmtDate(pendente.periodStart)} – {fmtDate(pendente.periodEnd)} · {pendente.deliveryCount} entregas · {fmtMoney(netCents(pendente))}
             </p>
             <div className="mt-4 flex items-center justify-between">
               <span className="text-sm font-semibold text-amber-400">Enviar NF e boleto</span>
@@ -144,7 +148,7 @@ export default function RiderDashboard() {
                       </span>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-semibold text-white">{fmtMoney(period.amountCents)}</p>
+                      <p className="text-sm font-semibold text-white">{fmtMoney(netCents(period))}</p>
                       <p className="text-xs text-gray-500">{period.periodLabel}</p>
                     </div>
                   </Link>

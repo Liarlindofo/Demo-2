@@ -7,7 +7,11 @@ import { ArrowLeft, Bike, DollarSign, CheckCircle, Clock, FileText } from 'lucid
 
 interface Period {
   id: string; periodLabel: string; periodStart: string; periodEnd: string;
-  deliveryCount: number; amountCents: number; status: string;
+  deliveryCount: number; amountCents: number; discountCents?: number; status: string;
+}
+
+function netCents(p: Period) {
+  return Math.max(0, p.amountCents - (p.discountCents ?? 0));
 }
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
@@ -37,7 +41,7 @@ export default function RiderHistoricoPage() {
   const anoAtual = new Date().getFullYear();
   const totalAno = periods
     .filter(p => ['approved', 'paid'].includes(p.status) && new Date(p.periodEnd).getFullYear() === anoAtual)
-    .reduce((s, p) => s + p.amountCents, 0);
+    .reduce((s, p) => s + netCents(p), 0);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
@@ -91,7 +95,7 @@ export default function RiderHistoricoPage() {
                     </p>
                   </div>
                   <div className="text-right space-y-1">
-                    <p className="text-sm font-bold text-green-400">{fmtMoney(period.amountCents)}</p>
+                    <p className="text-sm font-bold text-green-400">{fmtMoney(netCents(period))}</p>
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
                   </div>
                 </Link>

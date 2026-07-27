@@ -11,8 +11,13 @@ import {
 interface Doc { documentType: string; status: string; fileName: string; uploadedAt: string }
 interface Period {
   id: string; periodLabel: string; periodStart: string; periodEnd: string;
-  deliveryCount: number; amountCents: number; status: string; summary: string | null;
+  deliveryCount: number; amountCents: number; dailyRateCents?: number;
+  discountCents?: number; status: string; summary: string | null;
   documents: Doc[];
+}
+
+function netCents(p: Period) {
+  return Math.max(0, p.amountCents - (p.discountCents ?? 0));
 }
 
 const fmtMoney = (cents: number) =>
@@ -119,9 +124,40 @@ export default function RiderQuinzenaPage() {
               <p className="text-white font-medium">{period.deliveryCount}</p>
             </div>
           </div>
+          {((period.dailyRateCents ?? 0) > 0 || (period.discountCents ?? 0) > 0) && (
+            <div className="space-y-1.5 text-sm">
+              {(() => {
+                const daily = period.dailyRateCents ?? 0;
+                const discount = period.discountCents ?? 0;
+                const deliveries = Math.max(0, period.amountCents - daily);
+                return (
+                  <>
+                    {deliveries > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Entregas</span>
+                        <span className="text-white">{fmtMoney(deliveries)}</span>
+                      </div>
+                    )}
+                    {daily > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Diárias</span>
+                        <span className="text-white">+ {fmtMoney(daily)}</span>
+                      </div>
+                    )}
+                    {discount > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Desconto</span>
+                        <span className="text-red-400">− {fmtMoney(discount)}</span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
           <div className="bg-[#0a0a0a] rounded-xl p-4 text-center">
             <p className="text-xs text-gray-500 mb-1">Valor a receber</p>
-            <p className="text-3xl font-bold text-green-400">{fmtMoney(period.amountCents)}</p>
+            <p className="text-3xl font-bold text-green-400">{fmtMoney(netCents(period))}</p>
           </div>
           {period.summary && (
             <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4">
@@ -205,7 +241,7 @@ export default function RiderQuinzenaPage() {
           <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-5 text-center">
             <CheckCircle className="w-8 h-8 text-green-400 mx-auto mb-2" />
             <p className="font-semibold text-green-400">Quinzena aprovada!</p>
-            <p className="text-sm text-gray-400 mt-1">O pagamento de {fmtMoney(period.amountCents)} será processado em breve.</p>
+            <p className="text-sm text-gray-400 mt-1">O pagamento de {fmtMoney(netCents(period))} será processado em breve.</p>
           </div>
         )}
 
@@ -213,7 +249,7 @@ export default function RiderQuinzenaPage() {
           <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-5 text-center">
             <DollarSign className="w-8 h-8 text-green-500 mx-auto mb-2" />
             <p className="font-semibold text-green-500">Pagamento realizado!</p>
-            <p className="text-sm text-gray-400 mt-1">{fmtMoney(period.amountCents)} pago.</p>
+            <p className="text-sm text-gray-400 mt-1">{fmtMoney(netCents(period))} pago.</p>
           </div>
         )}
       </div>
