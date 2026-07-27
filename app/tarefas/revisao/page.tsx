@@ -72,12 +72,15 @@ function EvidenciaCard({ ev }: { ev: Evidencia }) {
               className={`rounded-xl border border-[#2a2a2e] object-cover cursor-pointer transition-all ${fotoExpandida ? 'max-h-[480px] w-full object-contain' : 'max-h-48 w-full'}`}
               onClick={() => setFotoExpandida((v) => !v)}
             />
-            <button
-              onClick={() => setFotoExpandida((v) => !v)}
+            <a
+              href={ev.urlArquivo}
+              target="_blank"
+              rel="noopener noreferrer"
               className="absolute top-2 right-2 bg-black/60 rounded-lg p-1.5 hover:bg-black/80 transition-colors"
+              title="Abrir em nova aba"
             >
               <Eye className="w-3.5 h-3.5 text-white" />
-            </button>
+            </a>
             <p className="text-xs text-gray-500 mt-1">
               {fotoExpandida ? 'Clique para reduzir' : 'Clique para ampliar'}
             </p>
@@ -205,7 +208,9 @@ function AnaliseIACard({ ia }: { ia: AnaliseIA }) {
         {ia.confianca !== undefined && (
           <>
             <span className="text-gray-500">Confiança da IA</span>
-            <span className="text-white">{Math.round(ia.confianca * 100)}%</span>
+            <span className="text-white">
+              {Math.round(ia.confianca <= 1 ? ia.confianca * 100 : ia.confianca)}%
+            </span>
           </>
         )}
       </div>
