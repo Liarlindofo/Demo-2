@@ -21,6 +21,7 @@ import {
   ClipboardList,
   AlertCircle,
 } from 'lucide-react';
+import DateTimePicker from '@/components/ui/date-time-picker';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,8 @@ interface SlotConfig {
   recorrenciaTipo: 'diaria' | 'semanal';
   diasSemana: number[];
   dataFim: string;
+  /** Quando true, omite dataFim no payload; backend usa teto de 90 dias. */
+  semDataFim: boolean;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -166,7 +169,11 @@ function contarDatasSlot(slot: SlotConfig): number {
   if (!slot.repetir) return 1;
 
   const dataInicio = new Date(`${slot.data}T00:00:00`);
-  const dataFimBase = slot.dataFim ? new Date(`${slot.dataFim}T23:59:59`) : null;
+  // Sem dataFim (ou semDataFim) → usa teto de 90 dias, igual ao backend
+  const dataFimBase =
+    !slot.semDataFim && slot.dataFim
+      ? new Date(`${slot.dataFim}T23:59:59`)
+      : null;
   const maxDataFim = new Date(dataInicio.getTime() + 90 * 24 * 60 * 60 * 1000);
   const efetiveFim =
     dataFimBase && dataFimBase < maxDataFim ? dataFimBase : maxDataFim;
@@ -435,6 +442,7 @@ export default function AtribuicoesPage() {
         recorrenciaTipo: 'diaria',
         diasSemana: [],
         dataFim: addDays(selectedDate, 7),
+        semDataFim: false,
       }));
       setWSlots(slots);
       setWizardStep(3);
@@ -453,6 +461,10 @@ export default function AtribuicoesPage() {
           slot.diasSemana.length === 0
         ) {
           setWError('Selecione pelo menos um dia da semana para a recorrência semanal.');
+          return;
+        }
+        if (slot.repetir && !slot.semDataFim && !slot.dataFim) {
+          setWError('Informe a data final da recorrência ou marque "Sem data de término".');
           return;
         }
         const dt = new Date(`${slot.data}T${slot.horario}:00`);
@@ -507,7 +519,8 @@ export default function AtribuicoesPage() {
               ...(slot.recorrenciaTipo === 'semanal' && {
                 diasSemana: slot.diasSemana,
               }),
-              ...(slot.dataFim && { dataFim: slot.dataFim }),
+              // Sem dataFim → API materializa até o teto de 90 dias
+              ...(!slot.semDataFim && slot.dataFim && { dataFim: slot.dataFim }),
             }
           : { tipo: 'unica' as const },
       }));
@@ -1049,29 +1062,34 @@ export default function AtribuicoesPage() {
                         </span>
                       </div>
 
-                      {/* Data + Horário */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className={labelCls}>Data de início</label>
-                          <input
-                            type="date"
-                            value={slot.data}
-                            min={today}
-                            onChange={(e) => updateSlot(idx, 'data', e.target.value)}
-                            className={inputCls}
-                          />
-                        </div>
-                        <div>
-                          <label className={labelCls}>
-                            Horário limite <span className="text-red-400">*</span>
-                          </label>
-                          <input
-                            type="time"
-                            value={slot.horario}
-                            onChange={(e) => updateSlot(idx, 'horario', e.target.value)}
-                            className={inputCls}
-                          />
-                        </div>
+                      {/* Data + Horário (campo único) */}
+                      <div>
+                        <label className={labelCls}>
+                          Data e horário limite <span className="text-red-400">*</span>
+                        </label>
+                        <DateTimePicker
+                          date={slot.data}
+                          time={slot.horario}
+                          minDate={new Date(`${today}T00:00:00`)}
+                          onDateChange={(d) => {
+                            setWSlots((prev) =>
+                              prev.map((s, i) => {
+                                if (i !== idx) return s;
+                                const next = { ...s, data: d };
+                                // Mantém dataFim válida em relação ao novo início
+                                if (
+                                  !s.semDataFim &&
+                                  s.dataFim &&
+                                  s.dataFim <= d
+                                ) {
+                                  next.dataFim = addDays(d, 7);
+                                }
+                                return next;
+                              }),
+                            );
+                          }}
+                          onTimeChange={(t) => updateSlot(idx, 'horario', t)}
+                        />
                       </div>
 
                       {/* Toggle repetir */}
@@ -1147,23 +1165,59 @@ export default function AtribuicoesPage() {
                             </div>
                           )}
 
+                          {/* Sem data de término */}
+                          <label className="flex items-center gap-2.5 cursor-pointer w-fit select-none">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setWSlots((prev) =>
+                                  prev.map((s, i) => {
+                                    if (i !== idx) return s;
+                                    const nextSem = !s.semDataFim;
+                                    return {
+                                      ...s,
+                                      semDataFim: nextSem,
+                                      dataFim: nextSem
+                                        ? ''
+                                        : s.dataFim || addDays(s.data, 7),
+                                    };
+                                  }),
+                                );
+                              }}
+                              className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
+                                slot.semDataFim ? 'bg-amber-500' : 'bg-[#3a3a3e]'
+                              }`}
+                              aria-checked={slot.semDataFim}
+                              role="switch"
+                            >
+                              <span
+                                className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
+                                style={{ left: slot.semDataFim ? '18px' : '2px' }}
+                              />
+                            </button>
+                            <span className="text-sm text-gray-300">Sem data de término</span>
+                          </label>
+
                           {/* Data final */}
-                          <div>
-                            <label className={labelCls}>
-                              Data final{' '}
-                              <span className="text-gray-600 font-normal">
-                                (máx. 90 dias)
-                              </span>
-                            </label>
-                            <input
-                              type="date"
-                              value={slot.dataFim}
-                              min={addDays(slot.data, 1)}
-                              max={addDays(slot.data, 90)}
-                              onChange={(e) => updateSlot(idx, 'dataFim', e.target.value)}
-                              className={inputCls}
-                            />
-                          </div>
+                          {!slot.semDataFim && (
+                            <div>
+                              <label className={labelCls}>
+                                Data final{' '}
+                                <span className="text-red-400">*</span>{' '}
+                                <span className="text-gray-600 font-normal">
+                                  (máx. 90 dias)
+                                </span>
+                              </label>
+                              <input
+                                type="date"
+                                value={slot.dataFim}
+                                min={addDays(slot.data, 1)}
+                                max={addDays(slot.data, 90)}
+                                onChange={(e) => updateSlot(idx, 'dataFim', e.target.value)}
+                                className={inputCls}
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -1178,6 +1232,9 @@ export default function AtribuicoesPage() {
                             Serão criadas{' '}
                             <span className="text-amber-400 font-semibold">{nDatas}</span>{' '}
                             atribuiç{nDatas === 1 ? 'ão' : 'ões'}
+                            {slot.repetir && slot.semDataFim && (
+                              <span className="text-gray-600"> (próx. 90 dias)</span>
+                            )}
                           </>
                         )}
                       </p>
@@ -1236,7 +1293,12 @@ export default function AtribuicoesPage() {
                           <span className="text-xs text-gray-500 flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
                             {ptDate(slot.data)}
-                            {slot.repetir && slot.dataFim && ` → ${ptDate(slot.dataFim)}`}
+                            {slot.repetir &&
+                              (slot.semDataFim
+                                ? ' → sem término'
+                                : slot.dataFim
+                                  ? ` → ${ptDate(slot.dataFim)}`
+                                  : '')}
                           </span>
                           <span className="text-xs text-gray-500 flex items-center gap-1">
                             <Clock className="w-3 h-3" />
