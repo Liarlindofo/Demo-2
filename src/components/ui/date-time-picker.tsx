@@ -9,12 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0"));
-const MINUTES = ["00", "15", "30", "45"];
-
-function snapMinute(m: number): string {
-  const snapped = Math.round(m / 15) * 15;
-  return (snapped === 60 ? 45 : snapped).toString().padStart(2, "0");
-}
+const MINUTES = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, "0"));
 
 function parseYmd(ymd: string): Date | undefined {
   if (!ymd) return undefined;
@@ -63,7 +58,7 @@ export default function DateTimePicker({
 
   const minute = React.useMemo(() => {
     const m = parseInt((time || "08:00").split(":")[1] ?? "0", 10);
-    return snapMinute(m || 0);
+    return Math.min(59, Math.max(0, m || 0)).toString().padStart(2, "0");
   }, [time]);
 
   const minTs = React.useMemo(() => {
