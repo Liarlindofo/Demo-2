@@ -42,7 +42,7 @@ async function sendResetEmail(params: { to: string; riderName: string; link: str
           </table>
           <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">Ou copie e cole este link no seu navegador:</p>
           <p style="margin:0 0 24px;font-size:12px;color:#f97316;word-break:break-all;">${link}</p>
-          <p style="margin:0 0 8px;font-size:13px;color:#9ca3af;">⏳ Este link expira em <strong>2 horas</strong>.</p>
+          <p style="margin:0 0 8px;font-size:13px;color:#9ca3af;">⏳ Este link expira em <strong>24 horas</strong>.</p>
           <p style="margin:0;font-size:13px;color:#9ca3af;">
             Se você não solicitou a redefinição de senha, ignore este e-mail. Sua senha continua a mesma.
           </p>
@@ -80,7 +80,7 @@ async function sendResetEmail(params: { to: string; riderName: string; link: str
 
 export const dynamic = 'force-dynamic';
 
-const RESET_HOURS = 2; // link expira em 2 horas
+const RESET_HOURS = 24; // link expira em 24 horas
 
 /**
  * POST /api/rider/forgot-password

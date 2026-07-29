@@ -47,7 +47,7 @@ function ForgotPasswordForm({ onVoltar }: { onVoltar: () => void }) {
             você receberá um link para redefinir sua senha em instantes.
           </p>
         </div>
-        <p className="text-xs text-gray-600">O link expira em 2 horas.</p>
+        <p className="text-xs text-gray-600">O link expira em 24 horas.</p>
         <button
           onClick={onVoltar}
           className="w-full py-3 rounded-xl bg-[#1c1c1e] border border-[#2a2a2e] text-gray-300 text-sm font-medium hover:bg-[#2a2a2e] transition-colors"
