@@ -7,41 +7,37 @@ import { ArrowLeft, Check, Loader2, DollarSign } from 'lucide-react';
 interface Rider { id: string; name: string; loja: { nome: string } }
 
 const inputCls = 'w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50 transition-colors';
+const selectCls = 'w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors appearance-none cursor-pointer';
 const labelCls = 'text-xs font-medium text-gray-400 mb-1.5 block';
+
+const MESES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+function calcPeriod(mes: number, ano: number, quinzena: 1 | 2) {
+  // mes: 1–12
+  const monthIdx = mes - 1;
+  const monthName = MESES[monthIdx];
+  if (quinzena === 1) {
+    const start = new Date(ano, monthIdx, 1).toISOString().split('T')[0];
+    const end   = new Date(ano, monthIdx, 15).toISOString().split('T')[0];
+    return { label: `1ª Quinzena ${monthName}/${ano}`, start, end };
+  }
+  const start = new Date(ano, monthIdx, 16).toISOString().split('T')[0];
+  const end   = new Date(ano, monthIdx + 1, 0).toISOString().split('T')[0]; // último dia do mês
+  return { label: `2ª Quinzena ${monthName}/${ano}`, start, end };
+}
 
 function fmt(cents: number) {
   return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
-
 function parseCents(display: string): number {
   return parseInt(display.replace(/\D/g, '') || '0', 10);
 }
-
 function maskMoney(v: string): string {
   const cents = parseInt(v.replace(/\D/g, '') || '0', 10);
   return (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-}
-
-function periodFromStart(startIso: string): { label: string; end: string } {
-  const d = new Date(startIso + 'T12:00:00');
-  const day = d.getDate();
-  const month = d.toLocaleString('pt-BR', { month: 'long' });
-  const year = d.getFullYear();
-  const monthCap = month.charAt(0).toUpperCase() + month.slice(1);
-  if (day <= 15) {
-    const end = new Date(year, d.getMonth(), 15).toISOString().split('T')[0];
-    return { label: `1ª Quinzena ${monthCap}/${year}`, end };
-  }
-  const end = new Date(year, d.getMonth() + 1, 0).toISOString().split('T')[0];
-  return { label: `2ª Quinzena ${monthCap}/${year}`, end };
-}
-
-function defaultStart(): string {
-  const now = new Date();
-  const day = now.getDate();
-  return day <= 15
-    ? new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-    : new Date(now.getFullYear(), now.getMonth(), 16).toISOString().split('T')[0];
 }
 
 export default function NovaQuinzenaPage() {
@@ -49,22 +45,30 @@ export default function NovaQuinzenaPage() {
   const { id } = useParams<{ id: string }>();
   const [rider, setRider] = useState<Rider | null>(null);
 
-  const [periodStart, setPeriodStart] = useState(defaultStart());
-  const [periodEnd, setPeriodEnd] = useState(() => periodFromStart(defaultStart()).end);
+  // Período — mês, ano e quinzena
+  const now = new Date();
+  const [mes,      setMes]      = useState(now.getMonth() + 1);             // 1–12
+  const [ano,      setAno]      = useState(now.getFullYear());
+  const [quinzena, setQuinzena] = useState<1 | 2>(now.getDate() <= 15 ? 1 : 2);
+
+  const { label, start: periodStart, end: periodEnd } = calcPeriod(mes, ano, quinzena);
+
+  // Financeiro
   const [deliveriesDisplay, setDeliveriesDisplay] = useState('');
-  const [deliveriesCents, setDeliveriesCents] = useState(0);
-
-  const [dailyDisplay, setDailyDisplay] = useState('');
-  const [dailyCents, setDailyCents] = useState(0);
-
-  const [discountDisplay, setDiscountDisplay] = useState('');
-  const [discountCents, setDiscountCents] = useState(0);
+  const [deliveriesCents,   setDeliveriesCents]   = useState(0);
+  const [dailyDisplay,      setDailyDisplay]       = useState('');
+  const [dailyCents,        setDailyCents]         = useState(0);
+  const [discountDisplay,   setDiscountDisplay]    = useState('');
+  const [discountCents,     setDiscountCents]      = useState(0);
 
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [error,  setError]  = useState('');
 
   const totalBrutoCents = deliveriesCents + dailyCents;
   const netCents = Math.max(0, totalBrutoCents - discountCents);
+
+  // Anos disponíveis: ano atual e os 2 anteriores
+  const anos = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
   useEffect(() => {
     fetch(`/api/rh/motoboys/${id}`)
@@ -86,7 +90,6 @@ export default function NovaQuinzenaPage() {
     setError('');
     if (totalBrutoCents <= 0) { setError('Informe ao menos o valor das entregas ou das diárias'); return; }
     setSaving(true);
-    const { label } = periodFromStart(periodStart);
     try {
       const res = await fetch(`/api/rh/motoboys/${id}/quinzenas`, {
         method: 'POST',
@@ -95,7 +98,7 @@ export default function NovaQuinzenaPage() {
           periodLabel: label,
           periodStart,
           periodEnd,
-          amountCents: totalBrutoCents,
+          amountCents:    totalBrutoCents,
           dailyRateCents: dailyCents,
           discountCents,
         }),
@@ -104,13 +107,6 @@ export default function NovaQuinzenaPage() {
       if (!res.ok) { setError(data.error ?? 'Erro ao lançar quinzena'); return; }
       router.push(`/rh/motoboys/${id}`);
     } finally { setSaving(false); }
-  };
-
-  const { label: previewLabel } = periodFromStart(periodStart);
-
-  const handleStartChange = (v: string) => {
-    setPeriodStart(v);
-    setPeriodEnd(periodFromStart(v).end);
   };
 
   return (
@@ -136,25 +132,70 @@ export default function NovaQuinzenaPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
 
-          {/* Campos principais */}
+          {/* Período */}
           <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 space-y-4">
 
-            {/* Data de início + Data fim */}
+            {/* Mês + Ano */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Data de início *</label>
-                <input type="date" value={periodStart}
-                  onChange={e => handleStartChange(e.target.value)}
-                  required className={inputCls} />
+                <label className={labelCls}>Mês *</label>
+                <div className="relative">
+                  <select
+                    value={mes}
+                    onChange={e => setMes(Number(e.target.value))}
+                    className={selectCls}
+                  >
+                    {MESES.map((m, i) => (
+                      <option key={i} value={i + 1}>{m}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div>
-                <label className={labelCls}>Data fim *</label>
-                <input type="date" value={periodEnd}
-                  onChange={e => setPeriodEnd(e.target.value)}
-                  required className={inputCls} />
+                <label className={labelCls}>Ano *</label>
+                <div className="relative">
+                  <select
+                    value={ano}
+                    onChange={e => setAno(Number(e.target.value))}
+                    className={selectCls}
+                  >
+                    {anos.map(a => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
-            <p className="text-xs text-gray-600 -mt-2">{previewLabel}</p>
+
+            {/* Quinzena */}
+            <div>
+              <label className={labelCls}>Quinzena *</label>
+              <div className="grid grid-cols-2 gap-3">
+                {([1, 2] as const).map(q => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => setQuinzena(q)}
+                    className={`py-3 rounded-xl text-sm font-semibold border transition-all ${
+                      quinzena === q
+                        ? 'bg-orange-500 text-black border-orange-500'
+                        : 'bg-[#0a0a0a] text-gray-300 border-[#2a2a2e] hover:border-orange-500/40'
+                    }`}
+                  >
+                    {q === 1 ? '1ª Quinzena' : '2ª Quinzena'}
+                    <span className={`block text-xs mt-0.5 font-normal ${quinzena === q ? 'text-black/70' : 'text-gray-600'}`}>
+                      {q === 1 ? `01 – 15 ${MESES[mes - 1].slice(0, 3)}` : `16 – ${new Date(ano, mes, 0).getDate()} ${MESES[mes - 1].slice(0, 3)}`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Preview do período */}
+            <div className="bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-2.5 flex items-center justify-between">
+              <span className="text-xs text-gray-500">Período gerado</span>
+              <span className="text-xs font-semibold text-orange-400">{label}</span>
+            </div>
 
             <div className="border-t border-[#2a2a2e]" />
 
@@ -171,7 +212,7 @@ export default function NovaQuinzenaPage() {
 
             {/* Valor total de diárias */}
             <div>
-              <label className={labelCls}>Valor total de diárias</label>
+              <label className={labelCls}>Valor da diária</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">R$</span>
                 <input value={dailyDisplay}
@@ -194,7 +235,7 @@ export default function NovaQuinzenaPage() {
             </div>
           </div>
 
-          {/* Total a pagar — sempre visível */}
+          {/* Total a pagar */}
           <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 space-y-3">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total a pagar ao motoboy</p>
             <div className="space-y-2">
