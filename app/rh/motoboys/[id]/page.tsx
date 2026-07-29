@@ -106,6 +106,12 @@ export default function MotoboiDetailPage() {
   const [copiado, setCopiado] = useState(false);
   const [inviteError, setInviteError] = useState('');
 
+  // Reset senha state
+  const [resetData, setResetData] = useState<InviteData | null>(null);
+  const [loadingReset, setLoadingReset] = useState(false);
+  const [resetCopiado, setResetCopiado] = useState(false);
+  const [resetError, setResetError] = useState('');
+
   const fetchRider = useCallback(() => {
     setLoading(true);
     fetch(`/api/rh/motoboys/${id}`)
@@ -165,6 +171,30 @@ export default function MotoboiDetailPage() {
     navigator.clipboard.writeText(inviteData.link);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2000);
+  };
+
+  const handleResetSenha = async () => {
+    setLoadingReset(true);
+    setResetError('');
+    setResetData(null);
+    try {
+      const res = await fetch(`/api/rh/motoboys/${id}/reset-password`, { method: 'POST' });
+      if (res.ok) {
+        setResetData(await res.json());
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setResetError(d.error ?? 'Erro ao gerar link de redefinição');
+      }
+    } finally {
+      setLoadingReset(false);
+    }
+  };
+
+  const copiarReset = () => {
+    if (!resetData?.link) return;
+    navigator.clipboard.writeText(resetData.link);
+    setResetCopiado(true);
+    setTimeout(() => setResetCopiado(false), 2000);
   };
 
   const handleDelete = async () => {
@@ -320,10 +350,18 @@ export default function MotoboiDetailPage() {
                 <div className="w-9 h-9 rounded-xl bg-green-500/10 flex items-center justify-center">
                   <ShieldCheck className="w-5 h-5 text-green-400" />
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-green-400">Acesso configurado</p>
                   <p className="text-xs text-gray-500">O motoboy criou sua senha e pode acessar o portal em <span className="text-orange-400">/rider/login</span></p>
                 </div>
+                <button
+                  onClick={handleResetSenha}
+                  disabled={loadingReset}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs rounded-xl hover:bg-amber-500/20 transition-colors disabled:opacity-50 shrink-0"
+                >
+                  {loadingReset ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Redefinir senha
+                </button>
               </>
             ) : (
               <>
@@ -383,6 +421,41 @@ export default function MotoboiDetailPage() {
                 </div>
               )}
               {inviteError && <p className="text-xs text-red-400">{inviteError}</p>}
+            </div>
+          )}
+
+          {/* Painel de redefinição de senha */}
+          {(resetData || resetError) && (
+            <div className="pt-1 space-y-3 border-t border-[#2a2a2e]">
+              <p className="text-xs font-medium text-amber-400 flex items-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5" />
+                Link de redefinição de senha gerado
+              </p>
+              {resetData ? (
+                <>
+                  <div className="bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-xs text-gray-300 break-all">
+                    {resetData.link}
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Válido por 24 horas (até {new Date(resetData.expiresAt).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })})
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={copiarReset}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-orange-500/10 text-orange-400 text-xs rounded-lg hover:bg-orange-500/20 transition-colors">
+                      {resetCopiado ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      {resetCopiado ? 'Copiado!' : 'Copiar link'}
+                    </button>
+                    {resetData.whatsappLink && (
+                      <a href={resetData.whatsappLink} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-green-500/10 text-green-400 text-xs rounded-lg hover:bg-green-500/20 transition-colors">
+                        <MessageCircle className="w-3.5 h-3.5" /> Enviar pelo WhatsApp
+                      </a>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-red-400">{resetError}</p>
+              )}
             </div>
           )}
         </div>
