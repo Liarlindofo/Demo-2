@@ -112,6 +112,18 @@ export default function MotoboiDetailPage() {
   const [resetCopiado, setResetCopiado] = useState(false);
   const [resetError, setResetError] = useState('');
 
+  // Editar quinzena state
+  const [editingPeriod, setEditingPeriod] = useState<Period | null>(null);
+  const [editPeriodForm, setEditPeriodForm] = useState({
+    periodLabel: '', periodStart: '', periodEnd: '',
+    deliveryCount: '', totalDisplay: '', totalCents: 0,
+    dailyDisplay: '', dailyCents: 0,
+    discountDisplay: '', discountCents: 0,
+    discountNotes: '', summary: '',
+  });
+  const [savingPeriod, setSavingPeriod] = useState(false);
+  const [periodError, setPeriodError] = useState('');
+
   const fetchRider = useCallback(() => {
     setLoading(true);
     fetch(`/api/rh/motoboys/${id}`)
@@ -197,6 +209,64 @@ export default function MotoboiDetailPage() {
     setTimeout(() => setResetCopiado(false), 2000);
   };
 
+  const maskMoneyCents = (v: string) => {
+    const nums = v.replace(/\D/g, '');
+    const cents = parseInt(nums || '0', 10);
+    return { display: (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }), cents };
+  };
+
+  const openEditPeriod = (period: Period) => {
+    setEditingPeriod(period);
+    setPeriodError('');
+    const toDisplay = (c: number) => (c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+    setEditPeriodForm({
+      periodLabel:    period.periodLabel,
+      periodStart:    period.periodStart.split('T')[0],
+      periodEnd:      period.periodEnd.split('T')[0],
+      deliveryCount:  String(period.deliveryCount),
+      totalDisplay:   toDisplay(period.amountCents),
+      totalCents:     period.amountCents,
+      dailyDisplay:   toDisplay(period.dailyRateCents ?? 0),
+      dailyCents:     period.dailyRateCents ?? 0,
+      discountDisplay: toDisplay(period.discountCents ?? 0),
+      discountCents:  period.discountCents ?? 0,
+      discountNotes:  (period as Period & { discountNotes?: string }).discountNotes ?? '',
+      summary:        (period as Period & { summary?: string }).summary ?? '',
+    });
+  };
+
+  const handleSavePeriod = async () => {
+    if (!editingPeriod) return;
+    setPeriodError('');
+    setSavingPeriod(true);
+    try {
+      const res = await fetch(`/api/rh/motoboys/quinzenas/${editingPeriod.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          periodLabel:   editPeriodForm.periodLabel,
+          periodStart:   editPeriodForm.periodStart,
+          periodEnd:     editPeriodForm.periodEnd,
+          deliveryCount: parseInt(editPeriodForm.deliveryCount || '0', 10),
+          amountCents:   editPeriodForm.totalCents,
+          dailyRateCents: editPeriodForm.dailyCents,
+          discountCents:  editPeriodForm.discountCents,
+          discountNotes:  editPeriodForm.discountNotes || null,
+          summary:        editPeriodForm.summary || null,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setPeriodError(d.error ?? 'Erro ao salvar');
+        return;
+      }
+      setEditingPeriod(null);
+      fetchRider();
+    } finally {
+      setSavingPeriod(false);
+    }
+  };
+
   const handleDelete = async () => {
     setDeleting(true);
     try {
@@ -260,6 +330,120 @@ export default function MotoboiDetailPage() {
     }
   };
 
+  // Modal de edição de quinzena
+  const netEdit = Math.max(0, editPeriodForm.totalCents - editPeriodForm.discountCents);
+  const modalEdit = editingPeriod && (
+    <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 p-4">
+      <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="px-5 pt-5 pb-3 border-b border-[#2a2a2e] flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-white">Editar quinzena</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{editingPeriod.periodLabel}</p>
+          </div>
+          <button onClick={() => setEditingPeriod(null)} className="text-gray-500 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="text-xs text-gray-400 mb-1.5 block">Rótulo do período</label>
+            <input value={editPeriodForm.periodLabel}
+              onChange={e => setEditPeriodForm(f => ({ ...f, periodLabel: e.target.value }))}
+              className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-400 mb-1.5 block">Início</label>
+              <input type="date" value={editPeriodForm.periodStart}
+                onChange={e => setEditPeriodForm(f => ({ ...f, periodStart: e.target.value }))}
+                className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1.5 block">Fim</label>
+              <input type="date" value={editPeriodForm.periodEnd}
+                onChange={e => setEditPeriodForm(f => ({ ...f, periodEnd: e.target.value }))}
+                className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-400 mb-1.5 block">Qtd. entregas</label>
+              <input type="number" min="0" value={editPeriodForm.deliveryCount}
+                onChange={e => setEditPeriodForm(f => ({ ...f, deliveryCount: e.target.value }))}
+                className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1.5 block">Valor total bruto</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">R$</span>
+                <input value={editPeriodForm.totalDisplay}
+                  onChange={e => { const { display, cents } = maskMoneyCents(e.target.value); setEditPeriodForm(f => ({ ...f, totalDisplay: display, totalCents: cents })); }}
+                  className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors" />
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1.5 block">Valor da diária</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">R$</span>
+              <input value={editPeriodForm.dailyDisplay}
+                onChange={e => { const { display, cents } = maskMoneyCents(e.target.value); setEditPeriodForm(f => ({ ...f, dailyDisplay: display, dailyCents: cents })); }}
+                className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1.5 block">Valor de desconto</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">R$</span>
+              <input value={editPeriodForm.discountDisplay}
+                onChange={e => { const { display, cents } = maskMoneyCents(e.target.value); setEditPeriodForm(f => ({ ...f, discountDisplay: display, discountCents: cents })); }}
+                className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors" />
+            </div>
+          </div>
+          {editPeriodForm.discountCents > 0 && (
+            <div>
+              <label className="text-xs text-gray-400 mb-1.5 block">Detalhamento do desconto</label>
+              <textarea value={editPeriodForm.discountNotes}
+                onChange={e => setEditPeriodForm(f => ({ ...f, discountNotes: e.target.value }))}
+                rows={2} placeholder="ex: 2x Pizza Calabresa R$15,00..."
+                className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 resize-none focus:outline-none focus:border-orange-500/50 transition-colors" />
+            </div>
+          )}
+          {editPeriodForm.totalCents > 0 && (
+            <div className="bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-3 space-y-1.5">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Valor bruto</span>
+                <span className="text-white">{fmtMoney(editPeriodForm.totalCents)}</span>
+              </div>
+              {editPeriodForm.discountCents > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Desconto</span>
+                  <span className="text-red-400">− {fmtMoney(editPeriodForm.discountCents)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-[#2a2a2e] pt-1.5">
+                <span className="text-sm font-medium text-white">A receber</span>
+                <span className="text-green-400 font-bold">{fmtMoney(netEdit)}</span>
+              </div>
+            </div>
+          )}
+          {periodError && <p className="text-sm text-red-400 bg-red-500/10 rounded-xl px-4 py-3">{periodError}</p>}
+          <div className="flex gap-3 pt-1">
+            <button onClick={() => setEditingPeriod(null)}
+              className="flex-1 py-2.5 rounded-xl bg-[#2a2a2e] text-gray-300 text-sm font-medium hover:bg-[#3a3a3e] transition-colors">
+              Cancelar
+            </button>
+            <button onClick={handleSavePeriod} disabled={savingPeriod}
+              className="flex-1 py-2.5 rounded-xl bg-orange-500 text-black text-sm font-bold hover:bg-orange-400 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+              {savingPeriod ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Salvar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   if (loading) return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
       <Loader2 className="w-8 h-8 text-orange-400 animate-spin" />
@@ -277,6 +461,7 @@ export default function MotoboiDetailPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
+      {modalEdit}
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
 
         {/* Header */}
@@ -489,8 +674,19 @@ export default function MotoboiDetailPage() {
                           <span className="text-gray-500 ml-2 text-xs">{fmtDate(period.periodStart)} – {fmtDate(period.periodEnd)}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-3">
                         <span className="font-bold text-green-400 text-sm">{fmtMoney(netCents(period))}</span>
+                        {/* Botão editar — só quando sem documentos e ainda aguardando */}
+                        {period.status === 'pending_documents' && period.documents.length === 0 && (
+                          <button
+                            onClick={e => { e.stopPropagation(); openEditPeriod(period); }}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#2a2a2e] text-gray-400 hover:text-white hover:bg-[#3a3a3e] transition-colors text-xs"
+                            title="Editar quinzena"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            Editar
+                          </button>
+                        )}
                         {isOpen ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
                       </div>
                     </button>
