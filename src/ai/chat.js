@@ -37,7 +37,7 @@ export async function sendToGPT(userMessage, conversationHistory = [], settings 
     const {
       botName = 'Assistente',
       storeType = 'loja',
-      lineLimit = 8,
+      lineLimit = 20,
       basePrompt = ''
     } = settings;
 

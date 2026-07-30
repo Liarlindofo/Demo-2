@@ -59,6 +59,7 @@ export async function GET(
       basePrompt: botSettings.basePrompt || null,
       forbidden: botSettings.forbidden || null,
       messageLimit: botSettings.contextLimit || 30,
+      lineLimit: botSettings.lineLimit ?? 20,
       contextTime: 60, // Valor padrão
       botEnabled: botSettings.isActive ?? true
     };
@@ -117,7 +118,7 @@ export async function PUT(
           basePrompt: body.basePrompt || null,
           forbidden: body.forbidden || null,
           contextLimit: body.messageLimit || 10,
-          lineLimit: 5,
+          lineLimit: body.lineLimit ?? 20,
           isActive: body.botEnabled ?? true
         }
       });
@@ -131,6 +132,7 @@ export async function PUT(
           basePrompt: body.basePrompt !== undefined ? body.basePrompt : botSettings.basePrompt,
           forbidden: body.forbidden !== undefined ? body.forbidden : botSettings.forbidden,
           contextLimit: body.messageLimit !== undefined ? body.messageLimit : botSettings.contextLimit,
+          lineLimit: body.lineLimit !== undefined ? body.lineLimit : botSettings.lineLimit,
           isActive: body.botEnabled !== undefined ? body.botEnabled : botSettings.isActive
         }
       });
@@ -145,6 +147,7 @@ export async function PUT(
       basePrompt: botSettings.basePrompt || null,
       forbidden: botSettings.forbidden || null,
       messageLimit: botSettings.contextLimit || 30,
+      lineLimit: botSettings.lineLimit ?? 20,
       contextTime: 60,
       botEnabled: botSettings.isActive ?? true
     };
