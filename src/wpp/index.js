@@ -413,6 +413,15 @@ function setupMessageListener(client, userId, slot) {
     await handleIncomingMessage(message, client, userId, slot);
   });
 
+  // 🧪 TESTE DIAGNÓSTICO TEMPORÁRIO — remover depois
+  client.onMessage(async (message) => {
+    logger.info(`[🧪 onMessage-TESTE] Evento disparado! userId: ${userId}, slot: ${slot}, body: ${message.body}`);
+  });
+
+  client.onStateChange((state) => {
+    logger.info(`[🧪 onStateChange-TESTE] Estado: ${state}`);
+  });
+
   logger.success(`[setupMessageListener] ✅ Listener configurado com sucesso para [${userId}:${slot}]`);
 }
 
