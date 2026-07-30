@@ -571,8 +571,8 @@ async function handleIncomingMessage(message, client, userId, slot) {
           return;
         }
 
-        if (rawTextFromMe === '#voltar') {
-          logger.wpp(userId, slot, `✅ Comando #voltar recebido para ${phoneFromMe}`);
+        if (rawTextFromMe === '#ativar ia') {
+          logger.wpp(userId, slot, `✅ Comando #ativar ia recebido para ${phoneFromMe}`);
           resumeChat(userId, slot, phoneFromMe);
           sessionManager.setManualMode(userId, slot, phoneFromMe, false);
           return;
