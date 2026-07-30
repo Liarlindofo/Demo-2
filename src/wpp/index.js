@@ -405,12 +405,86 @@ function setupMessageListener(client, userId, slot) {
   }
   client.__listenerRegistrado = true;
 
+  /**
+   * Buffer de debounce por número de telefone.
+   * Estrutura: Map<phone, { texts: string[], lastMessage: object, timer: Timeout }>
+   * Escopo local à sessão — cada client tem seu próprio Map independente.
+   */
+  const messageBuffers = new Map();
+
   // Usamos APENAS onAnyMessage, pois em muitos ambientes o WPPConnect
   // dispara este evento para todas as mensagens (inclusive fromMe),
   // enquanto onMessage pode não ser chamado de forma consistente.
   client.onAnyMessage(async (message) => {
     logger.info(`[🔔 onAnyMessage] Evento disparado! userId: ${userId}, slot: ${slot}`);
-    await handleIncomingMessage(message, client, userId, slot);
+
+    // ── Bypass do buffer ─────────────────────────────────────────────────
+    // Grupos, status, mensagens fromMe e tipos não-texto (imagens, áudio,
+    // localização, documentos) são processados imediatamente, sem debounce.
+    // Isso preserva: comandos #boa noite/#voltar, sessões de tarefa com mídia
+    // e o fluxo de candidatura a vaga.
+    const isTextType = message.type === 'chat' || message.type === 'text';
+    if (
+      message.isGroupMsg ||
+      message.isStatus ||
+      message.isStory ||
+      (message.from && (message.from.includes('status') || message.from.includes('broadcast'))) ||
+      message.type === 'status' ||
+      message.fromMe ||
+      !isTextType
+    ) {
+      await handleIncomingMessage(message, client, userId, slot);
+      return;
+    }
+
+    const phone = message.from;
+    const text = (message.body || message.text || '').trim();
+
+    // Texto vazio mesmo sendo tipo chat/text → processa direto (será
+    // descartado internamente, mas sem segurar o loop do buffer)
+    if (!text) {
+      await handleIncomingMessage(message, client, userId, slot);
+      return;
+    }
+
+    // ── Acumula no buffer e (re)agenda o timer de 8 s ────────────────────
+    if (messageBuffers.has(phone)) {
+      clearTimeout(messageBuffers.get(phone).timer);
+      messageBuffers.get(phone).texts.push(text);
+      messageBuffers.get(phone).lastMessage = message;
+    } else {
+      messageBuffers.set(phone, { texts: [text], lastMessage: message, timer: null });
+    }
+
+    const count = messageBuffers.get(phone).texts.length;
+    logger.info(`[📦 BUFFER] Acumulando msg de ${phone} (${count} no buffer) — aguardando 8s`);
+
+    const timer = setTimeout(async () => {
+      const buffer = messageBuffers.get(phone);
+      messageBuffers.delete(phone); // limpa antes de processar para não vazar em caso de erro
+
+      if (!buffer || buffer.texts.length === 0) return;
+
+      const combinedText = buffer.texts.join('\n');
+      logger.info(
+        `[📦 BUFFER] Disparando: ${buffer.texts.length} msg(s) de ${phone} → "${combinedText.slice(0, 120)}${combinedText.length > 120 ? '…' : ''}"`,
+      );
+
+      // Mensagem sintética com texto combinado, mantendo todos os metadados
+      // da última mensagem recebida (from, type, chatId, etc.)
+      const combinedMessage = Object.assign({}, buffer.lastMessage, {
+        body: combinedText,
+        text: combinedText,
+      });
+
+      try {
+        await handleIncomingMessage(combinedMessage, client, userId, slot);
+      } catch (bufferErr) {
+        logger.warn(`[📦 BUFFER] Erro ao processar buffer de ${phone}: ${bufferErr?.message}`);
+      }
+    }, 8000);
+
+    messageBuffers.get(phone).timer = timer;
   });
 
   // 🧪 TESTE DIAGNÓSTICO TEMPORÁRIO — remover depois
@@ -623,17 +697,38 @@ async function handleIncomingMessage(message, client, userId, slot) {
         body: rawText, fromMe: false, timestamp: Date.now(),
       });
 
-      logger.info(`[🤖 BOT] Enviando para GPT: "${rawText}"`);
-      const aiResponse = await sendToGPT(rawText, formattedHistory, gptSettings);
-      logger.info(`[🤖 BOT] Resposta GPT: "${aiResponse}"`);
+      // ── Indicador "digitando..." ──────────────────────────────────────────
+      // Ativado antes da chamada à IA; desativado após o envio ou em erro.
+      // O try/catch isola falhas do typing para não bloquear a resposta.
+      try {
+        await client.startTyping(message.from);
+        logger.info(`[🤖 BOT] Typing ativado para ${chaveConversa}`);
+      } catch (typingErr) {
+        logger.warn(`[🤖 BOT] Erro ao ativar typing para ${chaveConversa}: ${typingErr?.message}`);
+      }
 
-      await client.sendText(message.from, aiResponse);
+      let aiResponse;
+      try {
+        logger.info(`[🤖 BOT] Enviando para GPT: "${rawText}"`);
+        aiResponse = await sendToGPT(rawText, formattedHistory, gptSettings);
+        logger.info(`[🤖 BOT] Resposta GPT: "${aiResponse}"`);
 
-      sessionManager.addMessage(userId, slot, chaveConversa, {
-        body: aiResponse, fromMe: true, timestamp: Date.now(),
-      });
+        await client.sendText(message.from, aiResponse);
 
-      logger.success(`✅ Resposta GPT enviada para ${chaveConversa} (${message.from})`);
+        sessionManager.addMessage(userId, slot, chaveConversa, {
+          body: aiResponse, fromMe: true, timestamp: Date.now(),
+        });
+
+        logger.success(`✅ Resposta GPT enviada para ${chaveConversa} (${message.from})`);
+      } finally {
+        // Garante desativação do typing mesmo em caso de exceção
+        try {
+          await client.stopTyping(message.from);
+          logger.info(`[🤖 BOT] Typing desativado para ${chaveConversa}`);
+        } catch (typingErr) {
+          logger.warn(`[🤖 BOT] Erro ao desativar typing para ${chaveConversa}: ${typingErr?.message}`);
+        }
+      }
     } catch (error) {
       logger.error(`❌ Erro ao processar mensagem [${userId}:${slot}]:`, error?.message || error);
       logger.error(`❌ Stack trace:`, error?.stack);
