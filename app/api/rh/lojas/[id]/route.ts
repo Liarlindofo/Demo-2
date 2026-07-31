@@ -18,7 +18,7 @@ export async function PATCH(
     if (!loja) return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 });
 
     const body = await req.json();
-    const { nome, cnpj, endereco, ativo } = body;
+    const { nome, cnpj, endereco, ativo, latitude, longitude, raioVerificacaoM } = body;
 
     const updated = await prisma.rhLoja.update({
       where: { id },
@@ -27,6 +27,9 @@ export async function PATCH(
         ...(cnpj !== undefined && { cnpj: cnpj || null }),
         ...(endereco !== undefined && { endereco: endereco || null }),
         ...(ativo !== undefined && { ativo }),
+        ...(latitude !== undefined && { latitude: latitude !== null ? Number(latitude) : null }),
+        ...(longitude !== undefined && { longitude: longitude !== null ? Number(longitude) : null }),
+        ...(raioVerificacaoM !== undefined && { raioVerificacaoM: Number(raioVerificacaoM) }),
       },
     });
 

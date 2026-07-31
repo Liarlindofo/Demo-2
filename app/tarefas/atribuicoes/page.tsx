@@ -81,6 +81,12 @@ interface SlotConfig {
   dataFim: string;
   /** Quando true, omite dataFim no payload; backend usa teto de 90 dias. */
   semDataFim: boolean;
+  /**
+   * Loja onde a tarefa será realizada (pode ser diferente da loja do funcionário).
+   * Só relevante para templates com exigeLocalizacao = true.
+   * undefined = usa a loja do funcionário (wLojaId).
+   */
+  lojaExecucaoId?: string;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -443,6 +449,7 @@ export default function AtribuicoesPage() {
         diasSemana: [],
         dataFim: addDays(selectedDate, 7),
         semDataFim: false,
+        lojaExecucaoId: wLojaId, // padrão: mesma loja do funcionário
       }));
       setWSlots(slots);
       setWizardStep(3);
@@ -474,6 +481,13 @@ export default function AtribuicoesPage() {
           setWError(
             `O horário ${slot.horario} em ${ptDate(slot.data)} está no passado ou é inválido.`,
           );
+          return;
+        }
+      }
+      for (const slot of wSlots) {
+        const tmpl = templates.find((t) => t.id === slot.templateId);
+        if (tmpl?.exigeLocalizacao && !slot.lojaExecucaoId) {
+          setWError(`Informe a loja de execução para o template "${tmpl.titulo}".`);
           return;
         }
       }
@@ -513,6 +527,7 @@ export default function AtribuicoesPage() {
         templateId: slot.templateId,
         dataBase: slot.data,
         horario: slot.horario,
+        ...(slot.lojaExecucaoId && { lojaExecucaoId: slot.lojaExecucaoId }),
         recorrencia: slot.repetir
           ? {
               tipo: slot.recorrenciaTipo,
@@ -1060,7 +1075,38 @@ export default function AtribuicoesPage() {
                         <span className="text-sm font-semibold text-white">
                           {tmpl?.titulo ?? slot.templateId}
                         </span>
+                        {tmpl?.exigeLocalizacao && (
+                          <span className="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded-lg">
+                            📍 verificação de local
+                          </span>
+                        )}
                       </div>
+
+                      {/* Loja de execução — só para templates com exigeLocalizacao */}
+                      {tmpl?.exigeLocalizacao && (
+                        <div>
+                          <label className={labelCls}>
+                            Em qual loja será realizada? <span className="text-red-400">*</span>
+                          </label>
+                          <select
+                            value={slot.lojaExecucaoId ?? wLojaId}
+                            onChange={(e) => updateSlot(idx, 'lojaExecucaoId', e.target.value)}
+                            className={inputCls}
+                          >
+                            {lojas.map((l) => (
+                              <option key={l.id} value={l.id}>
+                                {l.nome}{l.id === wLojaId ? ' (loja do funcionário)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {(slot.lojaExecucaoId && slot.lojaExecucaoId !== wLojaId) && (
+                            <p className="text-xs text-amber-400 mt-1.5 flex items-center gap-1">
+                              <Building2 className="w-3 h-3" />
+                              Localização verificada na loja selecionada, não na do funcionário.
+                            </p>
+                          )}
+                        </div>
+                      )}
 
                       {/* Data + Horário (campo único) */}
                       <div>

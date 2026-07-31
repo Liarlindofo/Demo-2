@@ -14,6 +14,8 @@ import {
   X,
   MapPin,
   Hash,
+  Search,
+  Navigation,
 } from 'lucide-react';
 
 interface Loja {
@@ -21,6 +23,9 @@ interface Loja {
   nome: string;
   cnpj: string | null;
   endereco: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  raioVerificacaoM: number;
   ativo: boolean;
 }
 
@@ -28,9 +33,15 @@ interface LojaForm {
   nome: string;
   cnpj: string;
   endereco: string;
+  latitude: string;
+  longitude: string;
+  raioVerificacaoM: string;
 }
 
-const EMPTY_FORM: LojaForm = { nome: '', cnpj: '', endereco: '' };
+const EMPTY_FORM: LojaForm = {
+  nome: '', cnpj: '', endereco: '',
+  latitude: '', longitude: '', raioVerificacaoM: '300',
+};
 
 function Modal({
   title,
@@ -71,6 +82,8 @@ export default function LojasPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingLoja, setEditingLoja] = useState<Loja | null>(null);
   const [form, setForm] = useState<LojaForm>(EMPTY_FORM);
+  const [geocoding, setGeocoding] = useState(false);
+  const [geocodeMsg, setGeocodeMsg] = useState<string | null>(null);
 
   const fetchLojas = useCallback(async () => {
     setLoading(true);
@@ -100,8 +113,16 @@ export default function LojasPage() {
 
   function openEdit(loja: Loja) {
     setEditingLoja(loja);
-    setForm({ nome: loja.nome, cnpj: loja.cnpj ?? '', endereco: loja.endereco ?? '' });
+    setForm({
+      nome: loja.nome,
+      cnpj: loja.cnpj ?? '',
+      endereco: loja.endereco ?? '',
+      latitude: loja.latitude != null ? String(loja.latitude) : '',
+      longitude: loja.longitude != null ? String(loja.longitude) : '',
+      raioVerificacaoM: String(loja.raioVerificacaoM ?? 300),
+    });
     setError(null);
+    setGeocodeMsg(null);
     setShowModal(true);
   }
 
@@ -110,6 +131,35 @@ export default function LojasPage() {
     setEditingLoja(null);
     setForm(EMPTY_FORM);
     setError(null);
+    setGeocodeMsg(null);
+  }
+
+  async function handleGeocode() {
+    if (!editingLoja) return;
+    setGeocoding(true);
+    setGeocodeMsg(null);
+    try {
+      const body: Record<string, string> = {};
+      if (form.endereco.trim()) body.endereco = form.endereco.trim();
+      const res = await fetch(`/api/rh/lojas/${editingLoja.id}/geocode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setGeocodeMsg(`Erro: ${data.error ?? 'Falha ao geocodificar.'}`);
+        return;
+      }
+      setForm((f) => ({
+        ...f,
+        latitude: String(data.latitude),
+        longitude: String(data.longitude),
+      }));
+      setGeocodeMsg(`Coordenadas encontradas: ${data.displayName?.slice(0, 80) ?? ''}`);
+    } finally {
+      setGeocoding(false);
+    }
   }
 
   async function handleSave() {
@@ -120,10 +170,16 @@ export default function LojasPage() {
     setSaving(true);
     setError(null);
     try {
+      const lat  = form.latitude.trim()  !== '' ? parseFloat(form.latitude)  : null;
+      const lng  = form.longitude.trim() !== '' ? parseFloat(form.longitude) : null;
+      const raio = form.raioVerificacaoM.trim() !== '' ? parseInt(form.raioVerificacaoM) : 300;
       const payload = {
         nome: form.nome.trim(),
         cnpj: form.cnpj.trim() || null,
         endereco: form.endereco.trim() || null,
+        latitude:         isNaN(lat as number)  ? null : lat,
+        longitude:        isNaN(lng as number)  ? null : lng,
+        raioVerificacaoM: isNaN(raio)           ? 300  : raio,
       };
 
       let res: Response;
@@ -280,6 +336,18 @@ export default function LojasPage() {
                         {loja.endereco}
                       </p>
                     )}
+                    {loja.latitude != null && loja.longitude != null ? (
+                      <p className="text-xs text-green-500/70 flex items-center gap-1">
+                        <Navigation className="w-3 h-3" />
+                        {loja.latitude.toFixed(5)}, {loja.longitude.toFixed(5)}
+                        <span className="text-gray-600 ml-1">({loja.raioVerificacaoM} m)</span>
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-600 flex items-center gap-1">
+                        <Navigation className="w-3 h-3" />
+                        Localização não configurada
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -367,6 +435,75 @@ export default function LojasPage() {
                 placeholder="Rua, número, bairro, cidade"
                 className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/40 transition-colors"
               />
+            </div>
+
+            {/* Localização para verificação de tarefas */}
+            <div className="border-t border-[#2a2a2e] pt-4">
+              <p className="text-xs font-medium text-gray-400 mb-3 flex items-center gap-1.5">
+                <Navigation className="w-3.5 h-3.5 text-amber-500" />
+                Localização para verificação de tarefas
+              </p>
+
+              {editingLoja && (
+                <button
+                  type="button"
+                  onClick={handleGeocode}
+                  disabled={geocoding}
+                  className="mb-3 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                >
+                  {geocoding
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Search className="w-3.5 h-3.5" />}
+                  {geocoding ? 'Buscando...' : 'Buscar coordenadas pelo endereço'}
+                </button>
+              )}
+
+              {geocodeMsg && (
+                <p className={`text-xs mb-3 rounded-lg px-3 py-2 border ${geocodeMsg.startsWith('Erro')
+                  ? 'text-red-400 bg-red-500/10 border-red-500/20'
+                  : 'text-green-400 bg-green-500/10 border-green-500/20'}`}>
+                  {geocodeMsg}
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Latitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={form.latitude}
+                    onChange={(e) => setForm((f) => ({ ...f, latitude: e.target.value }))}
+                    placeholder="-23.5505"
+                    className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/40 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Longitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={form.longitude}
+                    onChange={(e) => setForm((f) => ({ ...f, longitude: e.target.value }))}
+                    placeholder="-46.6333"
+                    className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/40 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <label className="text-xs text-gray-500 mb-1 block">Raio de verificação (metros)</label>
+                <input
+                  type="number"
+                  min="50"
+                  max="5000"
+                  value={form.raioVerificacaoM}
+                  onChange={(e) => setForm((f) => ({ ...f, raioVerificacaoM: e.target.value }))}
+                  placeholder="300"
+                  className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/40 transition-colors"
+                />
+                <p className="text-xs text-gray-600 mt-1">Distância máxima aceita para confirmar que o funcionário está na loja (padrão: 300 m).</p>
+              </div>
             </div>
 
             {error && (

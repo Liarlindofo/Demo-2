@@ -44,6 +44,29 @@ function instrucaoEvidencias(tipos) {
   return `Me manda ${partes.join(', ')} e ${ultimo}.`;
 }
 
+// ─── Geolocalização — fórmula de Haversine ────────────────────────────────
+
+/**
+ * Calcula a distância em metros entre dois pontos geográficos.
+ * Usa a fórmula de Haversine (precisão suficiente para raios < 50 km).
+ *
+ * @param {number} lat1
+ * @param {number} lng1
+ * @param {number} lat2
+ * @param {number} lng2
+ * @returns {number} Distância em metros
+ */
+function haversineMetros(lat1, lng1, lat2, lng2) {
+  const R    = 6_371_000; // raio médio da Terra em metros
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat  = toRad(lat2 - lat1);
+  const dLng  = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // ─── Normalização de telefone ──────────────────────────────────────────────
 
 function apenasDigitos(phone) {
@@ -441,8 +464,57 @@ export async function processarMensagem(message, client, telefone, sessao) {
     let emRevisaoAdmExtra = false;
 
     if (tipoMsg === 'LOCALIZACAO') {
-      evidenciaBody.latitude  = message.lat  ?? message.location?.lat;
-      evidenciaBody.longitude = message.lng   ?? message.location?.lng ?? message.location?.longitude;
+      const latFuncionario = message.lat  ?? message.location?.lat;
+      const lngFuncionario = message.lng  ?? message.location?.lng ?? message.location?.longitude;
+
+      evidenciaBody.latitude  = latFuncionario;
+      evidenciaBody.longitude = lngFuncionario;
+
+      // ── Verificação de distância ────────────────────────────────────────
+      // Busca a loja associada à TarefaAtribuida para obter lat/lng/raio.
+      // Falha silenciosa: se não encontrar coords configuradas, aceita mesmo assim.
+      try {
+        const tarefaAtribuida = await prisma.tarefaAtribuida.findUnique({
+          where: { id: sessao.tarefaId },
+          select: { loja: { select: { nome: true, latitude: true, longitude: true, raioVerificacaoM: true } } },
+        });
+
+        const loja = tarefaAtribuida?.loja;
+
+        if (loja?.latitude != null && loja?.longitude != null && latFuncionario != null && lngFuncionario != null) {
+          const distanciaM = haversineMetros(latFuncionario, lngFuncionario, loja.latitude, loja.longitude);
+          const raio       = loja.raioVerificacaoM ?? 300;
+
+          logger.info(
+            `[tarefaHandler/localizacao] Distância da loja "${loja.nome}": ${Math.round(distanciaM)} m (raio=${raio} m) (sid=${sid})`,
+          );
+
+          if (distanciaM > raio) {
+            logger.warn(
+              `[tarefaHandler/localizacao] Localização fora do raio: ${Math.round(distanciaM)} m > ${raio} m (sid=${sid})`,
+            );
+            try {
+              await client.sendText(
+                wppFrom,
+                `📍 Parece que você está a ${Math.round(distanciaM)} m da loja "${loja.nome}". A tarefa exige que você esteja a menos de ${raio} m do local. Confirma que está no local correto e envia sua localização novamente.`,
+              );
+            } catch (sendErr) {
+              logger.error(`[tarefaHandler/localizacao] sendText fora-do-raio — erro (sid=${sid})`, sendErr?.stack);
+            }
+            return; // não registra a evidência
+          }
+
+          // Guardar distância calculada junto à evidência
+          evidenciaBody.distanciaM = Math.round(distanciaM);
+        } else if (loja && (loja.latitude == null || loja.longitude == null)) {
+          logger.warn(
+            `[tarefaHandler/localizacao] Loja "${loja?.nome}" sem coordenadas configuradas — aceitando localização sem verificação (sid=${sid})`,
+          );
+        }
+      } catch (geoErr) {
+        logger.error(`[tarefaHandler/localizacao] Erro na verificação de distância (sid=${sid}):`, geoErr?.message);
+        // Aceita mesmo assim — não bloquear o funcionário por erro interno
+      }
 
     } else if (tipoMsg === 'CONFIRMACAO_TEXTO') {
       evidenciaBody.conteudoTexto = (message.body || message.text || '').trim();

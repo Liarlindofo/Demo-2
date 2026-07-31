@@ -56,6 +56,8 @@ interface SlotInput {
   templateId: string;
   dataBase: string; // "YYYY-MM-DD"
   horario: string;  // "HH:mm"
+  /** Loja onde a tarefa será realizada. Se omitido, usa lojaId do funcionário. */
+  lojaExecucaoId?: string;
   recorrencia?: {
     tipo?: 'unica' | 'diaria' | 'semanal';
     diasSemana?: number[];
@@ -135,6 +137,23 @@ export async function POST(req: Request) {
     if (!func) return NextResponse.json({ error: 'Funcionário não encontrado.' }, { status: 404 });
     if (!loja) return NextResponse.json({ error: 'Loja não encontrada.' }, { status: 404 });
 
+    // Pré-validar lojaExecucaoId distintas (evita busca repetida por loja no loop)
+    const lojaExecucaoIds = [...new Set(
+      slots.map((s) => s.lojaExecucaoId).filter((id): id is string => !!id && id !== lojaId),
+    )];
+    if (lojaExecucaoIds.length > 0) {
+      const lojasExec = await prisma.rhLoja.findMany({
+        where: { id: { in: lojaExecucaoIds }, userId: rh.userId },
+        select: { id: true },
+      });
+      const encontradas = new Set(lojasExec.map((l) => l.id));
+      for (const id of lojaExecucaoIds) {
+        if (!encontradas.has(id)) {
+          return NextResponse.json({ error: `Loja de execução não encontrada: ${id}` }, { status: 404 });
+        }
+      }
+    }
+
     const agora = new Date();
     // Tolerância de 60s para acomodar latência entre browser e servidor
     const limitePassado = new Date(agora.getTime() - 60_000);
@@ -181,11 +200,13 @@ export async function POST(req: Request) {
             { status: 400 },
           );
         }
+        // Usa lojaExecucaoId se informado; caso contrário, usa a loja do funcionário
+        const lojaEfetiva = slot.lojaExecucaoId ?? lojaId;
         registros.push({
           userId: rh.userId,
           templateId: slot.templateId,
           funcionarioId,
-          lojaId,
+          lojaId: lojaEfetiva,
           dataAgendada: d,
         });
       }
