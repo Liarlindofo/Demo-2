@@ -85,8 +85,9 @@ export function EstoqueDashboard() {
       sessoesProdutos.length > 0
         ? sessoesProdutos
         : construirSessoes([], config, productOrder);
-    const temAtiva = sessions.some(s => s.status === 'em_andamento');
-    await iniciarContagem(sessoesIniciais, 'Gerente', temAtiva, lojaNome);
+    // forceNew=false: retoma a contagem ativa desta loja se já existir;
+    // lojas diferentes coexistem sem se sobrescrever
+    await iniciarContagem(sessoesIniciais, 'Gerente', false, lojaNome);
     setScreen('counting');
   };
 

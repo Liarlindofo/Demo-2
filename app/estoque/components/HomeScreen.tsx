@@ -86,30 +86,22 @@ export function HomeScreen({ sessions, onIniciar, onRetomar }: HomeScreenProps) 
         })}
 
         {/* ── Iniciar nova contagem ───────────────────────────────────────── */}
-        {!temAtiva ? (
-          <button
-            onClick={onIniciar}
-            className="w-full bg-[#1c1c1e] border-2 border-dashed border-amber-500/40 hover:border-amber-500/80 hover:bg-amber-500/5 rounded-2xl p-8 flex flex-col items-center gap-3 transition-all active:scale-[0.98]"
-          >
-            <div className="w-14 h-14 rounded-2xl bg-amber-500/20 flex items-center justify-center">
-              <Plus className="w-7 h-7 text-amber-400" />
-            </div>
-            <div className="text-center">
-              <p className="font-bold text-white text-base">Iniciar nova contagem</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
-              </p>
-            </div>
-          </button>
-        ) : (
-          <button
-            onClick={onIniciar}
-            className="w-full flex items-center justify-center gap-2 border border-[#374151] rounded-2xl py-3 text-sm text-gray-500 hover:text-white hover:border-[#4a4a50] transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Nova contagem (substituirá a atual)
-          </button>
-        )}
+        <button
+          onClick={onIniciar}
+          className="w-full bg-[#1c1c1e] border-2 border-dashed border-amber-500/40 hover:border-amber-500/80 hover:bg-amber-500/5 rounded-2xl p-8 flex flex-col items-center gap-3 transition-all active:scale-[0.98]"
+        >
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/20 flex items-center justify-center">
+            <Plus className="w-7 h-7 text-amber-400" />
+          </div>
+          <div className="text-center">
+            <p className="font-bold text-white text-base">
+              {temAtiva ? 'Iniciar contagem para outra loja' : 'Iniciar nova contagem'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+            </p>
+          </div>
+        </button>
 
         {/* ── Últimas contagens ───────────────────────────────────────────── */}
         {concluidas.length > 0 && (

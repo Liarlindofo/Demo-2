@@ -60,7 +60,10 @@ export function useStockSession() {
   // ── Criar nova contagem ────────────────────────────────────────────────────
   const iniciarContagem = useCallback(
     async (sessoesIniciais?: StockCategory[], gerente = 'Gerente', forceNew = false, lojaNome?: string): Promise<StockSession> => {
-      const existente = sessions.find(s => s.status === 'em_andamento');
+      // Busca contagem ativa APENAS para a mesma loja — lojas diferentes coexistem
+      const existente = sessions.find(
+        s => s.status === 'em_andamento' && s.lojaNome === (lojaNome ?? null),
+      );
 
       if (existente && !forceNew) {
         setActiveSessionId(existente.id);
