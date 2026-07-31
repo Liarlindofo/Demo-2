@@ -824,6 +824,9 @@ model RhLoja {
   nome                  String
   cnpj                  String?
   endereco              String?
+  latitude              Float?
+  longitude             Float?
+  raioVerificacaoM      Int                     @default(300) @map("raio_verificacao_m")
   fap                   Float                   @default(1.0)
   ativo                 Boolean                 @default(true)
   createdAt             DateTime                @default(now())
