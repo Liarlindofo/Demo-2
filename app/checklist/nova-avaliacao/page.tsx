@@ -4,6 +4,18 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CHECKLIST_TOPICS, type EvaluationStatus } from "@/lib/checklist-data";
+
+interface ChecklistItemDynamic {
+  id: string;
+  name: string;
+  weight: number;
+  fotoObrigatoria: boolean;
+}
+interface ChecklistTopicDynamic {
+  id: string;
+  name: string;
+  items: ChecklistItemDynamic[];
+}
 import { ArrowLeft, Save, ChevronDown, ChevronUp, Camera, X } from "lucide-react";
 import { useUser } from "@stackframe/stack";
 import { startTokenRefresh, stopTokenRefresh } from "@/lib/refresh-token";
@@ -28,6 +40,12 @@ export default function NewEvaluationPage() {
   const user = useUser({ or: 'redirect' });
   const storeIdParam = searchParams.get('storeId');
   
+  const [checklistTopics, setChecklistTopics] = useState<ChecklistTopicDynamic[]>(
+    CHECKLIST_TOPICS.map((t) => ({
+      ...t,
+      items: t.items.map((i) => ({ ...i, fotoObrigatoria: false })),
+    }))
+  );
   const [currentStep, setCurrentStep] = useState<'info' | 'checklist' | 'final'>('info');
   const [stores, setStores] = useState<StoreData[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(storeIdParam);
@@ -48,6 +66,13 @@ export default function NewEvaluationPage() {
   const [pendingReload, setPendingReload] = useState(false);
   const confirmedReload = useRef(false);
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+
+  useEffect(() => {
+    fetch('/api/checklist/template')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.length) setChecklistTopics(data); })
+      .catch(() => {/* mantém o fallback estático */});
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -168,7 +193,7 @@ export default function NewEvaluationPage() {
       
       if (evaluation.topics && Array.isArray(evaluation.topics)) {
         evaluation.topics.forEach((topic: any) => {
-          let topicDefinition = CHECKLIST_TOPICS.find(t => t.id === topic.topicId || t.name === topic.topicName);
+          let topicDefinition = checklistTopics.find(t => t.id === topic.topicId || t.name === topic.topicName);
           
           if (topicDefinition) {
             const topicEvals = new Map();
@@ -436,7 +461,7 @@ export default function NewEvaluationPage() {
     
     console.log('📊 Calculando score, evaluations.size:', evaluations.size);
 
-    CHECKLIST_TOPICS.forEach(topic => {
+    checklistTopics.forEach(topic => {
       const items: any[] = [];
       let topicScore = 0;
       let topicMaxScore = 0;
@@ -503,28 +528,37 @@ export default function NewEvaluationPage() {
       return;
     }
     setCurrentStep('checklist');
-    setExpandedTopics(new Set([CHECKLIST_TOPICS[0].id]));
+    setExpandedTopics(new Set([checklistTopics[0]?.id ?? '']));
   };
 
   const handleFinishChecklist = () => {
-    let allItemsEvaluated = true;
-    let unevaluatedItems: string[] = [];
-    
-    CHECKLIST_TOPICS.forEach(topic => {
+    const unevaluatedItems: string[] = [];
+    const missingPhotoItems: string[] = [];
+
+    checklistTopics.forEach(topic => {
       const topicEvals = evaluations.get(topic.id);
       topic.items.forEach(item => {
         if (!topicEvals?.has(item.id)) {
-          allItemsEvaluated = false;
           unevaluatedItems.push(`${topic.name} - ${item.name}`);
+        } else if (item.fotoObrigatoria) {
+          const eval_ = topicEvals.get(item.id);
+          if (!eval_?.photoUrls?.length) {
+            missingPhotoItems.push(`${topic.name} - ${item.name}`);
+          }
         }
       });
     });
-    
-    if (!allItemsEvaluated) {
+
+    if (unevaluatedItems.length > 0) {
       alert(`Todos os itens devem ser avaliados antes de finalizar.\n\nItens não avaliados: ${unevaluatedItems.length}\n\nPor favor, marque uma opção para cada item do checklist.`);
       return;
     }
-    
+
+    if (missingPhotoItems.length > 0) {
+      alert(`Os itens abaixo exigem foto obrigatória:\n\n${missingPhotoItems.map(i => `• ${i}`).join('\n')}\n\nAdicione pelo menos uma foto para cada um antes de finalizar.`);
+      return;
+    }
+
     setCurrentStep('final');
   };
 
@@ -817,7 +851,7 @@ export default function NewEvaluationPage() {
           </div>
 
           <div className="space-y-4">
-            {CHECKLIST_TOPICS.map((topic) => {
+            {checklistTopics.map((topic) => {
               const isExpanded = expandedTopics.has(topic.id);
               const topicEvals = evaluations.get(topic.id);
               const completedItems = topic.items.filter(item => topicEvals?.has(item.id)).length;
@@ -846,7 +880,14 @@ export default function NewEvaluationPage() {
 
                         return (
                           <div key={item.id} className="border-t border-[#374151] pt-4">
-                            <div className="font-semibold text-white mb-3">{item.name}</div>
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="font-semibold text-white">{item.name}</span>
+                              {item.fotoObrigatoria && (
+                                <span className="text-xs bg-amber-600/20 text-amber-400 border border-amber-600/30 px-2 py-0.5 rounded-full">
+                                  📷 Foto obrigatória
+                                </span>
+                              )}
+                            </div>
                             <div className="grid grid-cols-3 gap-2 mb-3">
                               {(['DE ACORDO', 'PARCIAL', 'FORA DO PADRÃO'] as EvaluationStatus[]).map(status => (
                                 <button
@@ -874,7 +915,8 @@ export default function NewEvaluationPage() {
                               rows={2}
                             />
                             
-                            {showPhotoSection && (
+                            {/* Foto obrigatória: sempre mostra seção de foto, independente do status */}
+                            {(showPhotoSection || item.fotoObrigatoria) && (
                               <div className="mt-3 space-y-3">
                                 {/* Galeria de Fotos */}
                                 {evaluation?.photoUrls && evaluation.photoUrls.length > 0 && (

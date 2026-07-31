@@ -250,6 +250,36 @@ model BotSettings {
   @@map("bot_settings")
 }
 
+// Platefull.Check - Catálogo dinâmico de checklist
+model ChecklistCategory {
+  id       String                  @id @default(cuid())
+  nome     String
+  ordem    Int
+  itens    ChecklistItemTemplate[]
+  criadaEm DateTime               @default(now()) @map("criada_em")
+
+  @@index([ordem])
+  @@map("checklist_categories")
+}
+
+model ChecklistItemTemplate {
+  id              String            @id @default(cuid())
+  categoriaId     String            @map("categoria_id")
+  categoria       ChecklistCategory @relation(fields: [categoriaId], references: [id])
+  nome            String
+  weight          Int               // restrito a 10, 15 ou 20 — validado no backend
+  fotoObrigatoria Boolean           @default(false) @map("foto_obrigatoria")
+  ativo           Boolean           @default(true)  // soft-delete: nunca DELETE físico
+  ordem           Int
+  criadaEm        DateTime          @default(now()) @map("criada_em")
+  atualizadaEm    DateTime          @updatedAt @map("atualizada_em")
+
+  @@index([categoriaId])
+  @@index([ativo])
+  @@index([categoriaId, ativo, ordem])
+  @@map("checklist_item_templates")
+}
+
 // Platefull.Check Models
 model Evaluation {
   id                    String       @id @default(cuid())

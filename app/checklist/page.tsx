@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ClipboardCheck } from "lucide-react";
+import { ClipboardCheck, Settings } from "lucide-react";
 import { useUser } from "@stackframe/stack";
 
 interface StoreData {
@@ -70,16 +70,23 @@ export default function ChecklistPage() {
             </div>
           ) : (
             <>
-              {stores.length > 0 && (
-                <div className="flex justify-end mb-4">
+              <div className="flex justify-end gap-2 mb-4">
+                <Link
+                  href="/checklist/admin"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#141415] border border-[#374151] text-gray-300 hover:text-white hover:border-gray-500 rounded-lg transition-colors text-sm font-medium"
+                >
+                  <Settings className="w-4 h-4" />
+                  Gerenciar checklist
+                </Link>
+                {stores.length > 0 && (
                   <Link
                     href="/checklist/nova-loja"
                     className="inline-block px-5 py-2.5 bg-[#001F05] text-white rounded-lg hover:bg-[#001F05]/80 transition-colors font-semibold"
                   >
                     Adicionar loja
                   </Link>
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="space-y-4">
               {stores.length === 0 ? (
