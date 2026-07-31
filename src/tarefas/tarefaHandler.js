@@ -482,33 +482,37 @@ export async function processarMensagem(message, client, telefone, sessao) {
         const loja = tarefaAtribuida?.loja;
 
         if (loja?.latitude != null && loja?.longitude != null && latFuncionario != null && lngFuncionario != null) {
-          const distanciaM = haversineMetros(latFuncionario, lngFuncionario, loja.latitude, loja.longitude);
+          const distanciaM = Math.round(haversineMetros(latFuncionario, lngFuncionario, loja.latitude, loja.longitude));
           const raio       = loja.raioVerificacaoM ?? 300;
+          const foraDoRaio = distanciaM > raio;
 
           logger.info(
-            `[tarefaHandler/localizacao] Distância da loja "${loja.nome}": ${Math.round(distanciaM)} m (raio=${raio} m) (sid=${sid})`,
+            `[tarefaHandler/localizacao] Distância da loja "${loja.nome}": ${distanciaM} m (raio=${raio} m) — ${foraDoRaio ? '⚠️ FORA DO RAIO' : '✅ dentro do raio'} (sid=${sid})`,
           );
 
-          if (distanciaM > raio) {
-            logger.warn(
-              `[tarefaHandler/localizacao] Localização fora do raio: ${Math.round(distanciaM)} m > ${raio} m (sid=${sid})`,
-            );
-            try {
-              await client.sendText(
-                wppFrom,
-                `📍 Parece que você está a ${Math.round(distanciaM)} m da loja "${loja.nome}". A tarefa exige que você esteja a menos de ${raio} m do local. Confirma que está no local correto e envia sua localização novamente.`,
-              );
-            } catch (sendErr) {
-              logger.error(`[tarefaHandler/localizacao] sendText fora-do-raio — erro (sid=${sid})`, sendErr?.stack);
-            }
-            return; // não registra a evidência
-          }
+          // Gravar resultado geográfico em analiseIA da evidência.
+          // Quando divergencia = true, a API /evidencias seta emRevisaoAdm = true
+          // automaticamente — sem nenhuma mensagem ao funcionário (regra crítica).
+          evidenciaBody.analiseIA = {
+            distanciaM,
+            raioM:       raio,
+            foraDoRaio,
+            nomeLoja:    loja.nome,
+            divergencia: foraDoRaio,
+            observacao:  foraDoRaio
+              ? `Localização a ${distanciaM} m da loja "${loja.nome}" (raio permitido: ${raio} m). Requer revisão.`
+              : `Localização dentro do raio de ${raio} m da loja "${loja.nome}".`,
+          };
 
-          // Guardar distância calculada junto à evidência
-          evidenciaBody.distanciaM = Math.round(distanciaM);
+          if (foraDoRaio) {
+            emRevisaoAdmExtra = true; // atualiza flag local para o log de conclusão
+            logger.warn(
+              `[tarefaHandler/localizacao] Fora do raio — emRevisaoAdm será ativado pelo servidor (sid=${sid})`,
+            );
+          }
         } else if (loja && (loja.latitude == null || loja.longitude == null)) {
           logger.warn(
-            `[tarefaHandler/localizacao] Loja "${loja?.nome}" sem coordenadas configuradas — aceitando localização sem verificação (sid=${sid})`,
+            `[tarefaHandler/localizacao] Loja "${loja?.nome}" sem coordenadas configuradas — aceitando sem verificação (sid=${sid})`,
           );
         }
       } catch (geoErr) {
