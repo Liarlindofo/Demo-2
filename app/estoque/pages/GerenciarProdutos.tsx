@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ChevronLeft, Search, ChevronUp, ChevronDown, Plus, Trash2, X } from 'lucide-react';
+import { ChevronLeft, Search, ChevronUp, ChevronDown, Plus, Trash2, X, ArrowDownAZ } from 'lucide-react';
 import type { EstoqueConfigMap } from '../hooks/useEstoqueConfig';
 import type { ProdutoEstoque } from '../hooks/useProdutosEstoque';
 import { CATEGORIAS_PADRAO } from '@/lib/estoque-insumos-padrao';
@@ -17,6 +17,7 @@ interface GerenciarProdutosProps {
   onSetKgPorUnidade: (insumoId: string, kg: number | undefined) => void;
   onMoverAcima: (produtoId: string, allIds: string[]) => void;
   onMoverAbaixo: (produtoId: string, allIds: string[]) => void;
+  onSetProductOrder: (ids: string[]) => void;
   onRefetch: () => void;
 }
 
@@ -172,12 +173,20 @@ export function GerenciarProdutos({
   onSetKgPorUnidade,
   onMoverAcima,
   onMoverAbaixo,
+  onSetProductOrder,
   onRefetch,
 }: GerenciarProdutosProps) {
   const [search, setSearch] = useState('');
   const [reordenando, setReordenando] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleOrdenarAlfabetico = () => {
+    const ordenados = [...produtos].sort((a, b) =>
+      a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }),
+    );
+    onSetProductOrder(ordenados.map(p => p.insumoId));
+  };
 
   const allIds = produtos.map(p => p.insumoId);
 
@@ -247,6 +256,16 @@ export function GerenciarProdutos({
               {totalAtivos} de {produtos.length} produto{produtos.length !== 1 ? 's' : ''} habilitado{totalAtivos !== 1 ? 's' : ''}
             </p>
           </div>
+          {!reordenando && (
+            <button
+              onClick={handleOrdenarAlfabetico}
+              title="Ordenar A-Z"
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[#374151] text-gray-400 hover:text-white transition-colors"
+            >
+              <ArrowDownAZ className="w-3.5 h-3.5" />
+              A-Z
+            </button>
+          )}
           <button
             onClick={() => setReordenando(r => !r)}
             className={`text-xs px-3 py-1.5 rounded-lg border transition-colors font-medium ${

@@ -189,6 +189,7 @@ export function EstoqueDashboard() {
         onSetKgPorUnidade={setKgPorUnidade}
         onMoverAcima={moverProdutoAcima}
         onMoverAbaixo={moverProdutoAbaixo}
+        onSetProductOrder={setProductOrder}
         onRefetch={refetch}
       />
     );
