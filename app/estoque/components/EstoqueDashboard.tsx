@@ -244,6 +244,7 @@ export function EstoqueDashboard() {
         sessions={sessions}
         onIniciar={abrirSelecaoLoja}
         onRetomar={handleRetomar}
+        onExcluir={excluirContagem}
       />
 
 

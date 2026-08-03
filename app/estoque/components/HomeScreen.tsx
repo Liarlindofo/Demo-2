@@ -1,12 +1,14 @@
 'use client';
 
-import { ClipboardList, RotateCcw, Plus, CheckCircle2 } from 'lucide-react';
+import { useState } from 'react';
+import { ClipboardList, RotateCcw, Plus, CheckCircle2, Trash2 } from 'lucide-react';
 import type { StockSession } from '../types';
 
 interface HomeScreenProps {
   sessions: StockSession[];
   onIniciar: () => void;
   onRetomar: (sessionId: string) => void;
+  onExcluir: (sessionId: string) => void;
 }
 
 function formatarData(iso: string) {
@@ -19,7 +21,9 @@ function formatarData(iso: string) {
   });
 }
 
-export function HomeScreen({ sessions, onIniciar, onRetomar }: HomeScreenProps) {
+export function HomeScreen({ sessions, onIniciar, onRetomar, onExcluir }: HomeScreenProps) {
+  const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
+
   const emAndamento = sessions.filter(s => s.status === 'em_andamento');
   const concluidas  = sessions.filter(s => s.status === 'concluida');
   const temAtiva    = emAndamento.length > 0;
@@ -47,6 +51,8 @@ export function HomeScreen({ sessions, onIniciar, onRetomar }: HomeScreenProps) 
           const concluidas = s.sessoes.filter(c => c.status === 'concluida').length;
           const pct        = total > 0 ? Math.round((concluidas / total) * 100) : 0;
 
+          const confirmando = confirmandoId === s.id;
+
           return (
             <div key={s.id} className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5">
               <div className="flex items-center justify-between mb-1">
@@ -69,17 +75,44 @@ export function HomeScreen({ sessions, onIniciar, onRetomar }: HomeScreenProps) 
                 />
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <p className="text-sm text-amber-300">
                   {concluidas}/{total} sessões concluídas
                 </p>
-                <button
-                  onClick={() => onRetomar(s.id)}
-                  className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-black font-semibold text-sm rounded-xl px-4 py-2 transition-colors"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Continuar
-                </button>
+                <div className="flex items-center gap-2">
+                  {confirmando ? (
+                    <>
+                      <button
+                        onClick={() => setConfirmandoId(null)}
+                        className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded-lg border border-[#3a3a3e] transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => { onExcluir(s.id); setConfirmandoId(null); }}
+                        className="flex items-center gap-1.5 text-xs bg-red-500/20 hover:bg-red-500/30 text-red-400 font-semibold px-3 py-1.5 rounded-lg border border-red-500/30 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Apagar
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmandoId(s.id)}
+                      className="p-2 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      title="Apagar contagem"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onRetomar(s.id)}
+                    className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-black font-semibold text-sm rounded-xl px-4 py-2 transition-colors"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Continuar
+                  </button>
+                </div>
               </div>
             </div>
           );
