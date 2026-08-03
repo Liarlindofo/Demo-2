@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { AlertTriangle, MessageSquare, X, Check, Plus } from 'lucide-react';
+import { AlertTriangle, MessageSquare, X, Check, Plus, Pencil } from 'lucide-react';
 import type { StockItem } from '../types';
 import { formatQtd } from '../utils';
 
@@ -35,6 +35,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
   const [showObs, setShowObs] = useState(!!item.observacao);
   const [obsLocal, setObsLocal] = useState(item.observacao ?? '');
   const [addValue, setAddValue] = useState('');
+  const [editMode, setEditMode] = useState(false);
   const [contarEmKgLocal, setContarEmKgLocal] = useState(false);
   const [fardoIdx, setFardoIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -97,16 +98,34 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') handleAdicionar();
+    if (e.key === 'Enter') editMode ? handleSalvarEdicao() : handleAdicionar();
+    if (e.key === 'Escape' && editMode) handleCancelarEdicao();
   };
 
   const handleObsBlur = () => {
     onObservacao(categoriaId, item.insumoId, obsLocal);
   };
 
-  const handleReset = () => {
-    onQuantidade(categoriaId, item.insumoId, null);
+  const handleEditarTotal = () => {
+    // Preenche o input com o valor atual armazenado e entra no modo edição
+    setAddValue(item.quantidadeContada !== null ? String(item.quantidadeContada) : '');
+    setEditMode(true);
+    setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 50);
+  };
+
+  const handleSalvarEdicao = () => {
+    const num = parseFloat(addValue.replace(',', '.'));
+    if (isNaN(num) || num < 0) return;
+    // Substitui o valor diretamente (sem somar)
+    onQuantidade(categoriaId, item.insumoId, parseFloat(num.toFixed(3)));
     setAddValue('');
+    setEditMode(false);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const handleCancelarEdicao = () => {
+    setAddValue('');
+    setEditMode(false);
   };
 
   return (
@@ -221,14 +240,18 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
           </div>
         )}
 
-        {/* Botão reset */}
+        {/* Botão editar */}
         {contado && (
           <button
-            onClick={handleReset}
-            title="Zerar contagem"
-            className="w-7 h-7 rounded-lg bg-[#2a2a2e] text-gray-500 flex items-center justify-center hover:bg-red-500/20 hover:text-red-400 transition-colors shrink-0"
+            onClick={handleEditarTotal}
+            title="Editar valor"
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
+              editMode
+                ? 'bg-amber-500/20 text-amber-400'
+                : 'bg-[#2a2a2e] text-gray-500 hover:bg-amber-500/10 hover:text-amber-400'
+            }`}
           >
-            <X className="w-3.5 h-3.5" />
+            <Pencil className="w-3.5 h-3.5" />
           </button>
         )}
 
@@ -245,7 +268,15 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
         </button>
       </div>
 
-      {/* ── Campo de adição ───────────────────────────────────────────────── */}
+      {/* ── Campo de adição / edição ──────────────────────────────────────── */}
+      {editMode && (
+        <div className="px-3 pb-1">
+          <p className="text-xs text-amber-400 flex items-center gap-1">
+            <Pencil className="w-3 h-3" />
+            Editando — digite o valor correto e confirme
+          </p>
+        </div>
+      )}
       <div className="flex gap-2 px-3 pb-3">
         <input
           ref={inputRef}
@@ -256,21 +287,55 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
           value={addValue}
           onChange={e => setAddValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={contado ? `+ adicionar ${inputUnidade}` : `quantidade em ${inputUnidade}`}
-          className="flex-1 bg-[#2a2a2e] border border-[#374151] rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/60 transition-colors"
-        />
-        <button
-          onClick={handleAdicionar}
-          disabled={addValue === ''}
-          className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors shrink-0 ${
-            addValue !== ''
-              ? 'bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-black'
-              : 'bg-[#2a2a2e] text-gray-600 cursor-not-allowed'
+          placeholder={
+            editMode
+              ? `novo valor em ${unidadeDisplay}`
+              : contado
+              ? `+ adicionar ${inputUnidade}`
+              : `quantidade em ${inputUnidade}`
+          }
+          className={`flex-1 bg-[#2a2a2e] rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none transition-colors ${
+            editMode
+              ? 'border-2 border-amber-500/60 focus:border-amber-500'
+              : 'border border-[#374151] focus:border-amber-500/60'
           }`}
-        >
-          <Plus className="w-4 h-4" />
-          {contado ? 'Somar' : 'Add'} {inputUnidade}
-        </button>
+        />
+        {editMode ? (
+          <>
+            <button
+              onClick={handleCancelarEdicao}
+              className="w-10 flex items-center justify-center rounded-xl bg-[#2a2a2e] text-gray-400 hover:text-white transition-colors shrink-0"
+              title="Cancelar edição"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleSalvarEdicao}
+              disabled={addValue === ''}
+              className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors shrink-0 ${
+                addValue !== ''
+                  ? 'bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-black'
+                  : 'bg-[#2a2a2e] text-gray-600 cursor-not-allowed'
+              }`}
+            >
+              <Check className="w-4 h-4" />
+              Salvar
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={handleAdicionar}
+            disabled={addValue === ''}
+            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors shrink-0 ${
+              addValue !== ''
+                ? 'bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-black'
+                : 'bg-[#2a2a2e] text-gray-600 cursor-not-allowed'
+            }`}
+          >
+            <Plus className="w-4 h-4" />
+            {contado ? 'Somar' : 'Add'} {inputUnidade}
+          </button>
+        )}
       </div>
 
       {/* ── Observação inline ─────────────────────────────────────────────── */}
