@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { X, CheckCircle2, AlertTriangle, ChevronLeft, Search } from 'lucide-react';
+import { X, CheckCircle2, AlertTriangle, ChevronLeft, Search, Loader2, WifiOff } from 'lucide-react';
 import type { StockSession } from '../types';
+import type { SaveStatus } from '../hooks/useStockSession';
 import { ProgressBar } from '../components/ProgressBar';
 import { SessionAccordion } from '../components/SessionAccordion';
 import { StockItemRow } from '../components/StockItemRow';
@@ -10,6 +11,7 @@ import { formatQtd } from '../utils';
 
 interface ContagemProps {
   session: StockSession;
+  saveStatus: SaveStatus;
   onFechar: () => void;
   onQuantidade: (categoriaId: string, insumoId: string, qty: number | null) => void;
   onObservacao: (categoriaId: string, insumoId: string, obs: string) => void;
@@ -18,8 +20,36 @@ interface ContagemProps {
   onFinalizar: () => void;
 }
 
+function SaveIndicator({ status }: { status: SaveStatus }) {
+  if (status === 'idle') return null;
+  if (status === 'saving') {
+    return (
+      <span className="flex items-center gap-1 text-[11px] text-gray-500">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        Salvando…
+      </span>
+    );
+  }
+  if (status === 'saved') {
+    return (
+      <span className="flex items-center gap-1 text-[11px] text-green-500">
+        <CheckCircle2 className="w-3 h-3" />
+        Salvo
+      </span>
+    );
+  }
+  // error
+  return (
+    <span className="flex items-center gap-1 text-[11px] text-amber-400">
+      <WifiOff className="w-3 h-3" />
+      Erro ao salvar
+    </span>
+  );
+}
+
 export function Contagem({
   session,
+  saveStatus,
   onFechar,
   onQuantidade,
   onObservacao,
@@ -230,13 +260,16 @@ export function Contagem({
             <h1 className="font-bold text-white text-base">Contagem de Estoque</h1>
             <p className="text-xs text-gray-500">{dataFormatada}</p>
           </div>
-          <button
-            onClick={onFechar}
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors border border-[#374151] rounded-xl px-3 py-2"
-          >
-            <X className="w-3.5 h-3.5" />
-            Salvar e sair
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={onFechar}
+              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors border border-[#374151] rounded-xl px-3 py-2"
+            >
+              <X className="w-3.5 h-3.5" />
+              Salvar e sair
+            </button>
+            <SaveIndicator status={saveStatus} />
+          </div>
         </div>
 
         {/* Campo de pesquisa */}

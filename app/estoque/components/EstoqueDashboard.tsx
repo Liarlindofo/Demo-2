@@ -33,6 +33,7 @@ export function EstoqueDashboard() {
     sessions,
     activeSession,
     hydrated,
+    saveStatus,
     iniciarContagem,
     retomarContagem,
     fecharContagem,
@@ -101,6 +102,7 @@ export function EstoqueDashboard() {
     return (
       <Contagem
         session={activeSession}
+        saveStatus={saveStatus}
         onFechar={() => { fecharContagem(); setScreen('home'); }}
         onQuantidade={atualizarQuantidade}
         onObservacao={atualizarObservacao}
