@@ -4,9 +4,10 @@ import { getRiderSession } from '@/lib/rider-auth';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { sendPaymentDocumentsEmail } from '@/lib/rider-payment-email';
 
-export const dynamic = 'force-dynamic';
-
 const BUCKET = 'rider-documents';
+const SIGNED_URL_EXPIRY_SECONDS = 7 * 24 * 60 * 60; // 7 dias
+
+export const dynamic = 'force-dynamic';
 
 async function ensureBucket(supabase: SupabaseClient) {
   const { data: buckets, error: listError } = await supabase.storage.listBuckets();
@@ -174,8 +175,29 @@ async function notificarResponsavelPagamento(
     where: { id: period.riderId },
     include: { loja: { select: { nome: true } } },
   });
-
   if (!rider) return;
+
+  // Buscar documentos e gerar signed URLs válidas por 7 dias
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  let nfUrl: string | null = null;
+  let boletoUrl: string | null = null;
+
+  if (supabaseUrl && supabaseServiceKey) {
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const docs = await prisma.riderDocument.findMany({ where: { periodId: period.id } });
+
+    await Promise.all(
+      docs.map(async (doc) => {
+        const { data } = await supabase.storage
+          .from(BUCKET)
+          .createSignedUrl(doc.storagePath, SIGNED_URL_EXPIRY_SECONDS);
+        if (doc.documentType === 'nf') nfUrl = data?.signedUrl ?? null;
+        if (doc.documentType === 'boleto') boletoUrl = data?.signedUrl ?? null;
+      }),
+    );
+  }
 
   await sendPaymentDocumentsEmail({
     to: emailDestino,
@@ -186,5 +208,7 @@ async function notificarResponsavelPagamento(
     periodEnd: period.periodEnd.toISOString(),
     amountCents: period.amountCents,
     riderId: period.riderId,
+    nfUrl,
+    boletoUrl,
   });
 }

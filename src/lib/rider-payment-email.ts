@@ -13,8 +13,10 @@ export async function sendPaymentDocumentsEmail(params: {
   periodEnd: string;
   amountCents: number;
   riderId: string;
+  nfUrl: string | null;
+  boletoUrl: string | null;
 }): Promise<void> {
-  const { to, riderName, lojaNome, periodLabel, periodStart, periodEnd, amountCents, riderId } = params;
+  const { to, riderName, lojaNome, periodLabel, periodStart, periodEnd, amountCents, riderId, nfUrl, boletoUrl } = params;
 
   if (!process.env.RESEND_API_KEY) {
     console.warn('[rider-payment-email] RESEND_API_KEY não configurado — e-mail não enviado');
@@ -113,18 +115,54 @@ export async function sendPaymentDocumentsEmail(params: {
             <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;">
               Documentos Enviados
             </p>
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;border-collapse:separate;border-spacing:0;">
+              <!-- NF -->
               <tr>
-                <td style="padding:10px 16px;background:#ecfdf5;border:1px solid #d1fae5;border-radius:8px 8px 0 0;">
-                  <p style="margin:0;font-size:14px;color:#065f46;">✅ &nbsp;<strong>Nota Fiscal (NF)</strong> — enviada pelo motoboy</p>
+                <td style="padding:14px 16px;background:#ecfdf5;border:1px solid #d1fae5;border-radius:8px 8px 0 0;border-bottom:none;">
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td>
+                        <p style="margin:0;font-size:14px;color:#065f46;">✅ &nbsp;<strong>Nota Fiscal (NF)</strong></p>
+                      </td>
+                      <td align="right">
+                        ${nfUrl
+                          ? `<a href="${nfUrl}" target="_blank"
+                              style="display:inline-block;background:#059669;color:#ffffff;font-size:12px;font-weight:700;text-decoration:none;padding:6px 14px;border-radius:6px;">
+                              ⬇ Baixar NF
+                            </a>`
+                          : `<span style="font-size:12px;color:#6b7280;">Link indisponível</span>`
+                        }
+                      </td>
+                    </tr>
+                  </table>
                 </td>
               </tr>
+              <!-- Boleto -->
               <tr>
-                <td style="padding:10px 16px;background:#ecfdf5;border:1px solid #d1fae5;border-top:none;border-radius:0 0 8px 8px;">
-                  <p style="margin:0;font-size:14px;color:#065f46;">✅ &nbsp;<strong>Boleto</strong> — enviado pelo motoboy</p>
+                <td style="padding:14px 16px;background:#ecfdf5;border:1px solid #d1fae5;border-radius:0 0 8px 8px;">
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td>
+                        <p style="margin:0;font-size:14px;color:#065f46;">✅ &nbsp;<strong>Boleto</strong></p>
+                      </td>
+                      <td align="right">
+                        ${boletoUrl
+                          ? `<a href="${boletoUrl}" target="_blank"
+                              style="display:inline-block;background:#059669;color:#ffffff;font-size:12px;font-weight:700;text-decoration:none;padding:6px 14px;border-radius:6px;">
+                              ⬇ Baixar Boleto
+                            </a>`
+                          : `<span style="font-size:12px;color:#6b7280;">Link indisponível</span>`
+                        }
+                      </td>
+                    </tr>
+                  </table>
                 </td>
               </tr>
             </table>
+            <!-- Validade dos links -->
+            <p style="margin:-20px 0 28px;font-size:11px;color:#9ca3af;text-align:right;">
+              ⏳ Links válidos por 7 dias
+            </p>
 
             <!-- CTA -->
             <table cellpadding="0" cellspacing="0" style="margin:0 auto 32px;">
