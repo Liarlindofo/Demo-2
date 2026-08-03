@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getRiderSession } from '@/lib/rider-auth';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { sendPaymentDocumentsEmail } from '@/lib/rider-payment-email';
 
 export const dynamic = 'force-dynamic';
 
@@ -130,12 +131,60 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const allDocs = await prisma.riderDocument.findMany({ where: { periodId } });
   const hasNf = allDocs.some((d) => d.documentType === 'nf');
   const hasBoleto = allDocs.some((d) => d.documentType === 'boleto');
-  if (hasNf && hasBoleto && period.status === 'pending_documents') {
+  const bothReceived = hasNf && hasBoleto && period.status === 'pending_documents';
+
+  if (bothReceived) {
     await prisma.riderPaymentPeriod.update({
       where: { id: periodId },
       data: { status: 'documents_received' },
     });
+
+    // Enviar e-mail de notificação ao responsável de pagamentos (fire and forget)
+    notificarResponsavelPagamento(session.userId, period).catch((err) =>
+      console.error('[upload rider doc] Falha ao notificar responsável:', err),
+    );
   }
 
   return NextResponse.json({ ok: true, storagePath });
+}
+
+async function notificarResponsavelPagamento(
+  userId: string,
+  period: {
+    id: string;
+    riderId: string;
+    periodLabel: string;
+    periodStart: Date;
+    periodEnd: Date;
+    amountCents: number;
+  },
+) {
+  // Buscar e-mail do responsável configurado para este usuário
+  const configKey = `rider_payment_email_${userId}`;
+  const config = await prisma.systemConfig.findUnique({ where: { key: configKey } });
+  const emailDestino = config?.value?.trim();
+
+  if (!emailDestino) {
+    console.info('[rider-payment-email] Nenhum e-mail de responsável configurado — notificação ignorada');
+    return;
+  }
+
+  // Buscar dados do motoboy e da loja
+  const rider = await prisma.deliveryRider.findUnique({
+    where: { id: period.riderId },
+    include: { loja: { select: { nome: true } } },
+  });
+
+  if (!rider) return;
+
+  await sendPaymentDocumentsEmail({
+    to: emailDestino,
+    riderName: rider.name,
+    lojaNome: rider.loja?.nome ?? 'Loja',
+    periodLabel: period.periodLabel,
+    periodStart: period.periodStart.toISOString(),
+    periodEnd: period.periodEnd.toISOString(),
+    amountCents: period.amountCents,
+    riderId: period.riderId,
+  });
 }

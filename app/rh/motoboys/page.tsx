@@ -7,7 +7,7 @@ import {
   Bike, Plus, ArrowLeft, Search,
   Clock, ChevronRight, Mail,
   CheckCircle2, XCircle, Copy, MessageCircle, RefreshCw, Loader2,
-  FileText, AlertCircle, FileCheck,
+  FileText, AlertCircle, FileCheck, Settings, Save,
 } from 'lucide-react';
 
 interface Loja { id: string; nome: string }
@@ -189,6 +189,143 @@ function InviteModal({ rider, onClose, onToast }: InviteModalProps) {
   );
 }
 
+// ── Painel de configuração de e-mail ─────────────────────────────────────────
+
+function ConfigEmailPanel({ onToast }: { onToast: (msg: string) => void }) {
+  const [email, setEmail] = useState('');
+  const [emailInput, setEmailInput] = useState('');
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const fetchConfig = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/rh/motoboys/config');
+      if (res.ok) {
+        const data = await res.json();
+        setEmail(data.email ?? '');
+        setEmailInput(data.email ?? '');
+      }
+    } catch { /* silencia */ } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { if (open) fetchConfig(); }, [open, fetchConfig]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/rh/motoboys/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailInput }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        onToast(`Erro: ${data.error ?? 'Falha ao salvar'}`);
+        return;
+      }
+      setEmail(emailInput);
+      onToast('E-mail de pagamentos atualizado com sucesso!');
+      setOpen(false);
+    } catch {
+      onToast('Erro ao conectar com o servidor.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        title="Configurar e-mail de notificações de pagamento"
+        className="flex items-center gap-2 px-4 py-2.5 bg-[#1c1c1e] border border-[#2a2a2e] text-gray-400 text-sm font-medium rounded-xl hover:text-white hover:border-[#3a3a3e] transition-colors"
+      >
+        <Settings className="w-4 h-4" />
+        Configurações
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+          <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6 w-full max-w-md space-y-5" onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-orange-500/10 flex items-center justify-center">
+                  <Mail className="w-4 h-4 text-orange-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-white">Notificações de Pagamento</p>
+                  <p className="text-xs text-gray-500 mt-0.5">E-mail do responsável financeiro</p>
+                </div>
+              </div>
+              <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
+            </div>
+
+            {/* Descrição */}
+            <div className="bg-orange-500/8 border border-orange-500/20 rounded-xl px-4 py-3">
+              <p className="text-xs text-orange-300 leading-relaxed">
+                Quando um motoboy enviar a <strong>NF</strong> e o <strong>boleto</strong>, um e-mail de
+                notificação será enviado automaticamente para o endereço abaixo.
+              </p>
+            </div>
+
+            {/* Campo de e-mail */}
+            {loading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-2">
+                  E-mail do responsável
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                  <input
+                    type="email"
+                    value={emailInput}
+                    onChange={e => setEmailInput(e.target.value)}
+                    placeholder="financeiro@empresa.com.br"
+                    className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50"
+                  />
+                </div>
+                {email && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Atual: <span className="text-gray-300">{email}</span>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Ações */}
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setOpen(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-[#374151] text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || loading}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 text-black text-sm font-bold hover:bg-orange-400 transition-colors disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {saving ? 'Salvando…' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function MotoboyListPage() {
   const router = useRouter();
   const [riders, setRiders] = useState<Rider[]>([]);
@@ -246,10 +383,13 @@ export default function MotoboyListPage() {
               </div>
             </div>
           </div>
-          <Link href="/rh/motoboys/novo"
-            className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-black text-sm font-bold rounded-xl hover:bg-orange-400 transition-colors">
-            <Plus className="w-4 h-4" /> Cadastrar Motoboy
-          </Link>
+          <div className="flex items-center gap-2">
+            <ConfigEmailPanel onToast={(msg) => setToast(msg)} />
+            <Link href="/rh/motoboys/novo"
+              className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-black text-sm font-bold rounded-xl hover:bg-orange-400 transition-colors">
+              <Plus className="w-4 h-4" /> Cadastrar Motoboy
+            </Link>
+          </div>
         </div>
 
         {/* Alertas */}
