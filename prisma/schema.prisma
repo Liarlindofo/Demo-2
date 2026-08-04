@@ -78,6 +78,7 @@ model User {
   tarefaTemplates        TarefaTemplate[]
   tarefasAtribuidas      TarefaAtribuida[]
   reportDefinitions      ReportDefinition[]
+  serviceApiKeys         ServiceApiKey[]
 
   @@map("users")
 }
@@ -1550,4 +1551,20 @@ model ReportExecution {
 
   @@index([reportDefinitionId, executadoEm])
   @@map("report_executions")
+}
+
+/// API key de serviço para autenticação máquina-a-máquina (ex: n8n, VPS)
+/// O campo key armazena o HASH SHA-256 — nunca a key em texto puro
+model ServiceApiKey {
+  id        String   @id @default(cuid())
+  /// SHA-256 da key gerada — nunca armazenar texto puro
+  key       String   @unique
+  nome      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("service_api_keys")
 }
