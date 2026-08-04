@@ -77,6 +77,7 @@ model User {
   rhTeamMemberships      RhTeamMember[]
   tarefaTemplates        TarefaTemplate[]
   tarefasAtribuidas      TarefaAtribuida[]
+  reportDefinitions      ReportDefinition[]
 
   @@map("users")
 }
@@ -1467,3 +1468,86 @@ model TarefaEvidencia {
   @@map("tarefa_evidencias")
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Central de Relatórios
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ReportFonte {
+  SAIPOS_DASHBOARD
+}
+
+enum ReportEscopoLoja {
+  POR_LOJA
+  CONSOLIDADO
+  AMBOS
+}
+
+enum ReportExecucaoStatus {
+  SUCESSO
+  FALHA
+}
+
+/// Definição de um relatório automático agendado
+model ReportDefinition {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nome            String
+  fonte           ReportFonte
+  /// Horário de disparo no formato "HH:mm", ex: "23:30"
+  horario         String
+  escopoLoja      ReportEscopoLoja
+  /// ID do grupo ou contato no WPPConnect para onde enviar o relatório
+  destinoWhatsapp String
+  ativo           Boolean          @default(true)
+
+  campos    ReportField[]
+  execucoes ReportExecution[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([ativo, horario])
+  @@map("report_definitions")
+}
+
+/// Campo selecionado para um relatório
+model ReportField {
+  id                 String           @id @default(cuid())
+  reportDefinitionId String
+  reportDefinition   ReportDefinition @relation(fields: [reportDefinitionId], references: [id], onDelete: Cascade)
+  /// Referencia SaiposFieldCatalog.key
+  campoKey           String
+  ordem              Int
+
+  @@unique([reportDefinitionId, campoKey])
+  @@index([reportDefinitionId])
+  @@map("report_fields")
+}
+
+/// Catálogo global de campos disponíveis no painel Saipos
+model SaiposFieldCatalog {
+  key   String @id
+  label String
+  /// Grupo para organizar o checklist: "geral" | "cupons" | "ticket_medio" | "canal"
+  grupo String
+  ordem Int    @default(0)
+
+  @@map("saipos_field_catalog")
+}
+
+/// Log de cada execução de um relatório agendado
+model ReportExecution {
+  id                 String               @id @default(cuid())
+  reportDefinitionId String
+  reportDefinition   ReportDefinition     @relation(fields: [reportDefinitionId], references: [id], onDelete: Cascade)
+  status             ReportExecucaoStatus
+  /// Dados extraídos do Saipos, para auditoria
+  payload            Json?
+  erro               String?
+  executadoEm        DateTime             @default(now())
+
+  @@index([reportDefinitionId, executadoEm])
+  @@map("report_executions")
+}
