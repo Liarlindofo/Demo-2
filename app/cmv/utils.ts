@@ -612,6 +612,7 @@ export const calcularComboCMV = (combo: Combo, data: StoreData): ComboCMV => {
     id: combo.id,
     nome: combo.nome,
     descricao: combo.descricao,
+    fotoUrl: combo.fotoUrl,
     custoTotal,
     precoRegular,
     precoVenda: combo.precoVenda,

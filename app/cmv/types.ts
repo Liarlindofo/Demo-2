@@ -142,6 +142,7 @@ export interface Combo {
   descricao?: string;
   precoVenda: number;
   itens: ComboItem[];
+  fotoUrl?: string;
 }
 
 export interface ComboCMVItemPizza {
@@ -179,6 +180,7 @@ export interface ComboCMV {
   id: string;
   nome: string;
   descricao?: string;
+  fotoUrl?: string;
   custoTotal: number;
   /** Soma das médias de preço de categoria × quantidade */
   precoRegular: number;

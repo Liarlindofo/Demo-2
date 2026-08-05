@@ -642,9 +642,19 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
                 <ComboCard
                   key={combo.id}
                   combo={combo}
+                  storeSlug={storeId}
                   onClick={() => {
                     const raw = (data.combos ?? []).find(c => c.id === combo.id);
                     if (raw) setSelectedCombo(raw);
+                  }}
+                  onFotoUpload={(url) => {
+                    const newData = {
+                      ...data,
+                      combos: (data.combos ?? []).map(c =>
+                        c.id === combo.id ? { ...c, fotoUrl: url } : c
+                      ),
+                    };
+                    updateData(newData);
                   }}
                 />
               ))}
