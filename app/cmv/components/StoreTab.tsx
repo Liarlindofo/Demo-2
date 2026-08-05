@@ -573,11 +573,21 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
                 <PizzaCard
                   key={product.id}
                   product={product}
+                  storeSlug={storeId}
                   onClick={() => handleClickCard(product)}
                   selectMode={selectMode}
                   selected={selectedIds.has(product.id)}
                   onClone={!selectMode ? () => handleCloneSabor(product.id) : undefined}
                   onRename={!selectMode ? (name) => handleRenameSabor(product.id, name) : undefined}
+                  onFotoUpload={!selectMode ? (url) => {
+                    const newData = {
+                      ...data,
+                      sabores: data.sabores.map(s =>
+                        s.id === product.id ? { ...s, fotoUrl: url } : s
+                      ),
+                    };
+                    updateData(newData);
+                  } : undefined}
                 />
               ))}
             </div>

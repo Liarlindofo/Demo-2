@@ -1,18 +1,20 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Copy, Pencil, Check, X } from 'lucide-react';
+import { Copy, Pencil, Check, X, Camera, Loader2, ImageOff } from 'lucide-react';
 import type { ProductCMV } from '../types';
 import { CMV_COLORS, CMV_META, getStatusLabel } from '../constants';
 import { formatCurrency, formatPercent, getSugestoesPreco } from '../utils';
 
 interface PizzaCardProps {
   product: ProductCMV;
+  storeSlug?: string;
   onClick: () => void;
   selectMode?: boolean;
   selected?: boolean;
   onClone?: () => void;
   onRename?: (newName: string) => void;
+  onFotoUpload?: (url: string) => void;
 }
 
 const STATUS_BADGE_COLORS = {
@@ -23,7 +25,9 @@ const STATUS_BADGE_COLORS = {
 
 const BEBIDA_COLOR = '#06b6d4'; // cyan-500
 
-export const PizzaCard = ({ product, onClick, selectMode, selected, onClone, onRename }: PizzaCardProps) => {
+export const PizzaCard = ({
+  product, storeSlug, onClick, selectMode, selected, onClone, onRename, onFotoUpload,
+}: PizzaCardProps) => {
   const isBebida = product.tipoPrecificacao === 'bebidas';
   const cmvColor = isBebida ? BEBIDA_COLOR : CMV_COLORS[product.status];
   const barWidth = Math.min(100, Math.max(0, product.margem));
@@ -33,6 +37,35 @@ export const PizzaCard = ({ product, onClick, selectMode, selected, onClone, onR
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(product.nome);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Foto
+  const [uploading, setUploading] = useState(false);
+  const [fotoSrc, setFotoSrc] = useState(product.fotoUrl);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setFotoSrc(product.fotoUrl); }, [product.fotoUrl]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !storeSlug) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('saborId', product.id);
+      fd.append('storeSlug', storeSlug);
+      const res = await fetch('/api/cmv/foto', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Erro no upload');
+      setFotoSrc(data.url);
+      onFotoUpload?.(data.url);
+    } catch (err) {
+      console.error('[PizzaCard] Upload foto:', err);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   useEffect(() => {
     if (isRenaming) {
@@ -62,7 +95,7 @@ export const PizzaCard = ({ product, onClick, selectMode, selected, onClone, onR
   return (
     <div
       onClick={handleCardClick}
-      className={`group relative bg-[#1c1c1e] border rounded-2xl p-5 transition-all duration-200 select-none ${
+      className={`group relative bg-[#1c1c1e] border rounded-2xl overflow-hidden transition-all duration-200 select-none ${
         selectMode
           ? selected
             ? 'border-red-500/60 bg-red-500/5 cursor-pointer'
@@ -70,6 +103,56 @@ export const PizzaCard = ({ product, onClick, selectMode, selected, onClone, onR
           : 'border-[#2a2a2e] hover:border-[#3a3a3e] hover:bg-[#202024] cursor-pointer'
       }`}
     >
+      {/* Input de upload (oculto) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+        onClick={e => e.stopPropagation()}
+      />
+
+      {/* Foto do produto */}
+      {fotoSrc ? (
+        <div className="relative w-full h-36 bg-[#141416] overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={fotoSrc}
+            alt={product.nome}
+            className="w-full h-full object-cover"
+            onError={() => setFotoSrc(undefined)}
+          />
+          {/* Overlay de substituição no hover */}
+          {onFotoUpload && !selectMode && (
+            <button
+              onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
+              disabled={uploading}
+              title="Trocar foto"
+              className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              {uploading
+                ? <Loader2 className="w-6 h-6 text-white animate-spin" />
+                : <Camera className="w-6 h-6 text-white" />}
+            </button>
+          )}
+        </div>
+      ) : onFotoUpload && !selectMode ? (
+        /* Placeholder clicável quando sem foto */
+        <button
+          onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
+          disabled={uploading}
+          className="w-full h-20 flex flex-col items-center justify-center gap-1.5 bg-[#141416] hover:bg-[#1a1a1e] border-b border-[#2a2a2e] transition-colors"
+          title="Adicionar foto"
+        >
+          {uploading
+            ? <Loader2 className="w-5 h-5 text-gray-600 animate-spin" />
+            : <><ImageOff className="w-5 h-5 text-gray-700" /><span className="text-[10px] text-gray-700">Adicionar foto</span></>}
+        </button>
+      ) : null}
+
+      {/* Conteúdo do card */}
+      <div className="p-5">
       {/* Cabeçalho: Nome + Status Badge */}
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0 flex-1">
@@ -206,6 +289,7 @@ export const PizzaCard = ({ product, onClick, selectMode, selected, onClone, onR
           )}
         </div>
       )}
+      </div>{/* fim p-5 */}
     </div>
   );
 };

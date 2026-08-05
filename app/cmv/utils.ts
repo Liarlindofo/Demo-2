@@ -253,6 +253,7 @@ export const calcularCMVSabor = (
     margem,
     status,
     numIngredientes,
+    fotoUrl: sabor.fotoUrl,
   };
 };
 
