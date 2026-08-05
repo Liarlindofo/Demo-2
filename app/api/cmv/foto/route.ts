@@ -24,17 +24,19 @@ function sanitizeStorageSegment(raw: string): string {
     || 'item';
 }
 
+function getSupabase() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseKey) return null;
+  return { supabaseUrl, client: createClient(supabaseUrl, supabaseKey) };
+}
+
 /**
  * POST /api/cmv/foto
  *
- * Recebe multipart/form-data com:
- *   file      — arquivo de imagem
- *   saborId   — ID do sabor/produto no CMV
- *   storeSlug — slug da loja (ahu, pilarzinho, portao, uberaba)
- *
- * Faz upload para o bucket "cmv-produtos" do Supabase Storage
- * com upsert (sobrescreve versão anterior do mesmo produto).
- * Retorna { url } com a URL pública permanente.
+ * Gera URL assinada para upload direto ao Supabase (evita limite 413 do Vercel).
+ * Body JSON: { saborId, storeSlug, contentType, fileName? }
+ * Retorna: { signedUrl, path, token, publicUrl }
  */
 export async function POST(req: NextRequest) {
   const stackUser = await stackServerApp.getUser({ or: 'return-null' });
@@ -42,73 +44,71 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
+  const sb = getSupabase();
+  if (!sb) {
     return NextResponse.json(
       { error: 'Supabase não configurado (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)' },
       { status: 500 },
     );
   }
 
-  let formData: FormData;
+  let body: {
+    saborId?: string;
+    storeSlug?: string;
+    contentType?: string;
+    fileName?: string;
+  };
   try {
-    formData = await req.formData();
+    body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Payload inválido — envie multipart/form-data' }, { status: 400 });
+    return NextResponse.json({ error: 'Payload inválido — envie JSON' }, { status: 400 });
   }
 
-  const file      = formData.get('file')      as File   | null;
-  const saborId   = formData.get('saborId')   as string | null;
-  const storeSlug = formData.get('storeSlug') as string | null;
-
-  if (!file || !saborId || !storeSlug) {
+  const { saborId, storeSlug, contentType, fileName } = body;
+  if (!saborId || !storeSlug) {
     return NextResponse.json(
-      { error: 'Campos obrigatórios: file, saborId, storeSlug' },
+      { error: 'Campos obrigatórios: saborId, storeSlug' },
       { status: 400 },
     );
   }
 
-  // Extensão baseada no MIME type ou nome do arquivo (somente alfanumérico)
-  const rawExt = file.type.split('/')[1]?.replace('jpeg', 'jpg')
-              ?.replace('quicktime', 'mov')
-              || file.name.split('.').pop()?.toLowerCase()
-              || 'jpg';
+  const rawExt = contentType?.split('/')[1]?.replace('jpeg', 'jpg')
+    ?.replace('quicktime', 'mov')
+    || fileName?.split('.').pop()?.toLowerCase()
+    || 'jpg';
   const ext = rawExt.replace(/[^a-z0-9]/g, '') || 'jpg';
 
   const userId = sanitizeStorageSegment(stackUser.id);
   const store  = sanitizeStorageSegment(storeSlug);
   const sabor  = sanitizeStorageSegment(saborId);
+  const path   = `${userId}/${store}/${sabor}/${Date.now()}.${ext}`;
 
-  // Path com timestamp: suporta múltiplos arquivos por produto
-  const path = `${userId}/${store}/${sabor}/${Date.now()}.${ext}`;
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
-  const { error: uploadError } = await supabase.storage
+  const { data, error } = await sb.client.storage
     .from(BUCKET)
-    .upload(path, buffer, {
-      contentType: file.type || 'image/jpeg',
-      upsert: false, // path tem timestamp → arquivos distintos
-    });
+    .createSignedUploadUrl(path);
 
-  if (uploadError) {
-    console.error('[cmv/foto] Erro no upload Supabase:', uploadError);
-    return NextResponse.json({ error: uploadError.message }, { status: 500 });
+  if (error || !data) {
+    console.error('[cmv/foto] Erro ao criar signed URL:', error);
+    return NextResponse.json(
+      { error: error?.message ?? 'Falha ao gerar URL de upload' },
+      { status: 500 },
+    );
   }
 
-  const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  const { data: urlData } = sb.client.storage.from(BUCKET).getPublicUrl(path);
+  const publicUrl = `${urlData.publicUrl}?v=${Date.now()}`;
 
-  // Adiciona timestamp para invalidar cache do browser após atualização
-  const url = `${urlData.publicUrl}?v=${Date.now()}`;
-
-  return NextResponse.json({ url }, { status: 201 });
+  return NextResponse.json({
+    signedUrl: data.signedUrl,
+    token: data.token,
+    path: data.path,
+    publicUrl,
+    contentType: contentType || 'application/octet-stream',
+  });
 }
 
 /**
- * DELETE /api/cmv/foto?saborId=&storeSlug=&ext=
+ * DELETE /api/cmv/foto?saborId=&storeSlug=
  * Remove a foto de um produto do Storage.
  */
 export async function DELETE(req: NextRequest) {
@@ -117,9 +117,8 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !supabaseKey) {
+  const sb = getSupabase();
+  if (!sb) {
     return NextResponse.json({ error: 'Supabase não configurado' }, { status: 500 });
   }
 
@@ -131,13 +130,11 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'saborId e storeSlug são obrigatórios' }, { status: 400 });
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
   const userId = sanitizeStorageSegment(stackUser.id);
   const store  = sanitizeStorageSegment(storeSlug);
   const sabor  = sanitizeStorageSegment(saborId);
 
-  // Lista arquivos na pasta do produto (path: user/store/sabor/arquivo)
-  const { data: files } = await supabase.storage
+  const { data: files } = await sb.client.storage
     .from(BUCKET)
     .list(`${userId}/${store}/${sabor}`);
 
@@ -146,7 +143,7 @@ export async function DELETE(req: NextRequest) {
     .map(f => `${userId}/${store}/${sabor}/${f.name}`);
 
   if (paths.length > 0) {
-    await supabase.storage.from(BUCKET).remove(paths);
+    await sb.client.storage.from(BUCKET).remove(paths);
   }
 
   return NextResponse.json({ ok: true });

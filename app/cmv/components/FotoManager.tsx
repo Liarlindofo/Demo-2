@@ -8,7 +8,10 @@ import {
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-async function comprimirImagem(file: File, maxMB = 3): Promise<File> {
+const MAX_VIDEO_MB = 50;
+const MAX_IMAGE_MB = 3;
+
+async function comprimirImagem(file: File, maxMB = MAX_IMAGE_MB): Promise<File> {
   if (!file.type.startsWith('image/')) return file; // vídeos: sem compressão
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -35,6 +38,39 @@ async function comprimirImagem(file: File, maxMB = 3): Promise<File> {
     img.onerror = reject;
     img.src = objectUrl;
   });
+}
+
+/** Upload direto ao Supabase via URL assinada (evita limite 413 do Vercel). */
+async function uploadMidia(file: File, saborId: string, storeSlug: string): Promise<string> {
+  const signRes = await fetch('/api/cmv/foto', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      saborId,
+      storeSlug,
+      contentType: file.type || 'application/octet-stream',
+      fileName: file.name,
+    }),
+  });
+  const signData = await signRes.json().catch(() => ({ error: `HTTP ${signRes.status}` }));
+  if (!signRes.ok) throw new Error(signData.error || `Falha ao preparar upload (${signRes.status})`);
+
+  // Formato esperado pelo Storage (igual ao uploadToSignedUrl do supabase-js)
+  const body = new FormData();
+  body.append('cacheControl', '3600');
+  body.append('', file);
+
+  const uploadRes = await fetch(signData.signedUrl, {
+    method: 'PUT',
+    headers: { 'x-upsert': 'false' },
+    body,
+  });
+  if (!uploadRes.ok) {
+    const detail = await uploadRes.text().catch(() => '');
+    throw new Error(detail || `Upload falhou (${uploadRes.status})`);
+  }
+
+  return signData.publicUrl as string;
 }
 
 function isVideo(url: string) {
@@ -225,17 +261,20 @@ export function FotoManager({ fotos, nome, storeSlug, produtoId, onFotosChange }
     const novasUrls: string[] = [];
     for (const raw of Array.from(files)) {
       try {
+        const isVid = raw.type.startsWith('video/');
+        const maxBytes = (isVid ? MAX_VIDEO_MB : MAX_IMAGE_MB) * 1024 * 1024;
+        // Vídeos grandes: valida antes; imagens são comprimidas abaixo
+        if (isVid && raw.size > maxBytes) {
+          console.error(`[FotoManager] Vídeo muito grande (${(raw.size / 1024 / 1024).toFixed(1)} MB). Máx: ${MAX_VIDEO_MB} MB`);
+          alert(`Vídeo muito grande (${(raw.size / 1024 / 1024).toFixed(1)} MB). Máximo: ${MAX_VIDEO_MB} MB.`);
+          continue;
+        }
         const file = await comprimirImagem(raw);
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('saborId', produtoId);
-        fd.append('storeSlug', storeSlug);
-        const res = await fetch('/api/cmv/foto', { method: 'POST', body: fd });
-        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        if (res.ok) novasUrls.push(data.url);
-        else console.error('[FotoManager] Upload error:', data.error);
+        const url = await uploadMidia(file, produtoId, storeSlug);
+        novasUrls.push(url);
       } catch (err) {
-        console.error('[FotoManager] Upload:', err);
+        console.error('[FotoManager] Upload error:', err);
+        alert(err instanceof Error ? err.message : 'Falha no upload');
       }
     }
     if (novasUrls.length > 0) onFotosChange?.([...fotos, ...novasUrls]);
