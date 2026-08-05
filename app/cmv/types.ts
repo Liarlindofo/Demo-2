@@ -96,6 +96,8 @@ export interface Sabor {
   ingredientes?: IngredienteSabor[];
   /** URL da foto do produto no Supabase Storage */
   fotoUrl?: string;
+  /** Descrição livre do produto (ingredientes em destaque, modo de preparo, etc.) */
+  descricao?: string;
 }
 
 // ── Combos / Agrupamentos de produtos ─────────────────────────────────────────
@@ -216,6 +218,7 @@ export interface ProductCMV {
   status: 'otimo' | 'atencao' | 'critico';
   numIngredientes: number;
   fotoUrl?: string;         // URL da foto no Supabase Storage
+  descricao?: string;       // Descrição livre do produto
 }
 
 export interface StoreMetrics {

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { CheckSquare, Square, Camera, Loader2, ImageOff, Eye, Download } from 'lucide-react';
+import { DescricaoEditavel } from './DescricaoEditavel';
 
 async function comprimirImagem(file: File, maxMB = 3): Promise<File> {
   return new Promise((resolve, reject) => {
@@ -41,6 +42,7 @@ interface FlavorGroupCardProps {
   selectedCount?: number;
   storeSlug?: string;
   onFotoUpload?: (url: string) => void;
+  onDescricaoChange?: (descricao: string) => void;
 }
 
 const BEBIDA_COLOR = '#06b6d4'; // cyan-500
@@ -58,7 +60,7 @@ const STATUS_LABEL: Record<FlavorGroup['statusGeral'], string> = {
 };
 
 export const FlavorGroupCard = ({
-  group, storeSlug, onClick, selectMode, selectedCount = 0, onFotoUpload,
+  group, storeSlug, onClick, selectMode, selectedCount = 0, onFotoUpload, onDescricaoChange,
 }: FlavorGroupCardProps) => {
   const isGrupoBebidas = group.produtos.every(p => p.tipoPrecificacao === 'bebidas');
   const cmvColor = isGrupoBebidas ? BEBIDA_COLOR : CMV_COLORS[group.statusGeral];
@@ -210,6 +212,12 @@ export const FlavorGroupCard = ({
           <p className="text-xs text-gray-500 mt-1 truncate" title={categoriaLabel}>
             {categoriaLabel}
           </p>
+          {!selectMode && (
+            <DescricaoEditavel
+              valor={group.produtos[0]?.descricao}
+              onSalvar={onDescricaoChange}
+            />
+          )}
         </div>
         {!selectMode && (
           isGrupoBebidas ? (

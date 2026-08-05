@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { GlassWater, Package2, Pizza, Camera, Loader2, ImageOff, Eye, Download } from 'lucide-react';
+import { DescricaoEditavel } from './DescricaoEditavel';
 import type { ComboCMV } from '../types';
 import { TAMANHO_LABELS } from '../types';
 import { CMV_COLORS, CMV_META, getStatusLabel } from '../constants';
@@ -40,6 +41,7 @@ interface ComboCardProps {
   storeSlug?: string;
   onClick: () => void;
   onFotoUpload?: (url: string) => void;
+  onDescricaoChange?: (descricao: string) => void;
 }
 
 const STATUS_BADGE_COLORS = {
@@ -48,7 +50,7 @@ const STATUS_BADGE_COLORS = {
   critico: 'bg-red-500/20 text-red-400 border border-red-500/30',
 };
 
-export const ComboCard = ({ combo, storeSlug, onClick, onFotoUpload }: ComboCardProps) => {
+export const ComboCard = ({ combo, storeSlug, onClick, onFotoUpload, onDescricaoChange }: ComboCardProps) => {
   const cmvColor = CMV_COLORS[combo.status];
   const barWidth = Math.min(100, Math.max(0, combo.margem));
   const metaBarWidth = 100 - CMV_META;
@@ -160,18 +162,18 @@ export const ComboCard = ({ combo, storeSlug, onClick, onFotoUpload }: ComboCard
             <div className="w-6 h-6 rounded-md bg-orange-500/15 flex items-center justify-center shrink-0">
               <Package2 className="w-3.5 h-3.5 text-orange-400" />
             </div>
-            <h3 className="font-semibold text-white text-sm leading-tight truncate">{combo.nome}</h3>
-          </div>
-          {!semPreco && (
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${STATUS_BADGE_COLORS[combo.status]}`}>
-              {getStatusLabel(combo.status)}
-            </span>
-          )}
+          <h3 className="font-semibold text-white text-sm leading-tight truncate">{combo.nome}</h3>
+          <DescricaoEditavel
+            valor={combo.descricao}
+            onSalvar={onDescricaoChange}
+          />
         </div>
-
-        {combo.descricao && (
-          <p className="text-xs text-gray-500 mb-2 ml-8 truncate">{combo.descricao}</p>
+        {!semPreco && (
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${STATUS_BADGE_COLORS[combo.status]}`}>
+            {getStatusLabel(combo.status)}
+          </span>
         )}
+      </div>
 
         {/* Slots do combo */}
         <div className="ml-8 mb-3 space-y-1.5">

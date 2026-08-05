@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Copy, Pencil, Check, X, Camera, Loader2, ImageOff, Eye, Download } from 'lucide-react';
+import { DescricaoEditavel } from './DescricaoEditavel';
 
 /** Comprime imagem para no máximo `maxMB` MB usando Canvas (client-side). */
 async function comprimirImagem(file: File, maxMB = 3): Promise<File> {
@@ -44,6 +45,7 @@ interface PizzaCardProps {
   onClone?: () => void;
   onRename?: (newName: string) => void;
   onFotoUpload?: (url: string) => void;
+  onDescricaoChange?: (descricao: string) => void;
 }
 
 const STATUS_BADGE_COLORS = {
@@ -55,7 +57,7 @@ const STATUS_BADGE_COLORS = {
 const BEBIDA_COLOR = '#06b6d4'; // cyan-500
 
 export const PizzaCard = ({
-  product, storeSlug, onClick, selectMode, selected, onClone, onRename, onFotoUpload,
+  product, storeSlug, onClick, selectMode, selected, onClone, onRename, onFotoUpload, onDescricaoChange,
 }: PizzaCardProps) => {
   const isBebida = product.tipoPrecificacao === 'bebidas';
   const cmvColor = isBebida ? BEBIDA_COLOR : CMV_COLORS[product.status];
@@ -249,6 +251,12 @@ export const PizzaCard = ({
           <p className="text-xs text-gray-500 mt-1 truncate" title={product.categoria}>
             {product.categoria}
           </p>
+          {!selectMode && (
+            <DescricaoEditavel
+              valor={product.descricao}
+              onSalvar={onDescricaoChange}
+            />
+          )}
         </div>
         {isBebida ? (
           <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 bg-cyan-500/15 text-cyan-400 border border-cyan-500/25">

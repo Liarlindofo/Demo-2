@@ -543,15 +543,13 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
                     selectMode={selectMode}
                     selectedCount={selectedCount}
                     onFotoUpload={!selectMode ? (url) => {
-                      // Aplica a foto a TODOS os sabores do grupo (mesma pizza, tamanhos diferentes)
                       const ids = new Set(group.produtos.map(p => p.id));
-                      const newData = {
-                        ...data,
-                        sabores: data.sabores.map(s =>
-                          ids.has(s.id) ? { ...s, fotoUrl: url } : s
-                        ),
-                      };
-                      updateData(newData);
+                      updateData({ ...data, sabores: data.sabores.map(s => ids.has(s.id) ? { ...s, fotoUrl: url } : s) });
+                    } : undefined}
+                    onDescricaoChange={!selectMode ? (desc) => {
+                      // Aplica a descrição a TODOS os sabores do grupo
+                      const ids = new Set(group.produtos.map(p => p.id));
+                      updateData({ ...data, sabores: data.sabores.map(s => ids.has(s.id) ? { ...s, descricao: desc } : s) });
                     } : undefined}
                   />
                 );
@@ -592,13 +590,10 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
                   onClone={!selectMode ? () => handleCloneSabor(product.id) : undefined}
                   onRename={!selectMode ? (name) => handleRenameSabor(product.id, name) : undefined}
                   onFotoUpload={!selectMode ? (url) => {
-                    const newData = {
-                      ...data,
-                      sabores: data.sabores.map(s =>
-                        s.id === product.id ? { ...s, fotoUrl: url } : s
-                      ),
-                    };
-                    updateData(newData);
+                    updateData({ ...data, sabores: data.sabores.map(s => s.id === product.id ? { ...s, fotoUrl: url } : s) });
+                  } : undefined}
+                  onDescricaoChange={!selectMode ? (desc) => {
+                    updateData({ ...data, sabores: data.sabores.map(s => s.id === product.id ? { ...s, descricao: desc } : s) });
                   } : undefined}
                 />
               ))}
@@ -648,13 +643,10 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
                     if (raw) setSelectedCombo(raw);
                   }}
                   onFotoUpload={(url) => {
-                    const newData = {
-                      ...data,
-                      combos: (data.combos ?? []).map(c =>
-                        c.id === combo.id ? { ...c, fotoUrl: url } : c
-                      ),
-                    };
-                    updateData(newData);
+                    updateData({ ...data, combos: (data.combos ?? []).map(c => c.id === combo.id ? { ...c, fotoUrl: url } : c) });
+                  }}
+                  onDescricaoChange={(desc) => {
+                    updateData({ ...data, combos: (data.combos ?? []).map(c => c.id === combo.id ? { ...c, descricao: desc } : c) });
                   }}
                 />
               ))}
