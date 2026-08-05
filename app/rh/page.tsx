@@ -20,6 +20,7 @@ import {
   Gift,
   Bike,
   Shield,
+  Cake,
 } from 'lucide-react';
 
 interface Funcionario {
@@ -55,6 +56,19 @@ interface BonificacoesResumo {
   comAssiduidade: number;
   semAssiduidade: number;
   plrsTrimestre: number;
+}
+
+interface AniversarianteFuncionario {
+  id: string;
+  nome: string;
+  diaMes: number;
+  lojaNome: string | null;
+  cargoNome: string | null;
+}
+
+interface AniversariosResumo {
+  mesMes:     { label: string; count: number; funcionarios: AniversarianteFuncionario[] };
+  mesProximo: { label: string; count: number; funcionarios: AniversarianteFuncionario[] };
 }
 
 function LojaSelector({
@@ -188,6 +202,7 @@ export default function RhDashboard() {
   const [custoTotal, setCustoTotal] = useState<number | null>(null);
   const [transferenciasMes, setTransferenciasMes] = useState<number | null>(null);
   const [bonificacoesResumo, setBonificacoesResumo] = useState<BonificacoesResumo | null>(null);
+  const [aniversarios, setAniversarios] = useState<AniversariosResumo | null>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -228,6 +243,13 @@ export default function RhDashboard() {
     fetch('/api/rh/bonificacoes/resumo')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setBonificacoesResumo(d))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/rh/aniversarios')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setAniversarios(d))
       .catch(() => {});
   }, []);
 
@@ -522,6 +544,100 @@ export default function RhDashboard() {
             </div>
             <p className="text-xs text-gray-500 mt-3">Gerencie assiduidade e PLR pela IA Trabalhista →</p>
           </Link>
+        )}
+
+        {/* ── Aniversários ──────────────────────────────────────────────────── */}
+        {aniversarios && (aniversarios.mesMes.count > 0 || aniversarios.mesProximo.count > 0) && (
+          <div className="bg-[#1c1c1e] border border-pink-500/20 rounded-2xl p-5">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-pink-500/10 flex items-center justify-center">
+                <Cake className="w-5 h-5 text-pink-400" />
+              </div>
+              <h3 className="font-semibold text-white">Aniversários</h3>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Este mês */}
+              <div>
+                <p className="text-xs font-semibold text-pink-400 uppercase tracking-wider mb-2">
+                  {aniversarios.mesMes.label}
+                  {aniversarios.mesMes.count > 0 && (
+                    <span className="ml-2 bg-pink-500/15 text-pink-300 border border-pink-500/25 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+                      {aniversarios.mesMes.count}
+                    </span>
+                  )}
+                </p>
+                {aniversarios.mesMes.count === 0 ? (
+                  <p className="text-xs text-gray-600 italic">Nenhum aniversário</p>
+                ) : (
+                  <div className="space-y-2">
+                    {aniversarios.mesMes.funcionarios.map(f => (
+                      <Link
+                        key={f.id}
+                        href={`/rh/funcionarios/${f.id}`}
+                        className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-[#252528] transition-colors group"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center shrink-0">
+                          <span className="text-sm font-bold text-pink-400">
+                            {f.diaMes.toString().padStart(2, '0')}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-white truncate group-hover:text-pink-300 transition-colors">
+                            {f.nome.split(' ')[0]} {f.nome.split(' ').slice(-1)[0]}
+                          </p>
+                          {f.lojaNome && (
+                            <p className="text-[10px] text-gray-600 truncate">{f.lojaNome}</p>
+                          )}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Próximo mês */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  {aniversarios.mesProximo.label}
+                  {aniversarios.mesProximo.count > 0 && (
+                    <span className="ml-2 bg-[#2a2a2e] text-gray-400 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+                      {aniversarios.mesProximo.count}
+                    </span>
+                  )}
+                </p>
+                {aniversarios.mesProximo.count === 0 ? (
+                  <p className="text-xs text-gray-600 italic">Nenhum aniversário</p>
+                ) : (
+                  <div className="space-y-2">
+                    {aniversarios.mesProximo.funcionarios.map(f => (
+                      <Link
+                        key={f.id}
+                        href={`/rh/funcionarios/${f.id}`}
+                        className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-[#252528] transition-colors group"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-[#252528] flex items-center justify-center shrink-0">
+                          <span className="text-sm font-bold text-gray-400">
+                            {f.diaMes.toString().padStart(2, '0')}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-300 truncate group-hover:text-white transition-colors">
+                            {f.nome.split(' ')[0]} {f.nome.split(' ').slice(-1)[0]}
+                          </p>
+                          {f.lojaNome && (
+                            <p className="text-[10px] text-gray-600 truncate">{f.lojaNome}</p>
+                          )}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Navigation Grid */}
