@@ -538,9 +538,21 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
                   <FlavorGroupCard
                     key={group.nome}
                     group={group}
+                    storeSlug={storeId}
                     onClick={() => handleClickGroup(group)}
                     selectMode={selectMode}
                     selectedCount={selectedCount}
+                    onFotoUpload={!selectMode ? (url) => {
+                      // Aplica a foto a TODOS os sabores do grupo (mesma pizza, tamanhos diferentes)
+                      const ids = new Set(group.produtos.map(p => p.id));
+                      const newData = {
+                        ...data,
+                        sabores: data.sabores.map(s =>
+                          ids.has(s.id) ? { ...s, fotoUrl: url } : s
+                        ),
+                      };
+                      updateData(newData);
+                    } : undefined}
                   />
                 );
               })}

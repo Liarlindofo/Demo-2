@@ -1,7 +1,36 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Copy, Pencil, Check, X, Camera, Loader2, ImageOff } from 'lucide-react';
+import { Copy, Pencil, Check, X, Camera, Loader2, ImageOff, Eye, Download } from 'lucide-react';
+
+/** Comprime imagem para no máximo `maxMB` MB usando Canvas (client-side). */
+async function comprimirImagem(file: File, maxMB = 3): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const canvas = document.createElement('canvas');
+      const MAX_DIM = 1920;
+      let { width, height } = img;
+      if (width > MAX_DIM || height > MAX_DIM) {
+        if (width > height) { height = Math.round(height * MAX_DIM / width); width = MAX_DIM; }
+        else { width = Math.round(width * MAX_DIM / height); height = MAX_DIM; }
+      }
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+      let quality = 0.9;
+      const attempt = () => canvas.toBlob(blob => {
+        if (!blob) return reject(new Error('Falha ao comprimir'));
+        if (blob.size > maxMB * 1024 * 1024 && quality > 0.3) { quality -= 0.1; attempt(); }
+        else resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
+      }, 'image/jpeg', quality);
+      attempt();
+    };
+    img.onerror = reject;
+    img.src = objectUrl;
+  });
+}
 import type { ProductCMV } from '../types';
 import { CMV_COLORS, CMV_META, getStatusLabel } from '../constants';
 import { formatCurrency, formatPercent, getSugestoesPreco } from '../utils';
@@ -46,16 +75,17 @@ export const PizzaCard = ({
   useEffect(() => { setFotoSrc(product.fotoUrl); }, [product.fotoUrl]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !storeSlug) return;
+    const raw = e.target.files?.[0];
+    if (!raw || !storeSlug) return;
     setUploading(true);
     try {
+      const file = await comprimirImagem(raw);   // comprime antes de enviar
       const fd = new FormData();
       fd.append('file', file);
       fd.append('saborId', product.id);
       fd.append('storeSlug', storeSlug);
       const res = await fetch('/api/cmv/foto', { method: 'POST', body: fd });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       if (!res.ok) throw new Error(data.error ?? 'Erro no upload');
       setFotoSrc(data.url);
       onFotoUpload?.(data.url);
@@ -65,6 +95,26 @@ export const PizzaCard = ({
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const handleView = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!fotoSrc) return;
+    window.open(fotoSrc.split('?')[0], '_blank');
+  };
+
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!fotoSrc) return;
+    try {
+      const res = await fetch(fotoSrc);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${product.nome}.jpg`;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch (err) { console.error('[PizzaCard] Download foto:', err); }
   };
 
   useEffect(() => {
@@ -115,7 +165,7 @@ export const PizzaCard = ({
 
       {/* Foto do produto */}
       {fotoSrc ? (
-        <div className="relative w-full h-36 bg-[#141416] overflow-hidden">
+        <div className="relative w-full h-36 bg-[#141416] overflow-hidden group/foto">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={fotoSrc}
@@ -123,19 +173,27 @@ export const PizzaCard = ({
             className="w-full h-full object-cover"
             onError={() => setFotoSrc(undefined)}
           />
-          {/* Overlay de substituição no hover */}
-          {onFotoUpload && !selectMode && (
-            <button
-              onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
-              disabled={uploading}
-              title="Trocar foto"
-              className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              {uploading
-                ? <Loader2 className="w-6 h-6 text-white animate-spin" />
-                : <Camera className="w-6 h-6 text-white" />}
+          {/* Barra de ações — sempre visível */}
+          <div
+            className="absolute bottom-0 left-0 right-0 flex items-center justify-end gap-1 px-2 py-1.5 bg-gradient-to-t from-black/75 to-transparent"
+            onClick={e => e.stopPropagation()}
+          >
+            <button onClick={handleDownload} title="Baixar foto original"
+              className="w-7 h-7 flex items-center justify-center rounded-lg bg-black/50 hover:bg-black/80 text-white transition-colors">
+              <Download className="w-3.5 h-3.5" />
             </button>
-          )}
+            <button onClick={handleView} title="Visualizar foto"
+              className="w-7 h-7 flex items-center justify-center rounded-lg bg-black/50 hover:bg-black/80 text-white transition-colors">
+              <Eye className="w-3.5 h-3.5" />
+            </button>
+            {onFotoUpload && (
+              <button onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }} disabled={uploading}
+                title="Trocar foto"
+                className="w-7 h-7 flex items-center justify-center rounded-lg bg-black/50 hover:bg-black/80 text-white transition-colors disabled:opacity-50">
+                {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+              </button>
+            )}
+          </div>
         </div>
       ) : onFotoUpload && !selectMode ? (
         /* Placeholder clicável quando sem foto */
