@@ -393,6 +393,7 @@ export interface FlavorGroup {
   cmvMedio: number;
   cmvMin: number;
   cmvMax: number;
+  custoMedio: number;
   statusGeral: 'otimo' | 'atencao' | 'critico';
 }
 
@@ -422,8 +423,9 @@ export const agruparPorSabor = (products: ProductCMV[]): FlavorGroup[] => {
       const cmvMedio = cmvValues.reduce((s, v) => s + v, 0) / cmvValues.length;
       const cmvMin = Math.min(...cmvValues);
       const cmvMax = Math.max(...cmvValues);
+      const custoMedio = sorted.reduce((s, p) => s + p.custo, 0) / sorted.length;
       const statusGeral = getCMVStatus(cmvMax); // pior caso do grupo
-      return { nome, produtos: sorted, cmvMedio, cmvMin, cmvMax, statusGeral };
+      return { nome, produtos: sorted, cmvMedio, cmvMin, cmvMax, custoMedio, statusGeral };
     })
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 };
