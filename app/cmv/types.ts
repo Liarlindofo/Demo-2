@@ -94,8 +94,10 @@ export interface Sabor {
   itens: SaborItem[];
   /** @deprecated mantido para leitura de dados antigos, migrado automaticamente */
   ingredientes?: IngredienteSabor[];
-  /** URL da foto do produto no Supabase Storage */
+  /** @deprecated use fotos[0]. URL da foto principal no Supabase Storage */
   fotoUrl?: string;
+  /** Array de URLs de fotos/vídeos. O primeiro item é a capa. */
+  fotos?: string[];
   /** Descrição livre do produto (ingredientes em destaque, modo de preparo, etc.) */
   descricao?: string;
 }
@@ -144,7 +146,8 @@ export interface Combo {
   descricao?: string;
   precoVenda: number;
   itens: ComboItem[];
-  fotoUrl?: string;
+  fotoUrl?: string;   // @deprecated
+  fotos?: string[];
 }
 
 export interface ComboCMVItemPizza {
@@ -182,7 +185,8 @@ export interface ComboCMV {
   id: string;
   nome: string;
   descricao?: string;
-  fotoUrl?: string;
+  fotoUrl?: string;   // @deprecated
+  fotos?: string[];
   custoTotal: number;
   /** Soma das médias de preço de categoria × quantidade */
   precoRegular: number;
@@ -217,8 +221,9 @@ export interface ProductCMV {
   margem: number;
   status: 'otimo' | 'atencao' | 'critico';
   numIngredientes: number;
-  fotoUrl?: string;         // URL da foto no Supabase Storage
-  descricao?: string;       // Descrição livre do produto
+  fotoUrl?: string;         // @deprecated
+  fotos?: string[];         // Array de fotos/vídeos; fotos[0] = capa
+  descricao?: string;
 }
 
 export interface StoreMetrics {

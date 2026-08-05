@@ -542,12 +542,11 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
                     onClick={() => handleClickGroup(group)}
                     selectMode={selectMode}
                     selectedCount={selectedCount}
-                    onFotoUpload={!selectMode ? (url) => {
+                    onFotosChange={!selectMode ? (fotos) => {
                       const ids = new Set(group.produtos.map(p => p.id));
-                      updateData({ ...data, sabores: data.sabores.map(s => ids.has(s.id) ? { ...s, fotoUrl: url } : s) });
+                      updateData({ ...data, sabores: data.sabores.map(s => ids.has(s.id) ? { ...s, fotos, fotoUrl: fotos[0] } : s) });
                     } : undefined}
                     onDescricaoChange={!selectMode ? (desc) => {
-                      // Aplica a descrição a TODOS os sabores do grupo
                       const ids = new Set(group.produtos.map(p => p.id));
                       updateData({ ...data, sabores: data.sabores.map(s => ids.has(s.id) ? { ...s, descricao: desc } : s) });
                     } : undefined}
@@ -589,8 +588,8 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
                   selected={selectedIds.has(product.id)}
                   onClone={!selectMode ? () => handleCloneSabor(product.id) : undefined}
                   onRename={!selectMode ? (name) => handleRenameSabor(product.id, name) : undefined}
-                  onFotoUpload={!selectMode ? (url) => {
-                    updateData({ ...data, sabores: data.sabores.map(s => s.id === product.id ? { ...s, fotoUrl: url } : s) });
+                  onFotosChange={!selectMode ? (fotos) => {
+                    updateData({ ...data, sabores: data.sabores.map(s => s.id === product.id ? { ...s, fotos, fotoUrl: fotos[0] } : s) });
                   } : undefined}
                   onDescricaoChange={!selectMode ? (desc) => {
                     updateData({ ...data, sabores: data.sabores.map(s => s.id === product.id ? { ...s, descricao: desc } : s) });
@@ -642,8 +641,8 @@ export const StoreTab = ({ storeId }: StoreTabProps) => {
                     const raw = (data.combos ?? []).find(c => c.id === combo.id);
                     if (raw) setSelectedCombo(raw);
                   }}
-                  onFotoUpload={(url) => {
-                    updateData({ ...data, combos: (data.combos ?? []).map(c => c.id === combo.id ? { ...c, fotoUrl: url } : c) });
+                  onFotosChange={(fotos) => {
+                    updateData({ ...data, combos: (data.combos ?? []).map(c => c.id === combo.id ? { ...c, fotos, fotoUrl: fotos[0] } : c) });
                   }}
                   onDescricaoChange={(desc) => {
                     updateData({ ...data, combos: (data.combos ?? []).map(c => c.id === combo.id ? { ...c, descricao: desc } : c) });

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { GlassWater, Package2, Pizza, Camera, Loader2, ImageOff, Eye, Download } from 'lucide-react';
+import { GlassWater, Package2, Pizza } from 'lucide-react';
 import { DescricaoEditavel } from './DescricaoEditavel';
+import { FotoManager } from './FotoManager';
 import type { ComboCMV } from '../types';
 import { TAMANHO_LABELS } from '../types';
 import { CMV_COLORS, CMV_META, getStatusLabel } from '../constants';
@@ -40,7 +40,7 @@ interface ComboCardProps {
   combo: ComboCMV;
   storeSlug?: string;
   onClick: () => void;
-  onFotoUpload?: (url: string) => void;
+  onFotosChange?: (fotos: string[]) => void;
   onDescricaoChange?: (descricao: string) => void;
 }
 
@@ -50,7 +50,7 @@ const STATUS_BADGE_COLORS = {
   critico: 'bg-red-500/20 text-red-400 border border-red-500/30',
 };
 
-export const ComboCard = ({ combo, storeSlug, onClick, onFotoUpload, onDescricaoChange }: ComboCardProps) => {
+export const ComboCard = ({ combo, storeSlug, onClick, onFotosChange, onDescricaoChange }: ComboCardProps) => {
   const cmvColor = CMV_COLORS[combo.status];
   const barWidth = Math.min(100, Math.max(0, combo.margem));
   const metaBarWidth = 100 - CMV_META;
@@ -60,99 +60,23 @@ export const ComboCard = ({ combo, storeSlug, onClick, onFotoUpload, onDescricao
   const totalPizzas = combo.itens.filter(i => i.tipo === 'pizza').reduce((s, i) => s + i.quantidade, 0);
   const totalBebidas = combo.itens.filter(i => i.tipo === 'ingrediente').reduce((s, i) => s + i.quantidade, 0);
   const semProdutos = combo.itens.some(i => i.tipo === 'pizza' && i.numProdutos === 0);
-
-  // Foto
-  const [uploading, setUploading] = useState(false);
-  const [fotoSrc, setFotoSrc] = useState(combo.fotoUrl);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { setFotoSrc(combo.fotoUrl); }, [combo.fotoUrl]);
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.files?.[0];
-    if (!raw || !storeSlug) return;
-    setUploading(true);
-    try {
-      const file = await comprimirImagem(raw);
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('saborId', `combo-${combo.id}`);
-      fd.append('storeSlug', storeSlug);
-      const res = await fetch('/api/cmv/foto', { method: 'POST', body: fd });
-      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-      if (!res.ok) throw new Error(data.error ?? 'Erro no upload');
-      setFotoSrc(data.url);
-      onFotoUpload?.(data.url);
-    } catch (err) {
-      console.error('[ComboCard] Upload foto:', err);
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const handleView = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!fotoSrc) return;
-    window.open(fotoSrc.split('?')[0], '_blank');
-  };
-
-  const handleDownload = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!fotoSrc) return;
-    try {
-      const res = await fetch(fotoSrc);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `${combo.nome}.jpg`;
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a); URL.revokeObjectURL(url);
-    } catch (err) { console.error('[ComboCard] Download foto:', err); }
-  };
+  const fotos = combo.fotos ?? (combo.fotoUrl ? [combo.fotoUrl] : []);
 
   return (
     <div
       onClick={onClick}
       className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl overflow-hidden cursor-pointer hover:border-[#3a3a3e] hover:bg-[#202024] transition-all duration-200 select-none"
     >
-      {/* Input oculto */}
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
-        onChange={handleFileChange} onClick={e => e.stopPropagation()} />
-
-      {/* Foto */}
-      {fotoSrc ? (
-        <div className="relative w-full h-36 bg-[#141416] overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={fotoSrc} alt={combo.nome} className="w-full h-full object-cover" onError={() => setFotoSrc(undefined)} />
-          <div className="absolute bottom-0 left-0 right-0 flex items-center justify-end gap-1 px-2 py-1.5 bg-gradient-to-t from-black/75 to-transparent"
-            onClick={e => e.stopPropagation()}>
-            <button onClick={handleDownload} title="Baixar foto"
-              className="w-7 h-7 flex items-center justify-center rounded-lg bg-black/50 hover:bg-black/80 text-white transition-colors">
-              <Download className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={handleView} title="Visualizar foto"
-              className="w-7 h-7 flex items-center justify-center rounded-lg bg-black/50 hover:bg-black/80 text-white transition-colors">
-              <Eye className="w-3.5 h-3.5" />
-            </button>
-            {onFotoUpload && (
-              <button onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }} disabled={uploading}
-                title="Trocar foto"
-                className="w-7 h-7 flex items-center justify-center rounded-lg bg-black/50 hover:bg-black/80 text-white transition-colors disabled:opacity-50">
-                {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
-              </button>
-            )}
-          </div>
-        </div>
-      ) : onFotoUpload ? (
-        <button onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }} disabled={uploading}
-          className="w-full h-20 flex flex-col items-center justify-center gap-1.5 bg-[#141416] hover:bg-[#1a1a1e] border-b border-[#2a2a2e] transition-colors"
-          title="Adicionar foto">
-          {uploading
-            ? <Loader2 className="w-5 h-5 text-gray-600 animate-spin" />
-            : <><ImageOff className="w-5 h-5 text-gray-700" /><span className="text-[10px] text-gray-700">Adicionar foto</span></>}
-        </button>
-      ) : null}
+      {/* Galeria de fotos/vídeos */}
+      <div onClick={e => e.stopPropagation()}>
+        <FotoManager
+          fotos={fotos}
+          nome={combo.nome}
+          storeSlug={storeSlug}
+          produtoId={`combo-${combo.id}`}
+          onFotosChange={onFotosChange}
+        />
+      </div>
 
       {/* Conteúdo */}
       <div className="p-5">

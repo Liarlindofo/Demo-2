@@ -54,12 +54,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Extensão baseada no MIME type ou nome do arquivo
-  const ext = file.type.split('/')[1]?.replace('jpeg', 'jpg') ||
-              file.name.split('.').pop()?.toLowerCase() ||
-              'jpg';
+  const ext = file.type.split('/')[1]?.replace('jpeg', 'jpg')
+              ?.replace('quicktime', 'mov')
+              || file.name.split('.').pop()?.toLowerCase()
+              || 'jpg';
 
-  // Path: {userId}/{storeSlug}/{saborId}.{ext}
-  const path = `${stackUser.id}/${storeSlug}/${saborId}.${ext}`;
+  // Path com timestamp: suporta múltiplos arquivos por produto
+  const path = `${stackUser.id}/${storeSlug}/${saborId}/${Date.now()}.${ext}`;
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
     .from(BUCKET)
     .upload(path, buffer, {
       contentType: file.type || 'image/jpeg',
-      upsert: true, // sobrescreve versão anterior sem erro
+      upsert: false, // path tem timestamp → arquivos distintos
     });
 
   if (uploadError) {

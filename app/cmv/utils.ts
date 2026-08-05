@@ -254,6 +254,7 @@ export const calcularCMVSabor = (
     status,
     numIngredientes,
     fotoUrl: sabor.fotoUrl,
+    fotos:   sabor.fotos ?? (sabor.fotoUrl ? [sabor.fotoUrl] : undefined),
     descricao: sabor.descricao,
   };
 };
@@ -614,6 +615,7 @@ export const calcularComboCMV = (combo: Combo, data: StoreData): ComboCMV => {
     nome: combo.nome,
     descricao: combo.descricao,
     fotoUrl: combo.fotoUrl,
+    fotos:   combo.fotos ?? (combo.fotoUrl ? [combo.fotoUrl] : undefined),
     custoTotal,
     precoRegular,
     precoVenda: combo.precoVenda,
