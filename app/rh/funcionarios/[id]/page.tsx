@@ -683,62 +683,85 @@ export default function FuncionarioDetailPage() {
 
         {/* ── TAB FÉRIAS ── */}
         {tab === 'ferias' && (
-          <div className="space-y-5">
-            {/* Período aquisitivo */}
-            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6">
-              <div className="flex items-center gap-2 mb-5 pb-3 border-b border-[#2a2a2e]">
-                <Umbrella className="w-4 h-4 text-amber-500" /><h2 className="text-sm font-semibold text-white">Período Aquisitivo</h2>
+          <div className="space-y-4">
+
+            {/* ── Resumo de férias ─────────────────────────────────────────── */}
+            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Umbrella className="w-4 h-4 text-amber-500" />
+                <h2 className="text-sm font-semibold text-white">Férias</h2>
               </div>
-              {periodo ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    {[
-                      { label: 'Início aquisitivo', value: fmtDate(funcionario.dataInicioFerias) },
-                      { label: 'Vencimento', value: fmtDate(periodo.vencimento.toISOString()) },
-                      { label: 'Dias de direito', value: `${periodo.diasDireito} dias` },
-                      { label: 'Dias gozados', value: `${funcionario.diasFeriasGozados ?? 0} dias` },
-                    ].map(({ label, value }) => (
-                      <div key={label} className="bg-[#0a0a0a] rounded-xl p-3">
-                        <p className="text-xs text-gray-500 mb-1">{label}</p>
-                        <p className="text-sm font-semibold text-white">{value}</p>
+
+              {periodo ? (() => {
+                const venc = periodo.vencimento;
+                const dias = periodo.diasRestantes;
+                const vencido = dias < 0;
+                const urgente = !vencido && dias <= 60;
+
+                return (
+                  <div className="space-y-3">
+                    {/* Próximo vencimento */}
+                    <div className={`flex items-center justify-between p-4 rounded-xl border ${
+                      vencido  ? 'bg-red-500/10 border-red-500/25'
+                      : urgente ? 'bg-amber-500/10 border-amber-500/25'
+                               : 'bg-[#141416] border-[#2a2a2e]'
+                    }`}>
+                      <div>
+                        <p className="text-xs text-gray-500 mb-0.5">Próximo vencimento</p>
+                        <p className={`text-base font-bold ${vencido ? 'text-red-400' : urgente ? 'text-amber-400' : 'text-white'}`}>
+                          {venc.toLocaleDateString('pt-BR')}
+                        </p>
                       </div>
-                    ))}
+                      <div className={`text-right text-sm font-semibold ${vencido ? 'text-red-400' : urgente ? 'text-amber-400' : 'text-gray-400'}`}>
+                        {vencido
+                          ? <>Vencido há <span className="text-lg font-bold">{Math.abs(dias)}</span> dias</>
+                          : <>daqui <span className="text-lg font-bold">{dias}</span> dias</>
+                        }
+                      </div>
+                    </div>
+
+                    {/* Última férias */}
+                    <div className="flex items-center justify-between px-1">
+                      <div>
+                        <p className="text-xs text-gray-500 mb-0.5">Última férias registrada</p>
+                        {funcionario.dataGozoFerias ? (
+                          <p className="text-sm font-medium text-white">
+                            {new Date(funcionario.dataGozoFerias).toLocaleDateString('pt-BR')}
+                            {(funcionario.diasFeriasGozados ?? 0) > 0 && (
+                              <span className="text-gray-500 ml-2">· {funcionario.diasFeriasGozados} dias gozados</span>
+                            )}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-gray-600 italic">Nenhuma registrada</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${periodo.diasRestantes < 0 ? 'bg-red-500/10 border border-red-500/20 text-red-400' : periodo.diasRestantes <= 60 ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400' : 'bg-green-500/10 border border-green-500/20 text-green-400'}`}>
-                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                    {periodo.diasRestantes < 0
-                      ? `Período aquisitivo vencido há ${Math.abs(periodo.diasRestantes)} dias!`
-                      : `${periodo.diasRestantes} dias até o vencimento do período aquisitivo`
-                    }
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">Data de admissão não informada</p>
+                );
+              })() : (
+                <p className="text-sm text-gray-500">Data de admissão não informada — não é possível calcular o vencimento.</p>
               )}
             </div>
 
-            {/* Programar gozo */}
-            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-6">
-              <div className="flex items-center gap-2 mb-5 pb-3 border-b border-[#2a2a2e]">
-                <Calendar className="w-4 h-4 text-amber-500" /><h2 className="text-sm font-semibold text-white">Registrar Gozo de Férias</h2>
+            {/* ── Registrar férias ─────────────────────────────────────────── */}
+            <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Calendar className="w-4 h-4 text-amber-500" />
+                <h2 className="text-sm font-semibold text-white">Registrar Férias</h2>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelCls}>Data início do gozo</label>
+                  <label className={labelCls}>Data de início das férias</label>
                   <input type="date" value={dataGozoFerias} onChange={e => setDataGozoFerias(e.target.value)} className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Dias gozados</label>
-                  <input type="number" min={0} max={30} value={diasFeriasGozados} onChange={e => setDiasFeriasGozados(Number(e.target.value))} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Status</label>
-                  <select value={statusFerias} onChange={e => setStatusFerias(e.target.value)} className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/50">
-                    {Object.entries(STATUS_FERIAS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
+                  <label className={labelCls}>Quantos dias de férias?</label>
+                  <input type="number" min={0} max={30} value={diasFeriasGozados}
+                    onChange={e => setDiasFeriasGozados(Number(e.target.value))} className={inputCls} />
                 </div>
               </div>
-              <button onClick={handleSalvarFerias} disabled={salvandoFerias} className="mt-4 flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 disabled:opacity-60 transition-colors">
+              <button onClick={handleSalvarFerias} disabled={salvandoFerias}
+                className="mt-4 flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 disabled:opacity-60 transition-colors">
                 <Save className="w-4 h-4" />{salvandoFerias ? 'Salvando...' : 'Salvar férias'}
               </button>
             </div>
