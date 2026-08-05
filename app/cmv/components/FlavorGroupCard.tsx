@@ -43,10 +43,16 @@ export const FlavorGroupCard = ({
     .map(p => ({ product: p, sugestoes: getSugestoesPreco(p) }))
     .filter(({ sugestoes }) => sugestoes.length > 0);
 
-  // Usa o representante do grupo (primeiro produto) para a foto
-  const primeiroId = group.produtos[0]?.id ?? group.nome;
-  const groupSlug  = encodeURIComponent(group.nome.toLowerCase().replace(/\s+/g, '-'));
-  const produtoId  = groupSlug; // mantém compatibilidade com uploads anteriores por nome
+  // Slug ASCII-safe para Supabase Storage (não aceita % nem acentos na key)
+  const produtoId = group.nome
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    || 'produto';
   const fotos = group.produtos[0]?.fotos ?? (group.produtos[0]?.fotoUrl ? [group.produtos[0].fotoUrl] : []);
 
   return (

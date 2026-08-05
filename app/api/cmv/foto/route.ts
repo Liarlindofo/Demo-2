@@ -7,6 +7,23 @@ export const maxDuration = 60;
 
 const BUCKET = 'cmv-produtos';
 
+/** Segmento de path seguro para Supabase Storage (sem %, acentos ou chars inválidos). */
+function sanitizeStorageSegment(raw: string): string {
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    // mantém raw se não for URI-encoded válido
+  }
+  return decoded
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    || 'item';
+}
+
 /**
  * POST /api/cmv/foto
  *
@@ -53,14 +70,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Extensão baseada no MIME type ou nome do arquivo
-  const ext = file.type.split('/')[1]?.replace('jpeg', 'jpg')
+  // Extensão baseada no MIME type ou nome do arquivo (somente alfanumérico)
+  const rawExt = file.type.split('/')[1]?.replace('jpeg', 'jpg')
               ?.replace('quicktime', 'mov')
               || file.name.split('.').pop()?.toLowerCase()
               || 'jpg';
+  const ext = rawExt.replace(/[^a-z0-9]/g, '') || 'jpg';
+
+  const userId = sanitizeStorageSegment(stackUser.id);
+  const store  = sanitizeStorageSegment(storeSlug);
+  const sabor  = sanitizeStorageSegment(saborId);
 
   // Path com timestamp: suporta múltiplos arquivos por produto
-  const path = `${stackUser.id}/${storeSlug}/${saborId}/${Date.now()}.${ext}`;
+  const path = `${userId}/${store}/${sabor}/${Date.now()}.${ext}`;
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -110,15 +132,18 @@ export async function DELETE(req: NextRequest) {
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
+  const userId = sanitizeStorageSegment(stackUser.id);
+  const store  = sanitizeStorageSegment(storeSlug);
+  const sabor  = sanitizeStorageSegment(saborId);
 
-  // Lista arquivos com o prefixo do produto para encontrar qualquer extensão
+  // Lista arquivos na pasta do produto (path: user/store/sabor/arquivo)
   const { data: files } = await supabase.storage
     .from(BUCKET)
-    .list(`${stackUser.id}/${storeSlug}`, { search: saborId });
+    .list(`${userId}/${store}/${sabor}`);
 
   const paths = (files ?? [])
-    .filter(f => f.name.startsWith(saborId))
-    .map(f => `${stackUser.id}/${storeSlug}/${f.name}`);
+    .filter(f => f.name && !f.name.endsWith('/'))
+    .map(f => `${userId}/${store}/${sabor}/${f.name}`);
 
   if (paths.length > 0) {
     await supabase.storage.from(BUCKET).remove(paths);
