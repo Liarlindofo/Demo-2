@@ -18,6 +18,7 @@ import ComposicaoSalarialForm, { type ComposicaoSalarialValues } from '@/compone
 import DrawerBonificacaoTrimestral, { type BonificacaoTrimestral } from '@/components/rh/DrawerBonificacaoTrimestral';
 import { formatarCPF, calcularIdade } from '@/lib/validacoes';
 import { buildComposicaoPayload, parseMoney } from '@/components/rh/FuncionarioForm';
+import { calcPeriodoAquisitivo } from '@/lib/ferias-rh';
 
 interface Cargo { id: string; nome: string; ratPct: number }
 interface Loja { id: string; nome: string; ativo: boolean }
@@ -280,12 +281,16 @@ export default function FuncionarioDetailPage() {
     try {
       const res = await fetch(`/api/rh/funcionarios/${params.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataGozoFerias: dataGozoFerias || null, diasFeriasGozados, statusFerias }),
+        body: JSON.stringify({
+          dataGozoFerias: dataGozoFerias || null,
+          diasFeriasGozados,
+          statusFerias: dataGozoFerias ? 'gozadas' : statusFerias,
+        }),
       });
       if (res.ok) {
         const updated: Funcionario = await res.json();
         setFuncionario(updated);
-        showToast('Férias atualizadas');
+        showToast('Férias registradas — próximo vencimento atualizado');
       }
     } finally { setSalvandoFerias(false); }
   };
@@ -321,20 +326,13 @@ export default function FuncionarioDetailPage() {
     );
   }
 
-  // Cálculo do período aquisitivo de férias
-  const calcPeriodoAquisitivo = () => {
-    if (!funcionario.dataInicioFerias) return null;
-    const inicio = new Date(funcionario.dataInicioFerias);
-    const vencimento = new Date(inicio);
-    vencimento.setFullYear(vencimento.getFullYear() + 1);
-    const hoje = new Date();
-    const diasRestantes = Math.floor((vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
-    const mesesTrabalhados = Math.floor((hoje.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24 * 30));
-    const diasDireito = Math.min(30, Math.floor(mesesTrabalhados * 2.5));
-    return { inicio, vencimento, diasRestantes, diasDireito };
-  };
-
-  const periodo = calcPeriodoAquisitivo();
+  const periodo = calcPeriodoAquisitivo(
+    funcionario.dataInicioFerias ? new Date(funcionario.dataInicioFerias) : null,
+    {
+      dataAdmissao: funcionario.dataAdmissao ? new Date(funcionario.dataAdmissao) : null,
+      dataGozoFerias: funcionario.dataGozoFerias ? new Date(funcionario.dataGozoFerias) : null,
+    },
+  );
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">

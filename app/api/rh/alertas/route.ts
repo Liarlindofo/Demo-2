@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rhGetUser } from '@/lib/rh-auth';
+import { calcPeriodoAquisitivo } from '@/lib/ferias-rh';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,16 +56,22 @@ export async function GET() {
     const alertasFerias = funcionarios
       .filter((f) => f.dataInicioFerias)
       .map((f) => {
-        const inicioAquisitivo = f.dataInicioFerias!;
-        const vencimentoAquisitivo = new Date(inicioAquisitivo);
-        vencimentoAquisitivo.setFullYear(vencimentoAquisitivo.getFullYear() + 1);
-        const diasParaVencimento = diffDias(hoje, vencimentoAquisitivo);
-        return { f, vencimentoAquisitivo, diasParaVencimento };
+        const periodo = calcPeriodoAquisitivo(f.dataInicioFerias, {
+          dataAdmissao: f.dataAdmissao,
+          dataGozoFerias: f.dataGozoFerias,
+          hoje,
+        })!;
+        return {
+          f,
+          vencimentoAquisitivo: periodo.vencimento,
+          diasParaVencimento: periodo.diasRestantes,
+          inicioEfetivo: periodo.inicio,
+        };
       })
       .filter(({ diasParaVencimento }) => diasParaVencimento <= 60)
-      .map(({ f, vencimentoAquisitivo, diasParaVencimento }) => ({
+      .map(({ f, vencimentoAquisitivo, diasParaVencimento, inicioEfetivo }) => ({
         funcionario: { id: f.id, nome: f.nome, loja: f.loja, cargo: f.cargo },
-        dataInicioFerias: f.dataInicioFerias,
+        dataInicioFerias: inicioEfetivo,
         dataGozoFerias: f.dataGozoFerias,
         vencimentoAquisitivo,
         diasParaVencimento,

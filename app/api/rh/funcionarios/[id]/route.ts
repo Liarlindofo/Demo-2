@@ -9,6 +9,11 @@ import {
 import { calcularComposicaoSalarial } from '@/lib/calculos-rh';
 import { carregarBonificacoesComposicao } from '@/lib/rh-bonificacoes-composicao';
 import { limparCPF, validarCPF, validarDataNascimento } from '@/lib/validacoes';
+import {
+  deveAvancarPeriodoAoSalvarGozo,
+  inicioAquisitivoEfetivo,
+  proximoInicioAquisitivo,
+} from '@/lib/ferias-rh';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,13 +79,33 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const rh = await rhGetUser();
     if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
-    const funcionario = await prisma.rhFuncionario.findFirst({
+    let funcionario = await prisma.rhFuncionario.findFirst({
       where: { id, userId: rh!.userId },
       include: INCLUDE,
     });
 
     if (!funcionario)
       return NextResponse.json({ error: 'Funcionário não encontrado' }, { status: 404 });
+
+    // Corrige legado: gozo registrado sem avançar o período aquisitivo
+    if (
+      funcionario.dataInicioFerias &&
+      funcionario.dataAdmissao &&
+      funcionario.dataGozoFerias
+    ) {
+      const efetivo = inicioAquisitivoEfetivo(
+        funcionario.dataInicioFerias,
+        funcionario.dataAdmissao,
+        funcionario.dataGozoFerias,
+      );
+      if (efetivo.getTime() !== new Date(funcionario.dataInicioFerias).getTime()) {
+        funcionario = await prisma.rhFuncionario.update({
+          where: { id },
+          data: { dataInicioFerias: efetivo },
+          include: INCLUDE,
+        });
+      }
+    }
 
     const bonificacoesComposicao = await carregarBonificacoesComposicao(id);
 
@@ -210,6 +235,49 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const alteradoPor = rh!.userId;
 
+    // Avanço do período aquisitivo ao registrar/atualizar gozo de férias
+    let feriasData: {
+      dataGozoFerias?: Date | null;
+      statusFerias?: string;
+      diasFeriasGozados?: number;
+      dataInicioFerias?: Date;
+    } = {};
+    if (dataGozoFerias !== undefined || statusFerias !== undefined || diasFeriasGozados !== undefined) {
+      const gozoNovo = dataGozoFerias !== undefined
+        ? (dataGozoFerias ? new Date(dataGozoFerias) : null)
+        : existing.dataGozoFerias;
+
+      if (dataGozoFerias !== undefined) {
+        feriasData.dataGozoFerias = gozoNovo;
+      }
+      if (diasFeriasGozados !== undefined) {
+        feriasData.diasFeriasGozados = Number(diasFeriasGozados);
+      }
+      // Registrar gozo → status gozadas (salvo se o cliente mandar outro)
+      if (statusFerias !== undefined) {
+        feriasData.statusFerias = statusFerias;
+      } else if (gozoNovo) {
+        feriasData.statusFerias = 'gozadas';
+      }
+
+      const inicioAtual = existing.dataInicioFerias;
+      if (inicioAtual && gozoNovo) {
+        const avancar = deveAvancarPeriodoAoSalvarGozo(existing.dataGozoFerias, gozoNovo);
+        // Legado: gozo já existia mas período nunca avançou (ainda = admissão)
+        const legado = !avancar
+          && existing.dataGozoFerias
+          && existing.dataAdmissao
+          && inicioAquisitivoEfetivo(inicioAtual, existing.dataAdmissao, existing.dataGozoFerias).getTime()
+            !== new Date(inicioAtual).getTime();
+
+        if (avancar || legado) {
+          feriasData.dataInicioFerias = legado
+            ? inicioAquisitivoEfetivo(inicioAtual, existing.dataAdmissao, existing.dataGozoFerias)
+            : proximoInicioAquisitivo(inicioAtual);
+        }
+      }
+    }
+
     const funcionario = await prisma.$transaction(async (tx) => {
       const updated = await tx.rhFuncionario.update({
         where: { id },
@@ -239,11 +307,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...(domingoFolga !== undefined && { domingoFolga: domingoFolga || null }),
           ...(observacoes !== undefined && { observacoes: observacoes || null }),
           ...(ativo !== undefined && { ativo }),
-          ...(dataGozoFerias !== undefined && {
-            dataGozoFerias: dataGozoFerias ? new Date(dataGozoFerias) : null,
-          }),
-          ...(statusFerias !== undefined && { statusFerias }),
-          ...(diasFeriasGozados !== undefined && { diasFeriasGozados }),
+          ...feriasData,
           ...experienciaData,
         },
         include: INCLUDE,

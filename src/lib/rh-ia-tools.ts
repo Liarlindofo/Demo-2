@@ -3,6 +3,12 @@ import { ensureRhCargosPadrao } from './rh-cargos-padrao';
 import { enrichFuncionario } from './rh-funcionario';
 import { limparCPF, validarCPF } from './validacoes';
 import { seedAssiduidadeMes, mesAnoAtual, trimestreAtual } from './seed-assiduidade';
+import {
+  calcPeriodoAquisitivo,
+  deveAvancarPeriodoAoSalvarGozo,
+  inicioAquisitivoEfetivo,
+  proximoInicioAquisitivo,
+} from './ferias-rh';
 
 export const RH_BONIFICACOES_PROMPT = `
 ## BONIFICAÇÕES
@@ -972,30 +978,62 @@ async function registrarFerias(args: any, userId: string) {
 
   const func = await prisma.rhFuncionario.findFirst({
     where: { id: funcionarioId, userId },
-    select: { id: true, nome: true, dataInicioFerias: true },
+    select: {
+      id: true,
+      nome: true,
+      dataInicioFerias: true,
+      dataGozoFerias: true,
+      dataAdmissao: true,
+    },
   });
   if (!func) return JSON.stringify({ erro: 'Funcionário não encontrado' });
 
-  const update: any = {};
-  if (dataGozoFerias !== undefined) update.dataGozoFerias = new Date(dataGozoFerias);
+  const update: Record<string, unknown> = {};
+  const gozoNovo = dataGozoFerias !== undefined ? new Date(dataGozoFerias) : null;
+  if (gozoNovo) update.dataGozoFerias = gozoNovo;
   if (diasFeriasGozados !== undefined) update.diasFeriasGozados = Number(diasFeriasGozados);
   if (statusFerias !== undefined) update.statusFerias = statusFerias;
+  else if (gozoNovo) update.statusFerias = 'gozadas';
 
   if (Object.keys(update).length === 0) {
     return JSON.stringify({ erro: 'Nenhum campo de férias informado' });
   }
 
-  await prisma.rhFuncionario.update({ where: { id: funcionarioId }, data: update });
+  if (func.dataInicioFerias && gozoNovo) {
+    const avancar = deveAvancarPeriodoAoSalvarGozo(func.dataGozoFerias, gozoNovo);
+    const legado = !avancar
+      && func.dataGozoFerias
+      && inicioAquisitivoEfetivo(func.dataInicioFerias, func.dataAdmissao, func.dataGozoFerias).getTime()
+        !== new Date(func.dataInicioFerias).getTime();
+
+    if (avancar || legado) {
+      update.dataInicioFerias = legado
+        ? inicioAquisitivoEfetivo(func.dataInicioFerias, func.dataAdmissao, func.dataGozoFerias)
+        : proximoInicioAquisitivo(func.dataInicioFerias);
+    }
+  }
+
+  const updated = await prisma.rhFuncionario.update({
+    where: { id: funcionarioId },
+    data: update,
+  });
+
+  const periodo = calcPeriodoAquisitivo(updated.dataInicioFerias, {
+    dataAdmissao: updated.dataAdmissao,
+    dataGozoFerias: updated.dataGozoFerias,
+  });
 
   const statusLabel: Record<string, string> = { a_gozar: 'A gozar', gozando: 'Em gozo', gozadas: 'Gozadas' };
+  const statusFinal = (update.statusFerias as string | undefined) ?? statusFerias;
 
   return JSON.stringify({
     sucesso: true,
-    mensagem: `Férias de ${func.nome} atualizadas.`,
+    mensagem: `Férias de ${func.nome} atualizadas. Próximo vencimento: ${periodo?.vencimento.toLocaleDateString('pt-BR') ?? '—'}.`,
     funcionario: func.nome,
     dataGozoFerias: dataGozoFerias ?? null,
     diasFeriasGozados: diasFeriasGozados ?? null,
-    status: statusFerias ? statusLabel[statusFerias] ?? statusFerias : null,
+    status: statusFinal ? statusLabel[statusFinal] ?? statusFinal : null,
+    proximoVencimento: periodo?.vencimento.toLocaleDateString('pt-BR') ?? null,
   });
 }
 
@@ -1017,15 +1055,18 @@ async function consultarFerias(args: any, userId: string) {
 
   const resultado = funcionarios.map(f => {
     if (!f.dataInicioFerias) return { nome: f.nome, loja: f.loja.nome, semDados: true };
-    const vencimento = new Date(f.dataInicioFerias);
-    vencimento.setFullYear(vencimento.getFullYear() + 1);
-    const dias = diffDias(hoje, vencimento);
-    let urgencia = dias < 0 ? 'VENCIDO' : dias <= 30 ? 'CRÍTICO' : dias <= 60 ? 'ATENÇÃO' : 'OK';
+    const periodo = calcPeriodoAquisitivo(f.dataInicioFerias, {
+      dataAdmissao: f.dataAdmissao,
+      dataGozoFerias: f.dataGozoFerias,
+      hoje,
+    })!;
+    const dias = periodo.diasRestantes;
+    const urgencia = dias < 0 ? 'VENCIDO' : dias <= 30 ? 'CRÍTICO' : dias <= 60 ? 'ATENÇÃO' : 'OK';
     return {
       nome: f.nome,
       loja: f.loja.nome,
-      inicioAquisitivo: f.dataInicioFerias?.toLocaleDateString('pt-BR'),
-      vencimento: vencimento.toLocaleDateString('pt-BR'),
+      inicioAquisitivo: periodo.inicio.toLocaleDateString('pt-BR'),
+      vencimento: periodo.vencimento.toLocaleDateString('pt-BR'),
       diasParaVencer: dias,
       urgencia,
       status: f.statusFerias ?? 'a_gozar',
@@ -1394,10 +1435,12 @@ async function listarAlertasTrabalhistas(args: any, userId: string) {
   const alertasFerias = funcionarios
     .filter(f => f.dataInicioFerias)
     .map(f => {
-      const venc = new Date(f.dataInicioFerias!);
-      venc.setFullYear(venc.getFullYear() + 1);
-      const dias = diffDias(hoje, venc);
-      return { f, venc, dias };
+      const periodo = calcPeriodoAquisitivo(f.dataInicioFerias, {
+        dataAdmissao: f.dataAdmissao,
+        dataGozoFerias: f.dataGozoFerias,
+        hoje,
+      })!;
+      return { f, venc: periodo.vencimento, dias: periodo.diasRestantes };
     })
     .filter(({ dias }) => dias <= 60)
     .map(({ f, venc, dias }) => ({
