@@ -5,6 +5,7 @@ import { limparCPF, validarCPF } from './validacoes';
 import { seedAssiduidadeMes, mesAnoAtual, trimestreAtual } from './seed-assiduidade';
 import {
   calcPeriodoAquisitivo,
+  formatDateUTC,
   inicioAquisitivoAposGozo,
   sameUtcDay,
 } from './ferias-rh';
@@ -1023,12 +1024,12 @@ async function registrarFerias(args: any, userId: string) {
 
   return JSON.stringify({
     sucesso: true,
-    mensagem: `Férias de ${func.nome} atualizadas. Próximo vencimento: ${periodo?.vencimento.toLocaleDateString('pt-BR') ?? '—'}.`,
+    mensagem: `Férias de ${func.nome} atualizadas. Próximo vencimento: ${periodo ? formatDateUTC(periodo.vencimento) : '—'}.`,
     funcionario: func.nome,
     dataGozoFerias: dataGozoFerias ?? null,
     diasFeriasGozados: diasFeriasGozados ?? null,
     status: statusFinal ? statusLabel[statusFinal] ?? statusFinal : null,
-    proximoVencimento: periodo?.vencimento.toLocaleDateString('pt-BR') ?? null,
+    proximoVencimento: periodo ? formatDateUTC(periodo.vencimento) : null,
   });
 }
 
@@ -1060,13 +1061,13 @@ async function consultarFerias(args: any, userId: string) {
     return {
       nome: f.nome,
       loja: f.loja.nome,
-      inicioAquisitivo: periodo.inicio.toLocaleDateString('pt-BR'),
-      vencimento: periodo.vencimento.toLocaleDateString('pt-BR'),
+      inicioAquisitivo: formatDateUTC(periodo.inicio),
+      vencimento: formatDateUTC(periodo.vencimento),
       diasParaVencer: dias,
       urgencia,
       status: f.statusFerias ?? 'a_gozar',
       diasGozados: f.diasFeriasGozados ?? 0,
-      dataGozo: f.dataGozoFerias ? new Date(f.dataGozoFerias).toLocaleDateString('pt-BR') : null,
+      dataGozo: f.dataGozoFerias ? formatDateUTC(f.dataGozoFerias) : null,
     };
   });
 
@@ -1440,7 +1441,7 @@ async function listarAlertasTrabalhistas(args: any, userId: string) {
     .filter(({ dias }) => dias <= 60)
     .map(({ f, venc, dias }) => ({
       nome: f.nome, loja: f.loja.nome,
-      vencimento: venc.toLocaleDateString('pt-BR'),
+      vencimento: formatDateUTC(venc),
       diasParaVencer: dias,
       status: f.statusFerias ?? 'a_gozar',
       urgencia: dias < 0 ? 'VENCIDO' : dias <= 30 ? 'CRÍTICO' : 'ATENÇÃO',

@@ -113,19 +113,24 @@ export function calcPeriodoAquisitivo(
   const vencimento = addYears(inicio, 1);
 
   const hoje = opts?.hoje ? new Date(opts.hoje) : new Date();
-  hoje.setHours(0, 0, 0, 0);
-  const vencDay = new Date(vencimento);
-  vencDay.setHours(0, 0, 0, 0);
+  const hojeMs = utcDayMs(hoje);
+  const vencMs = utcDayMs(vencimento);
+  const inicioMs = utcDayMs(inicio);
 
-  const diasRestantes = Math.floor(
-    (vencDay.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
-  );
+  const diasRestantes = Math.round((vencMs - hojeMs) / (1000 * 60 * 60 * 24));
   const mesesTrabalhados = Math.floor(
-    (hoje.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24 * 30),
+    (hojeMs - inicioMs) / (1000 * 60 * 60 * 24 * 30),
   );
   const diasDireito = Math.min(30, Math.max(0, Math.floor(mesesTrabalhados * 2.5)));
 
   return { inicio, vencimento, diasRestantes, diasDireito };
+}
+
+/** Formata data civil (YYYY-MM-DD em UTC) para pt-BR — evita dia -1 no fuso BR. */
+export function formatDateUTC(d: Date | string | null | undefined): string {
+  if (!d) return '—';
+  const date = typeof d === 'string' ? new Date(d) : d;
+  return date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
 /**

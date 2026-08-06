@@ -707,7 +707,7 @@ export default function FuncionarioDetailPage() {
                       <div>
                         <p className="text-xs text-gray-500 mb-0.5">Próximo vencimento</p>
                         <p className={`text-base font-bold ${vencido ? 'text-red-400' : urgente ? 'text-amber-400' : 'text-white'}`}>
-                          {venc.toLocaleDateString('pt-BR')}
+                          {fmtDate(venc.toISOString())}
                         </p>
                       </div>
                       <div className={`text-right text-sm font-semibold ${vencido ? 'text-red-400' : urgente ? 'text-amber-400' : 'text-gray-400'}`}>
@@ -724,7 +724,7 @@ export default function FuncionarioDetailPage() {
                         <p className="text-xs text-gray-500 mb-0.5">Última férias registrada</p>
                         {funcionario.dataGozoFerias ? (
                           <p className="text-sm font-medium text-white">
-                            {new Date(funcionario.dataGozoFerias).toLocaleDateString('pt-BR')}
+                            {fmtDate(funcionario.dataGozoFerias)}
                             {(funcionario.diasFeriasGozados ?? 0) > 0 && (
                               <span className="text-gray-500 ml-2">· {funcionario.diasFeriasGozados} dias gozados</span>
                             )}
