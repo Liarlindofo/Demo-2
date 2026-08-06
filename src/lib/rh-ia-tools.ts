@@ -5,9 +5,8 @@ import { limparCPF, validarCPF } from './validacoes';
 import { seedAssiduidadeMes, mesAnoAtual, trimestreAtual } from './seed-assiduidade';
 import {
   calcPeriodoAquisitivo,
-  deveAvancarPeriodoAoSalvarGozo,
-  inicioAquisitivoEfetivo,
-  proximoInicioAquisitivo,
+  inicioAquisitivoAposGozo,
+  sameUtcDay,
 } from './ferias-rh';
 
 export const RH_BONIFICACOES_PROMPT = `
@@ -999,17 +998,13 @@ async function registrarFerias(args: any, userId: string) {
     return JSON.stringify({ erro: 'Nenhum campo de férias informado' });
   }
 
-  if (func.dataInicioFerias && gozoNovo) {
-    const avancar = deveAvancarPeriodoAoSalvarGozo(func.dataGozoFerias, gozoNovo);
-    const legado = !avancar
-      && func.dataGozoFerias
-      && inicioAquisitivoEfetivo(func.dataInicioFerias, func.dataAdmissao, func.dataGozoFerias).getTime()
-        !== new Date(func.dataInicioFerias).getTime();
-
-    if (avancar || legado) {
-      update.dataInicioFerias = legado
-        ? inicioAquisitivoEfetivo(func.dataInicioFerias, func.dataAdmissao, func.dataGozoFerias)
-        : proximoInicioAquisitivo(func.dataInicioFerias);
+  if (gozoNovo && (func.dataAdmissao || func.dataInicioFerias)) {
+    const alvo = inicioAquisitivoAposGozo(gozoNovo, {
+      dataAdmissao: func.dataAdmissao,
+      dataInicioFerias: func.dataInicioFerias,
+    });
+    if (!func.dataInicioFerias || !sameUtcDay(alvo, new Date(func.dataInicioFerias))) {
+      update.dataInicioFerias = alvo;
     }
   }
 

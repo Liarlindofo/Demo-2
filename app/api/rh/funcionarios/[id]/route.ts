@@ -10,9 +10,9 @@ import { calcularComposicaoSalarial } from '@/lib/calculos-rh';
 import { carregarBonificacoesComposicao } from '@/lib/rh-bonificacoes-composicao';
 import { limparCPF, validarCPF, validarDataNascimento } from '@/lib/validacoes';
 import {
-  deveAvancarPeriodoAoSalvarGozo,
+  inicioAquisitivoAposGozo,
   inicioAquisitivoEfetivo,
-  proximoInicioAquisitivo,
+  sameUtcDay,
 } from '@/lib/ferias-rh';
 
 export const dynamic = 'force-dynamic';
@@ -260,20 +260,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         feriasData.statusFerias = 'gozadas';
       }
 
-      const inicioAtual = existing.dataInicioFerias;
-      if (inicioAtual && gozoNovo) {
-        const avancar = deveAvancarPeriodoAoSalvarGozo(existing.dataGozoFerias, gozoNovo);
-        // Legado: gozo já existia mas período nunca avançou (ainda = admissão)
-        const legado = !avancar
-          && existing.dataGozoFerias
-          && existing.dataAdmissao
-          && inicioAquisitivoEfetivo(inicioAtual, existing.dataAdmissao, existing.dataGozoFerias).getTime()
-            !== new Date(inicioAtual).getTime();
-
-        if (avancar || legado) {
-          feriasData.dataInicioFerias = legado
-            ? inicioAquisitivoEfetivo(inicioAtual, existing.dataAdmissao, existing.dataGozoFerias)
-            : proximoInicioAquisitivo(inicioAtual);
+      // Alinha o período aquisitivo à data de gozo (avança N anos se necessário)
+      if (gozoNovo && (existing.dataAdmissao || existing.dataInicioFerias)) {
+        const alvo = inicioAquisitivoAposGozo(gozoNovo, {
+          dataAdmissao: existing.dataAdmissao,
+          dataInicioFerias: existing.dataInicioFerias,
+        });
+        const atual = existing.dataInicioFerias;
+        if (!atual || !sameUtcDay(alvo, new Date(atual))) {
+          feriasData.dataInicioFerias = alvo;
         }
       }
     }
