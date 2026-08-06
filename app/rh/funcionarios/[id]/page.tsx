@@ -16,7 +16,7 @@ import DrawerTransferencia from '@/components/rh/DrawerTransferencia';
 import ComposicaoSalarialCard from '@/components/rh/ComposicaoSalarial';
 import ComposicaoSalarialForm, { type ComposicaoSalarialValues } from '@/components/rh/ComposicaoSalarialForm';
 import DrawerBonificacaoTrimestral, { type BonificacaoTrimestral } from '@/components/rh/DrawerBonificacaoTrimestral';
-import { formatarCPF, calcularIdade } from '@/lib/validacoes';
+import { formatarCPF, calcularIdade, limparCPF, validarCPF } from '@/lib/validacoes';
 import { buildComposicaoPayload, parseMoney } from '@/components/rh/FuncionarioForm';
 import { calcPeriodoAquisitivo } from '@/lib/ferias-rh';
 
@@ -30,12 +30,12 @@ interface Funcionario {
   email?: string | null;
   telefone?: string | null;
   dataNascimento: string | null;
-  dataAdmissao: string;
+  dataAdmissao?: string | null;
   ativo: boolean;
-  cargoId: string;
-  cargo: { id: string; nome: string; ratPct: number };
-  lojaId: string;
-  loja: { id: string; nome: string; fap?: number };
+  cargoId?: string | null;
+  cargo?: { id: string; nome: string; ratPct: number } | null;
+  lojaId?: string | null;
+  loja?: { id: string; nome: string; fap?: number } | null;
   salarioBase: number;
   valorAlimentacao: number;
   valorVT: number;
@@ -161,10 +161,11 @@ export default function FuncionarioDetailPage() {
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const populateForm = (f: Funcionario) => {
-    setNome(f.nome); setCpf(f.cpf ?? ''); setEmail(f.email ?? '');
+    setNome(f.nome); setCpf(f.cpf ? formatCPF(f.cpf) : ''); setEmail(f.email ?? '');
     setTelefone(f.telefone ?? ''); setDataNascimento(f.dataNascimento ? f.dataNascimento.split('T')[0] : '');
-    setDataAdmissao(f.dataAdmissao.split('T')[0]); setCargoId(f.cargoId);
-    setLojaId(f.lojaId);
+    setDataAdmissao(f.dataAdmissao ? f.dataAdmissao.split('T')[0] : '');
+    setCargoId(f.cargoId ?? '');
+    setLojaId(f.lojaId ?? '');
     setComposicao({
       salarioBase: f.salarioBase.toFixed(2).replace('.', ','),
       cargoResponsabilidade: f.cargoResponsabilidade,
@@ -256,15 +257,26 @@ export default function FuncionarioDetailPage() {
     const errs: Record<string, string> = {};
     if (!nome.trim()) errs.nome = 'Nome é obrigatório';
     if (parseMoney(composicao.salarioBase) <= 0) errs.salarioBase = 'Salário base inválido';
+    const cpfDigits = limparCPF(cpf);
+    if (cpfDigits && !validarCPF(cpfDigits)) errs.cpf = 'CPF inválido';
     setErrors(errs);
-    if (Object.keys(errs).length > 0) return;
+    if (Object.keys(errs).length > 0) {
+      showToast(Object.values(errs)[0]);
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch(`/api/rh/funcionarios/${params.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nome: nome.trim(), cpf, email: email || null, telefone: telefone || null,
-          dataNascimento, dataAdmissao, cargoId, lojaId,
+          nome: nome.trim(),
+          cpf: cpfDigits || null,
+          email: email || null,
+          telefone: telefone || null,
+          dataNascimento: dataNascimento || null,
+          dataAdmissao: dataAdmissao || null,
+          cargoId: cargoId || null,
+          lojaId: lojaId || null,
           ...buildComposicaoPayload(composicao),
           escala, turno, horarioEntrada, horarioSaida,
           diasFolga,
@@ -272,7 +284,16 @@ export default function FuncionarioDetailPage() {
           observacoes: observacoes || null,
         }),
       });
-      if (res.ok) { const updated: Funcionario = await res.json(); setFuncionario(updated); setEditMode(false); showToast('Dados salvos'); }
+      if (res.ok) {
+        const updated: Funcionario = await res.json();
+        setFuncionario(updated);
+        populateForm(updated);
+        setEditMode(false);
+        showToast('Dados salvos');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || 'Não foi possível salvar');
+      }
     } finally { setSaving(false); }
   };
 
@@ -290,7 +311,11 @@ export default function FuncionarioDetailPage() {
       if (res.ok) {
         const updated: Funcionario = await res.json();
         setFuncionario(updated);
+        populateForm(updated);
         showToast('Férias registradas — próximo vencimento atualizado');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || 'Não foi possível salvar férias');
       }
     } finally { setSalvandoFerias(false); }
   };
@@ -423,7 +448,11 @@ export default function FuncionarioDetailPage() {
                       <input type="text" value={nome} onChange={e => setNome(e.target.value)} className={`${inputCls} ${errors.nome ? 'border-red-500/50' : ''}`} />
                       {errors.nome && <p className="text-xs text-red-400 mt-1">{errors.nome}</p>}
                     </div>
-                    <div><label className={labelCls}>CPF</label><input type="text" value={cpf} onChange={e => setCpf(formatCPF(e.target.value))} className={inputCls} /></div>
+                    <div>
+                      <label className={labelCls}>CPF</label>
+                      <input type="text" value={cpf} onChange={e => setCpf(formatCPF(e.target.value))} className={`${inputCls} ${errors.cpf ? 'border-red-500/50' : ''}`} />
+                      {errors.cpf && <p className="text-xs text-red-400 mt-1">{errors.cpf}</p>}
+                    </div>
                     <div><label className={labelCls}>Telefone</label><input type="text" value={telefone} onChange={e => setTelefone(e.target.value)} className={inputCls} /></div>
                     <div className="sm:col-span-2"><label className={labelCls}>E-mail</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputCls} /></div>
                     <div><label className={labelCls}>Data de admissão</label><input type="date" value={dataAdmissao} onChange={e => setDataAdmissao(e.target.value)} className={inputCls} /></div>
@@ -475,12 +504,14 @@ export default function FuncionarioDetailPage() {
                     <div>
                       <label className={labelCls}>Cargo</label>
                       <select value={cargoId} onChange={e => setCargoId(e.target.value)} className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/50">
+                        <option value="">Selecione o cargo</option>
                         {cargos.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className={labelCls}>Loja</label>
                       <select value={lojaId} onChange={e => setLojaId(e.target.value)} className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/50">
+                        <option value="">Selecione a loja</option>
                         {lojas.map((l: Loja) => <option key={l.id} value={l.id}>{l.nome}</option>)}
                       </select>
                     </div>

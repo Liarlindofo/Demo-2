@@ -41,11 +41,14 @@ export function calcularIdade(dataNascimento: Date, referencia = new Date()): nu
 }
 
 export function validarDataNascimento(data: Date): string | null {
+  if (!(data instanceof Date) || Number.isNaN(data.getTime())) {
+    return 'Data de nascimento inválida';
+  }
   const hoje = new Date();
   hoje.setHours(23, 59, 59, 999);
   if (data > hoje) return 'Data de nascimento não pode ser futura';
   const idade = calcularIdade(data);
+  if (Number.isNaN(idade) || idade > 120) return 'Data de nascimento inválida';
   if (idade < 16) return 'Idade mínima de 16 anos para trabalho';
-  if (idade > 120) return 'Data de nascimento inválida';
   return null;
 }

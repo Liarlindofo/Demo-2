@@ -164,18 +164,37 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       motivo,
     } = body;
 
-    if (cpfRaw !== undefined) {
-      const cpf = limparCPF(String(cpfRaw));
-      if (!validarCPF(cpf))
-        return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
-      const dup = await prisma.rhFuncionario.findFirst({
-        where: { userId: rh!.userId, cpf, ativo: true, id: { not: id } },
-      });
-      if (dup) return NextResponse.json({ error: 'CPF já cadastrado' }, { status: 409 });
+    // Normaliza strings vazias de campos opcionais (form manda "" em vez de null)
+    const cpfLimpo =
+      cpfRaw !== undefined ? limparCPF(String(cpfRaw || '')) : undefined;
+    const nascStr =
+      dataNascimento !== undefined
+        ? (dataNascimento ? String(dataNascimento) : null)
+        : undefined;
+    const admissaoStr =
+      dataAdmissao !== undefined
+        ? (dataAdmissao ? String(dataAdmissao) : null)
+        : undefined;
+    const cargoIdNorm =
+      cargoId !== undefined ? (cargoId ? String(cargoId) : null) : undefined;
+    const lojaIdNorm =
+      lojaId !== undefined ? (lojaId ? String(lojaId) : null) : undefined;
+
+    if (cpfLimpo !== undefined) {
+      if (cpfLimpo) {
+        if (!validarCPF(cpfLimpo))
+          return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
+        const dup = await prisma.rhFuncionario.findFirst({
+          where: { userId: rh!.userId, cpf: cpfLimpo, ativo: true, id: { not: id } },
+        });
+        if (dup) return NextResponse.json({ error: 'CPF já cadastrado' }, { status: 409 });
+      }
     }
 
-    if (dataNascimento !== undefined) {
-      const nasc = new Date(dataNascimento);
+    if (nascStr) {
+      const nasc = new Date(nascStr);
+      if (Number.isNaN(nasc.getTime()))
+        return NextResponse.json({ error: 'Data de nascimento inválida' }, { status: 400 });
       const errNasc = validarDataNascimento(nasc);
       if (errNasc) return NextResponse.json({ error: errNasc }, { status: 400 });
     }
@@ -183,16 +202,31 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (salarioBase !== undefined && Number(salarioBase) <= 0)
       return NextResponse.json({ error: 'Salário base inválido' }, { status: 400 });
 
-    let experienciaData = {};
-    if (dataAdmissao !== undefined) {
-      const admissao = new Date(dataAdmissao);
+    let experienciaData: Record<string, Date> = {};
+    if (admissaoStr) {
+      const admissao = new Date(admissaoStr);
+      if (Number.isNaN(admissao.getTime()))
+        return NextResponse.json({ error: 'Data de admissão inválida' }, { status: 400 });
+
       const { dataFimExperiencia1, dataFimExperiencia2 } = calcDatasExperiencia(admissao);
       experienciaData = {
         dataInicioExperiencia: admissao,
         dataFimExperiencia1,
         dataFimExperiencia2,
-        dataInicioFerias: admissao,
       };
+
+      // Só reinicia o período aquisitivo se a admissão mudou de fato
+      const admissaoMudou =
+        !existing.dataAdmissao ||
+        !sameUtcDay(admissao, new Date(existing.dataAdmissao));
+      if (admissaoMudou) {
+        experienciaData.dataInicioFerias = existing.dataGozoFerias
+          ? inicioAquisitivoAposGozo(existing.dataGozoFerias, {
+              dataAdmissao: admissao,
+              dataInicioFerias: admissao,
+            })
+          : admissao;
+      }
     }
 
     const composicaoAntes = composicaoSnapshot(existing);
@@ -278,13 +312,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         where: { id },
         data: {
           ...(nome !== undefined && { nome: nome.trim() }),
-          ...(cpfRaw !== undefined && { cpf: limparCPF(String(cpfRaw)) }),
+          ...(cpfLimpo !== undefined && { cpf: cpfLimpo || null }),
           ...(email !== undefined && { email: email || null }),
           ...(telefone !== undefined && { telefone: telefone || null }),
-          ...(dataNascimento !== undefined && { dataNascimento: new Date(dataNascimento) }),
-          ...(dataAdmissao !== undefined && { dataAdmissao: new Date(dataAdmissao) }),
-          ...(cargoId !== undefined && { cargoId }),
-          ...(lojaId !== undefined && { lojaId }),
+          ...(nascStr !== undefined && {
+            dataNascimento: nascStr ? new Date(nascStr) : null,
+          }),
+          ...(admissaoStr !== undefined && {
+            dataAdmissao: admissaoStr ? new Date(admissaoStr) : null,
+          }),
+          ...(cargoIdNorm !== undefined && { cargoId: cargoIdNorm }),
+          ...(lojaIdNorm !== undefined && { lojaId: lojaIdNorm }),
           ...(salarioBase !== undefined && { salarioBase: Number(salarioBase) }),
           ...(valorAlimentacao !== undefined && { valorAlimentacao: Number(valorAlimentacao) }),
           ...(valorVT !== undefined && { valorVT: Number(valorVT) }),
