@@ -59,10 +59,71 @@ interface SlotInput {
   /** Loja onde a tarefa será realizada. Se omitido, usa lojaId do funcionário. */
   lojaExecucaoId?: string;
   recorrencia?: {
-    tipo?: 'unica' | 'diaria' | 'semanal';
+    tipo?: 'unica' | 'diaria' | 'semanal' | 'mensal';
     diasSemana?: number[];
     dataFim?: string; // "YYYY-MM-DD"
+    mensalModo?: 'dia_do_mes' | 'nth_weekday';
+    diaDoMes?: number; // 1–31
+    nth?: 1 | 2 | 3 | 4 | -1;
+    weekday?: number; // 0–6 (Dom–Sáb)
   };
+}
+
+/** Último dia do mês (ano/mês 1-indexado). */
+function ultimoDiaDoMes(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/** Dia do mês com clamp: se dia 31 não existir, usa o último dia. */
+function diaDoMesNoMes(year: number, month: number, diaDoMes: number): string {
+  const last = ultimoDiaDoMes(year, month);
+  const day = Math.min(Math.max(1, diaDoMes), last);
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/**
+ * N-ésimo weekday do mês (nth=1..4 ou -1 = última).
+ * weekday: 0=Dom … 6=Sáb.
+ */
+function nthWeekdayNoMes(
+  year: number,
+  month: number,
+  nth: number,
+  weekday: number,
+): string | null {
+  if (nth === -1) {
+    const lastDay = ultimoDiaDoMes(year, month);
+    for (let day = lastDay; day >= 1; day--) {
+      const d = new Date(Date.UTC(year, month - 1, day));
+      if (d.getUTCDay() === weekday) {
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      }
+    }
+    return null;
+  }
+
+  let count = 0;
+  const lastDay = ultimoDiaDoMes(year, month);
+  for (let day = 1; day <= lastDay; day++) {
+    const d = new Date(Date.UTC(year, month - 1, day));
+    if (d.getUTCDay() === weekday) {
+      count++;
+      if (count === nth) {
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      }
+    }
+  }
+  return null;
+}
+
+function parseYm(dateStr: string): { year: number; month: number } {
+  const [y, m] = dateStr.split('-').map(Number);
+  return { year: y, month: m };
+}
+
+function addMonthsYm(year: number, month: number, n: number): { year: number; month: number } {
+  const total = year * 12 + (month - 1) + n;
+  return { year: Math.floor(total / 12), month: (total % 12) + 1 };
 }
 
 /**
@@ -90,6 +151,43 @@ function gerarDatas(slot: SlotInput): Date[] {
     ? dataFimBaseMs
     : maxMs;
 
+  if (tipo === 'mensal') {
+    const modo = slot.recorrencia?.mensalModo ?? 'dia_do_mes';
+    const datas: Date[] = [];
+    let { year, month } = parseYm(slot.dataBase);
+    const fimDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+    }).format(new Date(efetiveFimMs));
+    const fimYm = parseYm(fimDateStr);
+
+    while (
+      year < fimYm.year ||
+      (year === fimYm.year && month <= fimYm.month)
+    ) {
+      let dateStr: string | null = null;
+      if (modo === 'dia_do_mes') {
+        const dia = slot.recorrencia?.diaDoMes ?? 1;
+        dateStr = diaDoMesNoMes(year, month, dia);
+      } else {
+        const nth = slot.recorrencia?.nth ?? 1;
+        const weekday = slot.recorrencia?.weekday ?? 1;
+        dateStr = nthWeekdayNoMes(year, month, nth, weekday);
+      }
+
+      if (dateStr) {
+        const d = new Date(`${dateStr}T${slot.horario}:00-03:00`);
+        const ms = d.getTime();
+        if (ms >= dataInicioMs && ms <= efetiveFimMs) {
+          datas.push(d);
+        }
+      }
+
+      ({ year, month } = addMonthsYm(year, month, 1));
+    }
+
+    return datas;
+  }
+
   const diasSemana = slot.recorrencia?.diasSemana ?? [];
   const datas: Date[] = [];
 
@@ -111,6 +209,34 @@ function gerarDatas(slot: SlotInput): Date[] {
   }
 
   return datas;
+}
+
+function validarRecorrenciaMensal(slot: SlotInput): string | null {
+  const rec = slot.recorrencia;
+  if (!rec || rec.tipo !== 'mensal') return null;
+
+  const modo = rec.mensalModo ?? 'dia_do_mes';
+  if (modo === 'dia_do_mes') {
+    const dia = rec.diaDoMes;
+    if (typeof dia !== 'number' || !Number.isInteger(dia) || dia < 1 || dia > 31) {
+      return 'Informe um dia do mês válido (1–31) para a recorrência mensal.';
+    }
+    return null;
+  }
+
+  if (modo === 'nth_weekday') {
+    const nth = rec.nth;
+    const weekday = rec.weekday;
+    if (nth !== 1 && nth !== 2 && nth !== 3 && nth !== 4 && nth !== -1) {
+      return 'Informe a ocorrência do mês (1ª–4ª ou última).';
+    }
+    if (typeof weekday !== 'number' || !Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+      return 'Selecione o dia da semana para a recorrência mensal.';
+    }
+    return null;
+  }
+
+  return 'Modo de recorrência mensal inválido.';
 }
 
 export async function POST(req: Request) {
@@ -181,6 +307,11 @@ export async function POST(req: Request) {
           { error: `Template não encontrado ou inativo: ${slot.templateId}` },
           { status: 404 },
         );
+      }
+
+      const erroMensal = validarRecorrenciaMensal(slot);
+      if (erroMensal) {
+        return NextResponse.json({ error: erroMensal }, { status: 400 });
       }
 
       const datas = gerarDatas(slot);

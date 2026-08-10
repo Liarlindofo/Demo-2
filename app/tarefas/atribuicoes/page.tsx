@@ -76,11 +76,16 @@ interface SlotConfig {
   data: string;
   horario: string;
   repetir: boolean;
-  recorrenciaTipo: 'diaria' | 'semanal';
+  recorrenciaTipo: 'diaria' | 'semanal' | 'mensal';
   diasSemana: number[];
   dataFim: string;
   /** Quando true, omite dataFim no payload; backend usa teto de 90 dias. */
   semDataFim: boolean;
+  mensalModo: 'dia_do_mes' | 'nth_weekday';
+  diaDoMes: number;
+  /** 1–4 ou -1 (última). */
+  nth: 1 | 2 | 3 | 4 | -1;
+  weekday: number;
   /**
    * Loja onde a tarefa será realizada (pode ser diferente da loja do funcionário).
    * Só relevante para templates com exigeLocalizacao = true.
@@ -135,6 +140,14 @@ const STATUS_CFG: Record<
 
 const DIAS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
+const NTH_LABELS: { v: 1 | 2 | 3 | 4 | -1; label: string }[] = [
+  { v: 1, label: '1ª' },
+  { v: 2, label: '2ª' },
+  { v: 3, label: '3ª' },
+  { v: 4, label: '4ª' },
+  { v: -1, label: 'Última' },
+];
+
 const WIZARD_STEPS = ['Funcionário', 'Templates', 'Horário', 'Confirmar'];
 
 // ── Utils ──────────────────────────────────────────────────────────────────
@@ -170,6 +183,57 @@ function ptDataCurta(isoStr: string): string {
   });
 }
 
+function ultimoDiaDoMes(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+function diaDoMesNoMes(year: number, month: number, diaDoMes: number): string {
+  const last = ultimoDiaDoMes(year, month);
+  const day = Math.min(Math.max(1, diaDoMes), last);
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function nthWeekdayNoMes(
+  year: number,
+  month: number,
+  nth: number,
+  weekday: number,
+): string | null {
+  if (nth === -1) {
+    const lastDay = ultimoDiaDoMes(year, month);
+    for (let day = lastDay; day >= 1; day--) {
+      const d = new Date(year, month - 1, day);
+      if (d.getDay() === weekday) {
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      }
+    }
+    return null;
+  }
+
+  let count = 0;
+  const lastDay = ultimoDiaDoMes(year, month);
+  for (let day = 1; day <= lastDay; day++) {
+    const d = new Date(year, month - 1, day);
+    if (d.getDay() === weekday) {
+      count++;
+      if (count === nth) {
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      }
+    }
+  }
+  return null;
+}
+
+function labelRecorrenciaMensal(slot: SlotConfig): string {
+  if (slot.mensalModo === 'dia_do_mes') {
+    return `Todo dia ${slot.diaDoMes}`;
+  }
+  const nthLabel =
+    NTH_LABELS.find((n) => n.v === slot.nth)?.label ?? String(slot.nth);
+  const diaLabel = DIAS_PT[slot.weekday] ?? '';
+  return `Toda ${nthLabel.toLowerCase()} ${diaLabel.toLowerCase()}`;
+}
+
 /** Conta quantas atribuições serão geradas para um SlotConfig. */
 function contarDatasSlot(slot: SlotConfig): number {
   if (!slot.repetir) return 1;
@@ -183,6 +247,33 @@ function contarDatasSlot(slot: SlotConfig): number {
   const maxDataFim = new Date(dataInicio.getTime() + 90 * 24 * 60 * 60 * 1000);
   const efetiveFim =
     dataFimBase && dataFimBase < maxDataFim ? dataFimBase : maxDataFim;
+
+  if (slot.recorrenciaTipo === 'mensal') {
+    let count = 0;
+    let year = dataInicio.getFullYear();
+    let month = dataInicio.getMonth() + 1;
+    const fimYear = efetiveFim.getFullYear();
+    const fimMonth = efetiveFim.getMonth() + 1;
+
+    while (year < fimYear || (year === fimYear && month <= fimMonth)) {
+      let dateStr: string | null = null;
+      if (slot.mensalModo === 'dia_do_mes') {
+        dateStr = diaDoMesNoMes(year, month, slot.diaDoMes);
+      } else {
+        dateStr = nthWeekdayNoMes(year, month, slot.nth, slot.weekday);
+      }
+      if (dateStr) {
+        const d = new Date(`${dateStr}T12:00:00`);
+        if (d >= dataInicio && d <= efetiveFim) count++;
+      }
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+    }
+    return count;
+  }
 
   let count = 0;
   const current = new Date(dataInicio);
@@ -440,6 +531,8 @@ export default function AtribuicoesPage() {
         setWError('Selecione pelo menos um template.');
         return;
       }
+      const dayOfMonth = Number(selectedDate.split('-')[2]) || 1;
+      const weekdayDefault = new Date(`${selectedDate}T12:00:00`).getDay();
       const slots: SlotConfig[] = Array.from(wTemplateIds).map((tid) => ({
         templateId: tid,
         data: selectedDate,
@@ -449,6 +542,10 @@ export default function AtribuicoesPage() {
         diasSemana: [],
         dataFim: addDays(selectedDate, 7),
         semDataFim: false,
+        mensalModo: 'dia_do_mes',
+        diaDoMes: dayOfMonth,
+        nth: 1,
+        weekday: weekdayDefault,
         lojaExecucaoId: wLojaId, // padrão: mesma loja do funcionário
       }));
       setWSlots(slots);
@@ -469,6 +566,17 @@ export default function AtribuicoesPage() {
         ) {
           setWError('Selecione pelo menos um dia da semana para a recorrência semanal.');
           return;
+        }
+        if (slot.repetir && slot.recorrenciaTipo === 'mensal') {
+          if (slot.mensalModo === 'dia_do_mes') {
+            if (slot.diaDoMes < 1 || slot.diaDoMes > 31) {
+              setWError('Informe um dia do mês válido (1–31).');
+              return;
+            }
+          } else if (slot.weekday < 0 || slot.weekday > 6) {
+            setWError('Selecione o dia da semana para a recorrência mensal.');
+            return;
+          }
         }
         if (slot.repetir && !slot.semDataFim && !slot.dataFim) {
           setWError('Informe a data final da recorrência ou marque "Sem data de término".');
@@ -533,6 +641,12 @@ export default function AtribuicoesPage() {
               tipo: slot.recorrenciaTipo,
               ...(slot.recorrenciaTipo === 'semanal' && {
                 diasSemana: slot.diasSemana,
+              }),
+              ...(slot.recorrenciaTipo === 'mensal' && {
+                mensalModo: slot.mensalModo,
+                ...(slot.mensalModo === 'dia_do_mes'
+                  ? { diaDoMes: slot.diaDoMes }
+                  : { nth: slot.nth, weekday: slot.weekday }),
               }),
               // Sem dataFim → API materializa até o teto de 90 dias
               ...(!slot.semDataFim && slot.dataFim && { dataFim: slot.dataFim }),
@@ -1064,6 +1178,11 @@ export default function AtribuicoesPage() {
                     slot.repetir &&
                     slot.recorrenciaTipo === 'semanal' &&
                     slot.diasSemana.length === 0;
+                  const mensalIncompleto =
+                    slot.repetir &&
+                    slot.recorrenciaTipo === 'mensal' &&
+                    slot.mensalModo === 'nth_weekday' &&
+                    (slot.weekday < 0 || slot.weekday > 6);
 
                   return (
                     <div
@@ -1162,11 +1281,12 @@ export default function AtribuicoesPage() {
                           {/* Tipo de recorrência */}
                           <div>
                             <label className={labelCls}>Tipo de recorrência</label>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap">
                               {(
                                 [
                                   { v: 'diaria', label: 'Diária' },
                                   { v: 'semanal', label: 'Dias da semana' },
+                                  { v: 'mensal', label: 'Mensal' },
                                 ] as const
                               ).map(({ v, label }) => (
                                 <button
@@ -1208,6 +1328,107 @@ export default function AtribuicoesPage() {
                                   </button>
                                 ))}
                               </div>
+                            </div>
+                          )}
+
+                          {/* Mensal */}
+                          {slot.recorrenciaTipo === 'mensal' && (
+                            <div className="space-y-3">
+                              <div>
+                                <label className={labelCls}>Como repetir</label>
+                                <div className="flex gap-2 flex-wrap">
+                                  {(
+                                    [
+                                      { v: 'dia_do_mes', label: 'Dia do mês' },
+                                      { v: 'nth_weekday', label: 'Dia da semana' },
+                                    ] as const
+                                  ).map(({ v, label }) => (
+                                    <button
+                                      key={v}
+                                      type="button"
+                                      onClick={() => updateSlot(idx, 'mensalModo', v)}
+                                      className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                                        slot.mensalModo === v
+                                          ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                                          : 'bg-[#0a0a0a] border-[#2a2a2e] text-gray-400 hover:text-white'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {slot.mensalModo === 'dia_do_mes' ? (
+                                <div>
+                                  <label className={labelCls}>
+                                    Dia do mês <span className="text-red-400">*</span>
+                                  </label>
+                                  <select
+                                    value={slot.diaDoMes}
+                                    onChange={(e) =>
+                                      updateSlot(idx, 'diaDoMes', Number(e.target.value))
+                                    }
+                                    className={inputCls}
+                                  >
+                                    {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                                      <option key={d} value={d}>
+                                        Todo dia {d}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {slot.diaDoMes >= 29 && (
+                                    <p className="text-xs text-gray-500 mt-1.5">
+                                      Em meses sem esse dia, usa o último dia do mês.
+                                    </p>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  <div>
+                                    <label className={labelCls}>
+                                      Qual ocorrência <span className="text-red-400">*</span>
+                                    </label>
+                                    <div className="flex gap-1.5 flex-wrap">
+                                      {NTH_LABELS.map(({ v, label }) => (
+                                        <button
+                                          key={v}
+                                          type="button"
+                                          onClick={() => updateSlot(idx, 'nth', v)}
+                                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                                            slot.nth === v
+                                              ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                                              : 'bg-[#0a0a0a] border-[#2a2a2e] text-gray-400 hover:text-white'
+                                          }`}
+                                        >
+                                          {label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <label className={labelCls}>
+                                      Dia da semana <span className="text-red-400">*</span>
+                                    </label>
+                                    <div className="flex gap-1.5 flex-wrap">
+                                      {DIAS_PT.map((dia, dow) => (
+                                        <button
+                                          key={dow}
+                                          type="button"
+                                          onClick={() => updateSlot(idx, 'weekday', dow)}
+                                          className={`w-10 h-10 rounded-xl text-xs font-medium border transition-colors ${
+                                            slot.weekday === dow
+                                              ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                                              : 'bg-[#0a0a0a] border-[#2a2a2e] text-gray-400 hover:text-white'
+                                          }`}
+                                        >
+                                          {dia}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -1273,6 +1494,10 @@ export default function AtribuicoesPage() {
                           <span className="text-red-400">
                             Selecione ao menos um dia da semana
                           </span>
+                        ) : mensalIncompleto ? (
+                          <span className="text-red-400">
+                            Selecione o dia da semana
+                          </span>
                         ) : (
                           <>
                             Serão criadas{' '}
@@ -1280,6 +1505,12 @@ export default function AtribuicoesPage() {
                             atribuiç{nDatas === 1 ? 'ão' : 'ões'}
                             {slot.repetir && slot.semDataFim && (
                               <span className="text-gray-600"> (próx. 90 dias)</span>
+                            )}
+                            {slot.repetir && slot.recorrenciaTipo === 'mensal' && (
+                              <span className="text-gray-600">
+                                {' '}
+                                · {labelRecorrenciaMensal(slot)}
+                              </span>
                             )}
                           </>
                         )}
@@ -1354,7 +1585,9 @@ export default function AtribuicoesPage() {
                             <span className="text-xs text-gray-500">
                               {slot.recorrenciaTipo === 'diaria'
                                 ? 'Diária'
-                                : slot.diasSemana.map((d) => DIAS_PT[d]).join(', ')}
+                                : slot.recorrenciaTipo === 'mensal'
+                                  ? labelRecorrenciaMensal(slot)
+                                  : slot.diasSemana.map((d) => DIAS_PT[d]).join(', ')}
                             </span>
                           )}
                         </div>

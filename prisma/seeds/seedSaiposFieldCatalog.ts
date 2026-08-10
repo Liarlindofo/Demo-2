@@ -8,11 +8,11 @@ import { PrismaClient } from '@prisma/client';
 
 const CATALOGO = [
   // geral
-  { key: 'qtde_pedidos',               label: 'Quantidade de pedidos',                         grupo: 'geral',        ordem: 1  },
-  { key: 'pedidos_cancelados',          label: 'Pedidos cancelados',                            grupo: 'geral',        ordem: 2  },
-  { key: 'total_pedidos',               label: 'Total dos pedidos (R$)',                        grupo: 'geral',        ordem: 3  },
-  { key: 'total_pedidos_cancelados',    label: 'Total dos pedidos cancelados (R$)',              grupo: 'geral',        ordem: 4  },
-  { key: 'total_itens',                 label: 'Total dos itens (R$)',                          grupo: 'geral',        ordem: 5  },
+  { key: 'qtde_pedidos',               label: 'Qtde total de pedidos',                         grupo: 'geral',        ordem: 1  },
+  { key: 'pedidos_cancelados',          label: 'Qtde de pedidos cancelados',                    grupo: 'geral',        ordem: 2  },
+  { key: 'total_pedidos',               label: 'Total dos pedidos',                             grupo: 'geral',        ordem: 3  },
+  { key: 'total_pedidos_cancelados',    label: 'Total dos pedidos cancelados',                  grupo: 'geral',        ordem: 4  },
+  { key: 'total_itens',                 label: 'Total dos itens',                               grupo: 'geral',        ordem: 5  },
   { key: 'total_taxas_entrega',         label: 'Total das taxas de entrega',                    grupo: 'geral',        ordem: 6  },
   { key: 'total_taxas_servico',         label: 'Total das taxas de serviço',                    grupo: 'geral',        ordem: 7  },
   { key: 'total_acrescimos',            label: 'Total de acréscimos',                           grupo: 'geral',        ordem: 8  },
