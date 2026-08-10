@@ -62,6 +62,7 @@ interface Funcionario {
   turno: 'manhã' | 'tarde' | 'noite' | 'integral';
   horarioEntrada: string;
   horarioSaida: string;
+  horarioDigest: string;
   observacoes?: string | null;
   dataInicioExperiencia?: string | null;
   dataFimExperiencia1?: string | null;
@@ -154,6 +155,7 @@ export default function FuncionarioDetailPage() {
   const [turno, setTurno] = useState<'manhã' | 'tarde' | 'noite' | 'integral'>('manhã');
   const [horarioEntrada, setHorarioEntrada] = useState('');
   const [horarioSaida, setHorarioSaida] = useState('');
+  const [horarioDigest, setHorarioDigest] = useState('');
   const [diasFolga, setDiasFolga] = useState<string[]>([]);
   const [domingoFolga, setDomingoFolga] = useState<string>('1');
   const [observacoes, setObservacoes] = useState('');
@@ -175,6 +177,7 @@ export default function FuncionarioDetailPage() {
     });
     setEscala(f.escala); setTurno(f.turno); setHorarioEntrada(f.horarioEntrada);
     setHorarioSaida(f.horarioSaida);
+    setHorarioDigest(f.horarioDigest || f.horarioEntrada || '08:00');
     setDiasFolga(Array.isArray(f.diasFolga) ? f.diasFolga : []);
     setDomingoFolga(f.domingoFolga ?? '1');
     setObservacoes(f.observacoes ?? '');
@@ -278,7 +281,7 @@ export default function FuncionarioDetailPage() {
           cargoId: cargoId || null,
           lojaId: lojaId || null,
           ...buildComposicaoPayload(composicao),
-          escala, turno, horarioEntrada, horarioSaida,
+          escala, turno, horarioEntrada, horarioSaida, horarioDigest,
           diasFolga,
           domingoFolga,
           observacoes: observacoes || null,
@@ -608,6 +611,18 @@ export default function FuncionarioDetailPage() {
                       <div><label className={labelCls}>Saída</label><input type="time" value={horarioSaida} onChange={e => setHorarioSaida(e.target.value)} className={inputCls} /></div>
                     </div>
                     <div>
+                      <label className={labelCls}>Horário do resumo de tarefas (WhatsApp)</label>
+                      <input
+                        type="time"
+                        value={horarioDigest}
+                        onChange={(e) => setHorarioDigest(e.target.value)}
+                        className={inputCls}
+                      />
+                      <p className="text-xs text-gray-500 mt-1.5">
+                        Horário em que o bot envia a lista de tarefas do dia. Padrão: horário de entrada.
+                      </p>
+                    </div>
+                    <div>
                       <label className={labelCls}>Dias de folga fixos</label>
                       <div className="flex flex-wrap gap-2">
                         {DIAS_SEMANA.map(dia => (
@@ -635,6 +650,7 @@ export default function FuncionarioDetailPage() {
                     <div className="flex items-center gap-3"><span className="text-xs text-gray-500 w-20">Regime</span><span className={`px-3 py-1 rounded-full text-xs font-semibold ${funcionario.escala === '6x1' ? 'bg-amber-500/20 text-amber-400' : 'bg-green-500/20 text-green-400'}`}>{funcionario.escala}</span></div>
                     <div className="flex items-center gap-3"><span className="text-xs text-gray-500 w-20">Turno</span><span className="text-sm text-gray-200 capitalize">{funcionario.turno}</span></div>
                     <div className="flex items-center gap-3"><span className="text-xs text-gray-500 w-20">Horário</span><span className="text-sm text-gray-200">{funcionario.horarioEntrada} → {funcionario.horarioSaida}</span></div>
+                    <div className="flex items-center gap-3"><span className="text-xs text-gray-500 w-20">Resumo</span><span className="text-sm text-gray-200">{funcionario.horarioDigest || funcionario.horarioEntrada} (tarefas do dia)</span></div>
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-gray-500 w-20">Dias folga</span>
                       <div className="flex flex-wrap gap-1">

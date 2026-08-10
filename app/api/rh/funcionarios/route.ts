@@ -137,6 +137,12 @@ export async function POST(req: Request) {
     const admissao = dataAdmissao ? new Date(dataAdmissao) : new Date();
     const { dataFimExperiencia1, dataFimExperiencia2 } = calcDatasExperiencia(admissao);
 
+    const entrada = horarioEntrada ?? '08:00';
+    const horarioDigest =
+      typeof body.horarioDigest === 'string' && /^\d{2}:\d{2}$/.test(body.horarioDigest)
+        ? body.horarioDigest
+        : entrada;
+
     const funcionario = await prisma.rhFuncionario.create({
       data: {
         userId: dbUser.id,
@@ -151,8 +157,9 @@ export async function POST(req: Request) {
         ...composicao,
         escala: escala ?? '6x1',
         turno: turno ?? 'manhã',
-        horarioEntrada: horarioEntrada ?? '08:00',
+        horarioEntrada: entrada,
         horarioSaida: horarioSaida ?? '17:00',
+        horarioDigest,
         diasFolga: diasFolga ?? [],
         domingoFolga: domingoFolga ?? null,
         observacoes: observacoes || null,

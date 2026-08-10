@@ -75,6 +75,7 @@ export default function NovoFuncionarioPage() {
   const [turno, setTurno] = useState<'manhã' | 'tarde' | 'noite' | 'integral'>('manhã');
   const [horarioEntrada, setHorarioEntrada] = useState('08:00');
   const [horarioSaida, setHorarioSaida] = useState('17:00');
+  const [horarioDigest, setHorarioDigest] = useState('08:00');
   const [diasFolga, setDiasFolga] = useState<string[]>([]);
   const [domingoFolga, setDomingoFolga] = useState<string>('1');
   const [observacoes, setObservacoes] = useState('');
@@ -122,6 +123,7 @@ export default function NovoFuncionarioPage() {
         turno,
         horarioEntrada,
         horarioSaida,
+        horarioDigest,
         diasFolga,
         domingoFolga,
         observacoes: observacoes || null,
@@ -453,7 +455,12 @@ export default function NovoFuncionarioPage() {
                   <input
                     type="time"
                     value={horarioEntrada}
-                    onChange={(e) => setHorarioEntrada(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setHorarioEntrada(v);
+                      // Mantém o digest alinhado à entrada enquanto o usuário não customizou
+                      setHorarioDigest((prev) => (prev === horarioEntrada ? v : prev));
+                    }}
                     className={inputCls}
                   />
                 </div>
@@ -466,6 +473,19 @@ export default function NovoFuncionarioPage() {
                     className={inputCls}
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className={labelCls}>Horário do resumo de tarefas (WhatsApp)</label>
+                <input
+                  type="time"
+                  value={horarioDigest}
+                  onChange={(e) => setHorarioDigest(e.target.value)}
+                  className={inputCls}
+                />
+                <p className="text-xs text-gray-500 mt-1.5">
+                  Horário em que o bot envia a lista de tarefas do dia. Padrão: horário de entrada.
+                </p>
               </div>
 
               {/* Dias de Folga */}

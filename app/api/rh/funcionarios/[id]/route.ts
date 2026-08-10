@@ -154,6 +154,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       turno,
       horarioEntrada,
       horarioSaida,
+      horarioDigest,
       diasFolga,
       domingoFolga,
       observacoes,
@@ -336,6 +337,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...(turno !== undefined && { turno }),
           ...(horarioEntrada !== undefined && { horarioEntrada }),
           ...(horarioSaida !== undefined && { horarioSaida }),
+          ...(horarioDigest !== undefined &&
+            /^\d{2}:\d{2}$/.test(String(horarioDigest)) && { horarioDigest: String(horarioDigest) }),
           ...(diasFolga !== undefined && { diasFolga }),
           ...(domingoFolga !== undefined && { domingoFolga: domingoFolga || null }),
           ...(observacoes !== undefined && { observacoes: observacoes || null }),

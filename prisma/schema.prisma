@@ -887,6 +887,8 @@ model RhFuncionario {
   turno                 String
   horarioEntrada        String                   @default("08:00")
   horarioSaida          String                   @default("17:00")
+  /** Horário do resumo diário de tarefas no WhatsApp (HH:mm, BRT). */
+  horarioDigest         String                   @default("08:00")
   diasFolga             Json                     @default("[]")
   domingoFolga          String?
   observacoes           String?

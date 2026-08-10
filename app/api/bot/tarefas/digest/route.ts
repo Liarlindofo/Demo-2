@@ -8,8 +8,8 @@ import { requireBotAuth } from '@/lib/bot-auth';
  * GET /api/bot/tarefas/digest?data=YYYY-MM-DD
  *
  * Retorna todas as TarefaAtribuida com status AGENDADA do dia informado,
- * agrupadas por funcionário com telefone. Usado pelo bot às 12h para
- * montar o resumo diário de tarefas por funcionário.
+ * agrupadas por funcionário com telefone e horarioDigest. Usado pelo bot
+ * para montar o resumo diário de tarefas no horário configurado por funcionário.
  */
 export async function GET(req: NextRequest) {
   const authError = requireBotAuth(req);
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
         },
       },
       funcionario: {
-        select: { id: true, nome: true, telefone: true },
+        select: { id: true, nome: true, telefone: true, horarioDigest: true },
       },
       loja: { select: { id: true, nome: true } },
     },
@@ -59,7 +59,12 @@ export async function GET(req: NextRequest) {
     string,
     {
       userId: string;
-      funcionario: { id: string; nome: string; telefone: string | null };
+      funcionario: {
+        id: string;
+        nome: string;
+        telefone: string | null;
+        horarioDigest: string;
+      };
       loja: { id: string; nome: string };
       tarefas: object[];
     }

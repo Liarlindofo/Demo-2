@@ -3,7 +3,7 @@
  *
  * Três jobs (timezone America/Sao_Paulo):
  *
- *  1. "0 12 * * *"  — Digest diário: lista do dia por funcionário (12h00)
+ *  1. "* * * * *"   — Digest diário: resumo do dia no horário configurado por funcionário
  *  2. "* * * * *"   — Pendentes: dispara tarefas cujo horário chegou (a cada minuto)
  *  3. "55 23 * * *" — Fechamento: expira sessões abertas → NAO_CONCLUIDA (23h55)
  *
@@ -44,6 +44,31 @@ function dataHojeBrasilia() {
     .split('/')
     .reverse()
     .join('-');
+}
+
+/** Horário atual em Brasília no formato "HH:mm". */
+function horaAtualBrasilia() {
+  return new Date().toLocaleTimeString('pt-BR', {
+    hour:     '2-digit',
+    minute:   '2-digit',
+    hour12:   false,
+    timeZone: 'America/Sao_Paulo',
+  });
+}
+
+/** Normaliza "8:00" / "08:00:00" → "08:00". */
+function normalizarHora(h) {
+  if (!h || typeof h !== 'string') return '08:00';
+  const m = h.trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return '08:00';
+  return `${m[1].padStart(2, '0')}:${m[2]}`;
+}
+
+function saudacaoPorHora(hhmm) {
+  const hora = parseInt(hhmm.slice(0, 2), 10);
+  if (hora < 12) return 'Bom dia';
+  if (hora < 18) return 'Boa tarde';
+  return 'Boa noite';
 }
 
 /**
@@ -163,32 +188,43 @@ function instrucaoEvidencias(evidencias) {
   return `Me manda ${partes.join(', ')} e ${ultimo}.`;
 }
 
-// ─── Job 1: Digest diário às 12h ──────────────────────────────────────────
+// ─── Job 1: Digest diário (horário por funcionário) ───────────────────────
+
+/** Evita reenvio no mesmo dia: chave `${YYYY-MM-DD}:${funcionarioId}`. */
+const digestsEnviados = new Set();
+let digestsEnviadosDia = '';
 
 async function jobDigest(userId, getClient) {
-  logger.info('[scheduler:digest] ▶ Iniciando digest diário...');
-
   try {
-    const hoje    = dataHojeBrasilia();
-    const grupos  = await getDigest(hoje);
+    const hoje = dataHojeBrasilia();
+    const agoraHHMM = normalizarHora(horaAtualBrasilia());
 
-    if (!Array.isArray(grupos) || grupos.length === 0) {
-      logger.info('[scheduler:digest] Nenhuma tarefa agendada para hoje.');
-      return;
+    if (digestsEnviadosDia !== hoje) {
+      digestsEnviados.clear();
+      digestsEnviadosDia = hoje;
     }
 
-    // NOTA: O filtro de tenant por userId foi removido.
-    // O userId recebido pelo bot é o UUID de sessão WPPConnect, enquanto
-    // os registros da API usam o cuid da tabela stack_users — domínios
-    // incompatíveis que nunca batem. Todos os grupos retornados pela API
-    // já pertencem ao tenant autenticado via BOT_SECRET.
-    // Se o setup virar multi-tenant, a API deverá retornar o ID de sessão do bot.
-    const meusGrupos = grupos;
-    logger.info(`[scheduler:digest] ${meusGrupos.length} funcionário(s) com tarefas hoje.`);
+    const grupos = await getDigest(hoje);
 
-    for (const grupo of meusGrupos) {
+    if (!Array.isArray(grupos) || grupos.length === 0) return;
+
+    const pendentesAgora = grupos.filter((g) => {
+      const hora = normalizarHora(g.funcionario?.horarioDigest || '08:00');
+      if (hora !== agoraHHMM) return false;
+      const key = `${hoje}:${g.funcionario?.id}`;
+      return key && !digestsEnviados.has(key);
+    });
+
+    if (pendentesAgora.length === 0) return;
+
+    logger.info(
+      `[scheduler:digest] ▶ ${pendentesAgora.length} digest(s) às ${agoraHHMM} (${hoje})`,
+    );
+
+    for (const grupo of pendentesAgora) {
       try {
         const { funcionario, tarefas } = grupo;
+        const key = `${hoje}:${funcionario.id}`;
 
         const client = getClient();
         if (!client) {
@@ -201,6 +237,7 @@ async function jobDigest(userId, getClient) {
           logger.warn(
             `[scheduler:digest] Funcionário ${funcionario.nome} — telefone não localizado no WhatsApp (valor: "${funcionario?.telefone}").`,
           );
+          digestsEnviados.add(key); // evita retry infinito no mesmo minuto
           continue;
         }
 
@@ -208,12 +245,14 @@ async function jobDigest(userId, getClient) {
           `${i + 1}. *${t.titulo}* — ⏰ ${formatarHorario(t.horario)}`,
         );
 
+        const saudacao = saudacaoPorHora(agoraHHMM);
         const mensagem =
-          `📋 Boa tarde, ${funcionario.nome}! Suas tarefas de hoje:\n\n` +
+          `📋 ${saudacao}, ${funcionario.nome}! Suas tarefas de hoje:\n\n` +
           linhas.join('\n') +
           `\n\nNo horário de cada uma eu te aviso por aqui. 👊`;
 
         await client.sendText(destino, mensagem);
+        digestsEnviados.add(key);
         logger.info(`[scheduler:digest] ✅ Digest enviado para ${funcionario.nome} (${destino})`);
 
         await delayAleatorio(); // 3–8 s entre funcionários
@@ -225,7 +264,11 @@ async function jobDigest(userId, getClient) {
       }
     }
   } catch (err) {
-    logger.error('[scheduler:digest] Erro geral:', err?.message);
+    if (err?.message?.includes('HTTP')) {
+      logger.warn('[scheduler:digest] API Plateful indisponível, tentará no próximo ciclo.');
+    } else {
+      logger.error('[scheduler:digest] Erro geral:', err?.message);
+    }
   }
 }
 
@@ -375,9 +418,9 @@ async function jobFechamento() {
 export function initScheduler(userId, getClient) {
   logger.info(`[scheduler] Inicializando para userId="${userId}" (timezone: America/Sao_Paulo)`);
 
-  // Job 1 — Digest diário às 12h
+  // Job 1 — Digest diário (a cada minuto; filtra por horarioDigest do funcionário)
   cron.schedule(
-    '0 12 * * *',
+    '* * * * *',
     () => jobDigest(userId, getClient),
     { timezone: 'America/Sao_Paulo' },
   );
@@ -396,5 +439,5 @@ export function initScheduler(userId, getClient) {
     { timezone: 'America/Sao_Paulo' },
   );
 
-  logger.info('[scheduler] ✅ 3 jobs agendados: digest (12h), pendentes (*/1min), fechamento (23h55).');
+  logger.info('[scheduler] ✅ 3 jobs agendados: digest (*/1min por horário do funcionário), pendentes (*/1min), fechamento (23h55).');
 }
