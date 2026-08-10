@@ -21,7 +21,7 @@ import {
   ClipboardList,
   AlertCircle,
 } from 'lucide-react';
-import DateTimePicker from '@/components/ui/date-time-picker';
+import DateTimePicker, { DatePicker } from '@/components/ui/date-time-picker';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -1475,13 +1475,12 @@ export default function AtribuicoesPage() {
                                   (máx. 90 dias)
                                 </span>
                               </label>
-                              <input
-                                type="date"
-                                value={slot.dataFim}
-                                min={addDays(slot.data, 1)}
-                                max={addDays(slot.data, 90)}
-                                onChange={(e) => updateSlot(idx, 'dataFim', e.target.value)}
-                                className={inputCls}
+                              <DatePicker
+                                date={slot.dataFim}
+                                minDate={new Date(`${addDays(slot.data, 1)}T00:00:00`)}
+                                maxDate={new Date(`${addDays(slot.data, 90)}T00:00:00`)}
+                                onDateChange={(d) => updateSlot(idx, 'dataFim', d)}
+                                placeholder="Escolher data final"
                               />
                             </div>
                           )}

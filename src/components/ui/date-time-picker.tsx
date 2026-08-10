@@ -24,6 +24,156 @@ function toYmd(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+const dayPickerClassNames = {
+  root: "w-full",
+  months: "w-full relative",
+  month: "w-full space-y-3",
+  month_caption: "flex justify-center items-center h-9 px-10",
+  caption_label: "text-sm font-semibold text-white capitalize",
+  nav: "absolute inset-x-0 top-0 flex items-center justify-between",
+  button_previous: cn(
+    "h-8 w-8 inline-flex items-center justify-center rounded-lg",
+    "text-gray-400 hover:text-white hover:bg-[#2a2a2e] transition-colors",
+  ),
+  button_next: cn(
+    "h-8 w-8 inline-flex items-center justify-center rounded-lg",
+    "text-gray-400 hover:text-white hover:bg-[#2a2a2e] transition-colors",
+  ),
+  month_grid: "w-full border-collapse",
+  weekdays: "grid grid-cols-7 w-full",
+  weekday: "text-[11px] font-medium text-gray-500 text-center py-1 uppercase",
+  weeks: "w-full",
+  week: "grid grid-cols-7 w-full mt-0.5",
+  day: "relative p-0 text-center aspect-square",
+  day_button: cn(
+    "h-full w-full rounded-lg text-sm font-medium text-gray-200",
+    "hover:bg-amber-500/15 hover:text-amber-200 transition-colors",
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50",
+  ),
+  selected:
+    "[&>button]:bg-amber-500 [&>button]:text-black [&>button]:hover:bg-amber-400 [&>button]:hover:text-black",
+  today:
+    "[&>button]:bg-amber-500/15 [&>button]:text-amber-300 [&>button]:font-semibold",
+  outside: "[&>button]:text-gray-600 [&>button]:opacity-40",
+  disabled:
+    "[&>button]:text-gray-700 [&>button]:opacity-30 [&>button]:pointer-events-none",
+};
+
+function DayPickerChevron({ orientation }: { orientation?: "left" | "right" | "up" | "down" }) {
+  return orientation === "left" ? (
+    <ChevronLeft className="h-4 w-4" />
+  ) : (
+    <ChevronRight className="h-4 w-4" />
+  );
+}
+
+function useDayBounds(minDate?: Date, maxDate?: Date) {
+  const minTs = React.useMemo(() => {
+    if (!minDate) return null;
+    const d = new Date(minDate);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }, [minDate]);
+
+  const maxTs = React.useMemo(() => {
+    if (!maxDate) return null;
+    const d = new Date(maxDate);
+    d.setHours(23, 59, 59, 999);
+    return d.getTime();
+  }, [maxDate]);
+
+  const isDisabledDay = React.useCallback(
+    (d: Date) => {
+      const t = new Date(d).setHours(12, 0, 0, 0);
+      if (minTs != null && t < minTs) return true;
+      if (maxTs != null && t > maxTs) return true;
+      return false;
+    },
+    [minTs, maxTs],
+  );
+
+  return isDisabledDay;
+}
+
+export interface DatePickerProps {
+  date: string;
+  onDateChange: (date: string) => void;
+  minDate?: Date;
+  maxDate?: Date;
+  placeholder?: string;
+  className?: string;
+  disabled?: boolean;
+}
+
+/** Seletor só de data — mesmo visual do DateTimePicker, sem horário. */
+export function DatePicker({
+  date,
+  onDateChange,
+  minDate,
+  maxDate,
+  placeholder = "Escolher data",
+  className,
+  disabled,
+}: DatePickerProps) {
+  const [open, setOpen] = React.useState(false);
+  const selectedDay = React.useMemo(() => parseYmd(date), [date]);
+  const isDisabledDay = useDayBounds(minDate, maxDate);
+
+  const display = React.useMemo(() => {
+    if (!date) return null;
+    const d = parseYmd(date);
+    if (!d) return null;
+    return format(d, "dd/MM/yyyy", { locale: ptBR });
+  }, [date]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          className={cn(
+            "w-full flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm text-left transition-colors",
+            "bg-[#0a0a0a] border border-[#2a2a2e] text-white",
+            "hover:bg-[#141416] focus:outline-none focus:border-amber-500/40",
+            "disabled:opacity-50 disabled:cursor-not-allowed",
+            !display && "text-gray-500",
+            className,
+          )}
+        >
+          <CalendarIcon className="h-4 w-4 shrink-0 text-amber-400" />
+          {display ?? <span>{placeholder}</span>}
+        </button>
+      </PopoverTrigger>
+
+      <PopoverContent
+        align="start"
+        sideOffset={6}
+        className="w-[300px] p-0 bg-[#1c1c1e] border-[#2a2a2e] text-white rounded-2xl shadow-2xl overflow-hidden"
+      >
+        {open && (
+          <DayPicker
+            mode="single"
+            locale={ptBR}
+            selected={selectedDay}
+            onSelect={(d) => {
+              if (d) {
+                onDateChange(toYmd(d));
+                setOpen(false);
+              }
+            }}
+            disabled={isDisabledDay}
+            showOutsideDays
+            className="w-full p-3"
+            classNames={dayPickerClassNames}
+            components={{ Chevron: DayPickerChevron }}
+          />
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export interface DateTimePickerProps {
   date: string;
   time: string;
@@ -61,29 +211,7 @@ export default function DateTimePicker({
     return Math.min(59, Math.max(0, m || 0)).toString().padStart(2, "0");
   }, [time]);
 
-  const minTs = React.useMemo(() => {
-    if (!minDate) return null;
-    const d = new Date(minDate);
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  }, [minDate]);
-
-  const maxTs = React.useMemo(() => {
-    if (!maxDate) return null;
-    const d = new Date(maxDate);
-    d.setHours(23, 59, 59, 999);
-    return d.getTime();
-  }, [maxDate]);
-
-  const isDisabledDay = React.useCallback(
-    (d: Date) => {
-      const t = new Date(d).setHours(12, 0, 0, 0);
-      if (minTs != null && t < minTs) return true;
-      if (maxTs != null && t > maxTs) return true;
-      return false;
-    },
-    [minTs, maxTs],
-  );
+  const isDisabledDay = useDayBounds(minDate, maxDate);
 
   const display = React.useMemo(() => {
     if (!date || !time) return null;
@@ -132,48 +260,8 @@ export default function DateTimePicker({
             disabled={isDisabledDay}
             showOutsideDays
             className="w-full p-3"
-            classNames={{
-              root: "w-full",
-              months: "w-full relative",
-              month: "w-full space-y-3",
-              month_caption: "flex justify-center items-center h-9 px-10",
-              caption_label: "text-sm font-semibold text-white capitalize",
-              nav: "absolute inset-x-0 top-0 flex items-center justify-between",
-              button_previous: cn(
-                "h-8 w-8 inline-flex items-center justify-center rounded-lg",
-                "text-gray-400 hover:text-white hover:bg-[#2a2a2e] transition-colors",
-              ),
-              button_next: cn(
-                "h-8 w-8 inline-flex items-center justify-center rounded-lg",
-                "text-gray-400 hover:text-white hover:bg-[#2a2a2e] transition-colors",
-              ),
-              month_grid: "w-full border-collapse",
-              weekdays: "grid grid-cols-7 w-full",
-              weekday: "text-[11px] font-medium text-gray-500 text-center py-1 uppercase",
-              weeks: "w-full",
-              week: "grid grid-cols-7 w-full mt-0.5",
-              day: "relative p-0 text-center aspect-square",
-              day_button: cn(
-                "h-full w-full rounded-lg text-sm font-medium text-gray-200",
-                "hover:bg-amber-500/15 hover:text-amber-200 transition-colors",
-                "focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50",
-              ),
-              selected:
-                "[&>button]:bg-amber-500 [&>button]:text-black [&>button]:hover:bg-amber-400 [&>button]:hover:text-black",
-              today:
-                "[&>button]:bg-amber-500/15 [&>button]:text-amber-300 [&>button]:font-semibold",
-              outside: "[&>button]:text-gray-600 [&>button]:opacity-40",
-              disabled:
-                "[&>button]:text-gray-700 [&>button]:opacity-30 [&>button]:pointer-events-none",
-            }}
-            components={{
-              Chevron: ({ orientation }) =>
-                orientation === "left" ? (
-                  <ChevronLeft className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                ),
-            }}
+            classNames={dayPickerClassNames}
+            components={{ Chevron: DayPickerChevron }}
           />
         )}
 
