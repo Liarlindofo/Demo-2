@@ -18,7 +18,7 @@ const TOOL_LABELS: Record<SystemTool, string> = {
   [SystemTool.CHECKLIST]: "Checklist",
   [SystemTool.WHATSAPP_CHAT]: "WhatsApp Chat",
   [SystemTool.CONEXOES]: "Conexões",
-  [SystemTool.AGENDAMENTO_RELATORIOS]: "Agendamento de Relatórios",
+  [SystemTool.AGENDAMENTO_RELATORIOS]: "Central de Relatórios",
   [SystemTool.CMV]: "CMV",
   [SystemTool.ANALYTICS]: "Analytics",
   [SystemTool.ESTOQUE]: "Estoque",
