@@ -112,24 +112,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             </div>
                           )}
                           
-                          {/* Agendamento de Relatórios */}
+                          {/* Central de Relatórios */}
                           {permissions[SystemTool.AGENDAMENTO_RELATORIOS] ? (
                             <Link 
-                              href="/whatsapp-config" 
+                              href="/relatorios" 
                               onClick={() => setIsSidebarOpen(false)}
                               className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                                pathname === '/whatsapp-config' 
+                                pathname === '/relatorios' || pathname?.startsWith('/relatorios/')
                                   ? 'bg-[#001F05] text-green-400' 
                                   : 'text-gray-300 hover:bg-[#374151] hover:text-white'
                               }`}
                             >
                               <Calendar className="h-5 w-5" />
-                              <span className="font-medium">Agendamento de relatório</span>
+                              <span className="font-medium">Central de Relatórios</span>
                             </Link>
                           ) : (
                             <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-500 cursor-not-allowed">
                               <Lock className="h-5 w-5" />
-                              <span className="font-medium">Agendamento de relatório</span>
+                              <span className="font-medium">Central de Relatórios</span>
                             </div>
                           )}
                           

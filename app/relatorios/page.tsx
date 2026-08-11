@@ -1,0 +1,670 @@
+'use client';
+
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  ArrowLeft,
+  FileBarChart2,
+  Plus,
+  Pencil,
+  ToggleLeft,
+  ToggleRight,
+  Loader2,
+  X,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  Clock,
+} from 'lucide-react';
+import ToolProtection from '@/components/auth/ToolProtection';
+import { SystemTool } from '@/types/admin';
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+type EscopoLoja = 'POR_LOJA' | 'CONSOLIDADO' | 'AMBOS';
+type Fonte = 'SAIPOS_DASHBOARD';
+
+interface CatalogField {
+  key: string;
+  label: string;
+  grupo: string;
+  ordem: number;
+}
+
+interface UltimaExecucao {
+  id: string;
+  status: 'SUCESSO' | 'FALHA';
+  executadoEm: string;
+  erro: string | null;
+}
+
+interface ReportRow {
+  id: string;
+  nome: string;
+  fonte: Fonte;
+  horario: string;
+  escopoLoja: EscopoLoja;
+  destinoWhatsapp: string;
+  ativo: boolean;
+  campos: { campoKey: string; ordem: number }[];
+  ultimaExecucao: UltimaExecucao | null;
+}
+
+interface ReportForm {
+  nome: string;
+  fonte: Fonte;
+  horario: string;
+  escopoLoja: EscopoLoja;
+  destinoWhatsapp: string;
+  ativo: boolean;
+  /** Ordem de seleção preservada */
+  campos: string[];
+}
+
+const EMPTY_FORM: ReportForm = {
+  nome: '',
+  fonte: 'SAIPOS_DASHBOARD',
+  horario: '23:30',
+  escopoLoja: 'AMBOS',
+  destinoWhatsapp: '',
+  ativo: true,
+  campos: [],
+};
+
+const ESCOPO_LABELS: Record<EscopoLoja, string> = {
+  POR_LOJA: 'Por loja',
+  CONSOLIDADO: 'Consolidado',
+  AMBOS: 'Ambos',
+};
+
+const GRUPO_LABELS: Record<string, string> = {
+  geral: 'Geral',
+  cupons: 'Cupons',
+  ticket_medio: 'Ticket médio',
+  canal: 'Canais',
+};
+
+const GRUPO_ORDER = ['geral', 'cupons', 'ticket_medio', 'canal'];
+
+const inputCls =
+  'w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/40 transition-colors';
+
+const labelCls = 'text-xs font-medium text-gray-400 mb-1.5 block';
+
+const sectionCls = 'text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3';
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function ptDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  });
+}
+
+function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl w-full max-w-2xl shadow-2xl my-6">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a2a2e]">
+          <h2 className="text-base font-semibold text-white">{title}</h2>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-500 hover:text-white hover:bg-[#2a2a2e] transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── Página ─────────────────────────────────────────────────────────────────
+
+function RelatoriosContent() {
+  const router = useRouter();
+
+  const [reports, setReports] = useState<ReportRow[]>([]);
+  const [catalog, setCatalog] = useState<CatalogField[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<ReportRow | null>(null);
+  const [form, setForm] = useState<ReportForm>(EMPTY_FORM);
+
+  const catalogByGrupo = useMemo(() => {
+    const map = new Map<string, CatalogField[]>();
+    for (const c of catalog) {
+      const list = map.get(c.grupo) ?? [];
+      list.push(c);
+      map.set(c.grupo, list);
+    }
+    const ordered = GRUPO_ORDER.filter((g) => map.has(g));
+    for (const g of map.keys()) {
+      if (!ordered.includes(g)) ordered.push(g);
+    }
+    return ordered.map((grupo) => ({
+      grupo,
+      label: GRUPO_LABELS[grupo] ?? grupo,
+      campos: (map.get(grupo) ?? []).sort((a, b) => a.ordem - b.ordem),
+    }));
+  }, [catalog]);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [resReports, resCatalog] = await Promise.all([
+        fetch('/api/admin/reports'),
+        fetch('/api/admin/reports/catalog'),
+      ]);
+      if (resReports.ok) {
+        const data = await resReports.json();
+        setReports(Array.isArray(data) ? data : []);
+      }
+      if (resCatalog.ok) {
+        const data = await resCatalog.json();
+        setCatalog(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  function openCreate() {
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setError(null);
+    setShowModal(true);
+  }
+
+  function openEdit(r: ReportRow) {
+    setEditing(r);
+    setForm({
+      nome: r.nome,
+      fonte: r.fonte,
+      horario: r.horario,
+      escopoLoja: r.escopoLoja,
+      destinoWhatsapp: r.destinoWhatsapp,
+      ativo: r.ativo,
+      campos: [...r.campos]
+        .sort((a, b) => a.ordem - b.ordem)
+        .map((c) => c.campoKey),
+    });
+    setError(null);
+    setShowModal(true);
+  }
+
+  function closeModal() {
+    setShowModal(false);
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setError(null);
+  }
+
+  function setField<K extends keyof ReportForm>(key: K, value: ReportForm[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function toggleCampo(key: string) {
+    setForm((f) => {
+      if (f.campos.includes(key)) {
+        return { ...f, campos: f.campos.filter((k) => k !== key) };
+      }
+      return { ...f, campos: [...f.campos, key] };
+    });
+  }
+
+  function validate(): string | null {
+    if (!form.nome.trim()) return 'O nome é obrigatório.';
+    if (!/^\d{2}:\d{2}$/.test(form.horario)) return 'Horário inválido. Use HH:mm.';
+    if (!form.destinoWhatsapp.trim()) return 'Informe o destino WhatsApp (ID do grupo/contato).';
+    if (form.campos.length === 0) return 'Selecione ao menos um campo do catálogo.';
+    return null;
+  }
+
+  async function handleSave() {
+    const validationError = validate();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const payload = {
+        nome: form.nome.trim(),
+        horario: form.horario,
+        escopoLoja: form.escopoLoja,
+        destinoWhatsapp: form.destinoWhatsapp.trim(),
+        ativo: form.ativo,
+        campos: form.campos,
+      };
+
+      const res = await fetch(
+        editing ? `/api/admin/reports/${editing.id}` : '/api/admin/reports',
+        {
+          method: editing ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? 'Erro ao salvar relatório.');
+        return;
+      }
+
+      closeModal();
+      fetchAll();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleToggle(r: ReportRow) {
+    setTogglingId(r.id);
+    try {
+      const res = await fetch(`/api/admin/reports/${r.id}/toggle`, { method: 'PATCH' });
+      if (res.ok) {
+        const updated = await res.json();
+        setReports((prev) => prev.map((x) => (x.id === r.id ? { ...x, ...updated } : x)));
+      }
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0a0a0a] text-white">
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 mb-8">
+          <div className="flex items-start gap-3">
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="mt-1 w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:text-white hover:bg-[#1c1c1e] transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <FileBarChart2 className="w-6 h-6 text-amber-400" />
+                <h1 className="text-2xl font-bold text-white">Central de Relatórios</h1>
+              </div>
+              <p className="text-sm text-gray-500 mt-1">
+                Agende relatórios automáticos do Saipos para o WhatsApp
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Novo relatório
+          </button>
+        </div>
+
+        {/* Lista */}
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
+          </div>
+        ) : reports.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center">
+              <FileBarChart2 className="w-8 h-8 text-amber-400/50" />
+            </div>
+            <div>
+              <p className="text-white font-medium">Nenhum relatório cadastrado</p>
+              <p className="text-sm text-gray-500 mt-1">
+                Crie o primeiro relatório agendado do Saipos
+              </p>
+            </div>
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Novo relatório
+            </button>
+          </div>
+        ) : (
+          <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#2a2a2e] text-left">
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Nome
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Fonte
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Horário
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Escopo
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Ativo
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Última execução
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">
+                      Ações
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reports.map((r) => (
+                    <tr
+                      key={r.id}
+                      className={`border-b border-[#2a2a2e] last:border-0 ${
+                        !r.ativo ? 'opacity-60' : ''
+                      }`}
+                    >
+                      <td className="px-4 py-3.5">
+                        <span className="font-medium text-white">{r.nome}</span>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {r.campos.length} campo{r.campos.length === 1 ? '' : 's'}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3.5 text-gray-300">
+                        <span className="px-2 py-0.5 rounded-lg bg-[#1c1c1e] text-xs border border-[#2a2a2e]">
+                          {r.fonte === 'SAIPOS_DASHBOARD' ? 'Saipos' : r.fonte}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-gray-300">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-gray-500" />
+                          {r.horario}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-gray-300">
+                        {ESCOPO_LABELS[r.escopoLoja] ?? r.escopoLoja}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <button
+                          onClick={() => handleToggle(r)}
+                          disabled={togglingId === r.id}
+                          title={r.ativo ? 'Desativar' : 'Ativar'}
+                          className="inline-flex items-center gap-1.5 text-xs disabled:opacity-40"
+                        >
+                          {togglingId === r.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+                          ) : r.ativo ? (
+                            <ToggleRight className="w-5 h-5 text-green-400" />
+                          ) : (
+                            <ToggleLeft className="w-5 h-5 text-gray-500" />
+                          )}
+                          <span className={r.ativo ? 'text-green-400' : 'text-gray-500'}>
+                            {r.ativo ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </button>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        {r.ultimaExecucao ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span
+                              className={`inline-flex items-center gap-1 text-xs font-medium ${
+                                r.ultimaExecucao.status === 'SUCESSO'
+                                  ? 'text-green-400'
+                                  : 'text-red-400'
+                              }`}
+                            >
+                              {r.ultimaExecucao.status === 'SUCESSO' ? (
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                              ) : (
+                                <XCircle className="w-3.5 h-3.5" />
+                              )}
+                              {r.ultimaExecucao.status === 'SUCESSO' ? 'Sucesso' : 'Falha'}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {ptDateTime(r.ultimaExecucao.executadoEm)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-600">Nunca executado</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5 text-right">
+                        <button
+                          onClick={() => openEdit(r)}
+                          title="Editar"
+                          className="inline-flex w-8 h-8 rounded-lg items-center justify-center text-gray-500 hover:text-white hover:bg-[#2a2a2e] transition-colors"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modal criar/editar */}
+      {showModal && (
+        <Modal
+          title={editing ? 'Editar relatório' : 'Novo relatório'}
+          onClose={closeModal}
+        >
+          <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+            <div className="space-y-4">
+              <p className={sectionCls}>Configuração</p>
+
+              <div>
+                <label className={labelCls}>
+                  Nome <span className="text-red-400">*</span>
+                </label>
+                <input
+                  autoFocus
+                  type="text"
+                  value={form.nome}
+                  onChange={(e) => setField('nome', e.target.value)}
+                  placeholder="Ex: Relatório diário Saipos"
+                  className={inputCls}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Fonte</label>
+                  <select value={form.fonte} disabled className={`${inputCls} opacity-70 cursor-not-allowed`}>
+                    <option value="SAIPOS_DASHBOARD">Saipos Dashboard</option>
+                  </select>
+                  <p className="text-xs text-gray-600 mt-1.5">
+                    Única fonte disponível por enquanto
+                  </p>
+                </div>
+
+                <div>
+                  <label className={labelCls}>
+                    Horário <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={form.horario}
+                    onChange={(e) => setField('horario', e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>
+                    Escopo de loja <span className="text-red-400">*</span>
+                  </label>
+                  <select
+                    value={form.escopoLoja}
+                    onChange={(e) => setField('escopoLoja', e.target.value as EscopoLoja)}
+                    className={inputCls}
+                  >
+                    <option value="POR_LOJA">Por loja</option>
+                    <option value="CONSOLIDADO">Consolidado</option>
+                    <option value="AMBOS">Ambos</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelCls}>Ativo</label>
+                  <button
+                    type="button"
+                    onClick={() => setField('ativo', !form.ativo)}
+                    className="flex items-center gap-2.5 mt-1 select-none"
+                  >
+                    <span
+                      className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
+                        form.ativo ? 'bg-amber-500' : 'bg-[#3a3a3e]'
+                      }`}
+                      role="switch"
+                      aria-checked={form.ativo}
+                    >
+                      <span
+                        className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
+                        style={{ left: form.ativo ? '18px' : '2px' }}
+                      />
+                    </span>
+                    <span className="text-sm text-gray-300">
+                      {form.ativo ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className={labelCls}>
+                  Destino WhatsApp <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={form.destinoWhatsapp}
+                  onChange={(e) => setField('destinoWhatsapp', e.target.value)}
+                  placeholder="ID do grupo ou contato (ex: 120363...@g.us)"
+                  className={inputCls}
+                />
+              </div>
+            </div>
+
+            {/* Campos do catálogo */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className={sectionCls + ' mb-0'}>Campos do relatório</p>
+                <span className="text-xs text-gray-500">
+                  {form.campos.length} selecionado{form.campos.length === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              {catalog.length === 0 ? (
+                <p className="text-sm text-gray-500">
+                  Catálogo vazio. Rode o seed do SaiposFieldCatalog.
+                </p>
+              ) : (
+                <div className="space-y-5">
+                  {catalogByGrupo.map(({ grupo, label, campos }) => (
+                    <div key={grupo}>
+                      <p className="text-xs font-semibold text-amber-400/80 mb-2">{label}</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                        {campos.map((c) => {
+                          const checked = form.campos.includes(c.key);
+                          return (
+                            <label
+                              key={c.key}
+                              className={`flex items-start gap-2.5 px-3 py-2 rounded-xl border cursor-pointer transition-colors ${
+                                checked
+                                  ? 'bg-amber-500/10 border-amber-500/40'
+                                  : 'bg-[#0a0a0a] border-[#2a2a2e] hover:border-[#3a3a3e]'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleCampo(c.key)}
+                                className="mt-0.5 accent-amber-500"
+                              />
+                              <span className="text-sm text-gray-200 leading-snug">
+                                {c.label}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {error && (
+              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2.5 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-3 px-6 pb-6 pt-2 border-t border-[#2a2a2e]">
+            <button
+              onClick={closeModal}
+              className="flex-1 py-2.5 rounded-xl border border-[#2a2a2e] text-sm text-gray-400 hover:text-white hover:bg-[#1c1c1e] transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 py-2.5 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {saving ? 'Salvando...' : editing ? 'Salvar alterações' : 'Criar relatório'}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+export default function RelatoriosPage() {
+  return (
+    <ToolProtection
+      tool={SystemTool.AGENDAMENTO_RELATORIOS}
+      toolName="Central de Relatórios"
+    >
+      <RelatoriosContent />
+    </ToolProtection>
+  );
+}
