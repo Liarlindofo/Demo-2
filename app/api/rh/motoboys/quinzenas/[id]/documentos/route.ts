@@ -34,36 +34,3 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   return NextResponse.json(docsComUrl);
 }
-
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const rh = await rhGetUser();
-  if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
-
-  const { id: periodId } = await params;
-  const body = await req.json() as { documentId: string; status: 'approved' | 'rejected' };
-
-  const period = await prisma.riderPaymentPeriod.findFirst({
-    where: { id: periodId, userId: rh.userId },
-  });
-  if (!period) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
-
-  await prisma.riderDocument.update({
-    where: { id: body.documentId },
-    data: { status: body.status, reviewedBy: rh.userId, reviewedAt: new Date() },
-  });
-
-  // Se ambos os docs foram aprovados → marcar quinzena como approved
-  if (body.status === 'approved') {
-    const docs = await prisma.riderDocument.findMany({ where: { periodId } });
-    const nf = docs.find((d) => d.documentType === 'nf');
-    const boleto = docs.find((d) => d.documentType === 'boleto');
-    if (nf?.status === 'approved' && boleto?.status === 'approved') {
-      await prisma.riderPaymentPeriod.update({
-        where: { id: periodId },
-        data: { status: 'approved' },
-      });
-    }
-  }
-
-  return NextResponse.json({ ok: true });
-}

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, Bike, Plus, Clock, CheckCircle, XCircle, X,
+  ArrowLeft, Bike, Plus, Clock, X,
   FileText, Eye, Download, Loader2, ChevronDown, ChevronUp, DollarSign,
   Copy, RefreshCw, MessageCircle, CheckCircle2, ShieldCheck, ShieldOff, Trash2, AlertTriangle, Pencil,
 } from 'lucide-react';
@@ -35,7 +35,7 @@ interface Loja { id: string; nome: string }
 const PERIOD_STATUS: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   pending_documents: { label: 'Aguardando documentos', color: 'text-amber-400', icon: <Clock className="w-4 h-4" /> },
   documents_received: { label: 'Docs recebidos', color: 'text-blue-400', icon: <FileText className="w-4 h-4" /> },
-  approved: { label: 'Aprovado', color: 'text-green-400', icon: <CheckCircle className="w-4 h-4" /> },
+  approved: { label: 'Docs recebidos', color: 'text-blue-400', icon: <FileText className="w-4 h-4" /> },
   paid: { label: 'Pago', color: 'text-green-500', icon: <DollarSign className="w-4 h-4" /> },
 };
 
@@ -146,17 +146,6 @@ export default function MotoboiDetailPage() {
       setDocsSigned(p => ({ ...p, [periodId]: docs }));
     }
     setLoadingDocs(p => ({ ...p, [periodId]: false }));
-  };
-
-  const handleReviewDoc = async (periodId: string, documentId: string, status: 'approved' | 'rejected') => {
-    await fetch(`/api/rh/motoboys/quinzenas/${periodId}/documentos`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ documentId, status }),
-    });
-    const res = await fetch(`/api/rh/motoboys/quinzenas/${periodId}/documentos`);
-    if (res.ok) { const docs = await res.json(); setDocsSigned(p => ({ ...p, [periodId]: docs })); }
-    fetchRider();
   };
 
   const handleGetInvite = async (regenerar = false) => {
@@ -687,17 +676,14 @@ export default function MotoboiDetailPage() {
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="font-bold text-green-400 text-sm">{fmtMoney(netCents(period))}</span>
-                        {/* Botão editar — só quando sem documentos e ainda aguardando */}
-                        {period.status === 'pending_documents' && period.documents.length === 0 && (
-                          <button
-                            onClick={e => { e.stopPropagation(); openEditPeriod(period); }}
-                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#2a2a2e] text-gray-400 hover:text-white hover:bg-[#3a3a3e] transition-colors text-xs"
-                            title="Editar quinzena"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                            Editar
-                          </button>
-                        )}
+                        <button
+                          onClick={e => { e.stopPropagation(); openEditPeriod(period); }}
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#2a2a2e] text-gray-400 hover:text-white hover:bg-[#3a3a3e] transition-colors text-xs"
+                          title="Editar quinzena"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Editar
+                        </button>
                         {isOpen ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
                       </div>
                     </button>
@@ -753,9 +739,7 @@ export default function MotoboiDetailPage() {
                                     {doc ? (
                                       <div className="space-y-2">
                                         <p className="text-xs text-gray-300 truncate">{doc.fileName}</p>
-                                        <span className={`text-xs font-medium ${doc.status === 'approved' ? 'text-green-400' : doc.status === 'rejected' ? 'text-red-400' : 'text-amber-400'}`}>
-                                          {doc.status === 'approved' ? '✓ Aprovado' : doc.status === 'rejected' ? '✗ Rejeitado' : '⏳ Pendente'}
-                                        </span>
+                                        <span className="text-xs font-medium text-green-400">Enviado</span>
                                         <div className="flex gap-1.5">
                                           {doc.signedUrl && (
                                             <>
@@ -771,18 +755,6 @@ export default function MotoboiDetailPage() {
                                                   ? <Loader2 className="w-3 h-3 animate-spin" />
                                                   : <Download className="w-3 h-3" />}
                                                 Baixar
-                                              </button>
-                                            </>
-                                          )}
-                                          {doc.status === 'pending' && (
-                                            <>
-                                              <button onClick={() => handleReviewDoc(period.id, doc.id, 'approved')}
-                                                className="flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-400 text-xs rounded-lg hover:bg-green-500/20">
-                                                <CheckCircle className="w-3 h-3" /> Aprovar
-                                              </button>
-                                              <button onClick={() => handleReviewDoc(period.id, doc.id, 'rejected')}
-                                                className="flex items-center gap-1 px-2 py-1 bg-red-500/10 text-red-400 text-xs rounded-lg hover:bg-red-500/20">
-                                                <XCircle className="w-3 h-3" /> Rejeitar
                                               </button>
                                             </>
                                           )}

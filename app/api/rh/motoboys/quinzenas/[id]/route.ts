@@ -30,7 +30,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json() as {
     status?: string;
-    // Campos de edição da quinzena (só permitidos se ainda sem documentos)
     periodLabel?: string;
     periodStart?: string;
     periodEnd?: string;
@@ -41,22 +40,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     discountNotes?: string | null;
     summary?: string | null;
   };
-
-  // Se vier campos de edição, verifica que não há documentos enviados
-  const isEditing = body.periodLabel !== undefined || body.amountCents !== undefined;
-  if (isEditing) {
-    const period = await prisma.riderPaymentPeriod.findFirst({
-      where: { id, userId: rh.userId },
-      include: { documents: { select: { id: true } } },
-    });
-    if (!period) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
-    if (period.documents.length > 0) {
-      return NextResponse.json(
-        { error: 'Não é possível editar uma quinzena com documentos enviados' },
-        { status: 409 },
-      );
-    }
-  }
 
   const result = await prisma.riderPaymentPeriod.updateMany({
     where: { id, userId: rh.userId },
