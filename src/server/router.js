@@ -26,9 +26,16 @@ router.get('/health', api.healthCheck);
 // QR Code (SLOT FIXO = 1)
 router.get('/qr/:userId', asyncHandler(api.getQRCode));
 
-// Gerenciar conexões WhatsApp (SLOT FIXO = 1)
+// Gerenciar conexões WhatsApp (SLOT FIXO = 1 — atendimento)
 router.post('/start/:userId', asyncHandler(api.startConnection));
 router.post('/stop/:userId', asyncHandler(api.stopConnection));
+
+// Sessão SOMENTE-ENVIO (slot 2+ — sem listener do bot)
+router.post('/send-only/:userId/start', asyncHandler(api.startSendOnlyConnection));
+router.get('/send-only/:userId/status', asyncHandler(api.getSendOnlyStatus));
+router.get('/send-only/:userId/qr', asyncHandler(api.getSendOnlyQRCode));
+router.post('/send-only/:userId/send', asyncHandler(api.sendSendOnlyMessage));
+router.post('/send-only/:userId/stop', asyncHandler(api.stopSendOnlyConnection));
 
 // Configurações do bot
 router.get('/settings/:userId', asyncHandler(api.getSettings));

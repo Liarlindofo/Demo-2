@@ -15,6 +15,11 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
+/** Slot padrão da sessão de atendimento (bot). Não alterar. */
+export const SLOT_ATENDIMENTO = 1;
+/** Slot padrão da sessão somente-envio (sem listener do bot). */
+export const SLOT_SOMENTE_ENVIO = 2;
+
 /**
  * Controle de modo manual (pausa do bot) por conversa.
  * A chave considera usuário, slot e número do cliente para evitar colisões.
@@ -219,19 +224,27 @@ async function cleanupOrphanBrowserIsolated(userDataDir) {
 
 /**
  * Inicia cliente WPPConnect para um usuário/slot — NÃO BLOQUEIA
+ *
+ * @param {string} userId
+ * @param {number} [slot=1]
+ * @param {{ mode?: 'atendimento' | 'somente-envio' }} [options]
+ *   - mode 'atendimento' (default): registra listener do bot (respostas automáticas)
+ *   - mode 'somente-envio': conecta ao WhatsApp (QR), mas NÃO registra listener de mensagens
  */
-export async function startClient(userId, slot = 1) {
+export async function startClient(userId, slot = SLOT_ATENDIMENTO, options = {}) {
   let normalizedUserId = userId;
+  const mode = options.mode === 'somente-envio' ? 'somente-envio' : 'atendimento';
+  const isSendOnly = mode === 'somente-envio';
 
   try {
-    logger.wpp(userId, slot, 'Iniciando cliente WPPConnect (não bloqueante)...');
+    logger.wpp(userId, slot, `Iniciando cliente WPPConnect (não bloqueante)... mode=${mode}`);
 
     if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
       throw new Error(`userId inválido: ${userId}`);
     }
 
     normalizedUserId = String(userId).trim();
-    logger.info(`[startClient] userId original: "${userId}", normalizado: "${normalizedUserId}"`);
+    logger.info(`[startClient] userId original: "${userId}", normalizado: "${normalizedUserId}", slot=${slot}, mode=${mode}`);
 
     // se já está em memória, não recria
     if (sessionManager.hasClient(normalizedUserId, slot)) {
@@ -244,10 +257,12 @@ export async function startClient(userId, slot = 1) {
           message: 'Cliente já está ativo com QR Code',
           qrCode: bot.qrCode,
           isConnected: bot.isConnected,
+          mode: sessionManager.getMode(normalizedUserId, slot),
+          slot,
         };
       }
 
-      return { success: false, message: 'Cliente já está ativo' };
+      return { success: false, message: 'Cliente já está ativo', mode, slot };
     }
 
     const sessionName = `${normalizedUserId}-slot${slot}`;
@@ -274,6 +289,7 @@ export async function startClient(userId, slot = 1) {
       isConnected: false,
       qrCode: null,
       connectedNumber: null,
+      sessionJson: { mode },
     });
 
     const headless =
@@ -288,11 +304,17 @@ export async function startClient(userId, slot = 1) {
         headless,
         puppeteerOptions,
         autoClose: 0,
-        logQR: false,
+        // ASCII QR no terminal da VPS (útil pra sessão somente-envio)
+        logQR: isSendOnly,
         disableWelcome: true,
         updatesLog: false,
 
-        catchQR: async (base64Qr) => {
+        catchQR: async (base64Qr, asciiQR) => {
+          if (isSendOnly && asciiQR) {
+            console.log('\n========== QR CODE (somente-envio) ==========\n');
+            console.log(asciiQR);
+            console.log('\n=============================================\n');
+          }
           await onQRCode(normalizedUserId, slot, base64Qr);
         },
 
@@ -303,16 +325,20 @@ export async function startClient(userId, slot = 1) {
       })
       .then(async (client) => {
         logger.wpp(normalizedUserId, slot, '✅ Cliente WPPConnect criado com sucesso.');
-        sessionManager.setClient(normalizedUserId, slot, client);
+        sessionManager.setClient(normalizedUserId, slot, client, mode);
 
-        logger.wpp(normalizedUserId, slot, '🎧 Registrando listener de mensagens...');
-        setupMessageListener(client, normalizedUserId, slot);
-        logger.wpp(normalizedUserId, slot, '✅ Listener de mensagens registrado!');
+        if (isSendOnly) {
+          logger.wpp(normalizedUserId, slot, '📤 Sessão SOMENTE-ENVIO — listener do bot NÃO registrado.');
+        } else {
+          logger.wpp(normalizedUserId, slot, '🎧 Registrando listener de mensagens...');
+          setupMessageListener(client, normalizedUserId, slot);
+          logger.wpp(normalizedUserId, slot, '✅ Listener de mensagens registrado!');
+        }
 
         try {
           const isConnected = await client.isConnected().catch(() => false);
           if (isConnected) {
-            logger.wpp(normalizedUserId, slot, '✅ Cliente está conectado! Pronto para receber mensagens.');
+            logger.wpp(normalizedUserId, slot, '✅ Cliente está conectado!');
             await onStatusChange(normalizedUserId, slot, 'chatsAvailable', client);
           } else {
             logger.warn(`[startClient] Cliente criado mas ainda não conectado [${normalizedUserId}:${slot}]`);
@@ -323,21 +349,62 @@ export async function startClient(userId, slot = 1) {
       })
       .catch(async (error) => {
         logger.error(`❌ Erro CRÍTICO ao criar cliente [${normalizedUserId}:${slot}]`, error);
-        // ⚠️ IMPORTANTE: NÃO remover client automaticamente!
-        // O client pode ter sido criado parcialmente e ainda estar funcionando.
-        // Apenas log o erro e atualiza o banco. O cliente será removido SOMENTE
-        // por ação manual (stopClient) ou desconexão real do WhatsApp.
         await WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
       });
 
     return {
       success: true,
-      message: 'Sessão iniciada, aguardando QR.',
+      message: isSendOnly
+        ? 'Sessão somente-envio iniciada, aguardando QR (veja o log do worker / GET /api/send-only/:userId/qr).'
+        : 'Sessão iniciada, aguardando QR.',
       isConnected: false,
+      mode,
+      slot,
     };
   } catch (error) {
     logger.error(`Erro ao iniciar cliente [${normalizedUserId}:${slot}]:`, error);
-    return { success: false, message: error.message };
+    return { success: false, message: error.message, mode, slot };
+  }
+}
+
+/**
+ * Envia mensagem de texto via uma sessão ativa (tipicamente somente-envio).
+ * @param {string} userId
+ * @param {string} to - número com DDI (ex: 5541999999999) ou JID
+ * @param {string} message
+ * @param {number} [slot=SLOT_SOMENTE_ENVIO]
+ */
+export async function sendMessage(userId, to, message, slot = SLOT_SOMENTE_ENVIO) {
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId) {
+    return { success: false, error: 'userId inválido' };
+  }
+  if (!to || !message) {
+    return { success: false, error: 'Campos "to" e "message" são obrigatórios' };
+  }
+
+  const client = sessionManager.getClient(normalizedUserId, slot);
+  if (!client) {
+    return { success: false, error: `Sessão não encontrada em memória [${normalizedUserId}:${slot}]` };
+  }
+
+  try {
+    const isConnected = await client.isConnected().catch(() => false);
+    if (!isConnected) {
+      return { success: false, error: 'Sessão ainda não está conectada ao WhatsApp' };
+    }
+
+    let dest = String(to).trim();
+    if (!dest.includes('@')) {
+      dest = `${dest.replace(/\D/g, '')}@c.us`;
+    }
+
+    await client.sendText(dest, message);
+    logger.wpp(normalizedUserId, slot, `📤 sendMessage OK → ${dest}`);
+    return { success: true, to: dest, slot, mode: sessionManager.getMode(normalizedUserId, slot) };
+  } catch (error) {
+    logger.error(`[sendMessage] Erro [${normalizedUserId}:${slot}]:`, error);
+    return { success: false, error: error.message || String(error) };
   }
 }
 

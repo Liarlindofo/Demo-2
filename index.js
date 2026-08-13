@@ -102,6 +102,13 @@ app.get('/', (req, res) => {
       qr: '/api/qr/:userId',
       start: 'POST /api/start/:userId',
       stop: 'POST /api/stop/:userId',
+      sendOnly: {
+        start: 'POST /api/send-only/:userId/start',
+        status: 'GET /api/send-only/:userId/status',
+        qr: 'GET /api/send-only/:userId/qr',
+        send: 'POST /api/send-only/:userId/send',
+        stop: 'POST /api/send-only/:userId/stop',
+      },
       settings: {
         get: '/api/settings/:userId',
         update: 'POST /api/settings/:userId'

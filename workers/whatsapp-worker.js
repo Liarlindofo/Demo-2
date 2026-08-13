@@ -3,16 +3,14 @@ import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import { existsSync } from 'fs';
 
-// Obter diretório atual (compatível com ES modules)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Tentar carregar .env de múltiplos locais
 const envPaths = [
-  resolve(__dirname, '..', '.env'),     // Raiz do projeto (subindo um nível do workers/)
-  resolve(process.cwd(), '.env'),       // Diretório de trabalho atual
-  '/var/www/I/.env',                    // Caminho absoluto na VPS
-  '/var/www/Demo-2/.env',               // Caminho alternativo na VPS
+  resolve(__dirname, '..', '.env'),
+  resolve(process.cwd(), '.env'),
+  '/var/www/I/.env',
+  '/var/www/Demo-2/.env',
 ];
 
 let envLoaded = false;
@@ -27,115 +25,143 @@ for (const envPath of envPaths) {
   }
 }
 
-// Se não encontrou em nenhum lugar, tentar carregar do diretório padrão
 if (!envLoaded) {
   const result = dotenv.config();
   if (result.error) {
     console.warn(`[worker] ⚠️ Aviso: Não foi possível carregar arquivo .env`);
-    console.warn(`[worker] Tentou os seguintes caminhos:`, envPaths);
-  } else {
-    console.log(`[worker] ✅ Arquivo .env carregado do diretório padrão`);
   }
 }
 
-// Debug: Verificar se a API key foi carregada
-const apiKey = process.env.OPENROUTER_API_KEY;
-if (apiKey) {
-  const maskedKey = apiKey.substring(0, 10) + '...' + apiKey.substring(apiKey.length - 4);
-  console.log(`[worker] ✅ OPENROUTER_API_KEY carregada: ${maskedKey}`);
-} else {
-  console.error(`[worker] ❌ ERRO: OPENROUTER_API_KEY NÃO encontrada!`);
-}
-
-import { startClient, stopClient } from "../src/wpp/index.js";
+import { startClient, sendMessage, SLOT_ATENDIMENTO, SLOT_SOMENTE_ENVIO } from "../src/wpp/index.js";
 import { initScheduler } from "../src/tarefas/scheduler.js";
 import sessionManager from "../src/wpp/sessionManager.js";
 import logger from "../src/utils/logger.js";
+import http from "http";
 
-const arg = process.argv.find((a) => a.startsWith("--userId="));
+function parseArg(name) {
+  const arg = process.argv.find((a) => a.startsWith(`--${name}=`));
+  if (!arg) return null;
+  let value = arg.split("=").slice(1).join("=");
+  value = value.replace(/^["']|["']$/g, '').trim();
+  return value || null;
+}
 
-if (!arg) {
-  console.error("❌ ERRO: USER_ID não informado nos argumentos");
-  console.error("Argumentos recebidos:", process.argv);
+const userId = parseArg('userId');
+const slotArg = parseArg('slot');
+const modeArg = parseArg('mode');
+
+if (!userId) {
+  console.error("❌ ERRO: --userId=... não informado");
+  console.error("Uso atendimento:  node workers/whatsapp-worker.js --userId=XXX");
+  console.error("Uso somente-envio: node workers/whatsapp-worker.js --userId=XXX --slot=2 --mode=somente-envio");
   process.exit(1);
 }
 
-// Extrair userId com suporte a aspas
-let userId = arg.split("=").slice(1).join("="); // Suporta userId com "="
-userId = userId.replace(/^["']|["']$/g, ''); // Remove aspas se houver
-userId = userId.trim();
+const mode = modeArg === 'somente-envio' ? 'somente-envio' : 'atendimento';
+const slot = slotArg
+  ? parseInt(slotArg, 10)
+  : (mode === 'somente-envio' ? SLOT_SOMENTE_ENVIO : SLOT_ATENDIMENTO);
 
-if (!userId || userId.length === 0) {
-  console.error("❌ ERRO: userId vazio após extração");
-  console.error("Argumento original:", arg);
+if (!Number.isFinite(slot) || slot < 1) {
+  console.error(`❌ ERRO: slot inválido: ${slotArg}`);
   process.exit(1);
 }
 
-// LOG CRÍTICO: Identificar qual worker está rodando
 console.log('='.repeat(60));
 console.log(`🚀 INICIANDO WHATSAPP WORKER`);
-console.log(`📌 userId recebido: "${userId}"`);
-console.log(`📌 userId type: ${typeof userId}`);
-console.log(`📌 userId length: ${userId.length}`);
+console.log(`📌 userId: "${userId}"`);
+console.log(`📌 slot: ${slot}`);
+console.log(`📌 mode: ${mode}`);
 console.log(`📌 Process ID: ${process.pid}`);
 console.log(`📌 Timestamp: ${new Date().toISOString()}`);
 console.log('='.repeat(60));
 
-logger.info(`[whatsapp-worker] Worker iniciado para userId: "${userId}" (PID: ${process.pid})`);
+logger.info(`[whatsapp-worker] Worker iniciado userId="${userId}" slot=${slot} mode=${mode} (PID: ${process.pid})`);
 
-// ⚠️ IMPORTANTE: Worker deve ser "long-lived" (processo duradouro)
-// NÃO encerrar sessão automaticamente em SIGINT/SIGTERM/erros
-// O PM2 gerencia o ciclo de vida do processo, mas o client WhatsApp
-// deve permanecer ATIVO até comando manual explícito de desconectar
-
-// Graceful shutdown: quando o PM2 parar/deletar, apenas logar e sair
-// NÃO chamar stopClient() automaticamente
 const shutdown = async (signal) => {
-  logger.warn(`[whatsapp-worker] ${signal} recebido. Mantendo sessão ativa para userId="${userId}"`);
-  logger.info(`[whatsapp-worker] ⚠️ Worker sendo finalizado, mas cliente WhatsApp permanece em memória.`);
-  logger.info(`[whatsapp-worker] ℹ️ Use comando explícito de desconectar para remover a sessão.`);
+  logger.warn(`[whatsapp-worker] ${signal} recebido. Mantendo sessão ativa para userId="${userId}" slot=${slot}`);
   process.exit(0);
 };
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
-
-// Rede de segurança global — apenas logar, nunca encerrar o processo
 process.on('unhandledRejection', (reason) =>
   logger.error('[unhandledRejection]', reason?.stack || String(reason)));
-
 process.on('uncaughtException', (err) =>
   logger.error('[uncaughtException]', err?.stack || String(err)));
 
 try {
-  logger.info(`[whatsapp-worker] 🚀 Chamando startClient(${userId})...`);
-  const result = await startClient(userId);
-  logger.success(`[whatsapp-worker] ✅ startClient() retornou com sucesso para userId: "${userId}"`);
-  logger.info(`[whatsapp-worker] 📦 Resultado:`, result);
-  logger.success(`[whatsapp-worker] ✅ Cliente iniciado com sucesso para userId: "${userId}"`);
+  logger.info(`[whatsapp-worker] 🚀 Chamando startClient(${userId}, ${slot}, { mode: '${mode}' })...`);
+  const result = await startClient(userId, slot, { mode });
+  logger.success(`[whatsapp-worker] ✅ startClient() retornou:`, result);
 
-  // Inicializar scheduler de tarefas para este worker/tenant.
-  // getClient retorna o cliente WPPConnect ativo (slot 1 por padrão).
-  // Se ainda não está conectado, as chamadas do scheduler simplesmente
-  // retornarão null e serão silenciadas até a próxima execução.
-  initScheduler(userId, () => sessionManager.getClient(userId, 1));
-  logger.info(`[whatsapp-worker] ✅ Scheduler de tarefas inicializado para userId: "${userId}"`);
+  // Scheduler de tarefas só no bot de atendimento (slot 1)
+  if (mode === 'atendimento' && slot === SLOT_ATENDIMENTO) {
+    initScheduler(userId, () => sessionManager.getClient(userId, SLOT_ATENDIMENTO));
+    logger.info(`[whatsapp-worker] ✅ Scheduler de tarefas inicializado`);
+  } else {
+    logger.info(`[whatsapp-worker] 📤 Sessão somente-envio — scheduler do bot NÃO iniciado`);
+    startSendOnlyHttpServer(userId, slot);
+  }
 
-  // IMPORTANTE: Não sair do processo! O startClient é assíncrono e o WPPConnect
-  // continua rodando em background. O worker deve ficar vivo para manter o processo.
-  // O WPPConnect cria event listeners que mantêm o processo vivo automaticamente.
   logger.info(`[whatsapp-worker] ✅ Worker mantido vivo. WPPConnect rodando em background.`);
-
 } catch (error) {
-  logger.error(`[whatsapp-worker] ❌ ERRO ao iniciar cliente para userId: "${userId}"`);
-  logger.error(`[whatsapp-worker] ❌ Tipo do erro: ${error.constructor.name}`);
-  logger.error(`[whatsapp-worker] ❌ Mensagem: ${error.message}`);
-  logger.error(`[whatsapp-worker] ❌ Stack trace:`, error.stack);
-  logger.error(`[whatsapp-worker] ❌ Erro completo:`, error);
-  
-  // NÃO matar o processo! Deixa o PM2 gerenciar os restarts.
-  // Se matar com exit(1), o PM2 vai reiniciar infinitamente.
+  logger.error(`[whatsapp-worker] ❌ ERRO ao iniciar cliente:`, error);
   logger.warn(`[whatsapp-worker] ⚠️ Erro capturado, mas mantendo processo vivo. PM2 vai gerenciar.`);
 }
 
+/**
+ * Mini HTTP no worker somente-envio para a API platefull fazer proxy de POST /send.
+ * Porta: SEND_ONLY_HTTP_PORT (default 3012), bind 127.0.0.1.
+ */
+function startSendOnlyHttpServer(boundUserId, boundSlot) {
+  const port = Number(process.env.SEND_ONLY_HTTP_PORT || 3012);
 
+  const server = http.createServer(async (req, res) => {
+    const sendJson = (status, body) => {
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(body));
+    };
+
+    if (req.method === 'GET' && req.url === '/health') {
+      return sendJson(200, {
+        ok: true,
+        userId: boundUserId,
+        slot: boundSlot,
+        mode: 'somente-envio',
+        hasClient: sessionManager.hasClient(boundUserId, boundSlot),
+      });
+    }
+
+    if (req.method === 'POST' && req.url === '/send') {
+      let raw = '';
+      for await (const chunk of req) raw += chunk;
+      let body = {};
+      try { body = JSON.parse(raw || '{}'); } catch {
+        return sendJson(400, { success: false, error: 'JSON inválido' });
+      }
+
+      const to = body.to;
+      const message = body.message;
+      const slot = body.slot != null ? Number(body.slot) : boundSlot;
+      const uid = body.userId || boundUserId;
+
+      if (!to || !message) {
+        return sendJson(400, { success: false, error: 'Campos "to" e "message" obrigatórios' });
+      }
+
+      const result = await sendMessage(uid, to, message, slot);
+      return sendJson(result.success ? 200 : 503, result);
+    }
+
+    return sendJson(404, { success: false, error: 'Not found' });
+  });
+
+  server.listen(port, '127.0.0.1', () => {
+    logger.info(`[whatsapp-worker] 🌐 Mini-HTTP somente-envio em http://127.0.0.1:${port} (POST /send)`);
+  });
+
+  server.on('error', (err) => {
+    logger.error(`[whatsapp-worker] Mini-HTTP falhou (porta ${port}): ${err.message}`);
+  });
+}

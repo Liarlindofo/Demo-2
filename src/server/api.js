@@ -1,8 +1,13 @@
 import { UserModel, WhatsAppBotModel, BotSettingsModel } from '../db/models.js';
 import prisma from '../db/index.js';
 import logger from '../utils/logger.js';
-import { startWhatsappWorker, stopWhatsappWorker } from '../services/pm2.service.js';
-import { stopClient } from '../wpp/index.js';
+import {
+  startWhatsappWorker,
+  stopWhatsappWorker,
+  startSendOnlyWorker,
+  stopSendOnlyWorker,
+} from '../services/pm2.service.js';
+import { stopClient, sendMessage, SLOT_SOMENTE_ENVIO } from '../wpp/index.js';
 import config from '../../config.js';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -487,4 +492,272 @@ export async function healthCheck(req, res) {
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   });
+}
+
+// ─── Sessão SOMENTE-ENVIO (slot 2 por padrão — não mexe no bot de atendimento) ─
+
+function resolveSendOnlySlot(req) {
+  const raw = req.query?.slot ?? req.body?.slot ?? SLOT_SOMENTE_ENVIO;
+  const slot = parseInt(String(raw), 10);
+  return Number.isFinite(slot) && slot >= 2 ? slot : SLOT_SOMENTE_ENVIO;
+}
+
+/**
+ * POST /api/send-only/:userId/start
+ * Sobe worker PM2 separado com mode=somente-envio (sem listener do bot).
+ * Query: ?slot=2 (default 2)  ?force=1 para resetar
+ */
+export async function startSendOnlyConnection(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ success: false, message: 'userId inválido' });
+    }
+
+    const normalizedUserId = userId.trim();
+    const slot = resolveSendOnlySlot(req);
+    const force =
+      String(req.query?.force || '').toLowerCase() === '1' ||
+      String(req.query?.force || '').toLowerCase() === 'true';
+
+    if (force) {
+      await stopSendOnlyWorker(normalizedUserId, slot).catch(() => {});
+      await WhatsAppBotModel.clearSession(normalizedUserId, slot).catch(() => {});
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+
+    const result = await startSendOnlyWorker(normalizedUserId, slot);
+    return res.json({
+      ...result,
+      mode: 'somente-envio',
+      message:
+        result.message ||
+        'Worker somente-envio iniciado. Escaneie o QR via GET /api/send-only/:userId/qr ou veja o ASCII no log do PM2.',
+    });
+  } catch (error) {
+    logger.error('[startSendOnlyConnection]', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+/**
+ * GET /api/send-only/:userId/status
+ * Status da sessão somente-envio (mesmo formato de /api/status, slot 2+).
+ */
+export async function getSendOnlyStatus(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ success: false, message: 'userId inválido', session: null });
+    }
+
+    const normalizedUserId = userId.trim();
+    const slot = resolveSendOnlySlot(req);
+    const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
+
+    const isActive = !!bot;
+    const isConnected = !!(bot && bot.isConnected);
+    const qrCode = (bot && bot.qrCode) || null;
+
+    let status = 'DISCONNECTED';
+    if (isActive) {
+      if (isConnected) status = 'CONNECTED';
+      else if (qrCode) status = 'QRCODE';
+      else status = 'CONNECTING';
+    }
+
+    return res.json({
+      success: true,
+      userId: normalizedUserId,
+      slot,
+      mode: 'somente-envio',
+      session: {
+        status,
+        qrCode,
+        isActive,
+        isConnected,
+        connectedNumber: (bot && bot.connectedNumber) || null,
+        updatedAt: bot?.updatedAt ? bot.updatedAt.toISOString() : null,
+      },
+    });
+  } catch (error) {
+    logger.error('[getSendOnlyStatus]', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+      session: {
+        status: 'DISCONNECTED',
+        qrCode: null,
+        isActive: false,
+        isConnected: false,
+        connectedNumber: null,
+        updatedAt: null,
+      },
+    });
+  }
+}
+
+/**
+ * GET /api/send-only/:userId/qr
+ * Retorna o QR (base64) da sessão somente-envio.
+ */
+export async function getSendOnlyQRCode(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ success: false, qrCode: null, message: 'userId inválido' });
+    }
+
+    const normalizedUserId = userId.trim();
+    const slot = resolveSendOnlySlot(req);
+    const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
+
+    if (!bot) {
+      return res.json({
+        success: true,
+        qrCode: null,
+        slot,
+        mode: 'somente-envio',
+        isConnected: false,
+        message: 'Sessão ainda não iniciada ou aguardando QR',
+      });
+    }
+
+    return res.json({
+      success: true,
+      qrCode: bot.qrCode || null,
+      slot: bot.slot,
+      mode: bot.sessionJson?.mode || 'somente-envio',
+      isConnected: bot.isConnected || false,
+      connectedNumber: bot.connectedNumber || null,
+      updatedAt: bot.updatedAt ? bot.updatedAt.toISOString() : null,
+      message: bot.qrCode
+        ? undefined
+        : bot.isConnected
+          ? 'Já conectado'
+          : 'Aguardando geração do QR Code',
+    });
+  } catch (error) {
+    logger.error('[getSendOnlyQRCode]', error);
+    return res.status(500).json({ success: false, qrCode: null, message: error.message });
+  }
+}
+
+/**
+ * POST /api/send-only/:userId/send
+ * Body: { to: "5541...", message: "texto", slot?: 2 }
+ *
+ * NOTA: o client vive no processo do worker PM2. Esta rota só funciona se
+ * sendMessage for chamado DENTRO do worker — na arquitetura atual o client
+ * não está na memória da API. Por isso preferimos proxy via worker HTTP
+ * interno OU documentar uso do script.
+ *
+ * Implementação prática: gravamos um "pedido" não é ideal.
+ * Melhor: expor send no mesmo processo do worker via IPC é complexo.
+ *
+ * Solução adotada: a API tenta sendMessage no processo atual (funciona se
+ * a sessão foi iniciada no mesmo processo). Caso contrário retorna instrução
+ * para usar o script CLI `scripts/wpp-send-only-send.js` OU reiniciamos
+ * orientando que o envio deve ser feito via endpoint no worker.
+ *
+ * Alternativa rápida e robusta: worker também sobe um mini HTTP local.
+ * Por simplicidade, usamos o client se estiver no mesmo process; senão
+ * falhamos com mensagem clara.
+ *
+ * ATUALIZAÇÃO: na VPS o client está no worker. Vamos usar uma abordagem
+ * onde o script CLI e um helper no worker resolvem. Para a API da platefull-api,
+ * documentamos que send via HTTP precisa do client no mesmo processo.
+ *
+ * Melhor fix: iniciar sessão somente-envio DENTRO da API (sem PM2) para
+ * send-only — mais simples para o caso de uso "só enviar". Mas browser
+ * no processo da API é pesado.
+ *
+ * Pragmático: manter worker PM2 + para send, usar `pm2 send` não existe.
+ * Exportar função e um segundo mini-server no worker? Overkill.
+ *
+ * Solução escolhida: criar `workers/whatsapp-send-worker.js` que além de
+ * startClient, escuta um arquivo de fila ou socket — too complex.
+ *
+ * Mais simples e alinhado ao pedido: a rota /send chama sendMessage;
+ * se o client não estiver na API, retorna 503 pedindo para usar o script
+ * `node scripts/wpp-send-message.js --userId=... --to=... --message=...`
+ * que se conecta ao client... mas client só existe no worker process!
+ *
+ * A ÚNICA forma de send funcionar via HTTP na arquitetura PM2 é:
+ * 1) Ter a sessão no processo da API, OU
+ * 2) Ter um endpoint HTTP no próprio worker.
+ *
+ * Vou adicionar um pequeno HTTP server no worker quando mode=somente-envio
+ * na porta SEND_ONLY_HTTP_PORT (default 3012) com POST /send.
+ * A API platefull faz proxy para esse porto local.
+ */
+export async function sendSendOnlyMessage(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ success: false, message: 'userId inválido' });
+    }
+
+    const normalizedUserId = userId.trim();
+    const slot = resolveSendOnlySlot(req);
+    const { to, message } = req.body || {};
+
+    if (!to || !message) {
+      return res.status(400).json({ success: false, message: 'Body precisa de "to" e "message"' });
+    }
+
+    // 1) Tenta no processo atual (útil se rodando sem PM2 / script CLI)
+    const local = await sendMessage(normalizedUserId, to, message, slot);
+    if (local.success) {
+      return res.json(local);
+    }
+
+    // 2) Proxy para o mini-HTTP do worker somente-envio
+    const port = Number(process.env.SEND_ONLY_HTTP_PORT || 3012);
+    try {
+      const proxyRes = await fetch(`http://127.0.0.1:${port}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: normalizedUserId, slot, to, message }),
+      });
+      const data = await proxyRes.json().catch(() => ({}));
+      return res.status(proxyRes.status).json(data);
+    } catch (proxyErr) {
+      return res.status(503).json({
+        success: false,
+        message:
+          'Sessão somente-envio não acessível neste processo. Confirme que o worker está online ' +
+          '(POST /api/send-only/:userId/start) e que SEND_ONLY_HTTP_PORT está liberado.',
+        detail: local.error || proxyErr.message,
+        slot,
+      });
+    }
+  } catch (error) {
+    logger.error('[sendSendOnlyMessage]', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+/**
+ * POST /api/send-only/:userId/stop
+ */
+export async function stopSendOnlyConnection(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ success: false, message: 'userId inválido' });
+    }
+
+    const normalizedUserId = userId.trim();
+    const slot = resolveSendOnlySlot(req);
+
+    await stopSendOnlyWorker(normalizedUserId, slot).catch(() => {});
+    await stopClient(normalizedUserId, slot).catch(() => {});
+    await WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
+
+    return res.json({ success: true, message: 'Sessão somente-envio parada', slot, mode: 'somente-envio' });
+  } catch (error) {
+    logger.error('[stopSendOnlyConnection]', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
 }
