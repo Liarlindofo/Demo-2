@@ -221,21 +221,25 @@ function SessionCard({
 
         {session.iaAtiva && (
           <div>
-            <label className="text-xs text-gray-500 mb-1.5 block">Prompt desta sessão</label>
+            <label className="text-xs text-gray-500 mb-1.5 block">Prompt exclusivo desta sessão</label>
             <textarea
               value={promptDraft}
               onChange={(e) => setPromptDraft(e.target.value)}
-              onBlur={() => {
-                if ((promptDraft || "") !== (session.iaPrompt || "")) {
-                  onSaveConfig({ iaPrompt: promptDraft });
-                }
-              }}
               rows={4}
-              placeholder="Instruções específicas desta sessão (opcional)…"
+              placeholder="Vazio = usa o prompt padrão de /whatsapp-tools"
               className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-xs text-gray-300 placeholder-gray-600 resize-none focus:outline-none focus:border-emerald-500/40"
             />
-            <p className="text-[10px] text-gray-600 mt-1">
-              Salva ao sair do campo. Se ligar a IA numa sessão já conectada sem listener, reconecte para ela passar a responder.
+            <button
+              type="button"
+              disabled={savingConfig}
+              onClick={() => onSaveConfig({ iaPrompt: promptDraft.trim() || null })}
+              className="mt-2 text-xs font-medium text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
+            >
+              Salvar prompt
+            </button>
+            <p className="text-[10px] text-gray-600 mt-1.5 leading-relaxed">
+              Se preenchido, esta sessão <span className="text-gray-400">ignora</span> o prompt de /whatsapp-tools e usa só este texto.
+              Se vazio, usa o padrão da Platefull. Não precisa reconectar para o prompt valer.
             </p>
           </div>
         )}

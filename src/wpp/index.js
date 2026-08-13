@@ -754,6 +754,7 @@ async function handleIncomingMessage(message, client, userId, slot) {
       // ── 0. Defesa em camadas: iaAtiva no BANCO (tempo real) ────────────────
       // Mesmo que um listener tenha sido anexado por bug de reconnect, uma
       // sessão sem IA nunca deve responder de verdade.
+      let sessionIaPrompt = '';
       try {
         const durable = await WhatsAppBotModel.getDurableConfig(userId, slot);
         if (!durable || durable.iaAtiva !== true) {
@@ -763,6 +764,7 @@ async function handleIncomingMessage(message, client, userId, slot) {
           );
           return;
         }
+        sessionIaPrompt = (durable.iaPrompt || '').trim();
       } catch (iaErr) {
         logger.error(
           `[handleIncomingMessage] Falha ao consultar iaAtiva [${userId}:${slot}] — ` +
@@ -936,11 +938,21 @@ async function handleIncomingMessage(message, client, userId, slot) {
 
       const formattedHistory = formatConversationHistory(conversationHistory, botSettings.contextLimit || 10);
 
+      const exclusivePrompt = sessionIaPrompt;
+      const fallbackPrompt = (botSettings.basePrompt || '').trim();
+      const basePrompt = exclusivePrompt
+        ? `Siga EXCLUSIVAMENTE as instruções desta sessão. Não use persona padrão de pizzaria/atendimento se ela contradisser o que está abaixo.\n\n${exclusivePrompt}`
+        : fallbackPrompt;
+
+      logger.info(
+        `[🤖 BOT] Prompt da sessão: ${exclusivePrompt ? `EXCLUSIVO (${exclusivePrompt.length} chars)` : `padrão /whatsapp-tools (${fallbackPrompt.length} chars)`}`,
+      );
+
       const gptSettings = {
         botName:    botSettings.botName    || 'Assistente',
         storeType:  botSettings.storeType  || 'restaurant',
         lineLimit:  botSettings.lineLimit  || 5,
-        basePrompt: botSettings.basePrompt || '',
+        basePrompt,
       };
 
       sessionManager.addMessage(userId, slot, chaveConversa, {
