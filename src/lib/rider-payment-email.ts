@@ -200,6 +200,8 @@ export async function sendPaymentDocumentsEmail(params: {
 </body>
 </html>`;
 
+  console.info(`[rider-payment-email] POST Resend → to=${to} from=${FROM}`);
+
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -208,7 +210,7 @@ export async function sendPaymentDocumentsEmail(params: {
     },
     body: JSON.stringify({
       from: FROM,
-      to,
+      to: [to],
       subject: `📄 Documentos de pagamento recebidos — ${riderName} (${lojaNome})`,
       html,
     }),
@@ -216,6 +218,9 @@ export async function sendPaymentDocumentsEmail(params: {
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
-    throw new Error(`Resend retornou ${response.status}: ${body}`);
+    throw new Error(`Resend retornou ${response.status} (to=${to}): ${body}`);
   }
+
+  const result = await response.json().catch(() => ({}));
+  console.info(`[rider-payment-email] Enviado com sucesso → to=${to} id=${result?.id ?? '?'}`);
 }

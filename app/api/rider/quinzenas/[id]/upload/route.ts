@@ -129,14 +129,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const allDocs = await prisma.riderDocument.findMany({ where: { periodId } });
   const hasNf = allDocs.some((d) => d.documentType === 'nf');
   const hasBoleto = allDocs.some((d) => d.documentType === 'boleto');
-  const bothReceived = hasNf && hasBoleto && period.status === 'pending_documents';
+  const bothPresent = hasNf && hasBoleto;
+  // Notifica na 1ª vez (pending → received) e também se o motoboy reenviar NF/boleto em análise
+  const shouldNotify =
+    bothPresent &&
+    (period.status === 'pending_documents' || period.status === 'documents_received');
 
-  if (bothReceived) {
+  if (bothPresent && period.status === 'pending_documents') {
     await prisma.riderPaymentPeriod.update({
       where: { id: periodId },
       data: { status: 'documents_received' },
     });
+  }
 
+  if (shouldNotify) {
     // Enviar e-mail de notificação ao responsável de pagamentos (fire and forget)
     notificarResponsavelPagamento(session.userId, period).catch((err) =>
       console.error('[upload rider doc] Falha ao notificar responsável:', err),
@@ -166,6 +172,8 @@ async function notificarResponsavelPagamento(
     console.info('[rider-payment-email] Nenhum e-mail de responsável configurado — notificação ignorada');
     return;
   }
+
+  console.info(`[rider-payment-email] Enviando notificação para ${emailDestino} (period=${period.id})`);
 
   // Buscar dados do motoboy e da loja
   const rider = await prisma.deliveryRider.findUnique({
