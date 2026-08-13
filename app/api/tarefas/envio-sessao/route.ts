@@ -2,8 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { rhGetUser } from '@/lib/rh-auth';
-import { getTenantStackUserId, listSessionsForStackUser } from '@/lib/whatsapp-sessions';
+import { getRhContext } from '@/lib/rh-auth';
+import { getTenantStackUserId, listSessionsForActor } from '@/lib/whatsapp-sessions';
 
 /**
  * GET /api/tarefas/envio-sessao
@@ -12,16 +12,18 @@ import { getTenantStackUserId, listSessionsForStackUser } from '@/lib/whatsapp-s
  * Config única por tenant: qual sessão WhatsApp envia digest/pendentes.
  */
 export async function GET() {
-  const rh = await rhGetUser();
-  if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const ctx = await getRhContext();
+  if (!ctx) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const user = await prisma.user.findUnique({
-    where: { id: rh.userId },
+    where: { id: ctx.userId },
     select: { tarefasSessionSlot: true },
   });
 
-  const stackUserId = await getTenantStackUserId(rh.userId);
-  const sessions = stackUserId ? await listSessionsForStackUser(stackUserId) : [];
+  const sessions = await listSessionsForActor({
+    tenantUserId: ctx.userId,
+    stackUserId: ctx.stackUserId,
+  });
 
   return NextResponse.json({
     sessionSlot: user?.tarefasSessionSlot ?? 1,
@@ -30,8 +32,8 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const rh = await rhGetUser();
-  if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const ctx = await getRhContext();
+  if (!ctx) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
   const sessionSlot = parseInt(String(body.sessionSlot), 10);
@@ -39,18 +41,26 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: 'sessionSlot inválido.' }, { status: 400 });
   }
 
-  const stackUserId = await getTenantStackUserId(rh.userId);
-  if (stackUserId) {
+  const stackUserId = ctx.stackUserId;
+  const tenantStack = await getTenantStackUserId(ctx.userId);
+  const lookupIds = [...new Set([stackUserId, tenantStack].filter(Boolean))] as string[];
+
+  let found = false;
+  for (const id of lookupIds) {
     const bot = await prisma.whatsAppBot.findUnique({
-      where: { userId_slot: { userId: stackUserId, slot: sessionSlot } },
+      where: { userId_slot: { userId: id, slot: sessionSlot } },
     });
-    if (!bot) {
-      return NextResponse.json({ error: 'Sessão WhatsApp não encontrada.' }, { status: 400 });
+    if (bot) {
+      found = true;
+      break;
     }
+  }
+  if (lookupIds.length > 0 && !found) {
+    return NextResponse.json({ error: 'Sessão WhatsApp não encontrada.' }, { status: 400 });
   }
 
   await prisma.user.update({
-    where: { id: rh.userId },
+    where: { id: ctx.userId },
     data: { tarefasSessionSlot: sessionSlot },
   });
 

@@ -3,10 +3,10 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
-import { rhGetUser } from '@/lib/rh-auth';
+import { getRhContext } from '@/lib/rh-auth';
 import { callWhatsAppVpsSession } from '@/lib/whatsapp-vps';
 import {
-  getTenantStackUserId,
+  listSessionsForActor,
   listSessionsForStackUser,
   nextAvailableSlot,
 } from '@/lib/whatsapp-sessions';
@@ -20,12 +20,13 @@ export async function GET(req: NextRequest) {
   const scope = req.nextUrl.searchParams.get('scope');
 
   if (scope === 'tenant') {
-    const rh = await rhGetUser();
-    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
-    const stackUserId = await getTenantStackUserId(rh.userId);
-    if (!stackUserId) return NextResponse.json({ sessions: [] });
-    const sessions = await listSessionsForStackUser(stackUserId);
-    return NextResponse.json({ sessions, stackUserId });
+    const ctx = await getRhContext();
+    if (!ctx) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const sessions = await listSessionsForActor({
+      tenantUserId: ctx.userId,
+      stackUserId: ctx.stackUserId,
+    });
+    return NextResponse.json({ sessions, stackUserId: ctx.stackUserId });
   }
 
   const stackUser = await stackServerApp.getUser({ or: 'return-null' });

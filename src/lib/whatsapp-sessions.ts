@@ -73,6 +73,30 @@ export async function getTenantStackUserId(tenantUserId: string): Promise<string
   return viaStack?.id ?? null;
 }
 
+/**
+ * Sessões visíveis para o ator: as do Stack Auth logado (mesmo critério de
+ * /connections) + as do tenant, se o vínculo User.stackUserId existir.
+ */
+export async function listSessionsForActor(params: {
+  tenantUserId: string;
+  stackUserId: string;
+}) {
+  const ids = [...new Set(
+    [params.stackUserId, await getTenantStackUserId(params.tenantUserId)].filter(
+      (id): id is string => Boolean(id),
+    ),
+  )];
+
+  const bySlot = new Map<number, WhatsAppSessionDto>();
+  for (const id of ids) {
+    const list = await listSessionsForStackUser(id);
+    for (const session of list) {
+      if (!bySlot.has(session.slot)) bySlot.set(session.slot, session);
+    }
+  }
+  return [...bySlot.values()].sort((a, b) => a.slot - b.slot);
+}
+
 export async function nextAvailableSlot(stackUserId: string): Promise<number> {
   const bots = await prisma.whatsAppBot.findMany({
     where: { userId: stackUserId },

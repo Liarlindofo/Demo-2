@@ -184,7 +184,7 @@ function RelatoriosContent() {
       const [resReports, resCatalog, resSessions] = await Promise.all([
         fetch('/api/admin/reports'),
         fetch('/api/admin/reports/catalog'),
-        fetch('/api/whatsapp-sessions?scope=tenant'),
+        fetch('/api/whatsapp-sessions'),
       ]);
       if (resReports.ok) {
         const data = await resReports.json();
@@ -209,11 +209,20 @@ function RelatoriosContent() {
     fetchAll();
   }, [fetchAll]);
 
-  function openCreate() {
+  async function openCreate() {
     setEditing(null);
     setForm(EMPTY_FORM);
     setError(null);
     setShowModal(true);
+    try {
+      const res = await fetch('/api/whatsapp-sessions');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.sessions)) setSessions(data.sessions);
+      }
+    } catch {
+      // keep list already carregada
+    }
   }
 
   function openEdit(r: ReportRow) {
