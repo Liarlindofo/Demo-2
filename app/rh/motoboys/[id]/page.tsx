@@ -116,7 +116,8 @@ export default function MotoboiDetailPage() {
   const [editingPeriod, setEditingPeriod] = useState<Period | null>(null);
   const [editPeriodForm, setEditPeriodForm] = useState({
     periodLabel: '', periodStart: '', periodEnd: '',
-    deliveryCount: '', totalDisplay: '', totalCents: 0,
+    deliveryCount: '',
+    deliveriesDisplay: '', deliveriesCents: 0,
     dailyDisplay: '', dailyCents: 0,
     discountDisplay: '', discountCents: 0,
     discountNotes: '', summary: '',
@@ -208,15 +209,17 @@ export default function MotoboiDetailPage() {
     setEditingPeriod(period);
     setPeriodError('');
     const toDisplay = (c: number) => (c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+    const daily = period.dailyRateCents ?? 0;
+    const deliveries = Math.max(0, period.amountCents - daily);
     setEditPeriodForm({
       periodLabel:    period.periodLabel,
       periodStart:    period.periodStart.split('T')[0],
       periodEnd:      period.periodEnd.split('T')[0],
       deliveryCount:  String(period.deliveryCount),
-      totalDisplay:   toDisplay(period.amountCents),
-      totalCents:     period.amountCents,
-      dailyDisplay:   toDisplay(period.dailyRateCents ?? 0),
-      dailyCents:     period.dailyRateCents ?? 0,
+      deliveriesDisplay: toDisplay(deliveries),
+      deliveriesCents: deliveries,
+      dailyDisplay:   toDisplay(daily),
+      dailyCents:     daily,
       discountDisplay: toDisplay(period.discountCents ?? 0),
       discountCents:  period.discountCents ?? 0,
       discountNotes:  (period as Period & { discountNotes?: string }).discountNotes ?? '',
@@ -227,6 +230,11 @@ export default function MotoboiDetailPage() {
   const handleSavePeriod = async () => {
     if (!editingPeriod) return;
     setPeriodError('');
+    const totalBruto = editPeriodForm.deliveriesCents + editPeriodForm.dailyCents;
+    if (totalBruto <= 0) {
+      setPeriodError('Informe ao menos o valor das entregas ou das diárias');
+      return;
+    }
     setSavingPeriod(true);
     try {
       const res = await fetch(`/api/rh/motoboys/quinzenas/${editingPeriod.id}`, {
@@ -237,7 +245,7 @@ export default function MotoboiDetailPage() {
           periodStart:   editPeriodForm.periodStart,
           periodEnd:     editPeriodForm.periodEnd,
           deliveryCount: parseInt(editPeriodForm.deliveryCount || '0', 10),
-          amountCents:   editPeriodForm.totalCents,
+          amountCents:   totalBruto,
           dailyRateCents: editPeriodForm.dailyCents,
           discountCents:  editPeriodForm.discountCents,
           discountNotes:  editPeriodForm.discountNotes || null,
@@ -325,7 +333,8 @@ export default function MotoboiDetailPage() {
   };
 
   // Modal de edição de quinzena
-  const netEdit = Math.max(0, editPeriodForm.totalCents - editPeriodForm.discountCents);
+  const totalBrutoEdit = editPeriodForm.deliveriesCents + editPeriodForm.dailyCents;
+  const netEdit = Math.max(0, totalBrutoEdit - editPeriodForm.discountCents);
   const modalEdit = editingPeriod && (
     <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 p-4">
       <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -359,21 +368,19 @@ export default function MotoboiDetailPage() {
                 className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-400 mb-1.5 block">Qtd. entregas</label>
-              <input type="number" min="0" value={editPeriodForm.deliveryCount}
-                onChange={e => setEditPeriodForm(f => ({ ...f, deliveryCount: e.target.value }))}
-                className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1.5 block">Valor total bruto</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">R$</span>
-                <input value={editPeriodForm.totalDisplay}
-                  onChange={e => { const { display, cents } = maskMoneyCents(e.target.value); setEditPeriodForm(f => ({ ...f, totalDisplay: display, totalCents: cents })); }}
-                  className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors" />
-              </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1.5 block">Qtd. entregas</label>
+            <input type="number" min="0" value={editPeriodForm.deliveryCount}
+              onChange={e => setEditPeriodForm(f => ({ ...f, deliveryCount: e.target.value }))}
+              className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1.5 block">Valor total das entregas</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">R$</span>
+              <input value={editPeriodForm.deliveriesDisplay}
+                onChange={e => { const { display, cents } = maskMoneyCents(e.target.value); setEditPeriodForm(f => ({ ...f, deliveriesDisplay: display, deliveriesCents: cents })); }}
+                className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors" />
             </div>
           </div>
           <div>
@@ -403,12 +410,20 @@ export default function MotoboiDetailPage() {
                 className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 resize-none focus:outline-none focus:border-orange-500/50 transition-colors" />
             </div>
           )}
-          {editPeriodForm.totalCents > 0 && (
+          {totalBrutoEdit > 0 && (
             <div className="bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-3 space-y-1.5">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Valor bruto</span>
-                <span className="text-white">{fmtMoney(editPeriodForm.totalCents)}</span>
-              </div>
+              {editPeriodForm.deliveriesCents > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Entregas</span>
+                  <span className="text-white">{fmtMoney(editPeriodForm.deliveriesCents)}</span>
+                </div>
+              )}
+              {editPeriodForm.dailyCents > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Diárias</span>
+                  <span className="text-white">+ {fmtMoney(editPeriodForm.dailyCents)}</span>
+                </div>
+              )}
               {editPeriodForm.discountCents > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Desconto</span>

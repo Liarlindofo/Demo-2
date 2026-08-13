@@ -39,8 +39,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     include: { documents: true },
   });
   if (!period) return NextResponse.json({ error: 'Quinzena não encontrada' }, { status: 404 });
-  if (period.status === 'approved' || period.status === 'paid') {
-    return NextResponse.json({ error: 'Quinzena já encerrada' }, { status: 400 });
+  if (period.status === 'paid') {
+    return NextResponse.json({ error: 'Quinzena já paga — não é possível alterar documentos' }, { status: 400 });
   }
 
   const formData = await req.formData();
@@ -60,9 +60,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const existingDoc = period.documents.find((d) => d.documentType === documentType);
-  if (existingDoc?.status === 'approved') {
-    return NextResponse.json({ error: 'Documento já aprovado, não pode substituir' }, { status: 400 });
-  }
 
   const storagePath = `${session.userId}/${session.riderId}/${periodId}/${documentType}.pdf`;
   const buffer = Buffer.from(await file.arrayBuffer());

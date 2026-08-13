@@ -4,8 +4,8 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, Bike, Clock, CheckCircle, FileText, Upload,
-  Loader2, DollarSign, Check, AlertCircle,
+  ArrowLeft, Bike, FileText, Upload,
+  Loader2, DollarSign, AlertCircle,
 } from 'lucide-react';
 
 interface Doc { documentType: string; status: string; fileName: string; uploadedAt: string }
@@ -26,8 +26,8 @@ const fmtDate = (s: string) => new Date(s).toLocaleDateString('pt-BR');
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   pending_documents: { label: 'Aguardando seus documentos', color: 'text-amber-400' },
-  documents_received: { label: 'Documentos recebidos — em análise', color: 'text-blue-400' },
-  approved: { label: 'Aprovado pelo RH', color: 'text-green-400' },
+  documents_received: { label: 'Documentos recebidos', color: 'text-blue-400' },
+  approved: { label: 'Documentos recebidos', color: 'text-blue-400' },
   paid: { label: 'Pago', color: 'text-green-500' },
 };
 
@@ -89,7 +89,7 @@ export default function RiderQuinzenaPage() {
   const st = STATUS_LABEL[period.status] ?? { label: period.status, color: 'text-gray-400' };
   const nfDoc = period.documents.find(d => d.documentType === 'nf');
   const boletoDoc = period.documents.find(d => d.documentType === 'boleto');
-  const canUpload = ['pending_documents', 'documents_received'].includes(period.status);
+  const canUpload = period.status !== 'paid';
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
@@ -176,7 +176,6 @@ export default function RiderQuinzenaPage() {
             const isUploading = uploading[tipo];
             const err = uploadError[tipo];
             const ref = tipo === 'nf' ? nfRef : boletoRef;
-            const isApproved = doc?.status === 'approved';
 
             return (
               <div key={tipo} className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5">
@@ -188,12 +187,8 @@ export default function RiderQuinzenaPage() {
                     <p className="text-xs text-gray-500 mt-0.5">PDF, máximo 10MB</p>
                   </div>
                   {doc ? (
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                      doc.status === 'approved' ? 'text-green-400 bg-green-500/10' :
-                      doc.status === 'rejected' ? 'text-red-400 bg-red-500/10' :
-                      'text-amber-400 bg-amber-500/10'
-                    }`}>
-                      {doc.status === 'approved' ? '✓ Aprovado' : doc.status === 'rejected' ? '✗ Rejeitado' : '⏳ Em análise'}
+                    <span className="text-xs font-medium px-2.5 py-1 rounded-full text-green-400 bg-green-500/10">
+                      Enviado
                     </span>
                   ) : null}
                 </div>
@@ -211,7 +206,7 @@ export default function RiderQuinzenaPage() {
                   </div>
                 )}
 
-                {canUpload && !isApproved && (
+                {canUpload && (
                   <>
                     <input ref={ref} type="file" accept="application/pdf" className="hidden"
                       onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(tipo, f); e.target.value = ''; }} />
@@ -225,25 +220,10 @@ export default function RiderQuinzenaPage() {
                     </button>
                   </>
                 )}
-
-                {isApproved && (
-                  <div className="flex items-center gap-2 text-sm text-green-400">
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Documento aprovado pelo RH</span>
-                  </div>
-                )}
               </div>
             );
           })}
         </div>
-
-        {period.status === 'approved' && (
-          <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-5 text-center">
-            <CheckCircle className="w-8 h-8 text-green-400 mx-auto mb-2" />
-            <p className="font-semibold text-green-400">Quinzena aprovada!</p>
-            <p className="text-sm text-gray-400 mt-1">O pagamento de {fmtMoney(netCents(period))} será processado em breve.</p>
-          </div>
-        )}
 
         {period.status === 'paid' && (
           <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-5 text-center">
