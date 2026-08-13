@@ -42,8 +42,11 @@ interface QrModalState {
   connectionName?: string;
 }
 
-const API_URL =
-  process.env.NEXT_PUBLIC_WHATSAPP_API_URL || "https://api.platefull.com.br";
+/** Proxy Next.js → VPS (nunca chamar 127.0.0.1 / API pública direto do browser). */
+function sessionApi(kind: SessionKind, action: "start" | "stop" | "qr" | "status", search = "") {
+  const q = search ? (search.startsWith("?") ? search : `?${search}`) : "";
+  return `/api/whatsapp-sessions/${kind}/${action}${q}`;
+}
 
 const EMPTY_SESSION: SessionStatus = {
   status: "DISCONNECTED",
@@ -253,8 +256,8 @@ function ConnectionsPageContent() {
 
     try {
       const [statusRes, sendOnlyRes] = await Promise.all([
-        fetch(`${API_URL}/api/status/${user.id}`),
-        fetch(`${API_URL}/api/send-only/${user.id}/status`),
+        fetch(sessionApi("atendimento", "status")),
+        fetch(sessionApi("relatorios", "status")),
       ]);
 
       if (statusRes.ok) {
@@ -310,12 +313,7 @@ function ConnectionsPageContent() {
     const interval = setInterval(async () => {
       for (const kind of activeKinds) {
         try {
-          const url =
-            kind === "atendimento"
-              ? `${API_URL}/api/qr/${user.id}`
-              : `${API_URL}/api/send-only/${user.id}/qr`;
-
-          const qrResponse = await fetch(url);
+          const qrResponse = await fetch(sessionApi(kind, "qr"));
           if (!qrResponse.ok) continue;
 
           const qrData = await qrResponse.json();
@@ -366,12 +364,7 @@ function ConnectionsPageContent() {
     const forceQs = force ? "?force=1" : "";
 
     try {
-      const url =
-        kind === "atendimento"
-          ? `${API_URL}/api/start/${user.id}${forceQs}`
-          : `${API_URL}/api/send-only/${user.id}/start${forceQs}`;
-
-      const response = await fetch(url, {
+      const response = await fetch(sessionApi(kind, "start", forceQs), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -418,11 +411,7 @@ function ConnectionsPageContent() {
       ) {
         setAwaitingQr((prev) => ({ ...prev, [key]: true }));
         try {
-          const qrUrl =
-            kind === "atendimento"
-              ? `${API_URL}/api/qr/${user.id}`
-              : `${API_URL}/api/send-only/${user.id}/qr`;
-          const qrResponse = await fetch(qrUrl);
+          const qrResponse = await fetch(sessionApi(kind, "qr"));
           if (qrResponse.ok) {
             const qrData = await qrResponse.json();
             if (qrData.success && qrData.qrCode) {
@@ -456,12 +445,7 @@ function ConnectionsPageContent() {
     setActionLoading((prev) => ({ ...prev, [key]: true }));
 
     try {
-      const url =
-        kind === "atendimento"
-          ? `${API_URL}/api/stop/${user.id}?forget=1`
-          : `${API_URL}/api/send-only/${user.id}/stop`;
-
-      await fetch(url, {
+      await fetch(sessionApi(kind, "stop"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });

@@ -40,17 +40,44 @@ router.get('/status/:userId', async (req, res) => {
       return res.json({
         exists: false,
         isConnected: false,
-        status: 'not_found'
+        status: 'not_found',
+        success: true,
+        userId: normalizedUserId,
+        session: {
+          status: 'DISCONNECTED',
+          qrCode: null,
+          isActive: false,
+          isConnected: false,
+          connectedNumber: null,
+          updatedAt: null,
+        },
       });
     }
 
-    // Bot encontrado - retorna status completo
+    // Bot encontrado - retorna status completo (+ session no formato do frontend)
+    const isConnected = bot.isConnected || false;
+    const qrCode = bot.qrCode || null;
+    let sessionStatus = 'DISCONNECTED';
+    if (isConnected) sessionStatus = 'CONNECTED';
+    else if (qrCode) sessionStatus = 'QRCODE';
+    else sessionStatus = 'CONNECTING';
+
     return res.json({
       exists: true,
-      isConnected: bot.isConnected || false,
-      status: bot.isConnected ? 'connected' : (bot.qrCode ? 'waiting_qr' : 'disconnected'),
+      isConnected,
+      status: isConnected ? 'connected' : (qrCode ? 'waiting_qr' : 'disconnected'),
       connectedNumber: bot.connectedNumber || null,
-      qrCode: bot.qrCode || null
+      qrCode,
+      success: true,
+      userId: normalizedUserId,
+      session: {
+        status: sessionStatus,
+        qrCode,
+        isActive: true,
+        isConnected,
+        connectedNumber: bot.connectedNumber || null,
+        updatedAt: bot.updatedAt ? bot.updatedAt.toISOString() : null,
+      },
     });
 
   } catch (error) {

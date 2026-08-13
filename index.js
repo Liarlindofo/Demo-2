@@ -27,6 +27,7 @@ import logger from './src/utils/logger.js';
 import router from './src/server/router.js';
 import statusRoutes from './src/routes/status.routes.js';
 import prisma from './src/db/index.js';
+import { requireVpsApiKey } from './src/server/vps-api-auth.js';
 
 // ============================================
 // 2. INICIALIZAR EXPRESS
@@ -74,7 +75,7 @@ app.use((req, res, next) => {
 // 4. ROTAS
 // ============================================
 
-// Healthcheck - GET /health
+// Healthcheck - GET /health (público, sem API key)
 app.get('/health', (req, res) => {
   res.json({
     success: true,
@@ -83,6 +84,9 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Demais rotas /api exigem x-api-key quando WHATSAPP_API_KEY/BOT_API_KEY estiver setada
+app.use('/api', requireVpsApiKey);
 
 // Rotas de status (nova rota conforme prompt)
 app.use('/api', statusRoutes);
