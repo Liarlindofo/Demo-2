@@ -110,6 +110,7 @@ app.get('/', (req, res) => {
         start: 'POST /api/send-only/:userId/start',
         status: 'GET /api/send-only/:userId/status',
         qr: 'GET /api/send-only/:userId/qr',
+        groups: 'GET /api/send-only/:userId/groups',
         send: 'POST /api/send-only/:userId/send',
         stop: 'POST /api/send-only/:userId/stop',
       },

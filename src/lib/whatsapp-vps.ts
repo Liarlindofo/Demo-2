@@ -97,7 +97,7 @@ function buildPath(kind: WhatsAppSessionKind, action: string, userId: string, se
 
 export async function callWhatsAppVps(
   kind: WhatsAppSessionKind,
-  action: 'start' | 'stop' | 'qr' | 'status',
+  action: 'start' | 'stop' | 'qr' | 'status' | 'groups',
   userId: string,
   options: { method?: string; search?: string; timeoutMs?: number } = {},
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {

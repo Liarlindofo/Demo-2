@@ -32,7 +32,7 @@ if (!envLoaded) {
   }
 }
 
-import { startClient, sendMessage, SLOT_ATENDIMENTO, SLOT_SOMENTE_ENVIO } from "../src/wpp/index.js";
+import { startClient, sendMessage, listGroups, SLOT_ATENDIMENTO, SLOT_SOMENTE_ENVIO } from "../src/wpp/index.js";
 import { initScheduler } from "../src/tarefas/scheduler.js";
 import sessionManager from "../src/wpp/sessionManager.js";
 import logger from "../src/utils/logger.js";
@@ -133,6 +133,11 @@ function startSendOnlyHttpServer(boundUserId, boundSlot) {
       });
     }
 
+    if (req.method === 'GET' && (req.url === '/groups' || req.url?.startsWith('/groups?'))) {
+      const result = await listGroups(boundUserId, boundSlot);
+      return sendJson(result.success ? 200 : 503, result);
+    }
+
     if (req.method === 'POST' && req.url === '/send') {
       let raw = '';
       for await (const chunk of req) raw += chunk;
@@ -158,7 +163,7 @@ function startSendOnlyHttpServer(boundUserId, boundSlot) {
   });
 
   server.listen(port, '127.0.0.1', () => {
-    logger.info(`[whatsapp-worker] 🌐 Mini-HTTP somente-envio em http://127.0.0.1:${port} (POST /send)`);
+    logger.info(`[whatsapp-worker] 🌐 Mini-HTTP somente-envio em http://127.0.0.1:${port} (POST /send, GET /groups)`);
   });
 
   server.on('error', (err) => {

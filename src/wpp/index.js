@@ -409,6 +409,95 @@ export async function sendMessage(userId, to, message, slot = SLOT_SOMENTE_ENVIO
 }
 
 /**
+ * Lista grupos visíveis pela sessão (somente leitura).
+ * Usa listChats({ onlyGroups: true }) — API atual do WPPConnect 2.2.x.
+ * Fallback: getAllGroups() (deprecated).
+ *
+ * IMPORTANTE: o WhatsApp só retorna grupos em que ESTE número já participa.
+ * Se o número de Relatórios não estiver no grupo, ele não aparece aqui.
+ *
+ * @returns {{ success: boolean, groups?: Array<{id:string,name:string}>, error?: string, note?: string }}
+ */
+export async function listGroups(userId, slot = SLOT_SOMENTE_ENVIO) {
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId) {
+    return { success: false, error: 'userId inválido', groups: [] };
+  }
+
+  const client = sessionManager.getClient(normalizedUserId, slot);
+  if (!client) {
+    return {
+      success: false,
+      error: `Sessão não encontrada em memória [${normalizedUserId}:${slot}]. Inicie com POST /api/send-only/:userId/start e conecte o QR.`,
+      groups: [],
+    };
+  }
+
+  try {
+    const isConnected = await client.isConnected().catch(() => false);
+    if (!isConnected) {
+      return {
+        success: false,
+        error: 'Sessão ainda não está conectada ao WhatsApp',
+        groups: [],
+      };
+    }
+
+    let chats = [];
+    if (typeof client.listChats === 'function') {
+      chats = await client.listChats({ onlyGroups: true });
+    } else if (typeof client.getAllGroups === 'function') {
+      chats = await client.getAllGroups();
+    } else {
+      return {
+        success: false,
+        error: 'Cliente WPPConnect sem listChats/getAllGroups',
+        groups: [],
+      };
+    }
+
+    const groups = (Array.isArray(chats) ? chats : [])
+      .map((chat) => {
+        let id = null;
+        if (chat?.id?._serialized) id = chat.id._serialized;
+        else if (typeof chat?.id === 'string') id = chat.id;
+        else if (chat?.id?.user) id = `${chat.id.user}@${chat.id.server || 'g.us'}`;
+        else if (chat?.contact?.id?._serialized) id = chat.contact.id._serialized;
+
+        if (!id || !String(id).endsWith('@g.us')) return null;
+
+        const name =
+          chat?.name ||
+          chat?.formattedTitle ||
+          chat?.contact?.name ||
+          chat?.contact?.pushname ||
+          chat?.groupMetadata?.subject ||
+          String(id);
+
+        return { id: String(id), name: String(name) };
+      })
+      .filter(Boolean)
+      // dedupe por id
+      .filter((g, i, arr) => arr.findIndex((x) => x.id === g.id) === i)
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+    return {
+      success: true,
+      slot,
+      mode: sessionManager.getMode(normalizedUserId, slot) || 'somente-envio',
+      count: groups.length,
+      groups,
+      note:
+        'Só aparecem grupos em que ESTE número (sessão somente-envio) já participa. ' +
+        'Adicione o número de Relatórios no grupo desejado antes de consultar, se a lista vier vazia ou incompleta.',
+    };
+  } catch (error) {
+    logger.error(`[listGroups] Erro [${normalizedUserId}:${slot}]:`, error);
+    return { success: false, error: error.message || String(error), groups: [] };
+  }
+}
+
+/**
  * PARA cliente WPPConnect
  * (slot default pra bater com worker que pode chamar stopClient(userId) )
  */

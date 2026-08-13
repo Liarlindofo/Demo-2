@@ -34,6 +34,7 @@ router.post('/stop/:userId', asyncHandler(api.stopConnection));
 router.post('/send-only/:userId/start', asyncHandler(api.startSendOnlyConnection));
 router.get('/send-only/:userId/status', asyncHandler(api.getSendOnlyStatus));
 router.get('/send-only/:userId/qr', asyncHandler(api.getSendOnlyQRCode));
+router.get('/send-only/:userId/groups', asyncHandler(api.getSendOnlyGroups));
 router.post('/send-only/:userId/send', asyncHandler(api.sendSendOnlyMessage));
 router.post('/send-only/:userId/stop', asyncHandler(api.stopSendOnlyConnection));
 

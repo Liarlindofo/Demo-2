@@ -7,7 +7,7 @@ import {
   startSendOnlyWorker,
   stopSendOnlyWorker,
 } from '../services/pm2.service.js';
-import { stopClient, sendMessage, SLOT_SOMENTE_ENVIO } from '../wpp/index.js';
+import { stopClient, sendMessage, listGroups, SLOT_SOMENTE_ENVIO } from '../wpp/index.js';
 import config from '../../config.js';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -640,6 +640,56 @@ export async function getSendOnlyQRCode(req, res) {
   } catch (error) {
     logger.error('[getSendOnlyQRCode]', error);
     return res.status(500).json({ success: false, qrCode: null, message: error.message });
+  }
+}
+
+/**
+ * GET /api/send-only/:userId/groups
+ * Lista grupos que a sessão somente-envio enxerga (somente leitura).
+ * Só retorna grupos em que o número conectado já é participante.
+ */
+export async function getSendOnlyGroups(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ success: false, message: 'userId inválido', groups: [] });
+    }
+
+    const normalizedUserId = userId.trim();
+    const slot = resolveSendOnlySlot(req);
+
+    // 1) Mesmo processo (script CLI / API com client local)
+    const local = await listGroups(normalizedUserId, slot);
+    if (local.success) {
+      return res.json(local);
+    }
+
+    // 2) Proxy pro mini-HTTP do worker PM2
+    const port = Number(process.env.SEND_ONLY_HTTP_PORT || 3012);
+    try {
+      const proxyRes = await fetch(`http://127.0.0.1:${port}/groups`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+      const data = await proxyRes.json().catch(() => ({}));
+      return res.status(proxyRes.status).json(data);
+    } catch (proxyErr) {
+      return res.status(503).json({
+        success: false,
+        groups: [],
+        message:
+          local.error ||
+          'Sessão somente-envio não acessível. Confirme POST /api/send-only/:userId/start e que o worker está online.',
+        detail: proxyErr.message,
+        note:
+          'Só aparecem grupos em que o número de Relatórios já participa. ' +
+          'Adicione esse número no grupo desejado antes de consultar.',
+        slot,
+      });
+    }
+  } catch (error) {
+    logger.error('[getSendOnlyGroups]', error);
+    return res.status(500).json({ success: false, groups: [], message: error.message });
   }
 }
 
