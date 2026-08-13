@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   Bike, Plus, ArrowLeft, Search,
@@ -327,16 +327,43 @@ function ConfigEmailPanel({ onToast }: { onToast: (msg: string) => void }) {
 }
 
 export default function MotoboyListPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#0a0a0a] text-white">
+        <div className="max-w-5xl mx-auto px-4 py-8 space-y-3">
+          {[0, 1, 2].map(i => <div key={i} className="h-20 bg-[#1c1c1e] rounded-2xl animate-pulse" />)}
+        </div>
+      </div>
+    }>
+      <MotoboyListContent />
+    </Suspense>
+  );
+}
+
+function MotoboyListContent() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const filtroLoja = searchParams.get('lojaId') ?? '';
+  const filtroStatus = searchParams.get('status') ?? '';
+  const filtroDocs = searchParams.get('docs') ?? '';
+  const searchFromUrl = searchParams.get('q') ?? '';
+
   const [riders, setRiders] = useState<Rider[]>([]);
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filtroLoja, setFiltroLoja] = useState('');
-  const [filtroStatus, setFiltroStatus] = useState('');
-  const [filtroDocs, setFiltroDocs] = useState('');
+  const [search, setSearch] = useState(searchFromUrl);
   const [inviteRider, setInviteRider] = useState<Rider | null>(null);
   const [toast, setToast] = useState('');
+
+  const setFiltro = useCallback((key: 'lojaId' | 'status' | 'docs' | 'q', value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) params.set(key, value);
+    else params.delete(key);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [searchParams, pathname, router]);
 
   useEffect(() => {
     fetch('/api/rh/lojas').then(r => r.ok ? r.json() : []).then(setLojas).catch(() => {});
@@ -354,8 +381,23 @@ export default function MotoboyListPage() {
       .finally(() => setLoading(false));
   }, [filtroLoja, filtroStatus]);
 
+  // Debounce da busca na URL
+  useEffect(() => {
+    setSearch(searchFromUrl);
+  }, [searchFromUrl]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (search !== searchFromUrl) setFiltro('q', search);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search, searchFromUrl, setFiltro]);
+
   const filtrados = riders.filter((r) => {
-    const matchSearch = r.name.toLowerCase().includes(search.toLowerCase()) || r.email.toLowerCase().includes(search.toLowerCase());
+    const q = search.toLowerCase();
+    const matchSearch = !q
+      || r.name.toLowerCase().includes(q)
+      || r.email.toLowerCase().includes(q);
     const matchDocs = !filtroDocs || r.docStatus === filtroDocs;
     return matchSearch && matchDocs;
   });
@@ -422,19 +464,19 @@ export default function MotoboyListPage() {
               className="w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50"
             />
           </div>
-          <select value={filtroLoja} onChange={(e) => setFiltroLoja(e.target.value)}
+          <select value={filtroLoja} onChange={(e) => setFiltro('lojaId', e.target.value)}
             className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
             <option value="">Todas as lojas</option>
             {lojas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
           </select>
-          <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}
+          <select value={filtroStatus} onChange={(e) => setFiltro('status', e.target.value)}
             className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
             <option value="">Todos os status</option>
             <option value="active">Ativos</option>
             <option value="pending_setup">Aguardando ativação</option>
             <option value="inactive">Inativos</option>
           </select>
-          <select value={filtroDocs} onChange={(e) => setFiltroDocs(e.target.value)}
+          <select value={filtroDocs} onChange={(e) => setFiltro('docs', e.target.value)}
             className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
             <option value="">Todos os docs</option>
             <option value="pending">Docs pendentes</option>

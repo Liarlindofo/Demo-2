@@ -472,7 +472,13 @@ export default function MotoboiDetailPage() {
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
-            <button onClick={() => router.push('/rh/motoboys')} className="w-9 h-9 rounded-xl bg-[#1c1c1e] border border-[#2a2a2e] flex items-center justify-center hover:bg-[#2a2a2e]">
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.history.length > 1) router.back();
+                else router.push('/rh/motoboys');
+              }}
+              className="w-9 h-9 rounded-xl bg-[#1c1c1e] border border-[#2a2a2e] flex items-center justify-center hover:bg-[#2a2a2e]"
+            >
               <ArrowLeft className="w-4 h-4 text-gray-400" />
             </button>
             <div className="flex items-center gap-2.5">
