@@ -222,7 +222,14 @@ model WhatsAppBot {
   status          String?    // Status da sessão (ex: "CONNECTED", "CONNECTING", "QRCODE", etc.)
   isConnected     Boolean    @default(false)
   connectedNumber String?
-  sessionJson     Json?
+  sessionJson     Json?      // Estado efêmero (ex: state do WPP). NÃO é fonte de verdade de IA.
+  /// Nome amigável da sessão (ex: "Marketing - Ana")
+  label           String?
+  /// null = nunca configurado (reconnect deve FALHAR, não assumir default).
+  /// true = responde com IA; false = somente envio (sem listener / sem resposta).
+  iaAtiva         Boolean?
+  /// Prompt específico desta sessão (usado quando iaAtiva=true). Nulo se IA desligada.
+  iaPrompt        String?    @db.Text
   qrCode          String?    @db.Text
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt

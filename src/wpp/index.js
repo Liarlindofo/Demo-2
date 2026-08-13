@@ -223,28 +223,81 @@ async function cleanupOrphanBrowserIsolated(userDataDir) {
 }
 
 /**
+ * Resolve iaAtiva a partir de options explícitas OU do banco.
+ * Nunca assume default silencioso (ex.: "atendimento").
+ *
+ * Aceita legado `mode: 'atendimento'|'somente-envio'` OU novo `iaAtiva: boolean`.
+ *
+ * @returns {Promise<{ iaAtiva: boolean, iaPrompt: string|null, label: string|null, mode: 'atendimento'|'somente-envio' }>}
+ */
+async function resolveSessionIaOptions(userId, slot, options = {}) {
+  let iaAtiva;
+  let iaPrompt = options.iaPrompt !== undefined ? options.iaPrompt : undefined;
+  let label = options.label !== undefined ? options.label : undefined;
+
+  if (typeof options.iaAtiva === 'boolean') {
+    iaAtiva = options.iaAtiva;
+  } else if (options.mode === 'somente-envio') {
+    iaAtiva = false;
+  } else if (options.mode === 'atendimento') {
+    iaAtiva = true;
+  } else {
+    const durable = await WhatsAppBotModel.getDurableConfig(userId, slot);
+    if (!durable) {
+      throw new Error(
+        `[startClient] Sessão [${userId}:${slot}] sem iaAtiva persistido — ` +
+          `NÃO iniciando (evita default silencioso de atendimento). Rode o backfill ou reconecte pela UI.`,
+      );
+    }
+    iaAtiva = durable.iaAtiva;
+    if (iaPrompt === undefined) iaPrompt = durable.iaPrompt;
+    if (label === undefined) label = durable.label;
+  }
+
+  const mode = iaAtiva ? 'atendimento' : 'somente-envio';
+  return {
+    iaAtiva,
+    iaPrompt: iaPrompt ?? null,
+    label: label ?? null,
+    mode,
+  };
+}
+
+/**
  * Inicia cliente WPPConnect para um usuário/slot — NÃO BLOQUEIA
  *
  * @param {string} userId
  * @param {number} [slot=1]
- * @param {{ mode?: 'atendimento' | 'somente-envio' }} [options]
- *   - mode 'atendimento' (default): registra listener do bot (respostas automáticas)
- *   - mode 'somente-envio': conecta ao WhatsApp (QR), mas NÃO registra listener de mensagens
+ * @param {{ mode?: 'atendimento' | 'somente-envio', iaAtiva?: boolean, iaPrompt?: string|null, label?: string|null }} [options]
+ *   - mode 'atendimento' / iaAtiva=true: registra listener do bot
+ *   - mode 'somente-envio' / iaAtiva=false: conecta, SEM listener
+ *   - sem mode/iaAtiva: lê do banco; se ausente, FALHA (não assume default)
  */
 export async function startClient(userId, slot = SLOT_ATENDIMENTO, options = {}) {
   let normalizedUserId = userId;
-  const mode = options.mode === 'somente-envio' ? 'somente-envio' : 'atendimento';
-  const isSendOnly = mode === 'somente-envio';
+  let mode = 'somente-envio';
+  let iaAtiva = false;
 
   try {
-    logger.wpp(userId, slot, `Iniciando cliente WPPConnect (não bloqueante)... mode=${mode}`);
-
     if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
       throw new Error(`userId inválido: ${userId}`);
     }
 
     normalizedUserId = String(userId).trim();
-    logger.info(`[startClient] userId original: "${userId}", normalizado: "${normalizedUserId}", slot=${slot}, mode=${mode}`);
+    const resolved = await resolveSessionIaOptions(normalizedUserId, slot, options);
+    iaAtiva = resolved.iaAtiva;
+    mode = resolved.mode;
+    const { iaPrompt, label } = resolved;
+    const isSendOnly = !iaAtiva;
+
+    logger.wpp(
+      normalizedUserId,
+      slot,
+      `Iniciando cliente WPPConnect (não bloqueante)... mode=${mode} iaAtiva=${iaAtiva}`,
+    );
+    logger.info(
+      `[startClient] userId="${normalizedUserId}" slot=${slot} mode=${mode} iaAtiva=${iaAtiva} label=${label ?? '—'}`,
+    );
 
     // se já está em memória, não recria
     if (sessionManager.hasClient(normalizedUserId, slot)) {
@@ -258,11 +311,12 @@ export async function startClient(userId, slot = SLOT_ATENDIMENTO, options = {})
           qrCode: bot.qrCode,
           isConnected: bot.isConnected,
           mode: sessionManager.getMode(normalizedUserId, slot),
+          iaAtiva: sessionManager.getIaAtiva(normalizedUserId, slot),
           slot,
         };
       }
 
-      return { success: false, message: 'Cliente já está ativo', mode, slot };
+      return { success: false, message: 'Cliente já está ativo', mode, iaAtiva, slot };
     }
 
     const sessionName = `${normalizedUserId}-slot${slot}`;
@@ -285,11 +339,26 @@ export async function startClient(userId, slot = SLOT_ATENDIMENTO, options = {})
       throw new Error(`Usuário ${normalizedUserId} não encontrado em stack_users`);
     }
 
+    // Persiste config DURÁVEL (iaAtiva/label/iaPrompt) — sobrevive a disconnect/reconnect
+    const existingBot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
+    const persistLabel =
+      label ??
+      existingBot?.label ??
+      (iaAtiva ? (slot === 1 ? 'Atendimento' : `Sessão ${slot}`) : (slot === 2 ? 'Somente envio' : `Sessão ${slot}`));
+
     await WhatsAppBotModel.upsert(normalizedUserId, slot, {
       isConnected: false,
       qrCode: null,
       connectedNumber: null,
-      sessionJson: { mode },
+      iaAtiva,
+      iaPrompt: iaPrompt ?? existingBot?.iaPrompt ?? null,
+      label: persistLabel,
+      sessionJson: {
+        ...(existingBot?.sessionJson && typeof existingBot.sessionJson === 'object' && !Array.isArray(existingBot.sessionJson)
+          ? existingBot.sessionJson
+          : {}),
+        mode, // compat legado — fonte de verdade é iaAtiva
+      },
     });
 
     const headless =
@@ -325,14 +394,18 @@ export async function startClient(userId, slot = SLOT_ATENDIMENTO, options = {})
       })
       .then(async (client) => {
         logger.wpp(normalizedUserId, slot, '✅ Cliente WPPConnect criado com sucesso.');
-        sessionManager.setClient(normalizedUserId, slot, client, mode);
+        sessionManager.setClient(normalizedUserId, slot, client, mode, iaAtiva);
 
-        if (isSendOnly) {
-          logger.wpp(normalizedUserId, slot, '📤 Sessão SOMENTE-ENVIO — listener do bot NÃO registrado.');
-        } else {
-          logger.wpp(normalizedUserId, slot, '🎧 Registrando listener de mensagens...');
+        if (iaAtiva) {
+          logger.wpp(normalizedUserId, slot, '🎧 Registrando listener de mensagens (iaAtiva=true)...');
           setupMessageListener(client, normalizedUserId, slot);
           logger.wpp(normalizedUserId, slot, '✅ Listener de mensagens registrado!');
+        } else {
+          logger.wpp(
+            normalizedUserId,
+            slot,
+            '📤 Sessão SEM IA (iaAtiva=false) — listener do bot NÃO registrado.',
+          );
         }
 
         try {
@@ -359,11 +432,12 @@ export async function startClient(userId, slot = SLOT_ATENDIMENTO, options = {})
         : 'Sessão iniciada, aguardando QR.',
       isConnected: false,
       mode,
+      iaAtiva,
       slot,
     };
   } catch (error) {
     logger.error(`Erro ao iniciar cliente [${normalizedUserId}:${slot}]:`, error);
-    return { success: false, message: error.message, mode, slot };
+    return { success: false, message: error.message, mode, iaAtiva, slot };
   }
 }
 
@@ -677,6 +751,26 @@ async function handleIncomingMessage(message, client, userId, slot) {
       logger.info(`[📨 MENSAGEM] De: ${message.from}, Tipo: ${message.type}, fromMe: ${message.fromMe}, isGroup: ${message.isGroupMsg}`);
       logger.info(`[📨 MENSAGEM] Corpo: "${message.body || message.text || '(vazio)'}"`);
 
+      // ── 0. Defesa em camadas: iaAtiva no BANCO (tempo real) ────────────────
+      // Mesmo que um listener tenha sido anexado por bug de reconnect, uma
+      // sessão sem IA nunca deve responder de verdade.
+      try {
+        const durable = await WhatsAppBotModel.getDurableConfig(userId, slot);
+        if (!durable || durable.iaAtiva !== true) {
+          logger.warn(
+            `[handleIncomingMessage] mensagem ignorada: sessão ${userId}:${slot} ` +
+              `não tem IA ativa (iaAtiva=${durable ? durable.iaAtiva : 'ausente'})`,
+          );
+          return;
+        }
+      } catch (iaErr) {
+        logger.error(
+          `[handleIncomingMessage] Falha ao consultar iaAtiva [${userId}:${slot}] — ` +
+            `ignorando mensagem por segurança: ${iaErr?.message || iaErr}`,
+        );
+        return;
+      }
+
       // ── 1. Descartes imediatos ────────────────────────────────────────────
       if (message.isGroupMsg) {
         logger.info(`[setupMessageListener] Ignorando mensagem de grupo`);
@@ -898,9 +992,28 @@ export async function restoreAllSessions() {
     logger.info(`Encontrados ${allBots.length} bots para restaurar`);
 
     for (const bot of allBots) {
-      startClient(bot.userId, bot.slot).catch((error) => {
-        logger.error(`Erro ao restaurar sessão [${bot.userId}:${bot.slot}]:`, error);
-      });
+      // Lê config DURÁVEL — sem iaAtiva explícito no banco, NÃO sobe (não assume atendimento)
+      WhatsAppBotModel.getDurableConfig(bot.userId, bot.slot)
+        .then(async (durable) => {
+          if (!durable) {
+            logger.error(
+              `[restoreAllSessions] ❌ Sessão [${bot.userId}:${bot.slot}] sem iaAtiva persistido — ` +
+                `mantendo DESCONECTADA (não restauro com comportamento assumido).`,
+            );
+            return;
+          }
+          logger.info(
+            `[restoreAllSessions] Restaurando [${bot.userId}:${bot.slot}] iaAtiva=${durable.iaAtiva}`,
+          );
+          await startClient(bot.userId, bot.slot, {
+            iaAtiva: durable.iaAtiva,
+            iaPrompt: durable.iaPrompt,
+            label: durable.label,
+          });
+        })
+        .catch((error) => {
+          logger.error(`Erro ao restaurar sessão [${bot.userId}:${bot.slot}]:`, error);
+        });
     }
 
     logger.success(`✓ Restauração de sessões concluída`);

@@ -128,18 +128,35 @@ function scheduleReconnect(userId, slot) {
     reconnectingSet.delete(key);
 
     try {
-      // Remove cliente antigo da memória antes de reconectar
+      // Lê config DURÁVEL do banco ANTES de remover o client / startar de novo.
+      // Nunca assumir default (ex.: atendimento) — isso era a causa do bot no slot2.
+      const durable = await WhatsAppBotModel.getDurableConfig(userId, slot);
+      if (!durable) {
+        logger.error(
+          `[scheduleReconnect] ❌ Sessão [${userId}:${slot}] sem iaAtiva persistido no banco. ` +
+            `Mantendo DESCONECTADA (não reconecto com comportamento assumido).`,
+        );
+        reconnectAttempts.delete(key);
+        return;
+      }
+
       if (sessionManager.hasClient(userId, slot)) {
         sessionManager.removeClient(userId, slot);
       }
 
-      logger.warn(`[scheduleReconnect] 🔄 Reconectando [${userId}:${slot}]... (tentativa ${attempts})`);
+      logger.warn(
+        `[scheduleReconnect] 🔄 Reconectando [${userId}:${slot}]... ` +
+          `(tentativa ${attempts}, iaAtiva=${durable.iaAtiva}, label=${durable.label ?? '—'})`,
+      );
 
-      // Import dinâmico para evitar dependência circular
       const { startClient } = await import('./index.js');
-      await startClient(userId, slot);
+      await startClient(userId, slot, {
+        iaAtiva: durable.iaAtiva,
+        iaPrompt: durable.iaPrompt,
+        label: durable.label,
+      });
 
-      logger.success(`[scheduleReconnect] ✅ Reconexão iniciada para [${userId}:${slot}]`);
+      logger.success(`[scheduleReconnect] ✅ Reconexão iniciada para [${userId}:${slot}] (iaAtiva=${durable.iaAtiva})`);
     } catch (err) {
       logger.error(`[scheduleReconnect] ❌ Falha ao reconectar [${userId}:${slot}]: ${err?.message || err}`);
       // Tenta de novo

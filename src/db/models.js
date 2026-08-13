@@ -78,6 +78,52 @@ export const WhatsAppBotModel = {
   },
 
   /**
+   * Configuração DURÁVEL da sessão (label / iaAtiva / iaPrompt).
+   * Fonte de verdade no banco — nunca assumir default silencioso.
+   *
+   * @returns {{ label: string|null, iaAtiva: boolean, iaPrompt: string|null } | null}
+   *   null se sessão não existe OU iaAtiva ainda não foi persistido (null no banco).
+   */
+  async getDurableConfig(userId, slot) {
+    try {
+      const bot = await this.findByUserAndSlot(userId, slot);
+      if (!bot) {
+        logger.error(`[WhatsAppBotModel.getDurableConfig] Sessão NÃO encontrada [${userId}:${slot}]`);
+        return null;
+      }
+      if (typeof bot.iaAtiva !== 'boolean') {
+        logger.error(
+          `[WhatsAppBotModel.getDurableConfig] iaAtiva ausente/inválido [${userId}:${slot}] ` +
+            `(valor=${String(bot.iaAtiva)}) — recusar start/reconnect com default`,
+        );
+        return null;
+      }
+      return {
+        label: bot.label ?? null,
+        iaAtiva: bot.iaAtiva,
+        iaPrompt: bot.iaPrompt ?? null,
+      };
+    } catch (error) {
+      logger.error(`Erro em WhatsAppBotModel.getDurableConfig [${userId}:${slot}]:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Persiste campos duráveis sem tocar em estado de conexão.
+   */
+  async saveDurableConfig(userId, slot, { iaAtiva, iaPrompt, label } = {}) {
+    const data = {};
+    if (typeof iaAtiva === 'boolean') data.iaAtiva = iaAtiva;
+    if (iaPrompt !== undefined) data.iaPrompt = iaPrompt;
+    if (label !== undefined) data.label = label;
+    if (Object.keys(data).length === 0) {
+      return this.findByUserAndSlot(userId, slot);
+    }
+    return this.upsert(userId, slot, data);
+  },
+
+  /**
    * Cria ou atualiza bot (upsert)
    * Valida que o usuário existe em stack_users antes de criar/atualizar
    */
@@ -155,23 +201,40 @@ export const WhatsAppBotModel = {
   },
 
   /**
-   * Marca bot como conectado
-   * Valida que o usuário existe em stack_users
+   * Marca bot como conectado.
+   * NÃO sobrescreve iaAtiva / iaPrompt / label.
+   * sessionJson efêmero é mergeado (preserva mode legado se existir).
    */
-  async setConnected(userId, slot, connectedNumber, sessionJson = null) {
+  async setConnected(userId, slot, connectedNumber, ephemeralSessionJson = null) {
     try {
-      // Verifica se o usuário existe na tabela correta
       const user = await prisma.stackUser.findUnique({ where: { id: userId } });
 
       if (!user) {
         throw new Error(`Usuário ${userId} não encontrado na tabela stack_users`);
       }
 
+      const existing = await this.findByUserAndSlot(userId, slot);
+      const prevJson =
+        existing?.sessionJson && typeof existing.sessionJson === 'object' && !Array.isArray(existing.sessionJson)
+          ? { ...existing.sessionJson }
+          : {};
+
+      const modeCompat =
+        typeof existing?.iaAtiva === 'boolean'
+          ? (existing.iaAtiva ? 'atendimento' : 'somente-envio')
+          : (prevJson.mode || undefined);
+
+      const sessionJson = {
+        ...prevJson,
+        ...(ephemeralSessionJson && typeof ephemeralSessionJson === 'object' ? ephemeralSessionJson : {}),
+        ...(modeCompat ? { mode: modeCompat } : {}),
+      };
+
       return await this.upsert(userId, slot, {
         isConnected: true,
         connectedNumber,
         sessionJson,
-        qrCode: null // Limpa QR após conectar
+        qrCode: null,
       });
     } catch (error) {
       logger.error(`Erro em WhatsAppBotModel.setConnected [${userId}:${slot}]:`, error);
@@ -180,12 +243,11 @@ export const WhatsAppBotModel = {
   },
 
   /**
-   * Marca bot como desconectado
-   * Valida que o usuário existe em stack_users
+   * Marca bot como desconectado.
+   * PRESERVA iaAtiva / iaPrompt / label / sessionJson (config durável).
    */
   async setDisconnected(userId, slot) {
     try {
-      // Verifica se o usuário existe na tabela correta
       const user = await prisma.stackUser.findUnique({ where: { id: userId } });
 
       if (!user) {
@@ -196,7 +258,6 @@ export const WhatsAppBotModel = {
         isConnected: false,
         connectedNumber: null,
         qrCode: null,
-        sessionJson: null
       });
     } catch (error) {
       logger.error(`Erro em WhatsAppBotModel.setDisconnected [${userId}:${slot}]:`, error);
@@ -205,12 +266,10 @@ export const WhatsAppBotModel = {
   },
 
   /**
-   * Limpa sessão (mantém registro, mas limpa dados)
-   * Valida que o usuário existe em stack_users
+   * Limpa estado de conexão (QR / número). PRESERVA iaAtiva / iaPrompt / label.
    */
   async clearSession(userId, slot) {
     try {
-      // Verifica se o usuário existe na tabela correta
       const user = await prisma.stackUser.findUnique({ where: { id: userId } });
 
       if (!user) {
@@ -221,7 +280,6 @@ export const WhatsAppBotModel = {
         isConnected: false,
         connectedNumber: null,
         qrCode: null,
-        sessionJson: null
       });
     } catch (error) {
       logger.error(`Erro em WhatsAppBotModel.clearSession [${userId}:${slot}]:`, error);

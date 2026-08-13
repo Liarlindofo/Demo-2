@@ -20,6 +20,9 @@ class SessionManager {
 
     // Modo da sessão: { "userId:slot": 'atendimento' | 'somente-envio' }
     this.sessionModes = new Map();
+
+    // IA ativa por sessão: { "userId:slot": boolean } — default seguro = false
+    this.sessionIaAtiva = new Map();
   }
 
   normalizeUserId(userId) {
@@ -40,9 +43,10 @@ class SessionManager {
    * @param {string} userId
    * @param {number} slot
    * @param {object} client
-   * @param {SessionMode} [mode='atendimento']
+   * @param {SessionMode} [mode]
+   * @param {boolean} [iaAtiva]
    */
-  setClient(userId, slot, client, mode = 'atendimento') {
+  setClient(userId, slot, client, mode, iaAtiva) {
     const normalizedUserId = this.normalizeUserId(userId);
     const key = this.getKey(normalizedUserId, slot);
 
@@ -56,23 +60,40 @@ class SessionManager {
       }
     }
 
-    const resolvedMode = mode === 'somente-envio' ? 'somente-envio' : 'atendimento';
+    // Preferir iaAtiva explícito; mode legado só como fallback. Default seguro = SEM IA.
+    const resolvedIaAtiva =
+      typeof iaAtiva === 'boolean'
+        ? iaAtiva
+        : mode === 'atendimento';
+    const resolvedMode = resolvedIaAtiva ? 'atendimento' : 'somente-envio';
+
     this.clients.set(key, client);
     this.sessionModes.set(key, resolvedMode);
-    logger.wpp(normalizedUserId, slot, `✅ Cliente armazenado na memória com chave: "${key}" (mode=${resolvedMode})`);
+    this.sessionIaAtiva.set(key, resolvedIaAtiva);
+    logger.wpp(
+      normalizedUserId,
+      slot,
+      `✅ Cliente armazenado na memória com chave: "${key}" (mode=${resolvedMode}, iaAtiva=${resolvedIaAtiva})`,
+    );
 
     const allKeys = Array.from(this.clients.keys());
     logger.info(`[SessionManager] Chaves ativas (${allKeys.length}): ${allKeys.join(', ')}`);
   }
 
-  /** @returns {SessionMode} */
+  /** @returns {SessionMode} — se ausente na memória, default SEGURO = somente-envio */
   getMode(userId, slot) {
     const key = this.getKey(userId, slot);
-    return this.sessionModes.get(key) || 'atendimento';
+    return this.sessionModes.get(key) || 'somente-envio';
+  }
+
+  /** @returns {boolean} */
+  getIaAtiva(userId, slot) {
+    const key = this.getKey(userId, slot);
+    return this.sessionIaAtiva.get(key) === true;
   }
 
   isSendOnly(userId, slot) {
-    return this.getMode(userId, slot) === 'somente-envio';
+    return !this.getIaAtiva(userId, slot);
   }
 
   getClient(userId, slot) {
@@ -99,6 +120,7 @@ class SessionManager {
     if (client) {
       this.clients.delete(key);
       this.sessionModes.delete(key);
+      this.sessionIaAtiva.delete(key);
       logger.wpp(normalizedUserId, slot, `✅ Cliente removido da memória (chave: "${key}")`);
       const remainingKeys = Array.from(this.clients.keys());
       logger.info(`[SessionManager] Chaves restantes (${remainingKeys.length}): ${remainingKeys.join(', ')}`);
