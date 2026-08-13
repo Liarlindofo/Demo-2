@@ -80,24 +80,26 @@ export const ComboCard = ({ combo, storeSlug, onClick, onFotosChange, onDescrica
 
       {/* Conteúdo */}
       <div className="p-5">
-        {/* Cabeçalho */}
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-6 h-6 rounded-md bg-orange-500/15 flex items-center justify-center shrink-0">
-              <Package2 className="w-3.5 h-3.5 text-orange-400" />
+        {/* Cabeçalho — título + badge; descrição abaixo (igual Sabores) */}
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-orange-500/15 flex items-center justify-center shrink-0">
+                <Package2 className="w-3.5 h-3.5 text-orange-400" />
+              </div>
+              <h3 className="font-semibold text-white text-sm leading-tight truncate">{combo.nome}</h3>
             </div>
-          <h3 className="font-semibold text-white text-sm leading-tight truncate">{combo.nome}</h3>
-          <DescricaoEditavel
-            valor={combo.descricao}
-            onSalvar={onDescricaoChange}
-          />
+            <DescricaoEditavel
+              valor={combo.descricao}
+              onSalvar={onDescricaoChange}
+            />
+          </div>
+          {!semPreco && (
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${STATUS_BADGE_COLORS[combo.status]}`}>
+              {getStatusLabel(combo.status)}
+            </span>
+          )}
         </div>
-        {!semPreco && (
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${STATUS_BADGE_COLORS[combo.status]}`}>
-            {getStatusLabel(combo.status)}
-          </span>
-        )}
-      </div>
 
         {/* Slots do combo */}
         <div className="ml-8 mb-3 space-y-1.5">
