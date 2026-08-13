@@ -37,6 +37,7 @@ export async function PUT(
       horario,
       escopoLoja,
       destinoWhatsapp,
+      sessionSlot,
       ativo,
       campos,
     } = body as {
@@ -44,6 +45,7 @@ export async function PUT(
       horario?: string;
       escopoLoja?: string;
       destinoWhatsapp?: string;
+      sessionSlot?: number | null;
       ativo?: boolean;
       campos?: string[];
     };
@@ -62,6 +64,10 @@ export async function PUT(
     }
     if (!destinoWhatsapp?.trim()) {
       return NextResponse.json({ error: 'destinoWhatsapp é obrigatório.' }, { status: 400 });
+    }
+    const slot = sessionSlot == null ? null : parseInt(String(sessionSlot), 10);
+    if (slot != null && (!Number.isFinite(slot) || slot < 1)) {
+      return NextResponse.json({ error: 'sessionSlot inválido.' }, { status: 400 });
     }
     if (!Array.isArray(campos) || campos.length === 0) {
       return NextResponse.json({ error: 'Selecione ao menos um campo.' }, { status: 400 });
@@ -98,6 +104,7 @@ export async function PUT(
           horario,
           escopoLoja: escopoLoja as ReportEscopoLoja,
           destinoWhatsapp: destinoWhatsapp.trim(),
+          sessionSlot: slot,
           ...(ativo !== undefined && { ativo: !!ativo }),
         },
         include: {

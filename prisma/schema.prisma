@@ -79,6 +79,8 @@ model User {
   tarefasAtribuidas      TarefaAtribuida[]
   reportDefinitions      ReportDefinition[]
   serviceApiKeys         ServiceApiKey[]
+  /// Slot WhatsApp usado pelo scheduler de tarefas (digest/pendentes). Null = slot 1.
+  tarefasSessionSlot     Int?
 
   @@map("users")
 }
@@ -1509,6 +1511,8 @@ model ReportDefinition {
   escopoLoja      ReportEscopoLoja
   /// ID do grupo ou contato no WPPConnect para onde enviar o relatório
   destinoWhatsapp String
+  /// Slot da sessão WhatsApp que envia este relatório (independente do destino)
+  sessionSlot     Int?
   ativo           Boolean          @default(true)
 
   campos    ReportField[]

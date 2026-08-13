@@ -38,6 +38,13 @@ router.get('/send-only/:userId/groups', asyncHandler(api.getSendOnlyGroups));
 router.post('/send-only/:userId/send', asyncHandler(api.sendSendOnlyMessage));
 router.post('/send-only/:userId/stop', asyncHandler(api.stopSendOnlyConnection));
 
+// Sessões genéricas (N slots)
+router.post('/sessions/:userId/start', asyncHandler(api.startSessionConnection));
+router.get('/sessions/:userId/status', asyncHandler(api.getSessionStatus));
+router.get('/sessions/:userId/qr', asyncHandler(api.getSessionQRCode));
+router.post('/sessions/:userId/stop', asyncHandler(api.stopSessionConnection));
+router.get('/sessions/:userId/list', asyncHandler(api.listUserSessions));
+
 // Configurações do bot
 router.get('/settings/:userId', asyncHandler(api.getSettings));
 router.post('/settings/:userId', asyncHandler(api.updateSettings));

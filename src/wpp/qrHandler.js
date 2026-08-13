@@ -48,8 +48,11 @@ export async function onStatusChange(userId, slot, status, client = null) {
         if (client) {
           const hostDevice = await client.getHostDevice().catch(() => null);
           if (hostDevice) {
-            const widId = (hostDevice.wid && hostDevice.wid.id) || hostDevice.id;
-            connectedNumber = extractPhoneNumber(widId);
+            connectedNumber =
+              extractPhoneNumber(hostDevice) ||
+              extractPhoneNumber(hostDevice.wid) ||
+              extractPhoneNumber(hostDevice.id) ||
+              extractPhoneNumber(hostDevice.phoneNumber);
           }
 
           try {
@@ -262,7 +265,17 @@ async function createUserAPIEntry(stackUserId, slot, connectedNumber) {
  */
 export function extractPhoneNumber(whatsappId) {
   if (!whatsappId) return null;
-  return whatsappId.split('@')[0];
+  if (typeof whatsappId === 'object') {
+    const raw =
+      whatsappId._serialized ||
+      whatsappId.user ||
+      whatsappId.id ||
+      (whatsappId.wid && (whatsappId.wid._serialized || whatsappId.wid.user || whatsappId.wid.id)) ||
+      '';
+    return extractPhoneNumber(raw);
+  }
+  const digits = String(whatsappId).split('@')[0].replace(/\D/g, '');
+  return digits.length >= 8 ? digits : null;
 }
 
 /**

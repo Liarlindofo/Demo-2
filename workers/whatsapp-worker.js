@@ -32,11 +32,12 @@ if (!envLoaded) {
   }
 }
 
-import { startClient, sendMessage, listGroups, SLOT_ATENDIMENTO, SLOT_SOMENTE_ENVIO } from "../src/wpp/index.js";
+import { startClient, sendMessage, listGroups } from "../src/wpp/index.js";
 import { initScheduler } from "../src/tarefas/scheduler.js";
 import sessionManager from "../src/wpp/sessionManager.js";
 import logger from "../src/utils/logger.js";
 import http from "http";
+import { sendWorkerPort } from "../src/services/pm2.service.js";
 
 function parseArg(name) {
   const arg = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -60,7 +61,7 @@ if (!userId) {
 const mode = modeArg === 'somente-envio' ? 'somente-envio' : 'atendimento';
 const slot = slotArg
   ? parseInt(slotArg, 10)
-  : (mode === 'somente-envio' ? SLOT_SOMENTE_ENVIO : SLOT_ATENDIMENTO);
+  : (mode === 'somente-envio' ? 2 : 1);
 
 if (!Number.isFinite(slot) || slot < 1) {
   console.error(`❌ ERRO: slot inválido: ${slotArg}`);
@@ -95,14 +96,13 @@ try {
   const result = await startClient(userId, slot, { mode });
   logger.success(`[whatsapp-worker] ✅ startClient() retornou:`, result);
 
-  // Scheduler de tarefas só no bot de atendimento (slot 1)
-  if (mode === 'atendimento' && slot === SLOT_ATENDIMENTO) {
-    initScheduler(userId, () => sessionManager.getClient(userId, SLOT_ATENDIMENTO));
-    logger.info(`[whatsapp-worker] ✅ Scheduler de tarefas inicializado`);
-  } else {
-    logger.info(`[whatsapp-worker] 📤 Sessão somente-envio — scheduler do bot NÃO iniciado`);
-    startSendOnlyHttpServer(userId, slot);
-  }
+  // Mini-HTTP em TODA sessão (IA ou não) para envio via API (relatórios/tarefas)
+  startSendOnlyHttpServer(userId, slot);
+
+  // Scheduler roda em todos os workers; cada job só dispara se este slot
+  // for o configurado em User.tarefasSessionSlot (evita duplicar digest).
+  initScheduler(userId, slot, () => sessionManager.getClient(userId, slot));
+  logger.info(`[whatsapp-worker] ✅ Scheduler de tarefas inicializado (filtra por slot ${slot})`);
 
   logger.info(`[whatsapp-worker] ✅ Worker mantido vivo. WPPConnect rodando em background.`);
 } catch (error) {
@@ -115,7 +115,7 @@ try {
  * Porta: SEND_ONLY_HTTP_PORT (default 3012), bind 127.0.0.1.
  */
 function startSendOnlyHttpServer(boundUserId, boundSlot) {
-  const port = Number(process.env.SEND_ONLY_HTTP_PORT || 3012);
+  const port = sendWorkerPort(boundSlot);
 
   const server = http.createServer(async (req, res) => {
     const sendJson = (status, body) => {
@@ -128,7 +128,8 @@ function startSendOnlyHttpServer(boundUserId, boundSlot) {
         ok: true,
         userId: boundUserId,
         slot: boundSlot,
-        mode: 'somente-envio',
+        mode: sessionManager.getMode(boundUserId, boundSlot),
+        iaAtiva: sessionManager.getIaAtiva(boundUserId, boundSlot),
         hasClient: sessionManager.hasClient(boundUserId, boundSlot),
       });
     }

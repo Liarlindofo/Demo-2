@@ -45,6 +45,7 @@ interface ReportRow {
   horario: string;
   escopoLoja: EscopoLoja;
   destinoWhatsapp: string;
+  sessionSlot: number | null;
   ativo: boolean;
   campos: { campoKey: string; ordem: number }[];
   ultimaExecucao: UltimaExecucao | null;
@@ -56,9 +57,17 @@ interface ReportForm {
   horario: string;
   escopoLoja: EscopoLoja;
   destinoWhatsapp: string;
+  sessionSlot: number | null;
   ativo: boolean;
   /** Ordem de seleção preservada */
   campos: string[];
+}
+
+interface WhatsSessionOpt {
+  slot: number;
+  label: string;
+  isConnected: boolean;
+  connectedNumber: string | null;
 }
 
 const EMPTY_FORM: ReportForm = {
@@ -67,6 +76,7 @@ const EMPTY_FORM: ReportForm = {
   horario: '23:30',
   escopoLoja: 'AMBOS',
   destinoWhatsapp: '',
+  sessionSlot: null,
   ativo: true,
   campos: [],
 };
@@ -140,6 +150,7 @@ function RelatoriosContent() {
 
   const [reports, setReports] = useState<ReportRow[]>([]);
   const [catalog, setCatalog] = useState<CatalogField[]>([]);
+  const [sessions, setSessions] = useState<WhatsSessionOpt[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -170,9 +181,10 @@ function RelatoriosContent() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [resReports, resCatalog] = await Promise.all([
+      const [resReports, resCatalog, resSessions] = await Promise.all([
         fetch('/api/admin/reports'),
         fetch('/api/admin/reports/catalog'),
+        fetch('/api/whatsapp-sessions?scope=tenant'),
       ]);
       if (resReports.ok) {
         const data = await resReports.json();
@@ -181,6 +193,10 @@ function RelatoriosContent() {
       if (resCatalog.ok) {
         const data = await resCatalog.json();
         setCatalog(Array.isArray(data) ? data : []);
+      }
+      if (resSessions.ok) {
+        const data = await resSessions.json();
+        setSessions(Array.isArray(data.sessions) ? data.sessions : []);
       }
     } catch {
       // silent
@@ -208,6 +224,7 @@ function RelatoriosContent() {
       horario: r.horario,
       escopoLoja: r.escopoLoja,
       destinoWhatsapp: r.destinoWhatsapp,
+      sessionSlot: r.sessionSlot ?? null,
       ativo: r.ativo,
       campos: [...r.campos]
         .sort((a, b) => a.ordem - b.ordem)
@@ -241,6 +258,7 @@ function RelatoriosContent() {
     if (!form.nome.trim()) return 'O nome é obrigatório.';
     if (!/^\d{2}:\d{2}$/.test(form.horario)) return 'Horário inválido. Use HH:mm.';
     if (!form.destinoWhatsapp.trim()) return 'Informe o destino WhatsApp (ID do grupo/contato).';
+    if (!form.sessionSlot) return 'Escolha a sessão WhatsApp que envia este relatório.';
     if (form.campos.length === 0) return 'Selecione ao menos um campo do catálogo.';
     return null;
   }
@@ -261,6 +279,7 @@ function RelatoriosContent() {
         horario: form.horario,
         escopoLoja: form.escopoLoja,
         destinoWhatsapp: form.destinoWhatsapp.trim(),
+        sessionSlot: form.sessionSlot,
         ativo: form.ativo,
         campos: form.campos,
       };
@@ -563,6 +582,40 @@ function RelatoriosContent() {
                     </span>
                   </button>
                 </div>
+              </div>
+
+              <div>
+                <label className={labelCls}>
+                  Enviar via <span className="text-red-400">*</span>
+                </label>
+                <select
+                  value={form.sessionSlot ?? ''}
+                  onChange={(e) =>
+                    setField('sessionSlot', e.target.value ? Number(e.target.value) : null)
+                  }
+                  className={inputCls}
+                >
+                  <option value="">Selecione a sessão</option>
+                  {sessions.map((s) => (
+                    <option key={s.slot} value={s.slot}>
+                      {s.label}
+                      {s.connectedNumber ? ` · ${s.connectedNumber}` : ''}
+                      {s.isConnected ? '' : ' (desconectada)'}
+                    </option>
+                  ))}
+                </select>
+                {form.sessionSlot &&
+                  sessions.find((s) => s.slot === form.sessionSlot) &&
+                  !sessions.find((s) => s.slot === form.sessionSlot)?.isConnected && (
+                    <p className="text-xs text-amber-400 mt-1.5">
+                      Esta sessão está desconectada. Reconecte em Conexões para o envio funcionar.
+                    </p>
+                  )}
+                {sessions.length === 0 && (
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    Nenhuma sessão cadastrada. Conecte um número em Conexões.
+                  </p>
+                )}
               </div>
 
               <div>

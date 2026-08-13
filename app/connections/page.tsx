@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useUser } from "@stackframe/stack";
 import Image from "next/image";
 import { Card } from "@/components/ui/card";
@@ -21,56 +21,39 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  Plus,
   Bot,
-  FileText,
+  Pencil,
 } from "lucide-react";
 
-type SessionKind = "atendimento" | "relatorios";
-
-interface SessionStatus {
+interface SessionRow {
+  slot: number;
+  label: string;
   status: string;
-  qrCode?: string | null;
+  isConnected: boolean;
   isActive: boolean;
-  isConnected?: boolean;
-  connectedNumber?: string | null;
+  connectedNumber: string | null;
+  qrCode: string | null;
+  iaAtiva: boolean;
+  iaPrompt: string | null;
 }
 
 interface QrModalState {
   open: boolean;
   qrCode?: string;
-  kind?: SessionKind;
-  connectionName?: string;
+  slot?: number;
+  label?: string;
 }
 
-/** Proxy Next.js → VPS (nunca chamar 127.0.0.1 / API pública direto do browser). */
-function sessionApi(kind: SessionKind, action: "start" | "stop" | "qr" | "status", search = "") {
-  const q = search ? (search.startsWith("?") ? search : `?${search}`) : "";
-  return `/api/whatsapp-sessions/${kind}/${action}${q}`;
-}
-
-const EMPTY_SESSION: SessionStatus = {
-  status: "DISCONNECTED",
-  qrCode: null,
-  isActive: false,
-  isConnected: false,
-  connectedNumber: null,
-};
-
-function isSessionConnected(session: SessionStatus) {
-  return (
-    session.isConnected === true ||
-    session.status === "CONNECTED" ||
-    session.status.toLowerCase() === "connected"
-  );
+function isSessionConnected(s: SessionRow) {
+  return s.isConnected || s.status === "CONNECTED";
 }
 
 function getStatusColor(status: string) {
   switch (status.toLowerCase()) {
     case "connected":
-    case "conectado":
       return "bg-green-500";
     case "connecting":
-    case "conectando":
     case "qrcode":
       return "bg-yellow-500";
     default:
@@ -81,10 +64,8 @@ function getStatusColor(status: string) {
 function getStatusText(status: string) {
   switch (status.toLowerCase()) {
     case "connected":
-    case "conectado":
       return "Conectado";
     case "connecting":
-    case "conectando":
       return "Conectando...";
     case "qrcode":
       return "Aguardando QR Code";
@@ -96,10 +77,8 @@ function getStatusText(status: string) {
 function getStatusIcon(status: string) {
   switch (status.toLowerCase()) {
     case "connected":
-    case "conectado":
       return <CheckCircle2 className="h-4 w-4 text-green-500" />;
     case "connecting":
-    case "conectando":
     case "qrcode":
       return <AlertCircle className="h-4 w-4 text-yellow-500" />;
     default:
@@ -108,59 +87,99 @@ function getStatusIcon(status: string) {
 }
 
 function SessionCard({
-  kind,
-  title,
-  description,
-  icon,
   session,
   isStarting,
   actionLoading,
+  savingConfig,
   onStart,
   onStop,
   onRefresh,
   onShowQr,
+  onSaveConfig,
 }: {
-  kind: SessionKind;
-  title: string;
-  description: string;
-  icon: ReactNode;
-  session: SessionStatus;
+  session: SessionRow;
   isStarting: boolean;
   actionLoading: boolean;
+  savingConfig: boolean;
   onStart: () => void;
   onStop: () => void;
   onRefresh: () => void;
   onShowQr: (qrCode: string) => void;
+  onSaveConfig: (patch: { label?: string; iaAtiva?: boolean; iaPrompt?: string | null }) => Promise<void>;
 }) {
   const connected = isSessionConnected(session);
-  const waitingQr =
-    session.status === "QRCODE" || session.status.toLowerCase() === "qrcode";
-  const connecting =
-    session.status === "CONNECTING" ||
-    session.status.toLowerCase() === "connecting";
+  const waitingQr = session.status === "QRCODE";
+  const connecting = session.status === "CONNECTING" || waitingQr;
+
+  const [editingLabel, setEditingLabel] = useState(false);
+  const [labelDraft, setLabelDraft] = useState(session.label);
+  const [promptDraft, setPromptDraft] = useState(session.iaPrompt ?? "");
+
+  useEffect(() => {
+    if (!editingLabel) setLabelDraft(session.label);
+  }, [session.label, editingLabel]);
+
+  useEffect(() => {
+    setPromptDraft(session.iaPrompt ?? "");
+  }, [session.iaPrompt]);
+
+  const commitLabel = async () => {
+    const next = labelDraft.trim();
+    setEditingLabel(false);
+    if (!next || next === session.label) {
+      setLabelDraft(session.label);
+      return;
+    }
+    await onSaveConfig({ label: next });
+  };
 
   return (
     <Card className="bg-[#141415] border-[#374151] rounded-2xl p-6 hover:border-[#001F05] transition-all">
       <div className="flex items-center gap-3 mb-2">
         <div
           className={`w-3 h-3 rounded-full ${getStatusColor(session.status)} ${
-            connecting || waitingQr ? "animate-pulse" : ""
+            connecting ? "animate-pulse" : ""
           }`}
         />
-        <div className="flex items-center gap-2 min-w-0">
-          {icon}
-          <h3 className="text-xl font-semibold text-white truncate">{title}</h3>
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <Bot className="h-5 w-5 text-emerald-400 shrink-0" />
+          {editingLabel ? (
+            <input
+              autoFocus
+              value={labelDraft}
+              onChange={(e) => setLabelDraft(e.target.value)}
+              onBlur={commitLabel}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitLabel();
+                if (e.key === "Escape") {
+                  setLabelDraft(session.label);
+                  setEditingLabel(false);
+                }
+              }}
+              className="bg-[#0a0a0a] border border-[#374151] rounded-lg px-2 py-1 text-sm text-white w-full"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingLabel(true)}
+              className="flex items-center gap-1.5 min-w-0 group"
+              title="Editar nome"
+            >
+              <h3 className="text-xl font-semibold text-white truncate">{session.label}</h3>
+              <Pencil className="h-3.5 w-3.5 text-gray-600 group-hover:text-gray-300 shrink-0" />
+            </button>
+          )}
         </div>
         {getStatusIcon(session.status)}
       </div>
 
-      <p className="text-gray-500 text-sm mb-3">{description}</p>
-
       <p className="text-gray-400 mb-2">{getStatusText(session.status)}</p>
 
-      {session.connectedNumber && connected && (
+      {connected && (
         <p className="text-xs text-gray-500 mb-3 truncate">
-          Número: {session.connectedNumber}
+          {session.connectedNumber
+            ? `Número: ${session.connectedNumber}`
+            : "Número: ainda não identificado (reconecte se persistir)"}
         </p>
       )}
 
@@ -174,12 +193,52 @@ function SessionCard({
                 : "bg-red-500/20 text-red-400"
           }`}
         >
-          {connected
-            ? "✓ Conectado"
-            : waitingQr
-              ? "⏳ Aguardando QR"
-              : "✗ Desconectado"}
+          {connected ? "✓ Conectado" : waitingQr ? "⏳ Aguardando QR" : "✗ Desconectado"}
         </span>
+      </div>
+
+      <div className="mb-4 space-y-3">
+        <button
+          type="button"
+          onClick={() => onSaveConfig({ iaAtiva: !session.iaAtiva })}
+          disabled={savingConfig}
+          className="flex items-center gap-2.5 select-none"
+        >
+          <span
+            className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
+              session.iaAtiva ? "bg-emerald-500" : "bg-[#3a3a3e]"
+            }`}
+            role="switch"
+            aria-checked={session.iaAtiva}
+          >
+            <span
+              className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
+              style={{ left: session.iaAtiva ? "18px" : "2px" }}
+            />
+          </span>
+          <span className="text-sm text-gray-300">IA ativa</span>
+        </button>
+
+        {session.iaAtiva && (
+          <div>
+            <label className="text-xs text-gray-500 mb-1.5 block">Prompt desta sessão</label>
+            <textarea
+              value={promptDraft}
+              onChange={(e) => setPromptDraft(e.target.value)}
+              onBlur={() => {
+                if ((promptDraft || "") !== (session.iaPrompt || "")) {
+                  onSaveConfig({ iaPrompt: promptDraft });
+                }
+              }}
+              rows={4}
+              placeholder="Instruções específicas desta sessão (opcional)…"
+              className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-xs text-gray-300 placeholder-gray-600 resize-none focus:outline-none focus:border-emerald-500/40"
+            />
+            <p className="text-[10px] text-gray-600 mt-1">
+              Salva ao sair do campo. Se ligar a IA numa sessão já conectada sem listener, reconecte para ela passar a responder.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="space-y-3">
@@ -233,229 +292,182 @@ function SessionCard({
           Atualizar Status
         </Button>
       </div>
-
-      <p className="text-[11px] text-gray-600 mt-4">
-        {kind === "atendimento" ? "Sessão slot 1 · bot de atendimento" : "Sessão slot 2 · somente envio"}
-      </p>
     </Card>
   );
 }
 
 function ConnectionsPageContent() {
   const user = useUser();
-  const [atendimento, setAtendimento] = useState<SessionStatus>(EMPTY_SESSION);
-  const [relatorios, setRelatorios] = useState<SessionStatus>(EMPTY_SESSION);
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [qrModal, setQrModal] = useState<QrModalState>({ open: false });
-  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
-  const [isStarting, setIsStarting] = useState<Record<string, boolean>>({});
-  const [awaitingQr, setAwaitingQr] = useState<Record<string, boolean>>({});
+  const [actionLoading, setActionLoading] = useState<Record<number, boolean>>({});
+  const [isStarting, setIsStarting] = useState<Record<number, boolean>>({});
+  const [savingConfig, setSavingConfig] = useState<Record<number, boolean>>({});
+  const [awaitingQr, setAwaitingQr] = useState<Record<number, boolean>>({});
+  const [creating, setCreating] = useState(false);
 
   const loadConnections = useCallback(async () => {
     if (!user?.id) return;
-
     try {
-      const [statusRes, sendOnlyRes] = await Promise.all([
-        fetch(sessionApi("atendimento", "status")),
-        fetch(sessionApi("relatorios", "status")),
-      ]);
-
-      if (statusRes.ok) {
-        const statusData = await statusRes.json();
-        setAtendimento(statusData.session || EMPTY_SESSION);
-      } else {
-        setAtendimento(EMPTY_SESSION);
-      }
-
-      if (sendOnlyRes.ok) {
-        const sendOnlyData = await sendOnlyRes.json();
-        setRelatorios(sendOnlyData.session || EMPTY_SESSION);
-      } else {
-        setRelatorios(EMPTY_SESSION);
+      const res = await fetch("/api/whatsapp-sessions");
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(Array.isArray(data.sessions) ? data.sessions : []);
       }
     } catch (error) {
       console.error("Erro ao carregar conexões:", error);
-      setAtendimento(EMPTY_SESSION);
-      setRelatorios(EMPTY_SESSION);
     } finally {
       setLoading(false);
     }
   }, [user?.id]);
 
   useEffect(() => {
-    if (user) {
-      loadConnections();
-      const interval = setInterval(loadConnections, 15000);
-      return () => clearInterval(interval);
-    }
+    if (!user) return;
+    loadConnections();
+    const interval = setInterval(loadConnections, 15000);
+    return () => clearInterval(interval);
   }, [user, loadConnections]);
 
-  // Fecha o modal só quando a sessão correspondente conectar
   useEffect(() => {
-    if (!qrModal.open || !qrModal.kind) return;
-
-    const session = qrModal.kind === "atendimento" ? atendimento : relatorios;
-    if (isSessionConnected(session)) {
+    if (!qrModal.open || qrModal.slot == null) return;
+    const session = sessions.find((s) => s.slot === qrModal.slot);
+    if (session && isSessionConnected(session)) {
       const t = setTimeout(() => setQrModal({ open: false }), 1500);
       return () => clearTimeout(t);
     }
-  }, [atendimento, relatorios, qrModal.open, qrModal.kind]);
+  }, [sessions, qrModal.open, qrModal.slot]);
 
-  // Polling de QR enquanto aguarda leitura
   useEffect(() => {
     if (!user?.id) return;
-
-    const activeKinds = (Object.keys(awaitingQr) as SessionKind[]).filter(
-      (k) => awaitingQr[k],
-    );
-    if (activeKinds.length === 0) return;
+    const activeSlots = Object.keys(awaitingQr)
+      .map(Number)
+      .filter((slot) => awaitingQr[slot]);
+    if (activeSlots.length === 0) return;
 
     const interval = setInterval(async () => {
-      for (const kind of activeKinds) {
+      for (const slot of activeSlots) {
         try {
-          const qrResponse = await fetch(sessionApi(kind, "qr"));
+          const qrResponse = await fetch(`/api/whatsapp-sessions/slot/${slot}/qr`);
           if (!qrResponse.ok) continue;
-
           const qrData = await qrResponse.json();
 
           if (qrData.isConnected) {
-            setAwaitingQr((prev) => ({ ...prev, [kind]: false }));
+            setAwaitingQr((prev) => ({ ...prev, [slot]: false }));
             await loadConnections();
             continue;
           }
 
           if (qrData.success && qrData.qrCode) {
-            setQrModal((prev) => ({
+            const sess = sessions.find((s) => s.slot === slot);
+            setQrModal({
               open: true,
               qrCode: qrData.qrCode,
-              kind,
-              connectionName:
-                kind === "atendimento"
-                  ? "WhatsApp de Atendimento"
-                  : "WhatsApp de Relatórios",
-            }));
+              slot,
+              label: sess?.label || `Sessão ${slot}`,
+            });
           }
         } catch (err) {
-          console.error(`Erro ao buscar QR (${kind}):`, err);
+          console.error(`Erro ao buscar QR (slot ${slot}):`, err);
         }
       }
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [awaitingQr, user?.id, loadConnections]);
+  }, [awaitingQr, user?.id, loadConnections, sessions]);
 
-  const handleStart = async (kind: SessionKind) => {
-    if (!user?.id) return;
-    const key = kind;
+  const handleStart = async (slot: number, label: string) => {
+    if (!user?.id || isStarting[slot]) return;
 
-    if (isStarting[key]) return;
+    setIsStarting((prev) => ({ ...prev, [slot]: true }));
+    setActionLoading((prev) => ({ ...prev, [slot]: true }));
 
-    setIsStarting((prev) => ({ ...prev, [key]: true }));
-    setActionLoading((prev) => ({ ...prev, [key]: true }));
-
-    const session = kind === "atendimento" ? atendimento : relatorios;
+    const session = sessions.find((s) => s.slot === slot);
     const alreadyWaiting =
-      session.status === "QRCODE" ||
-      session.status === "CONNECTING" ||
-      session.status.toLowerCase() === "qrcode";
-
-    // Reconexão / QR fresco: força reset da sessão no backend
-    const force = alreadyWaiting || Boolean(awaitingQr[key]);
+      session?.status === "QRCODE" || session?.status === "CONNECTING";
+    const force = alreadyWaiting || Boolean(awaitingQr[slot]);
     const forceQs = force ? "?force=1" : "";
 
     try {
-      const response = await fetch(sessionApi(kind, "start", forceQs), {
+      const response = await fetch(`/api/whatsapp-sessions/slot/${slot}/start${forceQs}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
       });
-
       const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || `Erro HTTP ${response.status}`);
 
-      if (!response.ok) {
-        throw new Error(data.message || `Erro HTTP ${response.status}`);
-      }
-
-      setAwaitingQr((prev) => ({ ...prev, [key]: true }));
-
-      if (data.qrCode) {
-        setQrModal({
-          open: true,
-          qrCode: data.qrCode,
-          kind,
-          connectionName:
-            kind === "atendimento"
-              ? "WhatsApp de Atendimento"
-              : "WhatsApp de Relatórios",
-        });
-      } else {
-        // Abre modal em loading até o polling trazer o QR
-        setQrModal({
-          open: true,
-          kind,
-          connectionName:
-            kind === "atendimento"
-              ? "WhatsApp de Atendimento"
-              : "WhatsApp de Relatórios",
-        });
-      }
-
+      setAwaitingQr((prev) => ({ ...prev, [slot]: true }));
+      setQrModal({
+        open: true,
+        qrCode: data.qrCode || undefined,
+        slot,
+        label,
+      });
       await loadConnections();
     } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Erro ao iniciar sessão";
-      console.error(`Erro ao iniciar sessão (${kind}):`, error);
-
-      if (
-        message.includes("browser is already running") ||
-        message.includes("Sessão já está")
-      ) {
-        setAwaitingQr((prev) => ({ ...prev, [key]: true }));
-        try {
-          const qrResponse = await fetch(sessionApi(kind, "qr"));
-          if (qrResponse.ok) {
-            const qrData = await qrResponse.json();
-            if (qrData.success && qrData.qrCode) {
-              setQrModal({
-                open: true,
-                qrCode: qrData.qrCode,
-                kind,
-                connectionName:
-                  kind === "atendimento"
-                    ? "WhatsApp de Atendimento"
-                    : "WhatsApp de Relatórios",
-              });
-            }
-          }
-        } catch (qrError) {
-          console.error("Erro ao buscar QR existente:", qrError);
-        }
-      } else {
-        alert(message || "Erro ao iniciar sessão. Tente novamente.");
-      }
+      const message = error instanceof Error ? error.message : "Erro ao iniciar sessão";
+      alert(message);
     } finally {
-      setIsStarting((prev) => ({ ...prev, [key]: false }));
-      setActionLoading((prev) => ({ ...prev, [key]: false }));
+      setIsStarting((prev) => ({ ...prev, [slot]: false }));
+      setActionLoading((prev) => ({ ...prev, [slot]: false }));
     }
   };
 
-  const handleStop = async (kind: SessionKind) => {
-    if (!user?.id) return;
-    const key = kind;
-
-    setActionLoading((prev) => ({ ...prev, [key]: true }));
-
+  const handleStop = async (slot: number) => {
+    setActionLoading((prev) => ({ ...prev, [slot]: true }));
     try {
-      await fetch(sessionApi(kind, "stop"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      setAwaitingQr((prev) => ({ ...prev, [key]: false }));
+      await fetch(`/api/whatsapp-sessions/slot/${slot}/stop`, { method: "POST" });
+      setAwaitingQr((prev) => ({ ...prev, [slot]: false }));
       await loadConnections();
     } catch (error) {
-      console.error(`Erro ao desconectar (${kind}):`, error);
+      console.error(`Erro ao desconectar slot ${slot}:`, error);
     } finally {
-      setActionLoading((prev) => ({ ...prev, [key]: false }));
+      setActionLoading((prev) => ({ ...prev, [slot]: false }));
+    }
+  };
+
+  const handleSaveConfig = async (
+    slot: number,
+    patch: { label?: string; iaAtiva?: boolean; iaPrompt?: string | null },
+  ) => {
+    setSavingConfig((prev) => ({ ...prev, [slot]: true }));
+    try {
+      const res = await fetch(`/api/whatsapp-sessions/slot/${slot}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Falha ao salvar");
+      }
+      await loadConnections();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao salvar");
+    } finally {
+      setSavingConfig((prev) => ({ ...prev, [slot]: false }));
+    }
+  };
+
+  const handleCreate = async () => {
+    setCreating(true);
+    try {
+      const res = await fetch("/api/whatsapp-sessions", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.message || "Falha ao criar sessão");
+
+      const slot = Number(data.slot);
+      setAwaitingQr((prev) => ({ ...prev, [slot]: true }));
+      setQrModal({
+        open: true,
+        qrCode: data.qrCode || undefined,
+        slot,
+        label: `Sessão ${slot}`,
+      });
+      await loadConnections();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao conectar novo número");
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -470,9 +482,7 @@ function ConnectionsPageContent() {
   if (!user) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <p className="text-white">
-          Por favor, faça login para acessar suas conexões.
-        </p>
+        <p className="text-white">Por favor, faça login para acessar suas conexões.</p>
       </div>
     );
   }
@@ -480,69 +490,64 @@ function ConnectionsPageContent() {
   return (
     <div className="min-h-screen bg-black p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Conexões</h1>
-          <p className="text-gray-400">
-            Gerencie as sessões WhatsApp de atendimento e de relatórios
-            separadamente
-          </p>
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">Conexões</h1>
+            <p className="text-gray-400">
+              Conecte quantos números quiser. Cada um pode ter IA e prompt próprios.
+            </p>
+          </div>
+          <Button
+            onClick={handleCreate}
+            disabled={creating}
+            className="bg-[#001F05] hover:bg-[#003308] text-white"
+          >
+            {creating ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Plus className="h-4 w-4 mr-2" />
+            )}
+            Conectar novo número
+          </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <SessionCard
-            kind="atendimento"
-            title="WhatsApp de Atendimento"
-            description="Bot que responde mensagens (IA, RH, tarefas)."
-            icon={<Bot className="h-5 w-5 text-emerald-400 shrink-0" />}
-            session={atendimento}
-            isStarting={Boolean(isStarting.atendimento)}
-            actionLoading={Boolean(actionLoading.atendimento)}
-            onStart={() => handleStart("atendimento")}
-            onStop={() => handleStop("atendimento")}
-            onRefresh={loadConnections}
-            onShowQr={(qrCode) =>
-              setQrModal({
-                open: true,
-                qrCode,
-                kind: "atendimento",
-                connectionName: "WhatsApp de Atendimento",
-              })
-            }
-          />
-
-          <SessionCard
-            kind="relatorios"
-            title="WhatsApp de Relatórios"
-            description="Somente envio — não responde mensagens. Usado pelos relatórios automáticos."
-            icon={<FileText className="h-5 w-5 text-sky-400 shrink-0" />}
-            session={relatorios}
-            isStarting={Boolean(isStarting.relatorios)}
-            actionLoading={Boolean(actionLoading.relatorios)}
-            onStart={() => handleStart("relatorios")}
-            onStop={() => handleStop("relatorios")}
-            onRefresh={loadConnections}
-            onShowQr={(qrCode) =>
-              setQrModal({
-                open: true,
-                qrCode,
-                kind: "relatorios",
-                connectionName: "WhatsApp de Relatórios",
-              })
-            }
-          />
-        </div>
+        {sessions.length === 0 ? (
+          <Card className="bg-[#141415] border-[#374151] rounded-2xl p-10 text-center">
+            <p className="text-gray-400 mb-4">Nenhuma sessão ainda.</p>
+            <Button onClick={handleCreate} disabled={creating} className="bg-[#001F05] hover:bg-[#003308] text-white">
+              <Plus className="h-4 w-4 mr-2" />
+              Conectar primeiro número
+            </Button>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {sessions.map((session) => (
+              <SessionCard
+                key={session.slot}
+                session={session}
+                isStarting={Boolean(isStarting[session.slot])}
+                actionLoading={Boolean(actionLoading[session.slot])}
+                savingConfig={Boolean(savingConfig[session.slot])}
+                onStart={() => handleStart(session.slot, session.label)}
+                onStop={() => handleStop(session.slot)}
+                onRefresh={loadConnections}
+                onShowQr={(qrCode) =>
+                  setQrModal({ open: true, qrCode, slot: session.slot, label: session.label })
+                }
+                onSaveConfig={(patch) => handleSaveConfig(session.slot, patch)}
+              />
+            ))}
+          </div>
+        )}
 
         <Card className="mt-8 bg-[#141415] border-[#374151] rounded-2xl p-6">
           <h3 className="text-lg font-semibold text-white mb-3">Como conectar</h3>
           <ol className="space-y-2 text-gray-400">
-            <li>1. Clique em &quot;Gerar QR Code&quot; no card desejado</li>
+            <li>1. Clique em &quot;Conectar novo número&quot; ou &quot;Gerar QR Code&quot;</li>
             <li>2. Abra o WhatsApp no celular do número correspondente</li>
             <li>3. Vá em Aparelhos conectados → Conectar aparelho</li>
             <li>4. Aponte a câmera para o QR Code</li>
-            <li>
-              5. Use números diferentes se quiser: atendimento e relatórios são
-              sessões independentes
-            </li>
+            <li>5. Dê um nome, ligue a IA se quiser, e escolha essa sessão em Relatórios ou Tarefas</li>
           </ol>
         </Card>
       </div>
@@ -555,9 +560,7 @@ function ConnectionsPageContent() {
       >
         <DialogContent className="bg-[#141415] border-[#374151] text-white">
           <DialogHeader>
-            <DialogTitle>
-              Escaneie o QR Code — {qrModal.connectionName}
-            </DialogTitle>
+            <DialogTitle>Escaneie o QR Code — {qrModal.label}</DialogTitle>
           </DialogHeader>
 
           <div className="flex flex-col items-center justify-center py-6">
@@ -574,9 +577,7 @@ function ConnectionsPageContent() {
                 <p className="text-gray-400 mt-4 text-center">
                   Aguardando leitura do QR Code...
                   <br />
-                  <span className="text-xs">
-                    A conexão será confirmada automaticamente
-                  </span>
+                  <span className="text-xs">A conexão será confirmada automaticamente</span>
                 </p>
               </>
             ) : (

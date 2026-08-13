@@ -6,6 +6,9 @@ import {
   stopWhatsappWorker,
   startSendOnlyWorker,
   stopSendOnlyWorker,
+  startSessionWorker,
+  stopSessionWorker,
+  sendWorkerPort,
 } from '../services/pm2.service.js';
 import { stopClient, sendMessage, listGroups, SLOT_SOMENTE_ENVIO } from '../wpp/index.js';
 import config from '../../config.js';
@@ -496,10 +499,14 @@ export async function healthCheck(req, res) {
 
 // ─── Sessão SOMENTE-ENVIO (slot 2 por padrão — não mexe no bot de atendimento) ─
 
-function resolveSendOnlySlot(req) {
-  const raw = req.query?.slot ?? req.body?.slot ?? SLOT_SOMENTE_ENVIO;
+function resolveAnySlot(req, fallback = 1) {
+  const raw = req.query?.slot ?? req.body?.slot ?? fallback;
   const slot = parseInt(String(raw), 10);
-  return Number.isFinite(slot) && slot >= 2 ? slot : SLOT_SOMENTE_ENVIO;
+  return Number.isFinite(slot) && slot >= 1 ? slot : fallback;
+}
+
+function resolveSendOnlySlot(req) {
+  return resolveAnySlot(req, SLOT_SOMENTE_ENVIO);
 }
 
 /**
@@ -665,7 +672,7 @@ export async function getSendOnlyGroups(req, res) {
     }
 
     // 2) Proxy pro mini-HTTP do worker PM2
-    const port = Number(process.env.SEND_ONLY_HTTP_PORT || 3012);
+    const port = sendWorkerPort(slot);
     try {
       const proxyRes = await fetch(`http://127.0.0.1:${port}/groups`, {
         method: 'GET',
@@ -763,7 +770,7 @@ export async function sendSendOnlyMessage(req, res) {
     }
 
     // 2) Proxy para o mini-HTTP do worker somente-envio
-    const port = Number(process.env.SEND_ONLY_HTTP_PORT || 3012);
+    const port = sendWorkerPort(slot);
     try {
       const proxyRes = await fetch(`http://127.0.0.1:${port}/send`, {
         method: 'POST',
@@ -809,5 +816,172 @@ export async function stopSendOnlyConnection(req, res) {
   } catch (error) {
     logger.error('[stopSendOnlyConnection]', error);
     return res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+// ─── Sessões genéricas (N slots por usuário) ───────────────────────────────
+
+function sessionStatusPayload(bot, slot) {
+  const isActive = !!bot;
+  const isConnected = !!(bot && bot.isConnected);
+  const qrCode = (bot && bot.qrCode) || null;
+  let status = 'DISCONNECTED';
+  if (isActive) {
+    if (isConnected) status = 'CONNECTED';
+    else if (qrCode) status = 'QRCODE';
+    else status = 'CONNECTING';
+  }
+  return {
+    status,
+    qrCode,
+    isActive,
+    isConnected,
+    connectedNumber: (bot && bot.connectedNumber) || null,
+    updatedAt: bot?.updatedAt ? bot.updatedAt.toISOString() : null,
+    label: bot?.label ?? null,
+    iaAtiva: bot?.iaAtiva === true,
+    iaPrompt: bot?.iaPrompt ?? null,
+    slot: bot?.slot ?? slot,
+  };
+}
+
+/**
+ * POST /api/sessions/:userId/start?slot=N&force=1
+ */
+export async function startSessionConnection(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ success: false, message: 'userId inválido' });
+    }
+
+    const normalizedUserId = userId.trim();
+    const slot = resolveAnySlot(req, 1);
+    const force =
+      String(req.query?.force || '').toLowerCase() === '1' ||
+      String(req.query?.force || '').toLowerCase() === 'true';
+
+    if (force) {
+      await stopSessionWorker(normalizedUserId, slot).catch(() => {});
+      await WhatsAppBotModel.clearSession(normalizedUserId, slot).catch(() => {});
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+
+    const result = await startSessionWorker(normalizedUserId, slot);
+    return res.json({
+      ...result,
+      message: result.message || 'Worker iniciado. Escaneie o QR via GET /api/sessions/:userId/qr?slot=N',
+    });
+  } catch (error) {
+    logger.error('[startSessionConnection]', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+/**
+ * GET /api/sessions/:userId/status?slot=N
+ */
+export async function getSessionStatus(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ success: false, message: 'userId inválido', session: null });
+    }
+
+    const normalizedUserId = userId.trim();
+    const slot = resolveAnySlot(req, 1);
+    const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
+    const session = sessionStatusPayload(bot, slot);
+
+    return res.json({
+      success: true,
+      userId: normalizedUserId,
+      slot,
+      iaAtiva: session.iaAtiva,
+      mode: session.iaAtiva ? 'atendimento' : 'somente-envio',
+      session,
+    });
+  } catch (error) {
+    logger.error('[getSessionStatus]', error);
+    return res.status(500).json({ success: false, message: error.message, session: null });
+  }
+}
+
+/**
+ * GET /api/sessions/:userId/qr?slot=N
+ */
+export async function getSessionQRCode(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ success: false, qrCode: null, message: 'userId inválido' });
+    }
+
+    const normalizedUserId = userId.trim();
+    const slot = resolveAnySlot(req, 1);
+    const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, slot);
+    const session = sessionStatusPayload(bot, slot);
+
+    return res.json({
+      success: true,
+      qrCode: session.qrCode,
+      slot,
+      isConnected: session.isConnected,
+      connectedNumber: session.connectedNumber,
+      session,
+      message: session.qrCode
+        ? undefined
+        : session.isConnected
+          ? 'Já conectado'
+          : 'Aguardando geração do QR Code',
+    });
+  } catch (error) {
+    logger.error('[getSessionQRCode]', error);
+    return res.status(500).json({ success: false, qrCode: null, message: error.message });
+  }
+}
+
+/**
+ * POST /api/sessions/:userId/stop?slot=N
+ */
+export async function stopSessionConnection(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ success: false, message: 'userId inválido' });
+    }
+
+    const normalizedUserId = userId.trim();
+    const slot = resolveAnySlot(req, 1);
+
+    await stopSessionWorker(normalizedUserId, slot).catch(() => {});
+    await stopClient(normalizedUserId, slot).catch(() => {});
+    await WhatsAppBotModel.setDisconnected(normalizedUserId, slot).catch(() => {});
+
+    return res.json({ success: true, message: 'Sessão parada', slot });
+  } catch (error) {
+    logger.error('[stopSessionConnection]', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+/**
+ * GET /api/sessions/:userId/list
+ */
+export async function listUserSessions(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ success: false, message: 'userId inválido', sessions: [] });
+    }
+
+    const bots = await WhatsAppBotModel.findAllByUser(userId.trim());
+    return res.json({
+      success: true,
+      sessions: bots.map((bot) => sessionStatusPayload(bot, bot.slot)),
+    });
+  } catch (error) {
+    logger.error('[listUserSessions]', error);
+    return res.status(500).json({ success: false, message: error.message, sessions: [] });
   }
 }

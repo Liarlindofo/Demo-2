@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ListChecks, ClipboardList, CalendarClock, BarChart3, Eye } from 'lucide-react';
+import { TarefasEnvioSessao } from './TarefasEnvioSessao';
 
 const modules = [
   {
@@ -68,6 +69,8 @@ export default function TarefasDashboard() {
             );
           })}
         </div>
+
+        <TarefasEnvioSessao />
 
         <div className="bg-[#1c1c1e] border border-[#2a2a2e] rounded-2xl p-5 text-center">
           <p className="text-sm text-gray-500">

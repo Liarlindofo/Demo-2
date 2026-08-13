@@ -103,7 +103,27 @@ export async function callWhatsAppVps(
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   const base = getVpsBaseUrl();
   const path = buildPath(kind, action, userId, options.search);
-  const url = `${base}${path}`;
+  return fetchVps(`${base}${path}`, action, options);
+}
+
+/** Chamadas genéricas por slot: /api/sessions/:userId/{action}?slot=N */
+export async function callWhatsAppVpsSession(
+  userId: string,
+  slot: number,
+  action: 'start' | 'stop' | 'qr' | 'status',
+  options: { search?: string; timeoutMs?: number } = {},
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  const base = getVpsBaseUrl();
+  const extra = options.search ? `&${options.search.replace(/^\?/, '')}` : '';
+  const path = `/api/sessions/${encodeURIComponent(userId)}/${action}?slot=${slot}${extra}`;
+  return fetchVps(`${base}${path}`, action, options);
+}
+
+async function fetchVps(
+  url: string,
+  action: string,
+  options: { method?: string; timeoutMs?: number } = {},
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   const method = options.method || (action === 'start' || action === 'stop' ? 'POST' : 'GET');
   const timeoutMs = options.timeoutMs ?? (action === 'start' ? 120_000 : 30_000);
 
@@ -125,7 +145,6 @@ export async function callWhatsAppVps(
       method,
       headers,
       signal: controller.signal,
-      // start/stop não têm body obrigatório
       body: method === 'POST' ? JSON.stringify({}) : undefined,
       cache: 'no-store',
     });

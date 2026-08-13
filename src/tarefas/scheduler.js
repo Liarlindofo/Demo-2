@@ -14,6 +14,7 @@
 
 import cron from 'node-cron';
 import logger from '../utils/logger.js';
+import prisma from '../db/index.js';
 import { getDigest, getPendentes, patchStatus } from './platefulApi.js';
 import { criarSessao, marcarSessaoExpirada, expirarSessoesAntigas } from './tarefaHandler.js';
 
@@ -69,6 +70,26 @@ function saudacaoPorHora(hhmm) {
   if (hora < 12) return 'Bom dia';
   if (hora < 18) return 'Boa tarde';
   return 'Boa noite';
+}
+
+/** Slot configurado no tenant para envio de tarefas. Default: 1. */
+async function getConfiguredTarefasSlot(stackUserId) {
+  try {
+    const row = await prisma.stackUser.findUnique({
+      where: { id: stackUserId },
+      select: { user: { select: { tarefasSessionSlot: true } } },
+    });
+    const slot = row?.user?.tarefasSessionSlot;
+    if (Number.isFinite(slot) && slot >= 1) return slot;
+  } catch (err) {
+    logger.warn(`[scheduler] Falha ao ler tarefasSessionSlot: ${err?.message}`);
+  }
+  return 1;
+}
+
+async function isTarefasSenderSlot(stackUserId, slot) {
+  const configured = await getConfiguredTarefasSlot(stackUserId);
+  return configured === Number(slot);
 }
 
 /**
@@ -194,8 +215,10 @@ function instrucaoEvidencias(evidencias) {
 const digestsEnviados = new Set();
 let digestsEnviadosDia = '';
 
-async function jobDigest(userId, getClient) {
+async function jobDigest(userId, slot, getClient) {
   try {
+    if (!(await isTarefasSenderSlot(userId, slot))) return;
+
     const hoje = dataHojeBrasilia();
     const agoraHHMM = normalizarHora(horaAtualBrasilia());
 
@@ -281,8 +304,10 @@ async function jobDigest(userId, getClient) {
  */
 const jaDisparados = new Set();
 
-async function jobPendentes(userId, getClient) {
+async function jobPendentes(userId, slot, getClient) {
   try {
+    if (!(await isTarefasSenderSlot(userId, slot))) return;
+
     const pendentes = await getPendentes();
     if (!Array.isArray(pendentes) || pendentes.length === 0) return;
 
@@ -397,7 +422,9 @@ async function jobPendentes(userId, getClient) {
 
 // ─── Job 3: Fechamento às 23h55 ───────────────────────────────────────────
 
-async function jobFechamento() {
+async function jobFechamento(userId, slot) {
+  if (!(await isTarefasSenderSlot(userId, slot))) return;
+
   logger.info('[scheduler:fechamento] ▶ Expirando sessões abertas do dia...');
   try {
     const n = await expirarSessoesAntigas();
@@ -412,32 +439,30 @@ async function jobFechamento() {
 /**
  * Inicializa os três jobs do scheduler de tarefas.
  *
- * @param {string}            userId    ID do tenant (worker PM2)
- * @param {() => object|null} getClient Função que retorna o cliente WPPConnect ativo (ou null)
+ * @param {string}            userId    Stack userId do worker PM2
+ * @param {number}            slot      Slot desta sessão
+ * @param {() => object|null} getClient Cliente WPPConnect desta sessão
  */
-export function initScheduler(userId, getClient) {
-  logger.info(`[scheduler] Inicializando para userId="${userId}" (timezone: America/Sao_Paulo)`);
+export function initScheduler(userId, slot, getClient) {
+  logger.info(`[scheduler] Inicializando para userId="${userId}" slot=${slot} (timezone: America/Sao_Paulo)`);
 
-  // Job 1 — Digest diário (a cada minuto; filtra por horarioDigest do funcionário)
   cron.schedule(
     '* * * * *',
-    () => jobDigest(userId, getClient),
+    () => jobDigest(userId, slot, getClient),
     { timezone: 'America/Sao_Paulo' },
   );
 
-  // Job 2 — Pendentes a cada minuto
   cron.schedule(
     '* * * * *',
-    () => jobPendentes(userId, getClient),
+    () => jobPendentes(userId, slot, getClient),
     { timezone: 'America/Sao_Paulo' },
   );
 
-  // Job 3 — Fechamento às 23h55
   cron.schedule(
     '55 23 * * *',
-    () => jobFechamento(),
+    () => jobFechamento(userId, slot),
     { timezone: 'America/Sao_Paulo' },
   );
 
-  logger.info('[scheduler] ✅ 3 jobs agendados: digest (*/1min por horário do funcionário), pendentes (*/1min), fechamento (23h55).');
+  logger.info('[scheduler] ✅ 3 jobs agendados: digest, pendentes, fechamento (só disparam no slot configurado em tarefasSessionSlot).');
 }

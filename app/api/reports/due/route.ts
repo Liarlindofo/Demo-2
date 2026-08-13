@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
     fonte: def.fonte,
     escopoLoja: def.escopoLoja,
     destinoWhatsapp: def.destinoWhatsapp,
+    sessionSlot: def.sessionSlot ?? 2,
     campos: def.campos.map((c) => ({
       key: c.campoKey,
       label: labelMap.get(c.campoKey) ?? c.campoKey,
