@@ -55,8 +55,9 @@ export default function ChecklistAdminPage() {
     nome: "", categoriaId: "", weight: 10 as WeightOption, fotoObrigatoria: false,
   });
 
-  // ── Modal de nova categoria ────────────────────────────────────────────────
+  // ── Modal de categoria (criar / editar) ────────────────────────────────────
   const [showCatModal, setShowCatModal]   = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [catNome, setCatNome]             = useState("");
 
   // ── Modal de confirmação de exclusão ──────────────────────────────────────
@@ -83,17 +84,39 @@ export default function ChecklistAdminPage() {
 
   // ─── Ações de categoria ────────────────────────────────────────────────────
 
-  const handleCreateCategory = async () => {
+  const openCreateCategory = () => {
+    setEditingCategory(null);
+    setCatNome("");
+    setShowCatModal(true);
+  };
+
+  const openEditCategory = (cat: Category) => {
+    setEditingCategory(cat);
+    setCatNome(cat.nome);
+    setShowCatModal(true);
+  };
+
+  const handleSaveCategory = async () => {
     if (!catNome.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch("/api/checklist/admin/categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome: catNome.trim() }),
-      });
-      if (!res.ok) throw new Error("Erro ao criar categoria");
+      const res = editingCategory
+        ? await fetch(`/api/checklist/admin/categories/${editingCategory.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nome: catNome.trim() }),
+          })
+        : await fetch("/api/checklist/admin/categories", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nome: catNome.trim() }),
+          });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || (editingCategory ? "Erro ao editar categoria" : "Erro ao criar categoria"));
+      }
       setShowCatModal(false);
+      setEditingCategory(null);
       setCatNome("");
       await loadCategories();
     } catch (e: any) {
@@ -197,7 +220,7 @@ export default function ChecklistAdminPage() {
             </div>
           </div>
           <button
-            onClick={() => setShowCatModal(true)}
+            onClick={openCreateCategory}
             className="flex items-center gap-2 bg-[#001F05] hover:bg-[#001F05]/80 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -233,28 +256,37 @@ export default function ChecklistAdminPage() {
               return (
                 <div key={cat.id} className="bg-[#141415] border border-[#374151] rounded-2xl overflow-hidden">
                   {/* Header da categoria */}
-                  <button
-                    onClick={() => toggleCat(cat.id)}
-                    className="w-full px-6 py-4 flex items-center justify-between hover:bg-[#0f0f10] transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
+                  <div className="px-6 py-4 flex items-center justify-between hover:bg-[#0f0f10] transition-colors">
+                    <button
+                      onClick={() => toggleCat(cat.id)}
+                      className="flex items-center gap-3 min-w-0 flex-1 text-left"
+                    >
                       {isOpen
-                        ? <ChevronDown className="w-5 h-5 text-gray-400" />
-                        : <ChevronRight className="w-5 h-5 text-gray-400" />
+                        ? <ChevronDown className="w-5 h-5 text-gray-400 shrink-0" />
+                        : <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
                       }
-                      <span className="font-bold text-white">{cat.nome}</span>
-                      <span className="text-xs text-gray-500 bg-[#374151] px-2 py-0.5 rounded-full">
+                      <span className="font-bold text-white truncate">{cat.nome}</span>
+                      <span className="text-xs text-gray-500 bg-[#374151] px-2 py-0.5 rounded-full shrink-0">
                         {cat.itens.length} {cat.itens.length === 1 ? "item" : "itens"}
                       </span>
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); openCreateItem(cat.id); }}
-                      className="flex items-center gap-1.5 text-xs text-green-400 hover:text-green-300 border border-green-800/50 hover:border-green-600 px-3 py-1.5 rounded-lg transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Adicionar item
                     </button>
-                  </button>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <button
+                        onClick={() => openEditCategory(cat)}
+                        className="p-1.5 text-gray-400 hover:text-white hover:bg-[#374151] rounded-lg transition-colors"
+                        title="Editar categoria"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => openCreateItem(cat.id)}
+                        className="flex items-center gap-1.5 text-xs text-green-400 hover:text-green-300 border border-green-800/50 hover:border-green-600 px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Adicionar item
+                      </button>
+                    </div>
+                  </div>
 
                   {/* Itens da categoria */}
                   {isOpen && (
@@ -406,34 +438,36 @@ export default function ChecklistAdminPage() {
         </div>
       )}
 
-      {/* ── Modal: nova categoria ──────────────────────────────────────────── */}
+      {/* ── Modal: criar / editar categoria ────────────────────────────────── */}
       {showCatModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-[#141415] border border-[#374151] rounded-2xl p-6 w-full max-w-sm">
-            <h2 className="text-lg font-bold text-white mb-4">Nova Categoria</h2>
+            <h2 className="text-lg font-bold text-white mb-4">
+              {editingCategory ? "Editar Categoria" : "Nova Categoria"}
+            </h2>
             <input
               type="text"
               value={catNome}
               onChange={(e) => setCatNome(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleCreateCategory()}
+              onKeyDown={(e) => e.key === "Enter" && handleSaveCategory()}
               className="w-full px-4 py-2.5 bg-[#0f0f10] border border-[#374151] rounded-xl text-white text-sm focus:ring-2 focus:ring-green-800 outline-none mb-4"
               placeholder="Ex: SEGURANÇA ALIMENTAR"
               autoFocus
             />
             <div className="flex gap-3">
               <button
-                onClick={() => { setShowCatModal(false); setCatNome(""); }}
+                onClick={() => { setShowCatModal(false); setEditingCategory(null); setCatNome(""); }}
                 className="flex-1 py-2.5 bg-[#0f0f10] border border-[#374151] text-gray-300 rounded-xl text-sm hover:bg-[#374151] transition-colors"
               >
                 Cancelar
               </button>
               <button
-                onClick={handleCreateCategory}
+                onClick={handleSaveCategory}
                 disabled={!catNome.trim() || saving}
                 className="flex-1 py-2.5 bg-[#001F05] hover:bg-[#001F05]/80 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                Criar
+                {editingCategory ? "Salvar" : "Criar"}
               </button>
             </div>
           </div>
