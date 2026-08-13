@@ -43,15 +43,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!rider) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
 
   // E-mail e CNPJ só podem ser alterados se o motoboy ainda não definiu senha
-  if ((body.email !== undefined || body.cnpj !== undefined) && rider.passwordHash) {
-    return NextResponse.json(
-      { error: 'E-mail e CNPJ não podem ser alterados após o motoboy criar sua senha' },
-      { status: 409 }
-    );
+  if (rider.passwordHash) {
+    const emailMudou = body.email !== undefined
+      && body.email.toLowerCase() !== (rider.email ?? '').toLowerCase();
+    const cnpjMudou = body.cnpj !== undefined
+      && body.cnpj.replace(/\D/g, '') !== (rider.cnpj ?? '').replace(/\D/g, '');
+    if (emailMudou || cnpjMudou) {
+      return NextResponse.json(
+        { error: 'E-mail e CNPJ não podem ser alterados após o motoboy criar sua senha' },
+        { status: 409 }
+      );
+    }
   }
 
   // Verificar unicidade de e-mail (excluindo o próprio registro)
-  if (body.email !== undefined) {
+  if (body.email !== undefined && body.email.toLowerCase() !== (rider.email ?? '').toLowerCase()) {
     const emailNorm = body.email.toLowerCase();
     const existente = await prisma.deliveryRider.findFirst({
       where: { userId: rh.userId, email: emailNorm, NOT: { id } },
@@ -60,7 +66,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   // Verificar unicidade de CNPJ (excluindo o próprio registro)
-  if (body.cnpj !== undefined) {
+  if (body.cnpj !== undefined && body.cnpj.replace(/\D/g, '') !== (rider.cnpj ?? '').replace(/\D/g, '')) {
     const cnpjNums = body.cnpj.replace(/\D/g, '');
     const existente = await prisma.deliveryRider.findFirst({
       where: { userId: rh.userId, cnpj: cnpjNums, NOT: { id } },
@@ -75,8 +81,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       ...(body.phone !== undefined ? { phone: body.phone } : {}),
       ...(body.lojaId !== undefined ? { lojaId: body.lojaId } : {}),
       ...(body.status !== undefined ? { status: body.status } : {}),
-      ...(body.email !== undefined ? { email: body.email.toLowerCase() } : {}),
-      ...(body.cnpj !== undefined ? { cnpj: body.cnpj.replace(/\D/g, '') } : {}),
+      // Com senha: ignora e-mail/CNPJ no update (mesmo se vierem no body iguais)
+      ...(!rider.passwordHash && body.email !== undefined ? { email: body.email.toLowerCase() } : {}),
+      ...(!rider.passwordHash && body.cnpj !== undefined ? { cnpj: body.cnpj.replace(/\D/g, '') } : {}),
     },
   });
 

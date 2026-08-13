@@ -310,16 +310,21 @@ export default function MotoboiDetailPage() {
     setEditSaving(true);
     setEditError('');
     try {
+      // Com senha criada, não envia e-mail/CNPJ (bloqueados) — evita 409 que impede troca de loja
+      const payload: Record<string, unknown> = {
+        name: editForm.name.trim(),
+        phone: editForm.phone.trim() || null,
+        lojaId: editForm.lojaId,
+      };
+      if (!rider?.passwordHash) {
+        payload.email = editForm.email.trim();
+        payload.cnpj = editForm.cnpj;
+      }
+
       const res = await fetch(`/api/rh/motoboys/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: editForm.name.trim(),
-          email: editForm.email.trim(),
-          phone: editForm.phone.trim() || null,
-          cnpj: editForm.cnpj,
-          lojaId: editForm.lojaId,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setEditError(data.error ?? 'Erro ao salvar'); return; }
