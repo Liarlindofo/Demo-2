@@ -92,12 +92,12 @@ process.on('uncaughtException', (err) =>
   logger.error('[uncaughtException]', err?.stack || String(err)));
 
 try {
+  // HTTP primeiro: a API consegue /health mesmo enquanto o Chromium restaura o token.
+  startSendOnlyHttpServer(userId, slot);
+
   logger.info(`[whatsapp-worker] 🚀 Chamando startClient(${userId}, ${slot}, { mode: '${mode}' })...`);
   const result = await startClient(userId, slot, { mode });
   logger.success(`[whatsapp-worker] ✅ startClient() retornou:`, result);
-
-  // Mini-HTTP em TODA sessão (IA ou não) para envio via API (relatórios/tarefas)
-  startSendOnlyHttpServer(userId, slot);
 
   // Scheduler roda em todos os workers; cada job só dispara se este slot
   // for o configurado em User.tarefasSessionSlot (evita duplicar digest).
@@ -107,7 +107,7 @@ try {
   logger.info(`[whatsapp-worker] ✅ Worker mantido vivo. WPPConnect rodando em background.`);
 } catch (error) {
   logger.error(`[whatsapp-worker] ❌ ERRO ao iniciar cliente:`, error);
-  logger.warn(`[whatsapp-worker] ⚠️ Erro capturado, mas mantendo processo vivo. PM2 vai gerenciar.`);
+  logger.warn(`[whatsapp-worker] ⚠️ Erro capturado, mas mantendo processo vivo (mini-HTTP ativo). PM2 vai gerenciar.`);
 }
 
 /**

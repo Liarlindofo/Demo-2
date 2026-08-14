@@ -349,7 +349,8 @@ export async function startClient(userId, slot = SLOT_ATENDIMENTO, options = {})
     await WhatsAppBotModel.upsert(normalizedUserId, slot, {
       isConnected: false,
       qrCode: null,
-      connectedNumber: null,
+      // Preserva o número já pareado enquanto o token em disco restaura (evita UI “vazia” / QR).
+      connectedNumber: existingBot?.connectedNumber ?? null,
       iaAtiva,
       iaPrompt: iaPrompt ?? existingBot?.iaPrompt ?? null,
       label: persistLabel,

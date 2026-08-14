@@ -10,6 +10,7 @@ import {
   stopSessionWorker,
   sendWorkerPort,
   workerHttpOrigin,
+  ensureSessionWorker,
 } from '../services/pm2.service.js';
 import { stopClient, sendMessage, listGroups, SLOT_SOMENTE_ENVIO } from '../wpp/index.js';
 import config from '../../config.js';
@@ -665,35 +666,63 @@ export async function getSendOnlyGroups(req, res) {
 
     const normalizedUserId = userId.trim();
     const slot = resolveAnySlot(req, 2);
-
-    // O client vive no worker PM2, não neste processo. Consulta o mini-HTTP primeiro.
     const origin = workerHttpOrigin(slot);
-    try {
+
+    const fetchGroups = async () => {
       const proxyRes = await fetch(`${origin}/groups`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
       });
       const data = await proxyRes.json().catch(() => ({}));
-      return res.status(proxyRes.status).json({ ...data, slot, worker: origin });
-    } catch (proxyErr) {
-      const local = await listGroups(normalizedUserId, slot);
-      if (local.success) {
-        return res.json({ ...local, slot });
-      }
+      return { status: proxyRes.status, data };
+    };
 
-      return res.status(503).json({
-        success: false,
-        groups: [],
-        slot,
-        message:
-          `Worker do slot ${slot} não está acessível em ${origin} (${proxyErr.message}). ` +
-          `O banco pode marcar "conectado" mesmo com o processo morto. ` +
-          `Religue com POST /api/sessions/${normalizedUserId}/start?slot=${slot} (sem force=1) para reusar o token e evitar QR.`,
-        detail: proxyErr.message,
-        localError: local.error,
-        note: 'Só aparecem grupos em que este número já participa.',
-      });
+    let proxied;
+    try {
+      proxied = await fetchGroups();
+    } catch (proxyErr) {
+      proxied = { status: 0, data: {}, fetchError: proxyErr.message };
     }
+
+    const workerMissingClient =
+      proxied.status === 0 ||
+      proxied.status >= 500 ||
+      proxied.data?.success === false;
+
+    if (workerMissingClient) {
+      logger.warn(
+        `[getSendOnlyGroups] Slot ${slot} sem client/HTTP (${proxied.fetchError || proxied.data?.error || proxied.status}). Relink sem force.`,
+      );
+      const ensured = await ensureSessionWorker(normalizedUserId, slot, { waitMs: 45000 });
+      try {
+        proxied = await fetchGroups();
+        proxied.data = { ...proxied.data, relinked: true, workerReady: ensured.ok };
+      } catch (proxyErr) {
+        proxied = { status: 0, data: { relinked: true, workerReady: ensured.ok }, fetchError: proxyErr.message };
+      }
+    }
+
+    if (proxied.status > 0) {
+      return res.status(proxied.status).json({ ...proxied.data, slot, worker: origin });
+    }
+
+    const local = await listGroups(normalizedUserId, slot);
+    if (local.success) {
+      return res.json({ ...local, slot });
+    }
+
+    return res.status(503).json({
+      success: false,
+      groups: [],
+      slot,
+      message:
+        `Worker do slot ${slot} não restaurou o client em ${origin} (${proxied.fetchError || 'timeout'}). ` +
+        `Se o token em disco ainda for válido, aguarde e tente de novo. ` +
+        `QR só é necessário se o WhatsApp tiver invalidado o aparelho.`,
+      detail: proxied.fetchError,
+      localError: local.error,
+      note: 'Só aparecem grupos em que este número já participa.',
+    });
   } catch (error) {
     logger.error('[getSendOnlyGroups]', error);
     return res.status(500).json({ success: false, groups: [], message: error.message });
@@ -768,6 +797,8 @@ export async function sendSendOnlyMessage(req, res) {
     if (local.success) {
       return res.json(local);
     }
+
+    await ensureSessionWorker(normalizedUserId, slot, { waitMs: 45000 });
 
     // 2) Proxy para o mini-HTTP do worker somente-envio
     const port = sendWorkerPort(slot);

@@ -100,8 +100,21 @@ export async function startSessionWorker(userId, slot = 1) {
         logger.warn(`[startSessionWorker] Worker ${name} já está online e com client.`);
         return { success: true, message: "Worker já está ativo", processName: name, slot: resolvedSlot, mode, iaAtiva };
       }
+      if (health.ok) {
+        // HTTP no ar = processo vivo e bootando. NÃO restart (isso mata o create e pede QR).
+        logger.warn(`[startSessionWorker] Worker ${name} online, mini-HTTP ok, client ainda conectando.`);
+        return {
+          success: true,
+          message: "Worker ativo; client ainda restaurando sessão em disco",
+          processName: name,
+          slot: resolvedSlot,
+          mode,
+          iaAtiva,
+          booting: true,
+        };
+      }
       logger.warn(
-        `[startSessionWorker] Worker ${name} online mas mini-HTTP/client indisponível (${health.error || 'sem client'}). Reiniciando processo (sessão em disco preservada, sem force).`,
+        `[startSessionWorker] Worker ${name} online mas mini-HTTP morto (${health.error || 'sem resposta'}). Reiniciando processo (pasta de sessão preservada, sem force).`,
       );
       await execAsync(`pm2 restart "${name}"`);
       return {
@@ -125,6 +138,42 @@ export async function startSessionWorker(userId, slot = 1) {
   await execAsync(command);
 
   return { success: true, processName: name, slot: resolvedSlot, mode, iaAtiva };
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Garante worker + client em memória, reusando a pasta de sessão (sem force/QR).
+ * - Mini-HTTP morto: start/restart PM2
+ * - HTTP vivo sem client: espera o WPPConnect restaurar o token
+ */
+export async function ensureSessionWorker(userId, slot, { waitMs = 45000 } = {}) {
+  const normalizedUserId = String(userId || '').trim();
+  const resolvedSlot = Number(slot);
+  const first = await pingWorkerHealth(resolvedSlot);
+
+  if (!(first.ok && first.data?.hasClient)) {
+    await startSessionWorker(normalizedUserId, resolvedSlot);
+  }
+
+  const deadline = Date.now() + waitMs;
+  let last = await pingWorkerHealth(resolvedSlot, 3000);
+  while (Date.now() < deadline) {
+    if (last.ok && last.data?.hasClient) {
+      return { ok: true, slot: resolvedSlot, health: last };
+    }
+    await sleep(1500);
+    last = await pingWorkerHealth(resolvedSlot, 3000);
+  }
+
+  return {
+    ok: Boolean(last.ok && last.data?.hasClient),
+    slot: resolvedSlot,
+    health: last,
+    timedOut: true,
+  };
 }
 
 export async function stopSessionWorker(userId, slot = 1) {

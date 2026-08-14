@@ -29,7 +29,7 @@ export async function GET(
   }
 
   const result = await callWhatsAppVpsSession(stackUser.id, slot, 'groups', {
-    timeoutMs: 60_000,
+    timeoutMs: 90_000,
   });
 
   return NextResponse.json(
