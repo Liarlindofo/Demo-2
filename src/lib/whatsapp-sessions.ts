@@ -59,18 +59,65 @@ export async function listSessionsForStackUser(stackUserId: string) {
   return bots.map(mapBotToDto);
 }
 
-export async function getTenantStackUserId(tenantUserId: string): Promise<string | null> {
+/**
+ * IDs de `stack_users` que pertencem ao tenant (`users.id` / CUID da API key).
+ *
+ * WhatsAppBot.userId → stack_users.id (UUID)
+ * ServiceApiKey / ReportDefinition.userId → users.id (CUID)
+ *
+ * O vínculo pode estar em User.stackUserId, StackUser.userId, ou só no e-mail.
+ */
+export async function resolveStackUserIdsForTenant(tenantUserId: string): Promise<string[]> {
+  const ids = new Set<string>();
+  if (!tenantUserId) return [];
+
+  const asStack = await prisma.stackUser.findUnique({
+    where: { id: tenantUserId },
+    select: { id: true },
+  });
+  if (asStack) ids.add(asStack.id);
+
   const user = await prisma.user.findUnique({
     where: { id: tenantUserId },
-    select: { stackUserId: true },
+    select: { stackUserId: true, email: true },
   });
-  if (user?.stackUserId) return user.stackUserId;
+  if (user?.stackUserId) ids.add(user.stackUserId);
 
-  const viaStack = await prisma.stackUser.findFirst({
+  const linked = await prisma.stackUser.findMany({
     where: { userId: tenantUserId },
     select: { id: true },
   });
-  return viaStack?.id ?? null;
+  for (const row of linked) ids.add(row.id);
+
+  if (user?.email) {
+    const byEmail = await prisma.stackUser.findMany({
+      where: { primaryEmail: { equals: user.email, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    for (const row of byEmail) ids.add(row.id);
+  }
+
+  return [...ids];
+}
+
+export async function getTenantStackUserId(tenantUserId: string): Promise<string | null> {
+  const ids = await resolveStackUserIdsForTenant(tenantUserId);
+  return ids[0] ?? null;
+}
+
+export async function findWhatsAppBotForTenant(tenantUserId: string, slot: number) {
+  const stackIds = await resolveStackUserIdsForTenant(tenantUserId);
+  if (stackIds.length === 0) return null;
+
+  return prisma.whatsAppBot.findFirst({
+    where: { userId: { in: stackIds }, slot },
+    select: {
+      userId: true,
+      slot: true,
+      isConnected: true,
+      label: true,
+    },
+  });
 }
 
 /**
@@ -82,7 +129,7 @@ export async function listSessionsForActor(params: {
   stackUserId: string;
 }) {
   const ids = [...new Set(
-    [params.stackUserId, await getTenantStackUserId(params.tenantUserId)].filter(
+    [params.stackUserId, ...(await resolveStackUserIdsForTenant(params.tenantUserId))].filter(
       (id): id is string => Boolean(id),
     ),
   )];

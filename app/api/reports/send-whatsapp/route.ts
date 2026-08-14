@@ -1,9 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { requireServiceApiKey } from '@/lib/auth/service-api-key';
-import { getTenantStackUserId } from '@/lib/whatsapp-sessions';
+import { findWhatsAppBotForTenant } from '@/lib/whatsapp-sessions';
 import { callWhatsAppVps, callWhatsAppVpsSession } from '@/lib/whatsapp-vps';
 
 /**
@@ -40,19 +39,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Campo "message" é obrigatório.' }, { status: 400 });
   }
 
-  const stackUserId = await getTenantStackUserId(userId);
-  if (!stackUserId) {
-    return NextResponse.json(
-      { success: false, error: 'Sessão WhatsApp não encontrada.', sessionSlot },
-      { status: 404 },
-    );
-  }
-
-  // Mesma regra de /log: o recurso tem que pertencer ao userId da key.
-  const bot = await prisma.whatsAppBot.findFirst({
-    where: { userId: stackUserId, slot: sessionSlot },
-    select: { slot: true, isConnected: true, label: true },
-  });
+  // ServiceApiKey.userId = users.id (CUID). WhatsAppBot.userId = stack_users.id (UUID).
+  const bot = await findWhatsAppBotForTenant(userId, sessionSlot);
 
   if (!bot) {
     return NextResponse.json(
@@ -60,6 +48,8 @@ export async function POST(req: NextRequest) {
       { status: 404 },
     );
   }
+
+  const stackUserId = bot.userId;
 
   const result = await callWhatsAppVpsSession(stackUserId, sessionSlot, 'send', {
     body: { to, message, slot: sessionSlot },
