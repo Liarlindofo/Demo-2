@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { rhGetUser } from '@/lib/rh-auth';
+import { getSessionDbUser } from '@/lib/rh-api-auth';
 import { ReportEscopoLoja } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
@@ -20,12 +20,12 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const rh = await rhGetUser();
-    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const dbUser = await getSessionDbUser();
+    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const { id } = await params;
     const existing = await prisma.reportDefinition.findFirst({
-      where: { id, userId: rh.userId },
+      where: { id, userId: dbUser.id },
     });
     if (!existing) {
       return NextResponse.json({ error: 'Relatório não encontrado.' }, { status: 404 });
