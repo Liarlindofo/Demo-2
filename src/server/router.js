@@ -45,6 +45,7 @@ router.get('/sessions/:userId/qr', asyncHandler(api.getSessionQRCode));
 router.post('/sessions/:userId/stop', asyncHandler(api.stopSessionConnection));
 router.get('/sessions/:userId/list', asyncHandler(api.listUserSessions));
 router.get('/sessions/:userId/groups', asyncHandler(api.getSendOnlyGroups));
+router.post('/sessions/:userId/send', asyncHandler(api.sendSendOnlyMessage));
 
 // Configurações do bot
 router.get('/settings/:userId', asyncHandler(api.getSettings));

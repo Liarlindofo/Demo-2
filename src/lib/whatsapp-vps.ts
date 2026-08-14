@@ -97,9 +97,9 @@ function buildPath(kind: WhatsAppSessionKind, action: string, userId: string, se
 
 export async function callWhatsAppVps(
   kind: WhatsAppSessionKind,
-  action: 'start' | 'stop' | 'qr' | 'status' | 'groups',
+  action: 'start' | 'stop' | 'qr' | 'status' | 'groups' | 'send',
   userId: string,
-  options: { method?: string; search?: string; timeoutMs?: number } = {},
+  options: { method?: string; search?: string; timeoutMs?: number; body?: Record<string, unknown> } = {},
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   const base = getVpsBaseUrl();
   const path = buildPath(kind, action, userId, options.search);
@@ -110,8 +110,8 @@ export async function callWhatsAppVps(
 export async function callWhatsAppVpsSession(
   userId: string,
   slot: number,
-  action: 'start' | 'stop' | 'qr' | 'status' | 'groups',
-  options: { search?: string; timeoutMs?: number } = {},
+  action: 'start' | 'stop' | 'qr' | 'status' | 'groups' | 'send',
+  options: { search?: string; timeoutMs?: number; body?: Record<string, unknown> } = {},
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   const base = getVpsBaseUrl();
   const extra = options.search ? `&${options.search.replace(/^\?/, '')}` : '';
@@ -122,10 +122,13 @@ export async function callWhatsAppVpsSession(
 async function fetchVps(
   url: string,
   action: string,
-  options: { method?: string; timeoutMs?: number } = {},
+  options: { method?: string; timeoutMs?: number; body?: Record<string, unknown> } = {},
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
-  const method = options.method || (action === 'start' || action === 'stop' ? 'POST' : 'GET');
-  const timeoutMs = options.timeoutMs ?? (action === 'start' ? 120_000 : 30_000);
+  const method =
+    options.method ||
+    (action === 'start' || action === 'stop' || action === 'send' ? 'POST' : 'GET');
+  const timeoutMs =
+    options.timeoutMs ?? (action === 'start' ? 120_000 : action === 'send' ? 90_000 : 30_000);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -145,7 +148,10 @@ async function fetchVps(
       method,
       headers,
       signal: controller.signal,
-      body: method === 'POST' ? JSON.stringify({}) : undefined,
+      body:
+        method === 'POST'
+          ? JSON.stringify(options.body !== undefined ? options.body : {})
+          : undefined,
       cache: 'no-store',
     });
 

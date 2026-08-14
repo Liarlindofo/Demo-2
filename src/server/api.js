@@ -785,7 +785,7 @@ export async function sendSendOnlyMessage(req, res) {
     }
 
     const normalizedUserId = userId.trim();
-    const slot = resolveSendOnlySlot(req);
+    const slot = resolveAnySlot(req, SLOT_SOMENTE_ENVIO);
     const { to, message } = req.body || {};
 
     if (!to || !message) {
