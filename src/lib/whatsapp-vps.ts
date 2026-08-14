@@ -110,7 +110,7 @@ export async function callWhatsAppVps(
 export async function callWhatsAppVpsSession(
   userId: string,
   slot: number,
-  action: 'start' | 'stop' | 'qr' | 'status',
+  action: 'start' | 'stop' | 'qr' | 'status' | 'groups',
   options: { search?: string; timeoutMs?: number } = {},
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   const base = getVpsBaseUrl();
