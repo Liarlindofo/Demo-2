@@ -9,6 +9,7 @@ import {
   startSessionWorker,
   stopSessionWorker,
   sendWorkerPort,
+  workerHttpOrigin,
 } from '../services/pm2.service.js';
 import { stopClient, sendMessage, listGroups, SLOT_SOMENTE_ENVIO } from '../wpp/index.js';
 import config from '../../config.js';
@@ -663,35 +664,34 @@ export async function getSendOnlyGroups(req, res) {
     }
 
     const normalizedUserId = userId.trim();
-    const slot = resolveSendOnlySlot(req);
+    const slot = resolveAnySlot(req, 2);
 
-    // 1) Mesmo processo (script CLI / API com client local)
-    const local = await listGroups(normalizedUserId, slot);
-    if (local.success) {
-      return res.json(local);
-    }
-
-    // 2) Proxy pro mini-HTTP do worker PM2
-    const port = sendWorkerPort(slot);
+    // O client vive no worker PM2, não neste processo. Consulta o mini-HTTP primeiro.
+    const origin = workerHttpOrigin(slot);
     try {
-      const proxyRes = await fetch(`http://127.0.0.1:${port}/groups`, {
+      const proxyRes = await fetch(`${origin}/groups`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
       });
       const data = await proxyRes.json().catch(() => ({}));
-      return res.status(proxyRes.status).json(data);
+      return res.status(proxyRes.status).json({ ...data, slot, worker: origin });
     } catch (proxyErr) {
+      const local = await listGroups(normalizedUserId, slot);
+      if (local.success) {
+        return res.json({ ...local, slot });
+      }
+
       return res.status(503).json({
         success: false,
         groups: [],
-        message:
-          local.error ||
-          'Sessão somente-envio não acessível. Confirme POST /api/send-only/:userId/start e que o worker está online.',
-        detail: proxyErr.message,
-        note:
-          'Só aparecem grupos em que o número de Relatórios já participa. ' +
-          'Adicione esse número no grupo desejado antes de consultar.',
         slot,
+        message:
+          `Worker do slot ${slot} não está acessível em ${origin} (${proxyErr.message}). ` +
+          `O banco pode marcar "conectado" mesmo com o processo morto. ` +
+          `Religue com POST /api/sessions/${normalizedUserId}/start?slot=${slot} (sem force=1) para reusar o token e evitar QR.`,
+        detail: proxyErr.message,
+        localError: local.error,
+        note: 'Só aparecem grupos em que este número já participa.',
       });
     }
   } catch (error) {

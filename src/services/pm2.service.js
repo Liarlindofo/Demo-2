@@ -35,6 +35,26 @@ export function sendWorkerPort(slot) {
   return base + (n - 2);
 }
 
+export function workerHttpOrigin(slot) {
+  return `http://127.0.0.1:${sendWorkerPort(slot)}`;
+}
+
+export async function pingWorkerHealth(slot, timeoutMs = 2000) {
+  const url = `${workerHttpOrigin(slot)}/health`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return { ok: false, url };
+    const data = await res.json().catch(() => ({}));
+    return { ok: true, url, data };
+  } catch (err) {
+    return { ok: false, url, error: err?.message || String(err) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function startWhatsappWorker(userId) {
   return startSessionWorker(userId, 1);
 }
@@ -75,8 +95,24 @@ export async function startSessionWorker(userId, slot = 1) {
   try {
     const { stdout } = await execAsync(`pm2 describe ${name}`);
     if (stdout.includes("online")) {
-      logger.warn(`[startSessionWorker] Worker ${name} já está online.`);
-      return { success: true, message: "Worker já está ativo", processName: name, slot: resolvedSlot, mode, iaAtiva };
+      const health = await pingWorkerHealth(resolvedSlot);
+      if (health.ok && health.data?.hasClient) {
+        logger.warn(`[startSessionWorker] Worker ${name} já está online e com client.`);
+        return { success: true, message: "Worker já está ativo", processName: name, slot: resolvedSlot, mode, iaAtiva };
+      }
+      logger.warn(
+        `[startSessionWorker] Worker ${name} online mas mini-HTTP/client indisponível (${health.error || 'sem client'}). Reiniciando processo (sessão em disco preservada, sem force).`,
+      );
+      await execAsync(`pm2 restart "${name}"`);
+      return {
+        success: true,
+        message: "Worker reiniciado para religar o client (QR não é necessário se o token ainda for válido)",
+        processName: name,
+        slot: resolvedSlot,
+        mode,
+        iaAtiva,
+        restarted: true,
+      };
     }
     await execAsync(`pm2 delete ${name}`).catch(() => {});
   } catch {}
