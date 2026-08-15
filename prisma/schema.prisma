@@ -81,6 +81,7 @@ model User {
   serviceApiKeys         ServiceApiKey[]
   /// Slot WhatsApp usado pelo scheduler de tarefas (digest/pendentes). Null = slot 1.
   tarefasSessionSlot     Int?
+  whatsappMessages       WhatsAppMessage[]
 
   @@map("users")
 }
@@ -232,6 +233,8 @@ model WhatsAppBot {
   iaAtiva         Boolean?
   /// Prompt específico desta sessão (usado quando iaAtiva=true). Nulo se IA desligada.
   iaPrompt        String?    @db.Text
+  /// Se true, grava IN/OUT desta sessão em WhatsAppMessage (revisão de reclamações).
+  monitorarReclamacoes Boolean @default(false)
   qrCode          String?    @db.Text
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
@@ -241,6 +244,35 @@ model WhatsAppBot {
   @@index([isConnected])
   @@index([status])
   @@map("whatsapp_bots")
+}
+
+/// Histórico de mensagens WhatsApp por tenant (base para revisão mensal de reclamações).
+model WhatsAppMessage {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionSlot       Int
+  /// "IN" (cliente) ou "OUT" (bot ou atendente humano)
+  direction         String
+  /// Número/LID do cliente — agrupa a conversa
+  contactId         String
+  contactName       String?
+  /// "text" | "image" | "audio" | "document" | etc
+  messageType       String
+  textContent       String?  @db.Text
+  /// URL pública no Supabase Storage, se houver mídia
+  mediaUrl          String?
+  /// true = humano digitou (não foi resposta automática da IA)
+  sentByAgent       Boolean  @default(false)
+  /// id original do WPPConnect — evita duplicar em reconexão/replay
+  whatsappMessageId String?
+  timestamp         DateTime
+  createdAt         DateTime @default(now())
+
+  @@index([userId, sessionSlot, timestamp])
+  @@index([userId, contactId, timestamp])
+  @@index([userId, sessionSlot, whatsappMessageId])
+  @@map("whatsapp_messages")
 }
 
 model BotSettings {

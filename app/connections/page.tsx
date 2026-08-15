@@ -36,6 +36,7 @@ interface SessionRow {
   qrCode: string | null;
   iaAtiva: boolean;
   iaPrompt: string | null;
+  monitorarReclamacoes: boolean;
 }
 
 interface QrModalState {
@@ -105,7 +106,12 @@ function SessionCard({
   onStop: () => void;
   onRefresh: () => void;
   onShowQr: (qrCode: string) => void;
-  onSaveConfig: (patch: { label?: string; iaAtiva?: boolean; iaPrompt?: string | null }) => Promise<void>;
+  onSaveConfig: (patch: {
+    label?: string;
+    iaAtiva?: boolean;
+    iaPrompt?: string | null;
+    monitorarReclamacoes?: boolean;
+  }) => Promise<void>;
 }) {
   const connected = isSessionConnected(session);
   const waitingQr = session.status === "QRCODE";
@@ -217,6 +223,27 @@ function SessionCard({
             />
           </span>
           <span className="text-sm text-gray-300">IA ativa</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSaveConfig({ monitorarReclamacoes: !session.monitorarReclamacoes })}
+          disabled={savingConfig}
+          className="flex items-center gap-2.5 select-none"
+        >
+          <span
+            className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
+              session.monitorarReclamacoes ? "bg-amber-500" : "bg-[#3a3a3e]"
+            }`}
+            role="switch"
+            aria-checked={session.monitorarReclamacoes}
+          >
+            <span
+              className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
+              style={{ left: session.monitorarReclamacoes ? "18px" : "2px" }}
+            />
+          </span>
+          <span className="text-sm text-gray-300">Registrar mensagens para revisão de reclamações</span>
         </button>
 
         {session.iaAtiva && (
@@ -431,7 +458,12 @@ function ConnectionsPageContent() {
 
   const handleSaveConfig = async (
     slot: number,
-    patch: { label?: string; iaAtiva?: boolean; iaPrompt?: string | null },
+    patch: {
+      label?: string;
+      iaAtiva?: boolean;
+      iaPrompt?: string | null;
+      monitorarReclamacoes?: boolean;
+    },
   ) => {
     setSavingConfig((prev) => ({ ...prev, [slot]: true }));
     try {

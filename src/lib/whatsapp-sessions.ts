@@ -10,6 +10,7 @@ export type WhatsAppSessionDto = {
   qrCode: string | null;
   iaAtiva: boolean;
   iaPrompt: string | null;
+  monitorarReclamacoes: boolean;
   updatedAt: string | null;
 };
 
@@ -28,6 +29,7 @@ export function mapBotToDto(bot: {
   connectedNumber: string | null;
   iaAtiva: boolean | null;
   iaPrompt: string | null;
+  monitorarReclamacoes?: boolean | null;
   updatedAt: Date;
 }): WhatsAppSessionDto {
   const qrCode = bot.qrCode ?? null;
@@ -47,6 +49,7 @@ export function mapBotToDto(bot: {
     qrCode,
     iaAtiva: bot.iaAtiva === true,
     iaPrompt: bot.iaPrompt ?? null,
+    monitorarReclamacoes: bot.monitorarReclamacoes === true,
     updatedAt: bot.updatedAt.toISOString(),
   };
 }

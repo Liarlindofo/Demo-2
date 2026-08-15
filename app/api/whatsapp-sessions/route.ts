@@ -70,6 +70,7 @@ export async function POST() {
       label: `Sessão ${slot}`,
       iaAtiva: false,
       iaPrompt: null,
+      monitorarReclamacoes: false,
       isConnected: false,
     },
   });

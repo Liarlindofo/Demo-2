@@ -12,7 +12,7 @@ function parseSlot(raw: string): number | null {
 
 /**
  * PATCH /api/whatsapp-sessions/slot/:slot
- * Atualiza label / iaAtiva / iaPrompt sem mexer na conexão.
+ * Atualiza label / iaAtiva / iaPrompt / monitorarReclamacoes sem mexer na conexão.
  */
 export async function PATCH(
   req: NextRequest,
@@ -28,7 +28,12 @@ export async function PATCH(
   if (!slot) return NextResponse.json({ error: 'Slot inválido' }, { status: 400 });
 
   const body = await req.json().catch(() => ({}));
-  const data: { label?: string; iaAtiva?: boolean; iaPrompt?: string | null } = {};
+  const data: {
+    label?: string;
+    iaAtiva?: boolean;
+    iaPrompt?: string | null;
+    monitorarReclamacoes?: boolean;
+  } = {};
 
   if (typeof body.label === 'string') {
     const label = body.label.trim();
@@ -41,6 +46,9 @@ export async function PATCH(
   }
   if (body.iaPrompt !== undefined) {
     data.iaPrompt = typeof body.iaPrompt === 'string' ? body.iaPrompt : null;
+  }
+  if (typeof body.monitorarReclamacoes === 'boolean') {
+    data.monitorarReclamacoes = body.monitorarReclamacoes;
   }
 
   if (Object.keys(data).length === 0) {

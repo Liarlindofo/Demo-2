@@ -872,6 +872,7 @@ function sessionStatusPayload(bot, slot) {
     label: bot?.label ?? null,
     iaAtiva: bot?.iaAtiva === true,
     iaPrompt: bot?.iaPrompt ?? null,
+    monitorarReclamacoes: bot?.monitorarReclamacoes === true,
     slot: bot?.slot ?? slot,
   };
 }

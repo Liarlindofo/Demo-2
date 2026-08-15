@@ -8,6 +8,7 @@ import { onQRCode, onStatusChange, extractPhoneNumber } from './qrHandler.js';
 import { WhatsAppBotModel, BotSettingsModel } from '../db/models.js';
 import { sendToGPT, formatConversationHistory } from '../ai/chat.js';
 import * as tarefaHandler from '../tarefas/tarefaHandler.js';
+import { recordWhatsAppMessage, markIaOutbound } from './messageArchive.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -397,17 +398,17 @@ export async function startClient(userId, slot = SLOT_ATENDIMENTO, options = {})
         logger.wpp(normalizedUserId, slot, '✅ Cliente WPPConnect criado com sucesso.');
         sessionManager.setClient(normalizedUserId, slot, client, mode, iaAtiva);
 
-        if (iaAtiva) {
-          logger.wpp(normalizedUserId, slot, '🎧 Registrando listener de mensagens (iaAtiva=true)...');
-          setupMessageListener(client, normalizedUserId, slot);
-          logger.wpp(normalizedUserId, slot, '✅ Listener de mensagens registrado!');
-        } else {
-          logger.wpp(
-            normalizedUserId,
-            slot,
-            '📤 Sessão SEM IA (iaAtiva=false) — listener do bot NÃO registrado.',
-          );
-        }
+        // Listener sempre: grava histórico se monitorarReclamacoes=true.
+        // A IA só responde quando iaAtiva=true (guard em handleIncomingMessage).
+        logger.wpp(
+          normalizedUserId,
+          slot,
+          iaAtiva
+            ? '🎧 Registrando listener de mensagens (iaAtiva=true)...'
+            : '🎧 Registrando listener (somente arquivo/histórico; iaAtiva=false)...',
+        );
+        setupMessageListener(client, normalizedUserId, slot);
+        logger.wpp(normalizedUserId, slot, '✅ Listener de mensagens registrado!');
 
         try {
           const isConnected = await client.isConnected().catch(() => false);
@@ -648,6 +649,13 @@ function setupMessageListener(client, userId, slot) {
   // enquanto onMessage pode não ser chamado de forma consistente.
   client.onAnyMessage(async (message) => {
     logger.info(`[🔔 onAnyMessage] Evento disparado! userId: ${userId}, slot: ${slot}`);
+
+    // Histórico de reclamações: mensagem crua, antes do debounce. Nunca bloqueia o bot.
+    recordWhatsAppMessage(message, client, userId, slot);
+
+    if (!sessionManager.getIaAtiva(userId, slot)) {
+      return;
+    }
 
     // ── Bypass do buffer ─────────────────────────────────────────────────
     // Grupos, status, mensagens fromMe e tipos não-texto (imagens, áudio,
@@ -976,6 +984,7 @@ async function handleIncomingMessage(message, client, userId, slot) {
         aiResponse = await sendToGPT(rawText, formattedHistory, gptSettings);
         logger.info(`[🤖 BOT] Resposta GPT: "${aiResponse}"`);
 
+        markIaOutbound(userId, slot, message.from, aiResponse);
         await client.sendText(message.from, aiResponse);
 
         sessionManager.addMessage(userId, slot, chaveConversa, {
