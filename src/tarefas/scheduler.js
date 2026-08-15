@@ -72,15 +72,54 @@ function saudacaoPorHora(hhmm) {
   return 'Boa noite';
 }
 
-/** Slot configurado no tenant para envio de tarefas. Default: 1. */
+function slotValido(slot) {
+  const n = Number(slot);
+  return Number.isFinite(n) && n >= 1 ? n : null;
+}
+
+/**
+ * Slot configurado no tenant para envio de tarefas.
+ *
+ * O worker recebe o UUID de stack_users; a config vive em users.tarefasSessionSlot
+ * (CUID do tenant). O vínculo pode estar em StackUser.userId, User.stackUserId
+ * ou via membro de equipe — se nenhum resolver, default 1.
+ */
 async function getConfiguredTarefasSlot(stackUserId) {
   try {
-    const row = await prisma.stackUser.findUnique({
+    const tenantIds = new Set();
+
+    const stackUser = await prisma.stackUser.findUnique({
       where: { id: stackUserId },
-      select: { user: { select: { tarefasSessionSlot: true } } },
+      select: { userId: true },
     });
-    const slot = row?.user?.tarefasSessionSlot;
-    if (Number.isFinite(slot) && slot >= 1) return slot;
+    if (stackUser?.userId) tenantIds.add(stackUser.userId);
+
+    const userByStack = await prisma.user.findFirst({
+      where: { stackUserId },
+      select: { id: true, tarefasSessionSlot: true },
+    });
+    if (userByStack) {
+      const slot = slotValido(userByStack.tarefasSessionSlot);
+      if (slot) return slot;
+      tenantIds.add(userByStack.id);
+    }
+
+    const membership = await prisma.rhTeamMember.findFirst({
+      where: { stackUserId, isActive: true },
+      select: { tenantUserId: true },
+    });
+    if (membership?.tenantUserId) tenantIds.add(membership.tenantUserId);
+
+    if (tenantIds.size > 0) {
+      const tenants = await prisma.user.findMany({
+        where: { id: { in: [...tenantIds] } },
+        select: { tarefasSessionSlot: true },
+      });
+      for (const t of tenants) {
+        const slot = slotValido(t.tarefasSessionSlot);
+        if (slot) return slot;
+      }
+    }
   } catch (err) {
     logger.warn(`[scheduler] Falha ao ler tarefasSessionSlot: ${err?.message}`);
   }
@@ -400,6 +439,8 @@ async function jobPendentes(userId, slot, getClient) {
         logger.info(
           `[scheduler:pendentes] ✅ "${template?.titulo}" → ${funcionario?.nome} (${destino})`,
         );
+
+        await delayAleatorio();
       } catch (err) {
         // Transição inválida (409) = tarefa já foi enviada por outro meio → ignorar
         if (err?.message?.includes('409') || err?.message?.includes('Transição inválida')) {
@@ -446,6 +487,15 @@ async function jobFechamento(userId, slot) {
 export function initScheduler(userId, slot, getClient) {
   logger.info(`[scheduler] Inicializando para userId="${userId}" slot=${slot} (timezone: America/Sao_Paulo)`);
 
+  getConfiguredTarefasSlot(userId)
+    .then((configured) => {
+      logger.info(
+        `[scheduler] Slot deste worker=${slot}; slot configurado para envio de tarefas=${configured}` +
+          (configured === Number(slot) ? ' → este worker ENVIA' : ' → este worker NÃO envia'),
+      );
+    })
+    .catch(() => {});
+
   cron.schedule(
     '* * * * *',
     () => jobDigest(userId, slot, getClient),
@@ -464,5 +514,7 @@ export function initScheduler(userId, slot, getClient) {
     { timezone: 'America/Sao_Paulo' },
   );
 
-  logger.info('[scheduler] ✅ 3 jobs agendados: digest, pendentes, fechamento (só disparam no slot configurado em tarefasSessionSlot).');
+  logger.info(
+    `[scheduler] ✅ 3 jobs agendados: digest, pendentes, fechamento (só disparam no slot de User.tarefasSessionSlot).`,
+  );
 }

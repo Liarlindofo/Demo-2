@@ -134,7 +134,8 @@ function tipoEvidenciaDeMsg(message) {
  * OU ao LID gravado no momento do envio (match por qualquer um dos dois).
  *
  * Só considera sessões criadas nas últimas 12 horas (janela de validade).
- * Ordem: mais recente primeiro (DESC) — a sessão relevante é sempre a nova.
+ * Ordem: mais recente primeiro (DESC) — a resposta do funcionário
+ * vale para a última cobrança enviada; as demais ficam na fila.
  *
  * @param {string|null}  telefone   Telefone bruto (será canonicalizado internamente)
  * @param {string|null}  [lidDigits] Dígitos do LID (sem "@lid"), opcional
@@ -234,15 +235,16 @@ export async function criarSessao(
 ) {
   const telefoneCanon = canonicalizarTelefone(telefone);
 
-  // Unicidade: garante no máximo uma sessão AGUARDANDO por funcionário.
-  // Expira qualquer sessão anterior antes de abrir a nova.
+  // Reenvio da mesma tarefa: substitui a sessão anterior.
+  // NÃO expira outras tarefas do mesmo telefone — várias podem disparar
+  // no mesmo horário e ficam em fila (a mais recente responde primeiro).
   const { count: expiradas } = await prisma.sessaoTarefa.updateMany({
-    where: { telefone: telefoneCanon, estado: 'AGUARDANDO' },
+    where: { tarefaId, telefone: telefoneCanon, estado: 'AGUARDANDO' },
     data:  { estado: 'EXPIRADA' },
   });
   if (expiradas > 0) {
     logger.info(
-      `[tarefaHandler/criarSessao] ${expiradas} sessão(ões) anterior(es) expirada(s) para tel=${telefoneCanon}`,
+      `[tarefaHandler/criarSessao] ${expiradas} sessão(ões) duplicada(s) da mesma tarefa expirada(s) para tel=${telefoneCanon}`,
     );
   }
 
@@ -702,18 +704,31 @@ export async function processarMensagem(message, client, telefone, sessao) {
         `[tarefaHandler] ✅ Sessão ${sessao.id} concluída | atraso=${minutosAtraso}min | emRevisao=${emRevisaoAdmExtra}`,
       );
 
-      // Notificar próxima tarefa pendente (delay de 2,5 s)
+      // Notificar próxima tarefa pendente na fila (delay de 2,5 s)
       setTimeout(async () => {
         try {
-          const proximas = await getSessoesAtivas(telefone);
+          const lidDaSessao = sessao.lid || null;
+          const proximas = await getSessoesAtivas(telefone, lidDaSessao);
           if (proximas.length > 0) {
             const proxima    = proximas[0];
             const prFaltando = (proxima.evidenciasExigidas || []).filter(
               (t) => !(proxima.evidenciasRecebidas || []).includes(t),
             );
+            let tituloProxima = proxima.descricaoTarefa || 'tarefa pendente';
+            try {
+              const atrib = await prisma.tarefaAtribuida.findUnique({
+                where: { id: proxima.tarefaId },
+                select: { template: { select: { titulo: true, descricao: true } } },
+              });
+              if (atrib?.template?.titulo) tituloProxima = atrib.template.titulo;
+            } catch { /* usa fallback */ }
+
             await client.sendText(
               wppFrom,
-              `📋 Você ainda tem outra tarefa pendente!\n\n${instrucaoEvidencias(prFaltando)}`,
+              `📋 Próxima tarefa: *${tituloProxima}*\n\n${instrucaoEvidencias(prFaltando)}`,
+            );
+            logger.info(
+              `[tarefaHandler] Fila: notificou próxima sessão ${proxima.id} após concluir ${sessao.id}`,
             );
           }
         } catch (e) {
@@ -765,7 +780,7 @@ export async function vincularLidASessaoRecente(lidDigits) {
         lid:      null,
         criadaEm: { gte: limite },
       },
-      orderBy: { criadaEm: 'desc' },
+      orderBy: { criadaEm: 'asc' },
     });
 
     if (!sessao) return false;

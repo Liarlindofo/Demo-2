@@ -33,6 +33,8 @@ export function TarefasEnvioSessao() {
   }, []);
 
   async function save(nextSlot: number) {
+    const prev = sessionSlot;
+    setSessionSlot(nextSlot);
     setSaving(true);
     setMsg(null);
     try {
@@ -43,11 +45,15 @@ export function TarefasEnvioSessao() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        setSessionSlot(prev);
         setMsg(data.error || 'Falha ao salvar');
         return;
       }
-      setSessionSlot(nextSlot);
+      setSessionSlot(Number(data.sessionSlot) || nextSlot);
       setMsg('Sessão de envio atualizada.');
+    } catch {
+      setSessionSlot(prev);
+      setMsg('Falha ao salvar');
     } finally {
       setSaving(false);
     }
