@@ -82,6 +82,10 @@ model User {
   /// Slot WhatsApp usado pelo scheduler de tarefas (digest/pendentes). Null = slot 1.
   tarefasSessionSlot     Int?
   whatsappMessages       WhatsAppMessage[]
+  /// Reforço opcional pro prompt de IA (não é filtro rígido). Vazio = critério geral do prompt.
+  palavrasChaveReclamacao String[] @default([])
+  complaintReviewRuns    ComplaintReviewRun[]
+  complaints             Complaint[]
 
   @@map("users")
 }
@@ -1612,4 +1616,46 @@ model ServiceApiKey {
 
   @@index([userId])
   @@map("service_api_keys")
+}
+
+/// Execução mensal de revisão de reclamações por IA (um run por tenant/período).
+model ComplaintReviewRun {
+  id               String      @id @default(cuid())
+  userId           String
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  periodStart      DateTime
+  periodEnd        DateTime
+  /// "PROCESSANDO" | "CONCLUIDO" | "ERRO"
+  status           String
+  totalConversas   Int?
+  totalReclamacoes Int?
+  erro             String?
+  executadoEm      DateTime    @default(now())
+  complaints       Complaint[]
+
+  @@index([userId, executadoEm])
+  @@map("complaint_review_runs")
+}
+
+/// Reclamação detectada pela IA em uma conversa (contactId) de um ComplaintReviewRun.
+model Complaint {
+  id                  String             @id @default(cuid())
+  reviewRunId         String
+  reviewRun           ComplaintReviewRun @relation(fields: [reviewRunId], references: [id], onDelete: Cascade)
+  userId              String
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contactId           String
+  contactName         String?
+  resumo              String             @db.Text
+  dataOcorrencia      DateTime
+  /// IDs de WhatsAppMessage usados como evidência
+  evidenciaMessageIds String[]
+  /// Vany (ou humano) revisa e confirma depois
+  confirmadoPorHumano Boolean            @default(false)
+  createdAt           DateTime           @default(now())
+
+  @@index([reviewRunId])
+  @@index([userId, dataOcorrencia])
+  @@index([userId, contactId])
+  @@map("complaints")
 }
