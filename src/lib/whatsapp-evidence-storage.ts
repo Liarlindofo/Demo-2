@@ -7,8 +7,17 @@ const DEFAULT_SIGNED_TTL_SECONDS = 3600;
 
 let supabaseAdmin: SupabaseClient | null = null;
 
+/** Aceita URL completa ou só o project ref (ex.: uluydllxvrteawtltceu). */
+export function normalizeSupabaseUrl(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  const v = raw.trim().replace(/^["']|["']$/g, '');
+  if (v.startsWith('http://') || v.startsWith('https://')) return v;
+  if (/^[a-z0-9-]+$/i.test(v)) return `https://${v}.supabase.co`;
+  return null;
+}
+
 export function getWhatsAppEvidenceSupabase(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const url = normalizeSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   if (!supabaseAdmin) supabaseAdmin = createClient(url, key);

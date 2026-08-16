@@ -12,6 +12,7 @@ import {
   type ConversationMessage,
 } from '@/lib/complaints/classify';
 import { buildAndSaveComparison } from '@/lib/complaints/compare';
+import { buildAndSaveAta } from '@/lib/complaints/build-ata';
 import {
   currentMonthPeriod,
   monthPeriod,
@@ -67,6 +68,11 @@ async function finishWithComparison(params: {
     period: params.period,
   });
 
+  const ata = await buildAndSaveAta({
+    userId: params.userId,
+    reviewRunId: updated.id,
+  });
+
   return NextResponse.json({
     reviewRunId: updated.id,
     status: updated.status,
@@ -81,6 +87,8 @@ async function finishWithComparison(params: {
       resolvidos: comparison.resolvidos,
       resumoTexto: comparison.resumoTexto,
     },
+    ataStoragePath: 'ataStoragePath' in ata ? ata.ataStoragePath : null,
+    ataError: 'error' in ata ? ata.error : undefined,
     ...(params.mensagem ? { mensagem: params.mensagem } : {}),
   });
 }

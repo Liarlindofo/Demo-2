@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  Download,
+  MessageSquareWarning,
 } from 'lucide-react';
 import ToolProtection from '@/components/auth/ToolProtection';
 import { SystemTool } from '@/types/admin';
@@ -23,6 +25,7 @@ import { SystemTool } from '@/types/admin';
 
 type EscopoLoja = 'POR_LOJA' | 'CONSOLIDADO' | 'AMBOS';
 type Fonte = 'SAIPOS_DASHBOARD';
+type TabId = 'agendados' | 'reclamacoes';
 
 interface CatalogField {
   key: string;
@@ -49,6 +52,18 @@ interface ReportRow {
   ativo: boolean;
   campos: { campoKey: string; ordem: number }[];
   ultimaExecucao: UltimaExecucao | null;
+}
+
+interface ComplaintRunRow {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  status: string;
+  totalConversas: number | null;
+  totalReclamacoes: number | null;
+  ataStoragePath: string | null;
+  executadoEm: string;
+  erro: string | null;
 }
 
 interface ReportForm {
@@ -116,6 +131,19 @@ function ptDateTime(iso: string): string {
   });
 }
 
+function periodLabel(isoStart: string): string {
+  const d = new Date(isoStart);
+  const month = d.toLocaleString('pt-BR', { month: 'long', timeZone: 'America/Sao_Paulo' });
+  const year = d.toLocaleString('pt-BR', { year: 'numeric', timeZone: 'America/Sao_Paulo' });
+  return `${month.charAt(0).toUpperCase()}${month.slice(1)}/${year}`;
+}
+
+function statusBadge(status: string) {
+  if (status === 'CONCLUIDO') return 'text-green-400 bg-green-500/10 border-green-500/20';
+  if (status === 'ERRO') return 'text-red-400 bg-red-500/10 border-red-500/20';
+  return 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+}
+
 function Modal({
   title,
   onClose,
@@ -148,12 +176,16 @@ function Modal({
 function RelatoriosContent() {
   const router = useRouter();
 
+  const [tab, setTab] = useState<TabId>('agendados');
   const [reports, setReports] = useState<ReportRow[]>([]);
+  const [complaintRuns, setComplaintRuns] = useState<ComplaintRunRow[]>([]);
   const [catalog, setCatalog] = useState<CatalogField[]>([]);
   const [sessions, setSessions] = useState<WhatsSessionOpt[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingComplaints, setLoadingComplaints] = useState(false);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [showModal, setShowModal] = useState(false);
@@ -208,6 +240,42 @@ function RelatoriosContent() {
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
+
+  const fetchComplaintRuns = useCallback(async () => {
+    setLoadingComplaints(true);
+    try {
+      const res = await fetch('/api/reports/complaints');
+      if (res.ok) {
+        const data = await res.json();
+        setComplaintRuns(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      // silent
+    } finally {
+      setLoadingComplaints(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'reclamacoes') fetchComplaintRuns();
+  }, [tab, fetchComplaintRuns]);
+
+  async function handleDownloadAta(runId: string) {
+    setDownloadingId(runId);
+    try {
+      const res = await fetch(`/api/reports/complaints/${runId}/document`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) {
+        alert(data.error || 'Não foi possível baixar a ata.');
+        return;
+      }
+      window.open(data.url, '_blank', 'noopener,noreferrer');
+    } catch {
+      alert('Falha de rede ao baixar a ata.');
+    } finally {
+      setDownloadingId(null);
+    }
+  }
 
   async function openCreate() {
     setEditing(null);
@@ -346,22 +414,131 @@ function RelatoriosContent() {
                 <h1 className="text-2xl font-bold text-white">Central de Relatórios</h1>
               </div>
               <p className="text-sm text-gray-500 mt-1">
-                Agende relatórios automáticos do Saipos para o WhatsApp
+                Relatórios Saipos agendados e atas mensais de reclamações
               </p>
             </div>
           </div>
 
+          {tab === 'agendados' && (
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Novo relatório
+            </button>
+          )}
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 mb-6 p-1 rounded-xl bg-[#111113] border border-[#2a2a2e] w-fit">
           <button
-            onClick={openCreate}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 transition-colors"
+            type="button"
+            onClick={() => setTab('agendados')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              tab === 'agendados'
+                ? 'bg-amber-500 text-black'
+                : 'text-gray-400 hover:text-white'
+            }`}
           >
-            <Plus className="w-4 h-4" />
-            Novo relatório
+            Agendados (Saipos)
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('reclamacoes')}
+            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              tab === 'reclamacoes'
+                ? 'bg-amber-500 text-black'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <MessageSquareWarning className="w-3.5 h-3.5" />
+            Reclamações
           </button>
         </div>
 
-        {/* Lista */}
-        {loading ? (
+        {tab === 'reclamacoes' ? (
+          loadingComplaints ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
+            </div>
+          ) : complaintRuns.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+              <MessageSquareWarning className="w-8 h-8 text-amber-400/50" />
+              <p className="text-white font-medium">Nenhuma revisão de reclamações ainda</p>
+              <p className="text-sm text-gray-500 max-w-md">
+                As atas aparecem aqui após o n8n (ou um teste) chamar o endpoint mensal de
+                classificação.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[#2a2a2e] text-left">
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Período
+                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Reclamações
+                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Executado em
+                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">
+                        Ata
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {complaintRuns.map((run) => (
+                      <tr key={run.id} className="border-b border-[#2a2a2e] last:border-0">
+                        <td className="px-4 py-3.5 font-medium text-white">
+                          {periodLabel(run.periodStart)}
+                        </td>
+                        <td className="px-4 py-3.5 text-gray-300">
+                          {run.totalReclamacoes ?? '—'}
+                          <span className="text-xs text-gray-500 ml-1">
+                            / {run.totalConversas ?? '—'} conversas
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span
+                            className={`inline-flex px-2 py-0.5 rounded-lg text-xs border ${statusBadge(run.status)}`}
+                          >
+                            {run.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 text-gray-400 text-xs">
+                          {ptDateTime(run.executadoEm)}
+                        </td>
+                        <td className="px-4 py-3.5 text-right">
+                          <button
+                            type="button"
+                            disabled={run.status !== 'CONCLUIDO' || downloadingId === run.id}
+                            onClick={() => handleDownloadAta(run.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {downloadingId === run.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5" />
+                            )}
+                            Baixar ata
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        ) : loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
           </div>

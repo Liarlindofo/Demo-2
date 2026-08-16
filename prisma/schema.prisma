@@ -1630,6 +1630,8 @@ model ComplaintReviewRun {
   totalConversas   Int?
   totalReclamacoes Int?
   erro             String?
+  /// Path interno no bucket privado atas-reclamacoes (nunca URL pública).
+  ataStoragePath   String?
   executadoEm      DateTime             @default(now())
   complaints       Complaint[]
   comparison       ComplaintComparison?

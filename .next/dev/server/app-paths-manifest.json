@@ -1,4 +1,1 @@
-{
-  "/api/reports/complaints/[runId]/route": "app/api/reports/complaints/[runId]/route.js",
-  "/api/reports/complaints/run/route": "app/api/reports/complaints/run/route.js"
-}
+{}

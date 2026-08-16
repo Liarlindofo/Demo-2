@@ -55,5 +55,8 @@ export async function GET(
     return NextResponse.json({ error: 'Review run não encontrado.' }, { status: 404 });
   }
 
-  return NextResponse.json(run);
+  return NextResponse.json({
+    ...run,
+    hasAta: Boolean(run.ataStoragePath),
+  });
 }
