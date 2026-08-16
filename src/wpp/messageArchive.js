@@ -23,7 +23,6 @@ const monitorCache = new Map();
 const iaOutbound = new Map();
 
 let supabaseClient = null;
-let bucketReady = false;
 
 function withTimeout(promise, ms, label) {
   return Promise.race([
@@ -177,24 +176,13 @@ function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
-    logger.warn('[messageArchive] Supabase não configurado — mídia não será enviada.');
+    logger.warn(
+      '[messageArchive] Supabase não configurado — defina NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY. Mídia não será enviada.',
+    );
     return null;
   }
   supabaseClient = createClient(url, key);
   return supabaseClient;
-}
-
-async function ensureBucket(supabase) {
-  if (bucketReady) return;
-  const { data: buckets, error: listError } = await supabase.storage.listBuckets();
-  if (listError) throw listError;
-  if (!buckets?.some((b) => b.name === BUCKET)) {
-    const { error: createError } = await supabase.storage.createBucket(BUCKET, { public: true });
-    if (createError && !/already exists/i.test(createError.message || '')) {
-      throw createError;
-    }
-  }
-  bucketReady = true;
 }
 
 async function baixarMidia(message, client) {
@@ -242,7 +230,8 @@ async function uploadMedia({ tenantUserId, slot, contactId, message, client, typ
   const buffer = await baixarMidia(message, client);
   if (!buffer?.length) return null;
 
-  await ensureBucket(supabase);
+  // Bucket privado criado no painel: "whatsapp-evidencias".
+  // Persistimos só o path interno — URL assinada é gerada na leitura.
   const mime = message.mimetype || 'application/octet-stream';
   const ext = extFromMime(mime, type);
   const safeContact = String(contactId || 'unknown').replace(/[^\w.-]/g, '').slice(0, 32);
@@ -253,11 +242,10 @@ async function uploadMedia({ tenantUserId, slot, contactId, message, client, typ
     upsert: false,
   });
   if (error) {
-    logger.warn(`[messageArchive] upload falhou: ${error.message}`);
+    logger.warn(`[messageArchive] upload falhou (bucket=${BUCKET}): ${error.message}`);
     return null;
   }
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
-  return data?.publicUrl ?? null;
+  return fileName;
 }
 
 function shouldSkip(message) {

@@ -260,7 +260,7 @@ model WhatsAppMessage {
   /// "text" | "image" | "audio" | "document" | etc
   messageType       String
   textContent       String?  @db.Text
-  /// URL pública no Supabase Storage, se houver mídia
+  /// Path interno no bucket privado whatsapp-evidencias (nunca URL pública).
   mediaUrl          String?
   /// true = humano digitou (não foi resposta automática da IA)
   sentByAgent       Boolean  @default(false)
