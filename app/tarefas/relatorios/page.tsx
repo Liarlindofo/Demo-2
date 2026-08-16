@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Download, BarChart3, CheckCircle2, Clock,
   XCircle, AlertTriangle, Loader2, RefreshCw, Search,
+  Camera, MessageSquare, MapPin, FileText, Eye, X, BrainCircuit,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -43,6 +44,40 @@ interface ItemRelatorio {
   funcionario: { nome: string; cargo: string | null };
   loja: { nome: string };
   observacaoIA: string | null;
+}
+
+interface AnaliseIA {
+  objeto_identificado?: string;
+  corresponde_ao_esperado?: boolean;
+  valor_lido?: string;
+  legivel?: boolean;
+  confianca?: number;
+  observacao?: string;
+  divergencia?: boolean;
+}
+
+interface EvidenciaDetalhe {
+  id: string;
+  tipo: 'FOTO' | 'CONFIRMACAO_TEXTO' | 'LOCALIZACAO' | 'ARQUIVO' | string;
+  conteudoTexto: string | null;
+  urlArquivo: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  analiseIA: AnaliseIA | null;
+  recebidaEm: string;
+}
+
+interface DetalheTarefa {
+  id: string;
+  dataAgendada: string;
+  concluidaEm: string | null;
+  minutosAtraso: number;
+  status: string;
+  emRevisaoAdm: boolean;
+  template: { titulo: string; descricao: string | null };
+  funcionario: { nome: string; cargo: { nome: string } | null };
+  loja: { nome: string };
+  evidencias: EvidenciaDetalhe[];
 }
 
 interface RelatorioData {
@@ -127,6 +162,123 @@ function exportarCSV(itens: ItemRelatorio[]) {
   URL.revokeObjectURL(url);
 }
 
+function AnaliseIABlock({ ia }: { ia: AnaliseIA }) {
+  return (
+    <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 space-y-1.5">
+      <div className="flex items-center gap-1.5 text-violet-300 text-xs font-semibold uppercase tracking-wider">
+        <BrainCircuit className="w-3.5 h-3.5" /> Análise da IA
+      </div>
+      {ia.objeto_identificado && (
+        <p className="text-sm text-gray-300">Objeto: {ia.objeto_identificado}</p>
+      )}
+      {ia.valor_lido && <p className="text-sm text-gray-300">Valor lido: {ia.valor_lido}</p>}
+      {ia.observacao && <p className="text-sm text-gray-400">{ia.observacao}</p>}
+      {ia.divergencia && (
+        <p className="text-xs text-orange-400">Divergência detectada entre texto e imagem.</p>
+      )}
+    </div>
+  );
+}
+
+function EvidenciaBlock({ ev }: { ev: EvidenciaDetalhe }) {
+  const [expandida, setExpandida] = useState(false);
+
+  if (ev.tipo === 'FOTO') {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-blue-300 text-xs font-semibold uppercase tracking-wider">
+          <Camera className="w-4 h-4" /> Foto
+        </div>
+        {ev.urlArquivo ? (
+          <div className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={ev.urlArquivo}
+              alt="Evidência"
+              className={`rounded-xl border border-[#2a2a2e] object-cover cursor-pointer ${expandida ? 'max-h-[480px] w-full object-contain' : 'max-h-48 w-full'}`}
+              onClick={() => setExpandida((v) => !v)}
+            />
+            <a
+              href={ev.urlArquivo}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute top-2 right-2 bg-black/60 rounded-lg p-1.5 hover:bg-black/80"
+              title="Abrir"
+            >
+              <Eye className="w-3.5 h-3.5 text-white" />
+            </a>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500 italic">Foto indisponível.</p>
+        )}
+        {ev.analiseIA && <AnaliseIABlock ia={ev.analiseIA} />}
+      </div>
+    );
+  }
+
+  if (ev.tipo === 'CONFIRMACAO_TEXTO') {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-green-300 text-xs font-semibold uppercase tracking-wider">
+          <MessageSquare className="w-4 h-4" /> Texto
+        </div>
+        <div className="bg-[#0a0a0a] rounded-xl p-3 border border-[#2a2a2e]">
+          <p className="text-sm text-gray-200 whitespace-pre-wrap">
+            {ev.conteudoTexto ?? '—'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (ev.tipo === 'LOCALIZACAO') {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-yellow-300 text-xs font-semibold uppercase tracking-wider">
+          <MapPin className="w-4 h-4" /> Localização
+        </div>
+        {ev.latitude != null && ev.longitude != null ? (
+          <div className="flex items-center gap-3 flex-wrap">
+            <p className="text-sm text-gray-300">
+              {ev.latitude.toFixed(6)}, {ev.longitude.toFixed(6)}
+            </p>
+            <a
+              href={`https://maps.google.com/?q=${ev.latitude},${ev.longitude}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-blue-400 hover:text-blue-300 underline"
+            >
+              Ver no mapa
+            </a>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500 italic">Coordenadas indisponíveis.</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-purple-300 text-xs font-semibold uppercase tracking-wider">
+        <FileText className="w-4 h-4" /> {ev.tipo}
+      </div>
+      {ev.urlArquivo ? (
+        <a
+          href={ev.urlArquivo}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-blue-400 underline"
+        >
+          Abrir arquivo
+        </a>
+      ) : (
+        <p className="text-xs text-gray-500">{ev.conteudoTexto ?? '—'}</p>
+      )}
+    </div>
+  );
+}
+
 // ─── Página ────────────────────────────────────────────────────────────────
 
 export default function RelatoriosTarefasPage() {
@@ -145,6 +297,8 @@ export default function RelatoriosTarefasPage() {
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState('');
+  const [detalhe, setDetalhe] = useState<DetalheTarefa | null>(null);
+  const [loadingDetalhe, setLoadingDetalhe] = useState(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -182,6 +336,23 @@ export default function RelatoriosTarefasPage() {
   }, [inicio, fim, filtroLoja, filtroFuncionario]);
 
   useEffect(() => { buscar(); }, [buscar]);
+
+  async function abrirDetalhe(id: string) {
+    setLoadingDetalhe(true);
+    setDetalhe(null);
+    try {
+      const res = await fetch(`/api/tarefas/atribuicoes/${id}`);
+      if (!res.ok) {
+        showToast('Não foi possível carregar o detalhe da tarefa.');
+        return;
+      }
+      setDetalhe(await res.json());
+    } catch {
+      showToast('Falha de rede ao carregar o detalhe.');
+    } finally {
+      setLoadingDetalhe(false);
+    }
+  }
 
   // Dados do gráfico de barras
   const chartData = (dados?.por_loja ?? []).map((l) => ({
@@ -415,7 +586,9 @@ export default function RelatoriosTarefasPage() {
                       {itens.map((item, i) => (
                         <tr
                           key={item.id}
-                          className={`border-b border-[#2a2a2e] hover:bg-[#222224] transition-colors ${i % 2 === 0 ? '' : 'bg-[#141416]'}`}
+                          onClick={() => abrirDetalhe(item.id)}
+                          className={`border-b border-[#2a2a2e] hover:bg-[#222224] transition-colors cursor-pointer ${i % 2 === 0 ? '' : 'bg-[#141416]'}`}
+                          title="Clique para ver evidências e resultado"
                         >
                           <td className="px-4 py-3 text-white">
                             <p>{item.funcionario.nome}</p>
@@ -424,7 +597,7 @@ export default function RelatoriosTarefasPage() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-gray-300 whitespace-nowrap">{item.loja.nome}</td>
-                          <td className="px-4 py-3 text-gray-300 max-w-[160px] truncate" title={item.template.titulo}>
+                          <td className="px-4 py-3 text-amber-300/90 max-w-[160px] truncate underline-offset-2 hover:underline" title={item.template.titulo}>
                             {item.template.titulo}
                           </td>
                           <td className="px-4 py-3 text-gray-400 whitespace-nowrap text-xs">
@@ -460,6 +633,94 @@ export default function RelatoriosTarefasPage() {
           </>
         )}
       </div>
+
+      {/* Modal detalhe */}
+      {(loadingDetalhe || detalhe) && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-lg mt-10 mb-10 bg-[#111113] border border-[#2a2a2e] rounded-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#2a2a2e]">
+              <h3 className="text-sm font-semibold text-white">Resultado da tarefa</h3>
+              <button
+                type="button"
+                onClick={() => { setDetalhe(null); setLoadingDetalhe(false); }}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:text-white hover:bg-[#1c1c1e]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {loadingDetalhe && !detalhe ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
+              </div>
+            ) : detalhe ? (
+              <div className="p-5 space-y-5 max-h-[75vh] overflow-y-auto">
+                <div>
+                  <p className="text-base font-semibold text-white">{detalhe.template.titulo}</p>
+                  {detalhe.template.descricao && (
+                    <p className="text-sm text-gray-400 mt-1 whitespace-pre-wrap">
+                      {detalhe.template.descricao}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Funcionário</p>
+                    <p className="text-white">{detalhe.funcionario.nome}</p>
+                    {detalhe.funcionario.cargo?.nome && (
+                      <p className="text-xs text-gray-500">{detalhe.funcionario.cargo.nome}</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Loja</p>
+                    <p className="text-white">{detalhe.loja.nome}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Agendado</p>
+                    <p className="text-gray-300">{ptDataHora(detalhe.dataAgendada)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Concluído</p>
+                    <p className="text-gray-300">
+                      {detalhe.concluidaEm ? ptDataHora(detalhe.concluidaEm) : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Status</p>
+                    <span
+                      className={`inline-flex px-2 py-1 rounded-lg text-xs font-medium ${STATUS_COLORS[detalhe.status] ?? 'bg-gray-500/20 text-gray-300'}`}
+                    >
+                      {STATUS_LABELS[detalhe.status] ?? detalhe.status}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Atraso</p>
+                    <p className="text-gray-300">
+                      {detalhe.minutosAtraso > 0 ? `+${detalhe.minutosAtraso} min` : '—'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="border-t border-[#2a2a2e] pt-4 space-y-4">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Evidências ({detalhe.evidencias.length})
+                  </p>
+                  {detalhe.evidencias.length === 0 ? (
+                    <p className="text-sm text-gray-500">Nenhuma evidência registrada ainda.</p>
+                  ) : (
+                    detalhe.evidencias.map((ev) => (
+                      <div key={ev.id} className="rounded-xl border border-[#2a2a2e] bg-[#0a0a0a] p-3">
+                        <EvidenciaBlock ev={ev} />
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

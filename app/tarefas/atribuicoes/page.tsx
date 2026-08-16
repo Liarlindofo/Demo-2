@@ -375,8 +375,13 @@ export default function AtribuicoesPage() {
   const [reagendarData, setReagendarData] = useState('');
   const [reagendarHorario, setReagendarHorario] = useState('');
   const [reagendarSaving, setReagendarSaving] = useState(false);
+  const [reagendarOutrosDias, setReagendarOutrosDias] = useState(0);
+  const [reagendarAplicarOutros, setReagendarAplicarOutros] = useState(false);
   const [detalhesItem, setDetalhesItem] = useState<TarefaItem | null>(null);
   const [cancelandoId, setCancelandoId] = useState<string | null>(null);
+  const [cancelItem, setCancelItem] = useState<TarefaItem | null>(null);
+  const [cancelOutrosDias, setCancelOutrosDias] = useState(0);
+  const [cancelAplicarOutros, setCancelAplicarOutros] = useState(false);
 
   // ── Fetchers ──────────────────────────────────────────────────────────────
 
@@ -681,10 +686,9 @@ export default function AtribuicoesPage() {
 
   // ── Reagendar ─────────────────────────────────────────────────────────────
 
-  function openReagendar(item: TarefaItem) {
+  async function openReagendar(item: TarefaItem) {
     const d = new Date(item.dataAgendada);
     setReagendarData(isoDate(d));
-    // Extrai hora:minuto no fuso BRT explicitamente
     const brtTime = d.toLocaleTimeString('pt-BR', {
       hour: '2-digit',
       minute: '2-digit',
@@ -692,13 +696,23 @@ export default function AtribuicoesPage() {
       timeZone: 'America/Sao_Paulo',
     });
     setReagendarHorario(brtTime);
+    setReagendarAplicarOutros(false);
+    setReagendarOutrosDias(0);
     setReagendarItem(item);
+    try {
+      const res = await fetch(`/api/tarefas/atribuicoes/${item.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setReagendarOutrosDias(Number(data.outrosDias) || 0);
+      }
+    } catch {
+      // ignore
+    }
   }
 
   async function handleReagendar() {
     if (!reagendarItem || !reagendarData || !reagendarHorario) return;
     const novaData = new Date(`${reagendarData}T${reagendarHorario}:00`);
-    // Tolerância de 60s para acomodar latência de rede
     if (novaData <= new Date(Date.now() - 60_000)) {
       alert('A nova data/hora não pode estar no passado.');
       return;
@@ -708,7 +722,10 @@ export default function AtribuicoesPage() {
       const res = await fetch(`/api/tarefas/atribuicoes/${reagendarItem.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataAgendada: novaData.toISOString() }),
+        body: JSON.stringify({
+          dataAgendada: novaData.toISOString(),
+          aplicarOutrosDias: reagendarAplicarOutros && reagendarOutrosDias > 0,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -724,23 +741,38 @@ export default function AtribuicoesPage() {
 
   // ── Cancelar ──────────────────────────────────────────────────────────────
 
-  async function handleCancelar(item: TarefaItem) {
-    if (
-      !confirm(
-        `Cancelar "${item.template.titulo}" de ${item.funcionario.nome}? Esta ação não pode ser desfeita.`,
-      )
-    )
-      return;
-    setCancelandoId(item.id);
+  async function openCancelar(item: TarefaItem) {
+    setCancelAplicarOutros(false);
+    setCancelOutrosDias(0);
+    setCancelItem(item);
     try {
-      const res = await fetch(`/api/tarefas/atribuicoes/${item.id}`, {
+      const res = await fetch(`/api/tarefas/atribuicoes/${item.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCancelOutrosDias(Number(data.outrosDias) || 0);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleCancelarConfirm() {
+    if (!cancelItem) return;
+    setCancelandoId(cancelItem.id);
+    try {
+      const res = await fetch(`/api/tarefas/atribuicoes/${cancelItem.id}`, {
         method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          aplicarOutrosDias: cancelAplicarOutros && cancelOutrosDias > 0,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         alert(data.error ?? 'Erro ao cancelar.');
         return;
       }
+      setCancelItem(null);
       fetchTarefas();
     } finally {
       setCancelandoId(null);
@@ -932,7 +964,7 @@ export default function AtribuicoesPage() {
                               </button>
                               {tarefa.status === 'AGENDADA' && (
                                 <button
-                                  onClick={() => handleCancelar(tarefa)}
+                                  onClick={() => openCancelar(tarefa)}
                                   disabled={cancelandoId === tarefa.id}
                                   title="Cancelar"
                                   className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
@@ -1677,6 +1709,24 @@ export default function AtribuicoesPage() {
                 />
               </div>
             </div>
+            {reagendarOutrosDias > 0 && (
+              <label className="flex items-start gap-3 p-3 rounded-xl bg-[#0a0a0a] border border-[#2a2a2e] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={reagendarAplicarOutros}
+                  onChange={(e) => setReagendarAplicarOutros(e.target.checked)}
+                  className="mt-0.5 accent-amber-500"
+                />
+                <span className="text-sm text-gray-300">
+                  Aplicar o novo horário também nos{' '}
+                  <span className="text-amber-400 font-medium">
+                    {reagendarOutrosDias} outro{reagendarOutrosDias === 1 ? '' : 's'} dia
+                    {reagendarOutrosDias === 1 ? '' : 's'}
+                  </span>{' '}
+                  agendados desta mesma tarefa (mesma pessoa / loja).
+                </span>
+              </label>
+            )}
           </div>
           <div className="flex gap-3 px-6 pb-6">
             <button
@@ -1692,6 +1742,54 @@ export default function AtribuicoesPage() {
             >
               {reagendarSaving && <Loader2 className="w-4 h-4 animate-spin" />}
               {reagendarSaving ? 'Salvando...' : 'Reagendar'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Cancelar modal ────────────────────────────────────────────────── */}
+      {cancelItem && (
+        <Modal title="Excluir atribuição" onClose={() => setCancelItem(null)}>
+          <div className="p-6 space-y-4">
+            <p className="text-sm text-gray-300">
+              Excluir{' '}
+              <span className="text-white font-medium">"{cancelItem.template.titulo}"</span> de{' '}
+              <span className="text-white">{cancelItem.funcionario.nome}</span>? Esta ação não
+              pode ser desfeita.
+            </p>
+            {cancelOutrosDias > 0 && (
+              <label className="flex items-start gap-3 p-3 rounded-xl bg-red-500/5 border border-red-500/20 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cancelAplicarOutros}
+                  onChange={(e) => setCancelAplicarOutros(e.target.checked)}
+                  className="mt-0.5 accent-red-500"
+                />
+                <span className="text-sm text-gray-300">
+                  Excluir também dos{' '}
+                  <span className="text-red-400 font-medium">
+                    {cancelOutrosDias} outro{cancelOutrosDias === 1 ? '' : 's'} dia
+                    {cancelOutrosDias === 1 ? '' : 's'}
+                  </span>{' '}
+                  agendados desta mesma tarefa.
+                </span>
+              </label>
+            )}
+          </div>
+          <div className="flex gap-3 px-6 pb-6">
+            <button
+              onClick={() => setCancelItem(null)}
+              className="flex-1 py-2.5 rounded-xl border border-[#2a2a2e] text-sm text-gray-400 hover:text-white hover:bg-[#1c1c1e] transition-colors"
+            >
+              Voltar
+            </button>
+            <button
+              onClick={handleCancelarConfirm}
+              disabled={cancelandoId === cancelItem.id}
+              className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-400 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            >
+              {cancelandoId === cancelItem.id && <Loader2 className="w-4 h-4 animate-spin" />}
+              Excluir
             </button>
           </div>
         </Modal>
