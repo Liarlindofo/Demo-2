@@ -71,6 +71,7 @@ export function TarefasEnvioSessao() {
           <h2 className="font-semibold text-white text-base">Sessão de envio</h2>
           <p className="text-sm text-gray-400">
             Número que dispara digest, pendentes e fechamento das tarefas.
+            Compartilhado com toda a empresa (a conexão pode estar em outra conta).
           </p>
         </div>
       </div>
@@ -85,7 +86,11 @@ export function TarefasEnvioSessao() {
             disabled={saving || sessions.length === 0}
             className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40"
           >
-            {sessions.length === 0 && <option value={1}>Nenhuma sessão conectada</option>}
+            {sessions.length === 0 && (
+              <option value={1}>
+                Nenhuma sessão no tenant — conecte em Conexões (qualquer conta da equipe)
+              </option>
+            )}
             {sessions.map((s) => (
               <option key={s.slot} value={s.slot}>
                 {s.label}
@@ -94,6 +99,11 @@ export function TarefasEnvioSessao() {
               </option>
             ))}
           </select>
+          {sessions.length > 0 && (
+            <p className="text-xs text-gray-600">
+              Qualquer membro da empresa vê e altera esta escolha; cada um continua com o próprio login.
+            </p>
+          )}
           {selected && !selected.isConnected && (
             <p className="text-xs text-amber-400">
               Esta sessão está desconectada. Reconecte em Conexões para os envios funcionarem.

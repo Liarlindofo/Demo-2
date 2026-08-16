@@ -68,7 +68,10 @@ export async function listSessionsForStackUser(stackUserId: string) {
  * WhatsAppBot.userId → stack_users.id (UUID)
  * ServiceApiKey / ReportDefinition.userId → users.id (CUID)
  *
- * O vínculo pode estar em User.stackUserId, StackUser.userId, ou só no e-mail.
+ * Inclui:
+ * - vínculo User.stackUserId / StackUser.userId / e-mail do dono
+ * - stackUserId de todos os RhTeamMember ativos (números conectados em
+ *   qualquer conta da empresa ficam visíveis no tenant)
  */
 export async function resolveStackUserIdsForTenant(tenantUserId: string): Promise<string[]> {
   const ids = new Set<string>();
@@ -100,6 +103,15 @@ export async function resolveStackUserIdsForTenant(tenantUserId: string): Promis
     for (const row of byEmail) ids.add(row.id);
   }
 
+  // Contas da equipe: WhatsApp pode estar conectado em qualquer membro
+  const members = await prisma.rhTeamMember.findMany({
+    where: { tenantUserId, isActive: true, stackUserId: { not: null } },
+    select: { stackUserId: true },
+  });
+  for (const m of members) {
+    if (m.stackUserId) ids.add(m.stackUserId);
+  }
+
   return [...ids];
 }
 
@@ -124,8 +136,28 @@ export async function findWhatsAppBotForTenant(tenantUserId: string, slot: numbe
 }
 
 /**
+ * Sessões do tenant (empresa): une bots de todas as contas Stack ligadas
+ * ao tenant — dono + membros de equipe. Usado em tarefas/relatórios.
+ */
+export async function listSessionsForTenant(tenantUserId: string) {
+  const ids = await resolveStackUserIdsForTenant(tenantUserId);
+  const bySlot = new Map<number, WhatsAppSessionDto>();
+  for (const id of ids) {
+    const list = await listSessionsForStackUser(id);
+    for (const session of list) {
+      // Prefere sessão já conectada se o mesmo slot existir em mais de uma conta
+      const prev = bySlot.get(session.slot);
+      if (!prev || (!prev.isConnected && session.isConnected)) {
+        bySlot.set(session.slot, session);
+      }
+    }
+  }
+  return [...bySlot.values()].sort((a, b) => a.slot - b.slot);
+}
+
+/**
  * Sessões visíveis para o ator: as do Stack Auth logado (mesmo critério de
- * /connections) + as do tenant, se o vínculo User.stackUserId existir.
+ * /connections) + as do tenant (dono + equipe).
  */
 export async function listSessionsForActor(params: {
   tenantUserId: string;
@@ -141,7 +173,10 @@ export async function listSessionsForActor(params: {
   for (const id of ids) {
     const list = await listSessionsForStackUser(id);
     for (const session of list) {
-      if (!bySlot.has(session.slot)) bySlot.set(session.slot, session);
+      const prev = bySlot.get(session.slot);
+      if (!prev || (!prev.isConnected && session.isConnected)) {
+        bySlot.set(session.slot, session);
+      }
     }
   }
   return [...bySlot.values()].sort((a, b) => a.slot - b.slot);
