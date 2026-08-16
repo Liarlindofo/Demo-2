@@ -587,6 +587,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../../app/tarefas/grupos/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/tarefas/grupos">> = Specific
+  const handler = {} as typeof import("../../../app/tarefas/grupos/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../../app/tarefas/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/tarefas">> = Specific
@@ -2346,6 +2355,24 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/tarefas/envio-sessao">> = Specific
   const handler = {} as typeof import("../../../app/api/tarefas/envio-sessao/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../../app/api/tarefas/grupos/[id]/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/tarefas/grupos/[id]">> = Specific
+  const handler = {} as typeof import("../../../app/api/tarefas/grupos/[id]/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../../app/api/tarefas/grupos/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/tarefas/grupos">> = Specific
+  const handler = {} as typeof import("../../../app/api/tarefas/grupos/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

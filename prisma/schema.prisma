@@ -76,6 +76,7 @@ model User {
   deliveryRiders         DeliveryRider[]
   rhTeamMemberships      RhTeamMember[]
   tarefaTemplates        TarefaTemplate[]
+  tarefaGrupos           TarefaGrupo[]
   tarefasAtribuidas      TarefaAtribuida[]
   reportDefinitions      ReportDefinition[]
   serviceApiKeys         ServiceApiKey[]
@@ -1421,15 +1422,47 @@ model TarefaTemplate {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  loja        RhLoja?           @relation(fields: [lojaId], references: [id])
-  cargo       RhCargo?          @relation(fields: [cargoId], references: [id])
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loja        RhLoja?            @relation(fields: [lojaId], references: [id])
+  cargo       RhCargo?           @relation(fields: [cargoId], references: [id])
   atribuicoes TarefaAtribuida[]
+  grupoItens  TarefaGrupoItem[]
 
   @@index([userId])
   @@index([lojaId])
   @@index([userId, ativo])
   @@map("tarefa_templates")
+}
+
+/// Pacote de templates para atribuir de uma vez (ex.: "Tarefas gerentes").
+model TarefaGrupo {
+  id          String   @id @default(cuid())
+  userId      String
+  nome        String
+  descricao   String?  @db.Text
+  ativo       Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itens TarefaGrupoItem[]
+
+  @@index([userId, ativo])
+  @@map("tarefa_grupos")
+}
+
+model TarefaGrupoItem {
+  id         String @id @default(cuid())
+  grupoId    String
+  templateId String
+  ordem      Int    @default(0)
+
+  grupo    TarefaGrupo    @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  template TarefaTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([grupoId, templateId])
+  @@index([templateId])
+  @@map("tarefa_grupo_itens")
 }
 
 /// Instância de tarefa atribuída a um funcionário em data/hora específica

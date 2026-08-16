@@ -20,6 +20,7 @@ import {
   Check,
   ClipboardList,
   AlertCircle,
+  Layers,
 } from 'lucide-react';
 import DateTimePicker, { DatePicker } from '@/components/ui/date-time-picker';
 
@@ -69,6 +70,14 @@ interface Template {
   lojaId: string | null;
   cargoId: string | null;
   ativo: boolean;
+}
+
+interface GrupoTemplate {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  ativo: boolean;
+  itens: Array<{ templateId: string; template: { id: string; titulo: string; ativo: boolean } }>;
 }
 
 interface SlotConfig {
@@ -357,6 +366,7 @@ export default function AtribuicoesPage() {
   // ── Reference data ────────────────────────────────────────────────────────
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [grupos, setGrupos] = useState<GrupoTemplate[]>([]);
   const [funcionariosLoja, setFuncionariosLoja] = useState<Funcionario[]>([]);
   const [loadingFuncionarios, setLoadingFuncionarios] = useState(false);
 
@@ -404,12 +414,17 @@ export default function AtribuicoesPage() {
 
   const fetchReferenceData = useCallback(async () => {
     try {
-      const [r1, r2] = await Promise.all([
+      const [r1, r2, r3] = await Promise.all([
         fetch('/api/rh/lojas'),
         fetch('/api/tarefas/templates'),
+        fetch('/api/tarefas/grupos'),
       ]);
       if (r1.ok) setLojas(await r1.json());
       if (r2.ok) setTemplates(await r2.json());
+      if (r3.ok) {
+        const data = await r3.json();
+        setGrupos(Array.isArray(data) ? data.filter((g: GrupoTemplate) => g.ativo) : []);
+      }
     } catch {
       // silent
     }
@@ -507,6 +522,26 @@ export default function AtribuicoesPage() {
     });
   }
 
+  /** Seleciona (ou limpa) todos os templates do grupo que forem compatíveis. */
+  function applyGrupo(grupo: GrupoTemplate) {
+    const idsCompativeis = new Set(templatesCompativeis.map((t) => t.id));
+    const doGrupo = grupo.itens
+      .map((i) => i.templateId)
+      .filter((id) => idsCompativeis.has(id));
+
+    setWTemplateIds((prev) => {
+      const next = new Set(prev);
+      const todosJaSelecionados =
+        doGrupo.length > 0 && doGrupo.every((id) => next.has(id));
+      if (todosJaSelecionados) {
+        for (const id of doGrupo) next.delete(id);
+      } else {
+        for (const id of doGrupo) next.add(id);
+      }
+      return next;
+    });
+  }
+
   const selectedFuncionario = funcionariosLoja.find((f) => f.id === wFuncionarioId);
 
   const templatesCompativeis = templates.filter((t) => {
@@ -520,6 +555,10 @@ export default function AtribuicoesPage() {
       return false;
     return true;
   });
+
+  const gruposUteis = grupos.filter((g) =>
+    g.itens.some((i) => templatesCompativeis.some((t) => t.id === i.templateId)),
+  );
 
   function goNext() {
     setWError(null);
@@ -1122,11 +1161,68 @@ export default function AtribuicoesPage() {
             {wizardStep === 2 && (
               <>
                 <p className="text-xs text-gray-500">
-                  Templates ativos compatíveis com a loja e cargo do funcionário.{' '}
+                  Escolha um grupo pronto ou marque templates avulsos.{' '}
                   <span className="text-amber-400">
                     {wTemplateIds.size} selecionado{wTemplateIds.size !== 1 ? 's' : ''}
                   </span>
                 </p>
+
+                {gruposUteis.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-violet-400/90 uppercase tracking-wider flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5" /> Grupos
+                    </p>
+                    {gruposUteis.map((g) => {
+                      const idsCompativeis = new Set(templatesCompativeis.map((t) => t.id));
+                      const doGrupo = g.itens
+                        .map((i) => i.templateId)
+                        .filter((id) => idsCompativeis.has(id));
+                      const todosSel =
+                        doGrupo.length > 0 && doGrupo.every((id) => wTemplateIds.has(id));
+                      const algunsSel =
+                        !todosSel && doGrupo.some((id) => wTemplateIds.has(id));
+                      return (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => applyGrupo(g)}
+                          className={`w-full flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
+                            todosSel
+                              ? 'bg-violet-500/15 border-violet-500/40'
+                              : algunsSel
+                                ? 'bg-violet-500/5 border-violet-500/25'
+                                : 'bg-[#0a0a0a] border-[#2a2a2e] hover:border-violet-500/30'
+                          }`}
+                        >
+                          <div
+                            className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5 border ${
+                              todosSel
+                                ? 'bg-violet-500 border-violet-500'
+                                : 'border-[#3a3a3e]'
+                            }`}
+                          >
+                            {todosSel && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className={`text-sm font-medium ${
+                                todosSel || algunsSel ? 'text-violet-200' : 'text-white'
+                              }`}
+                            >
+                              {g.nome}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {doGrupo.length} tarefa
+                              {doGrupo.length === 1 ? '' : 's'} compatível
+                              {doGrupo.length === 1 ? '' : 'eis'} neste contexto
+                              {g.descricao ? ` · ${g.descricao}` : ''}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {templatesCompativeis.length === 0 ? (
                   <div className="py-10 text-center">
@@ -1140,6 +1236,11 @@ export default function AtribuicoesPage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
+                    {gruposUteis.length > 0 && (
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-2">
+                        Templates avulsos
+                      </p>
+                    )}
                     {templatesCompativeis.map((t) => {
                       const sel = wTemplateIds.has(t.id);
                       return (

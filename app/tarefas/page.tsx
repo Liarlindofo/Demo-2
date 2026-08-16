@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ListChecks, ClipboardList, CalendarClock, BarChart3, Eye } from 'lucide-react';
+import { ListChecks, ClipboardList, CalendarClock, BarChart3, Eye, Layers } from 'lucide-react';
 import { TarefasEnvioSessao } from './TarefasEnvioSessao';
 
 const modules = [
@@ -10,6 +10,14 @@ const modules = [
     description: 'Crie e gerencie modelos de tarefas reutilizáveis',
     color: 'text-blue-400',
     bg: 'bg-blue-500/10',
+  },
+  {
+    href: '/tarefas/grupos',
+    icon: Layers,
+    label: 'Grupos',
+    description: 'Monte pacotes (ex.: tarefas gerentes) para atribuir de uma vez',
+    color: 'text-violet-400',
+    bg: 'bg-violet-500/10',
   },
   {
     href: '/tarefas/atribuicoes',
