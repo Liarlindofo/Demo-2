@@ -7,7 +7,8 @@ import { requireServiceApiKey } from '@/lib/auth/service-api-key';
 /**
  * GET /api/reports/complaints/:runId
  *
- * Consulta um ComplaintReviewRun do tenant da API key (e suas Complaints).
+ * Consulta um ComplaintReviewRun do tenant da API key, com Complaints e
+ * ComplaintComparison (quando existir) — base da ata (Fase 4).
  * Auth: header x-api-key (ServiceApiKey)
  */
 export async function GET(
@@ -33,6 +34,17 @@ export async function GET(
           dataOcorrencia: true,
           evidenciaMessageIds: true,
           confirmadoPorHumano: true,
+          createdAt: true,
+        },
+      },
+      comparison: {
+        select: {
+          id: true,
+          previousRunId: true,
+          recorrentes: true,
+          novos: true,
+          resolvidos: true,
+          resumoTexto: true,
           createdAt: true,
         },
       },

@@ -1,10 +1,10 @@
+import { callComplaintsOpenRouter, extractJsonObject } from '@/lib/complaints/openrouter';
+
 /**
  * Classificação de conversas WhatsApp como reclamação via OpenRouter.
  * Critério principal: julgamento de contexto (igual revisão humana).
  * palavrasChaveReclamacao = reforço opcional, nunca filtro rígido.
  */
-
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 export type ConversationMessage = {
   id: string;
@@ -93,17 +93,6 @@ Responda APENAS JSON válido, sem markdown:
 {"eReclamacao":true|false,"resumo":string|null,"dataOcorrencia":"YYYY-MM-DD"|null,"evidenciaMessageIds":string[]}${reforco}`;
 }
 
-function extractJson(raw: string): unknown {
-  const trimmed = raw.trim();
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('Resposta da IA sem JSON.');
-    return JSON.parse(match[0]);
-  }
-}
-
 function parseOccurrenceDate(
   value: unknown,
   fallback: Date,
@@ -123,69 +112,17 @@ export async function classifyConversation(params: {
   palavrasChave: string[];
 }): Promise<ClassificationResult> {
   const { messages, palavrasChave } = params;
-  const primaryKey = (process.env.OPENROUTER_API_KEY || '').trim();
-  const fallbackKey = (process.env.RH_OPENROUTER_API_KEY || '').trim();
-  const apiKey = primaryKey || fallbackKey;
-  if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY não configurada.');
-  }
-
   const validIds = new Set(messages.map((m) => m.id));
   const transcript = buildTranscript(messages);
-  // chatgpt-4o-latest no .env costuma 404 em várias contas; classificação usa mini por padrão.
-  const model = (
-    process.env.COMPLAINTS_OPENROUTER_MODEL ||
-    'openai/gpt-4o-mini'
-  ).trim();
 
-  async function callOpenRouter(key: string) {
-    return fetch(OPENROUTER_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
-        'X-Title': 'Platefull - Reclamações',
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.1,
-        max_tokens: 600,
-        messages: [
-          { role: 'system', content: buildSystemPrompt(palavrasChave) },
-          {
-            role: 'user',
-            content: `Classifique a conversa abaixo.\n\n${transcript}`,
-          },
-        ],
-      }),
-    });
-  }
+  const content = await callComplaintsOpenRouter({
+    system: buildSystemPrompt(palavrasChave),
+    user: `Classifique a conversa abaixo.\n\n${transcript}`,
+    maxTokens: 600,
+    temperature: 0.1,
+  });
 
-  let res = await callOpenRouter(apiKey);
-  // Conta OpenRouter principal às vezes lista models mas falha no chat — tenta RH.
-  if (
-    (res.status === 401 || res.status === 403) &&
-    fallbackKey &&
-    fallbackKey !== apiKey
-  ) {
-    res = await callOpenRouter(fallbackKey);
-  }
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`OpenRouter HTTP ${res.status}: ${errText.slice(0, 300)}`);
-  }
-
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error('OpenRouter retornou resposta vazia.');
-  }
-
-  const parsed = extractJson(content) as {
+  const parsed = extractJsonObject(content) as {
     eReclamacao?: unknown;
     resumo?: unknown;
     dataOcorrencia?: unknown;

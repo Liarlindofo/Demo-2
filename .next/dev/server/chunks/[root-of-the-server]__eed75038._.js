@@ -179,6 +179,17 @@ async function GET(req, { params }) {
                     confirmadoPorHumano: true,
                     createdAt: true
                 }
+            },
+            comparison: {
+                select: {
+                    id: true,
+                    previousRunId: true,
+                    recorrentes: true,
+                    novos: true,
+                    resolvidos: true,
+                    resumoTexto: true,
+                    createdAt: true
+                }
             }
         }
     });

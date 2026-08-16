@@ -11,6 +11,7 @@ import {
   classifyConversation,
   type ConversationMessage,
 } from '@/lib/complaints/classify';
+import { buildAndSaveComparison } from '@/lib/complaints/compare';
 import {
   currentMonthPeriod,
   monthPeriod,
@@ -43,11 +44,53 @@ function resolvePeriod(body: RunBody): MonthPeriod {
   throw new Error('period deve ser "previous" ou "current" (ou informe year+month).');
 }
 
+async function finishWithComparison(params: {
+  userId: string;
+  runId: string;
+  period: MonthPeriod;
+  totalConversas: number;
+  totalReclamacoes: number;
+  mensagem?: string;
+}) {
+  const updated = await prisma.complaintReviewRun.update({
+    where: { id: params.runId },
+    data: {
+      status: 'CONCLUIDO',
+      totalConversas: params.totalConversas,
+      totalReclamacoes: params.totalReclamacoes,
+    },
+  });
+
+  const comparison = await buildAndSaveComparison({
+    userId: params.userId,
+    reviewRunId: updated.id,
+    period: params.period,
+  });
+
+  return NextResponse.json({
+    reviewRunId: updated.id,
+    status: updated.status,
+    periodStart: updated.periodStart,
+    periodEnd: updated.periodEnd,
+    totalConversas: updated.totalConversas,
+    totalReclamacoes: updated.totalReclamacoes,
+    comparison: {
+      previousRunId: comparison.previousRunId,
+      recorrentes: comparison.recorrentes,
+      novos: comparison.novos,
+      resolvidos: comparison.resolvidos,
+      resumoTexto: comparison.resumoTexto,
+    },
+    ...(params.mensagem ? { mensagem: params.mensagem } : {}),
+  });
+}
+
 /**
  * POST /api/reports/complaints/run
  *
  * Classifica conversas WhatsApp do período (padrão: mês anterior completo)
  * usando IA. Só sessões com monitorarReclamacoes=true.
+ * Ao concluir, gera ComplaintComparison vs. mês imediatamente anterior.
  *
  * Auth: header x-api-key (ServiceApiKey)
  *
@@ -106,19 +149,10 @@ export async function POST(req: NextRequest) {
   });
 
   if (monitoredSlots.length === 0) {
-    const updated = await prisma.complaintReviewRun.update({
-      where: { id: run.id },
-      data: {
-        status: 'CONCLUIDO',
-        totalConversas: 0,
-        totalReclamacoes: 0,
-      },
-    });
-    return NextResponse.json({
-      reviewRunId: updated.id,
-      status: updated.status,
-      periodStart: updated.periodStart,
-      periodEnd: updated.periodEnd,
+    return finishWithComparison({
+      userId,
+      runId: run.id,
+      period,
       totalConversas: 0,
       totalReclamacoes: 0,
       mensagem: 'Nenhuma sessão com monitorarReclamacoes=true.',
@@ -205,22 +239,12 @@ export async function POST(req: NextRequest) {
       totalReclamacoes += 1;
     }
 
-    const updated = await prisma.complaintReviewRun.update({
-      where: { id: run.id },
-      data: {
-        status: 'CONCLUIDO',
-        totalConversas,
-        totalReclamacoes,
-      },
-    });
-
-    return NextResponse.json({
-      reviewRunId: updated.id,
-      status: updated.status,
-      periodStart: updated.periodStart,
-      periodEnd: updated.periodEnd,
-      totalConversas: updated.totalConversas,
-      totalReclamacoes: updated.totalReclamacoes,
+    return finishWithComparison({
+      userId,
+      runId: run.id,
+      period,
+      totalConversas,
+      totalReclamacoes,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

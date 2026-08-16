@@ -1620,9 +1620,9 @@ model ServiceApiKey {
 
 /// Execução mensal de revisão de reclamações por IA (um run por tenant/período).
 model ComplaintReviewRun {
-  id               String      @id @default(cuid())
+  id               String               @id @default(cuid())
   userId           String
-  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   periodStart      DateTime
   periodEnd        DateTime
   /// "PROCESSANDO" | "CONCLUIDO" | "ERRO"
@@ -1630,10 +1630,12 @@ model ComplaintReviewRun {
   totalConversas   Int?
   totalReclamacoes Int?
   erro             String?
-  executadoEm      DateTime    @default(now())
+  executadoEm      DateTime             @default(now())
   complaints       Complaint[]
+  comparison       ComplaintComparison?
 
   @@index([userId, executadoEm])
+  @@index([userId, periodStart, status])
   @@map("complaint_review_runs")
 }
 
@@ -1658,4 +1660,24 @@ model Complaint {
   @@index([userId, dataOcorrencia])
   @@index([userId, contactId])
   @@map("complaints")
+}
+
+/// Comparação do run atual com o mês imediatamente anterior (para ata).
+model ComplaintComparison {
+  id            String             @id @default(cuid())
+  reviewRunId   String             @unique
+  reviewRun     ComplaintReviewRun @relation(fields: [reviewRunId], references: [id], onDelete: Cascade)
+  /// null se for o primeiro mês com dado (sem comparação possível)
+  previousRunId String?
+  /// temas/clientes que reclamaram nos dois meses
+  recorrentes   Json
+  /// reclamações desse mês que não existiam no mês anterior
+  novos         Json
+  /// temas do mês passado que sumiram este mês
+  resolvidos    Json
+  /// parágrafo em linguagem natural pra colar na ata
+  resumoTexto   String             @db.Text
+  createdAt     DateTime           @default(now())
+
+  @@map("complaint_comparisons")
 }
