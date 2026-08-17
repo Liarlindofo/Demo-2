@@ -36,3 +36,34 @@ export async function PUT(
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }
+
+/** DELETE /api/checklist/admin/categories/[id] — remove categoria e todos os itens do catálogo */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const stackUser = await stackServerApp.getUser({ or: 'return-null' });
+    if (!stackUser) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
+
+    const { id } = await params;
+
+    const existing = await prisma.checklistCategory.findUnique({
+      where: { id },
+      select: { id: true, nome: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: 'Categoria não encontrada' }, { status: 404 });
+    }
+
+    await prisma.$transaction([
+      prisma.checklistItemTemplate.deleteMany({ where: { categoriaId: id } }),
+      prisma.checklistCategory.delete({ where: { id } }),
+    ]);
+
+    return NextResponse.json({ ok: true, nome: existing.nome });
+  } catch (error) {
+    console.error('Erro ao excluir categoria:', error);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+  }
+}

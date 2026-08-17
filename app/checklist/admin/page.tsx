@@ -62,6 +62,7 @@ export default function ChecklistAdminPage() {
 
   // ── Modal de confirmação de exclusão ──────────────────────────────────────
   const [confirmDelete, setConfirmDelete] = useState<{ item: Item; catName: string } | null>(null);
+  const [confirmDeleteCategory, setConfirmDeleteCategory] = useState<Category | null>(null);
 
   // ─── Carregar dados ────────────────────────────────────────────────────────
 
@@ -190,6 +191,30 @@ export default function ChecklistAdminPage() {
     }
   };
 
+  const handleDeleteCategory = async (cat: Category) => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/checklist/admin/categories/${cat.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Erro ao excluir categoria");
+      }
+      setConfirmDeleteCategory(null);
+      setExpandedCats((prev) => {
+        const next = new Set(prev);
+        next.delete(cat.id);
+        return next;
+      });
+      await loadCategories();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const toggleCat = (id: string) => {
     const next = new Set(expandedCats);
     next.has(id) ? next.delete(id) : next.add(id);
@@ -277,6 +302,13 @@ export default function ChecklistAdminPage() {
                         title="Editar categoria"
                       >
                         <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteCategory(cat)}
+                        className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"
+                        title="Excluir categoria"
+                      >
+                        <Trash2 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => openCreateItem(cat.id)}
@@ -474,7 +506,7 @@ export default function ChecklistAdminPage() {
         </div>
       )}
 
-      {/* ── Modal: confirmar exclusão ──────────────────────────────────────── */}
+      {/* ── Modal: confirmar exclusão de item ──────────────────────────────── */}
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-[#141415] border border-[#374151] rounded-2xl p-6 w-full max-w-sm">
@@ -499,6 +531,43 @@ export default function ChecklistAdminPage() {
               >
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: confirmar exclusão de categoria ───────────────────────── */}
+      {confirmDeleteCategory && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#141415] border border-[#374151] rounded-2xl p-6 w-full max-w-sm">
+            <h2 className="text-lg font-bold text-white mb-2">Excluir categoria?</h2>
+            <p className="text-sm text-gray-400 mb-1">
+              <span className="text-white font-medium">{confirmDeleteCategory.nome}</span>
+            </p>
+            <p className="text-xs text-gray-500 mb-1">
+              Todos os {confirmDeleteCategory.itens.length} item
+              {confirmDeleteCategory.itens.length === 1 ? "" : "s"} desta categoria também serão
+              removidos do checklist.
+            </p>
+            <p className="text-xs text-gray-500 mb-5">
+              Avaliações já realizadas permanecem no histórico com os nomes e respostas registrados
+              na época.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDeleteCategory(null)}
+                className="flex-1 py-2.5 bg-[#0f0f10] border border-[#374151] text-gray-300 rounded-xl text-sm hover:bg-[#374151] transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleDeleteCategory(confirmDeleteCategory)}
+                disabled={saving}
+                className="flex-1 py-2.5 bg-red-700 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Excluir categoria
               </button>
             </div>
           </div>
