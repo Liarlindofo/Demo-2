@@ -157,7 +157,7 @@ const NTH_LABELS: { v: 1 | 2 | 3 | 4 | -1; label: string }[] = [
   { v: -1, label: 'Última' },
 ];
 
-const WIZARD_STEPS = ['Funcionário', 'Templates', 'Horário', 'Confirmar'];
+const WIZARD_STEPS = ['Funcionário', 'Grupo', 'Horário', 'Confirmar'];
 
 // ── Utils ──────────────────────────────────────────────────────────────────
 
@@ -375,7 +375,7 @@ export default function AtribuicoesPage() {
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4>(1);
   const [wLojaId, setWLojaId] = useState('');
   const [wFuncionarioId, setWFuncionarioId] = useState('');
-  const [wTemplateIds, setWTemplateIds] = useState<Set<string>>(new Set());
+  const [wGrupoIds, setWGrupoIds] = useState<Set<string>>(new Set());
   const [wSlots, setWSlots] = useState<SlotConfig[]>([]);
   const [wSubmitting, setWSubmitting] = useState(false);
   const [wError, setWError] = useState<string | null>(null);
@@ -492,7 +492,7 @@ export default function AtribuicoesPage() {
     setWizardStep(1);
     setWLojaId('');
     setWFuncionarioId('');
-    setWTemplateIds(new Set());
+    setWGrupoIds(new Set());
     setWSlots([]);
     setWError(null);
     setFuncionariosLoja([]);
@@ -506,38 +506,18 @@ export default function AtribuicoesPage() {
   function handleLojaSelect(lojaId: string) {
     setWLojaId(lojaId);
     setWFuncionarioId('');
-    setWTemplateIds(new Set());
+    setWGrupoIds(new Set());
     setWSlots([]);
     setWError(null);
     if (lojaId) fetchFuncionarios(lojaId);
     else setFuncionariosLoja([]);
   }
 
-  function toggleTemplate(tid: string) {
-    setWTemplateIds((prev) => {
+  function toggleGrupo(gid: string) {
+    setWGrupoIds((prev) => {
       const next = new Set(prev);
-      if (next.has(tid)) next.delete(tid);
-      else next.add(tid);
-      return next;
-    });
-  }
-
-  /** Seleciona (ou limpa) todos os templates do grupo que forem compatíveis. */
-  function applyGrupo(grupo: GrupoTemplate) {
-    const idsCompativeis = new Set(templatesCompativeis.map((t) => t.id));
-    const doGrupo = grupo.itens
-      .map((i) => i.templateId)
-      .filter((id) => idsCompativeis.has(id));
-
-    setWTemplateIds((prev) => {
-      const next = new Set(prev);
-      const todosJaSelecionados =
-        doGrupo.length > 0 && doGrupo.every((id) => next.has(id));
-      if (todosJaSelecionados) {
-        for (const id of doGrupo) next.delete(id);
-      } else {
-        for (const id of doGrupo) next.add(id);
-      }
+      if (next.has(gid)) next.delete(gid);
+      else next.add(gid);
       return next;
     });
   }
@@ -560,6 +540,18 @@ export default function AtribuicoesPage() {
     g.itens.some((i) => templatesCompativeis.some((t) => t.id === i.templateId)),
   );
 
+  const selectedTemplateIds = (() => {
+    const ids = new Set<string>();
+    const compatible = new Set(templatesCompativeis.map((t) => t.id));
+    for (const g of grupos) {
+      if (!wGrupoIds.has(g.id)) continue;
+      for (const i of g.itens) {
+        if (compatible.has(i.templateId)) ids.add(i.templateId);
+      }
+    }
+    return ids;
+  })();
+
   function goNext() {
     setWError(null);
 
@@ -571,13 +563,17 @@ export default function AtribuicoesPage() {
     }
 
     if (wizardStep === 2) {
-      if (wTemplateIds.size === 0) {
-        setWError('Selecione pelo menos um template.');
+      if (wGrupoIds.size === 0) {
+        setWError('Selecione pelo menos um grupo de tarefas.');
+        return;
+      }
+      if (selectedTemplateIds.size === 0) {
+        setWError('Os grupos selecionados não têm tarefas compatíveis com este funcionário.');
         return;
       }
       const dayOfMonth = Number(selectedDate.split('-')[2]) || 1;
       const weekdayDefault = new Date(`${selectedDate}T12:00:00`).getDay();
-      const slots: SlotConfig[] = Array.from(wTemplateIds).map((tid) => ({
+      const slots: SlotConfig[] = Array.from(selectedTemplateIds).map((tid) => ({
         templateId: tid,
         data: selectedDate,
         horario: '08:00',
@@ -704,6 +700,7 @@ export default function AtribuicoesPage() {
         body: JSON.stringify({
           funcionarioId: wFuncionarioId,
           lojaId: wLojaId,
+          grupoIds: Array.from(wGrupoIds),
           slots,
         }),
       });
@@ -1157,56 +1154,68 @@ export default function AtribuicoesPage() {
               </>
             )}
 
-            {/* ── Step 2: Templates ────────────────────────────────── */}
+            {/* ── Step 2: Grupos ──────────────────────────────────── */}
             {wizardStep === 2 && (
               <>
                 <p className="text-xs text-gray-500">
-                  Escolha um grupo pronto ou marque templates avulsos.{' '}
+                  Selecione um ou mais grupos. As tarefas do grupo serão atribuídas ao
+                  funcionário.{' '}
                   <span className="text-amber-400">
-                    {wTemplateIds.size} selecionado{wTemplateIds.size !== 1 ? 's' : ''}
+                    {wGrupoIds.size} grupo{wGrupoIds.size !== 1 ? 's' : ''} ·{' '}
+                    {selectedTemplateIds.size} tarefa
+                    {selectedTemplateIds.size !== 1 ? 's' : ''}
                   </span>
                 </p>
 
-                {gruposUteis.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-violet-400/90 uppercase tracking-wider flex items-center gap-1.5">
-                      <Layers className="w-3.5 h-3.5" /> Grupos
+                {gruposUteis.length === 0 ? (
+                  <div className="py-10 text-center">
+                    <Layers className="w-10 h-10 text-gray-700 mx-auto mb-3" />
+                    <p className="text-sm text-gray-500">
+                      Nenhum grupo compatível encontrado.
                     </p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Crie um grupo com tarefas ativas para esta loja e cargo.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => router.push('/tarefas/grupos')}
+                      className="mt-4 px-4 py-2 rounded-xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-400"
+                    >
+                      Ir para grupos
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
                     {gruposUteis.map((g) => {
                       const idsCompativeis = new Set(templatesCompativeis.map((t) => t.id));
                       const doGrupo = g.itens
                         .map((i) => i.templateId)
                         .filter((id) => idsCompativeis.has(id));
-                      const todosSel =
-                        doGrupo.length > 0 && doGrupo.every((id) => wTemplateIds.has(id));
-                      const algunsSel =
-                        !todosSel && doGrupo.some((id) => wTemplateIds.has(id));
+                      const sel = wGrupoIds.has(g.id);
                       return (
                         <button
                           key={g.id}
                           type="button"
-                          onClick={() => applyGrupo(g)}
+                          onClick={() => toggleGrupo(g.id)}
                           className={`w-full flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
-                            todosSel
+                            sel
                               ? 'bg-violet-500/15 border-violet-500/40'
-                              : algunsSel
-                                ? 'bg-violet-500/5 border-violet-500/25'
-                                : 'bg-[#0a0a0a] border-[#2a2a2e] hover:border-violet-500/30'
+                              : 'bg-[#0a0a0a] border-[#2a2a2e] hover:border-violet-500/30'
                           }`}
                         >
                           <div
                             className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5 border ${
-                              todosSel
+                              sel
                                 ? 'bg-violet-500 border-violet-500'
                                 : 'border-[#3a3a3e]'
                             }`}
                           >
-                            {todosSel && <Check className="w-3 h-3 text-white" />}
+                            {sel && <Check className="w-3 h-3 text-white" />}
                           </div>
                           <div className="min-w-0 flex-1">
                             <p
                               className={`text-sm font-medium ${
-                                todosSel || algunsSel ? 'text-violet-200' : 'text-white'
+                                sel ? 'text-violet-200' : 'text-white'
                               }`}
                             >
                               {g.nome}
@@ -1217,81 +1226,20 @@ export default function AtribuicoesPage() {
                               {doGrupo.length === 1 ? '' : 'eis'} neste contexto
                               {g.descricao ? ` · ${g.descricao}` : ''}
                             </p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {templatesCompativeis.length === 0 ? (
-                  <div className="py-10 text-center">
-                    <ClipboardList className="w-10 h-10 text-gray-700 mx-auto mb-3" />
-                    <p className="text-sm text-gray-500">
-                      Nenhum template compatível encontrado.
-                    </p>
-                    <p className="text-xs text-gray-600 mt-1">
-                      Verifique se há templates ativos para esta loja e cargo.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {gruposUteis.length > 0 && (
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider pt-2">
-                        Templates avulsos
-                      </p>
-                    )}
-                    {templatesCompativeis.map((t) => {
-                      const sel = wTemplateIds.has(t.id);
-                      return (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => toggleTemplate(t.id)}
-                          className={`w-full flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
-                            sel
-                              ? 'bg-amber-500/10 border-amber-500/40'
-                              : 'bg-[#0a0a0a] border-[#2a2a2e] hover:border-[#3a3a3e]'
-                          }`}
-                        >
-                          <div
-                            className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5 border transition-colors ${
-                              sel ? 'bg-amber-500 border-amber-500' : 'border-[#3a3a3e] bg-transparent'
-                            }`}
-                          >
-                            {sel && <Check className="w-3 h-3 text-black" />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p
-                              className={`text-sm font-medium ${sel ? 'text-amber-300' : 'text-white'}`}
-                            >
-                              {t.titulo}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
-                              {t.descricao}
-                            </p>
-                            <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                              {t.exigeFoto && (
-                                <span className="text-xs bg-[#1c1c1e] text-gray-500 px-1.5 py-0.5 rounded">
-                                  📷
-                                </span>
-                              )}
-                              {t.exigeConfirmacaoTexto && (
-                                <span className="text-xs bg-[#1c1c1e] text-gray-500 px-1.5 py-0.5 rounded">
-                                  ✅
-                                </span>
-                              )}
-                              {t.exigeLocalizacao && (
-                                <span className="text-xs bg-[#1c1c1e] text-gray-500 px-1.5 py-0.5 rounded">
-                                  📍
-                                </span>
-                              )}
-                              {t.exigeArquivo && (
-                                <span className="text-xs bg-[#1c1c1e] text-gray-500 px-1.5 py-0.5 rounded">
-                                  📎
-                                </span>
-                              )}
-                            </div>
+                            {sel && (
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {g.itens
+                                  .filter((i) => idsCompativeis.has(i.templateId))
+                                  .map((i) => (
+                                    <span
+                                      key={i.templateId}
+                                      className="text-xs px-2 py-0.5 rounded-lg border border-violet-500/20 text-violet-300 bg-violet-500/5"
+                                    >
+                                      {i.template.titulo}
+                                    </span>
+                                  ))}
+                              </div>
+                            )}
                           </div>
                         </button>
                       );
@@ -1677,6 +1625,15 @@ export default function AtribuicoesPage() {
                         · {selectedFuncionario.cargo.nome}
                       </span>
                     )}
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Layers className="w-3.5 h-3.5 text-gray-400 mt-0.5" />
+                    <span className="text-sm text-white">
+                      {grupos
+                        .filter((g) => wGrupoIds.has(g.id))
+                        .map((g) => g.nome)
+                        .join(', ') || '—'}
+                    </span>
                   </div>
                 </div>
 

@@ -85,21 +85,17 @@ export async function PUT(
     }
 
     if (Array.isArray(templateIds)) {
-      if (templateIds.length === 0) {
-        return NextResponse.json(
-          { error: 'O grupo precisa ter pelo menos um template.' },
-          { status: 400 },
-        );
-      }
       const uniqueIds = [...new Set(templateIds.filter((x) => typeof x === 'string' && x))];
-      const owned = await prisma.tarefaTemplate.count({
-        where: { userId: rh.userId, id: { in: uniqueIds } },
-      });
-      if (owned !== uniqueIds.length) {
-        return NextResponse.json(
-          { error: 'Um ou mais templates são inválidos ou de outra conta.' },
-          { status: 400 },
-        );
+      if (uniqueIds.length > 0) {
+        const owned = await prisma.tarefaTemplate.count({
+          where: { userId: rh.userId, id: { in: uniqueIds } },
+        });
+        if (owned !== uniqueIds.length) {
+          return NextResponse.json(
+            { error: 'Um ou mais templates são inválidos ou de outra conta.' },
+            { status: 400 },
+          );
+        }
       }
 
       await prisma.$transaction([

@@ -68,23 +68,20 @@ export async function POST(req: Request) {
     if (!nome?.trim()) {
       return NextResponse.json({ error: 'Nome do grupo é obrigatório.' }, { status: 400 });
     }
-    if (!Array.isArray(templateIds) || templateIds.length === 0) {
-      return NextResponse.json(
-        { error: 'Selecione pelo menos um template para o grupo.' },
-        { status: 400 },
-      );
-    }
-
-    const uniqueIds = [...new Set(templateIds.filter((id) => typeof id === 'string' && id))];
-    const owned = await prisma.tarefaTemplate.findMany({
-      where: { userId: rh.userId, id: { in: uniqueIds } },
-      select: { id: true },
-    });
-    if (owned.length !== uniqueIds.length) {
-      return NextResponse.json(
-        { error: 'Um ou mais templates são inválidos ou de outra conta.' },
-        { status: 400 },
-      );
+    const uniqueIds = Array.isArray(templateIds)
+      ? [...new Set(templateIds.filter((id) => typeof id === 'string' && id))]
+      : [];
+    if (uniqueIds.length > 0) {
+      const owned = await prisma.tarefaTemplate.findMany({
+        where: { userId: rh.userId, id: { in: uniqueIds } },
+        select: { id: true },
+      });
+      if (owned.length !== uniqueIds.length) {
+        return NextResponse.json(
+          { error: 'Um ou mais templates são inválidos ou de outra conta.' },
+          { status: 400 },
+        );
+      }
     }
 
     const grupo = await prisma.tarefaGrupo.create({

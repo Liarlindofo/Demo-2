@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   ClipboardList,
@@ -15,6 +15,8 @@ import {
   Building2,
   Briefcase,
   Filter,
+  Trash2,
+  Layers,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -40,6 +42,7 @@ interface TarefaTemplate {
   ativo: boolean;
   loja?: { id: string; nome: string } | null;
   cargo?: { id: string; nome: string } | null;
+  grupoItens?: Array<{ grupo: { id: string; nome: string; ativo: boolean } }>;
 }
 
 interface Loja {
@@ -50,6 +53,12 @@ interface Loja {
 interface Cargo {
   id: string;
   nome: string;
+}
+
+interface GrupoOpt {
+  id: string;
+  nome: string;
+  ativo: boolean;
 }
 
 interface TemplateForm {
@@ -66,6 +75,7 @@ interface TemplateForm {
   ia_min: string;
   ia_max: string;
   ia_unidade: string;
+  grupoId: string;
 }
 
 const EMPTY_FORM: TemplateForm = {
@@ -82,6 +92,7 @@ const EMPTY_FORM: TemplateForm = {
   ia_min: '',
   ia_max: '',
   ia_unidade: '',
+  grupoId: '',
 };
 
 const EVIDENCIAS: {
@@ -137,13 +148,17 @@ function Modal({
 
 export default function TarefasTemplatesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const openedFromQuery = useRef(false);
 
   const [templates, setTemplates] = useState<TarefaTemplate[]>([]);
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [cargos, setCargos] = useState<Cargo[]>([]);
+  const [grupos, setGrupos] = useState<GrupoOpt[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [showModal, setShowModal] = useState(false);
@@ -173,12 +188,21 @@ export default function TarefasTemplatesPage() {
 
   const fetchLojasCargos = useCallback(async () => {
     try {
-      const [resLojas, resCargos] = await Promise.all([
+      const [resLojas, resCargos, resGrupos] = await Promise.all([
         fetch('/api/rh/lojas'),
         fetch('/api/rh/cargos'),
+        fetch('/api/tarefas/grupos'),
       ]);
       if (resLojas.ok) setLojas(await resLojas.json());
       if (resCargos.ok) setCargos(await resCargos.json());
+      if (resGrupos.ok) {
+        const data = await resGrupos.json();
+        setGrupos(
+          Array.isArray(data)
+            ? data.map((g: GrupoOpt) => ({ id: g.id, nome: g.nome, ativo: g.ativo }))
+            : [],
+        );
+      }
     } catch {
       // silent
     }
@@ -189,11 +213,22 @@ export default function TarefasTemplatesPage() {
     fetchLojasCargos();
   }, [fetchTemplates, fetchLojasCargos]);
 
+  useEffect(() => {
+    const grupoIdParam = searchParams.get('grupoId');
+    if (!grupoIdParam || openedFromQuery.current || grupos.length === 0) return;
+    if (!grupos.some((g) => g.id === grupoIdParam)) return;
+    openedFromQuery.current = true;
+    setEditingTemplate(null);
+    setForm({ ...EMPTY_FORM, grupoId: grupoIdParam });
+    setError(null);
+    setShowModal(true);
+  }, [searchParams, grupos]);
+
   // ── Handlers do modal ─────────────────────────────────────────────────────
 
-  function openCreate() {
+  function openCreate(grupoIdPre?: string) {
     setEditingTemplate(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, grupoId: grupoIdPre ?? '' });
     setError(null);
     setShowModal(true);
   }
@@ -215,6 +250,7 @@ export default function TarefasTemplatesPage() {
       ia_min: ia?.faixa_ok?.min != null ? String(ia.faixa_ok.min) : '',
       ia_max: ia?.faixa_ok?.max != null ? String(ia.faixa_ok.max) : '',
       ia_unidade: ia?.unidade ?? '',
+      grupoId: t.grupoItens?.[0]?.grupo.id ?? '',
     });
     setError(null);
     setShowModal(true);
@@ -241,6 +277,11 @@ export default function TarefasTemplatesPage() {
       !form.exigeArquivo
     ) {
       return 'Selecione pelo menos um tipo de evidência.';
+    }
+    const precisaGrupo =
+      !editingTemplate || (editingTemplate.grupoItens?.length ?? 0) === 0;
+    if (precisaGrupo && !form.grupoId) {
+      return 'Selecione um grupo. Toda tarefa precisa pertencer a um grupo.';
     }
     return null;
   }
@@ -285,6 +326,7 @@ export default function TarefasTemplatesPage() {
         validacaoIA,
         lojaId: form.lojaId || null,
         cargoId: form.cargoId || null,
+        ...(form.grupoId && { grupoId: form.grupoId }),
       };
 
       let res: Response;
@@ -329,6 +371,25 @@ export default function TarefasTemplatesPage() {
     }
   }
 
+  async function handleDelete(t: TarefaTemplate) {
+    const ok = confirm(
+      `Excluir a tarefa "${t.titulo}"?\n\nEla será removida dos grupos e das atribuições dos funcionários (incluindo pendentes e histórico). Esta ação não pode ser desfeita.`,
+    );
+    if (!ok) return;
+    setDeletingId(t.id);
+    try {
+      const res = await fetch(`/api/tarefas/templates/${t.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error ?? 'Erro ao excluir.');
+        return;
+      }
+      fetchTemplates();
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   // ── Filtros ───────────────────────────────────────────────────────────────
 
   const filtered = templates.filter((t) => {
@@ -340,6 +401,8 @@ export default function TarefasTemplatesPage() {
 
   const totalAtivos = templates.filter((t) => t.ativo).length;
   const totalInativos = templates.filter((t) => !t.ativo).length;
+  const gruposAtivos = grupos.filter((g) => g.ativo);
+  const podeCriar = gruposAtivos.length > 0;
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -373,13 +436,23 @@ export default function TarefasTemplatesPage() {
             </div>
           </div>
 
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-400 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Novo template
-          </button>
+          {podeCriar ? (
+            <button
+              onClick={() => openCreate()}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-400 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Novo template
+            </button>
+          ) : (
+            <button
+              onClick={() => router.push('/tarefas/grupos')}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-400 transition-colors"
+            >
+              <Layers className="w-4 h-4" />
+              Criar grupo primeiro
+            </button>
+          )}
         </div>
 
         {/* Filtros */}
@@ -445,18 +518,30 @@ export default function TarefasTemplatesPage() {
               </p>
               <p className="text-sm text-gray-500 mt-1">
                 {templates.length === 0
-                  ? 'Crie o primeiro modelo de tarefa operacional'
+                  ? podeCriar
+                    ? 'Crie o primeiro modelo de tarefa e vincule a um grupo'
+                    : 'Crie um grupo primeiro; toda tarefa precisa pertencer a um grupo'
                   : 'Tente ajustar os filtros'}
               </p>
             </div>
             {templates.length === 0 && (
-              <button
-                onClick={openCreate}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-400 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Criar template
-              </button>
+              podeCriar ? (
+                <button
+                  onClick={() => openCreate()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-400 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Criar template
+                </button>
+              ) : (
+                <button
+                  onClick={() => router.push('/tarefas/grupos')}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-400 transition-colors"
+                >
+                  <Layers className="w-4 h-4" />
+                  Criar grupo
+                </button>
+              )
             )}
           </div>
         ) : (
@@ -517,7 +602,7 @@ export default function TarefasTemplatesPage() {
                       )}
                     </div>
 
-                    {/* Loja / Cargo */}
+                    {/* Loja / Cargo / Grupos */}
                     <div className="flex flex-wrap gap-3 mt-2">
                       <span className="text-xs text-gray-500 flex items-center gap-1">
                         <Building2 className="w-3 h-3" />
@@ -527,6 +612,22 @@ export default function TarefasTemplatesPage() {
                         <Briefcase className="w-3 h-3" />
                         {t.cargo ? t.cargo.nome : 'Todos os cargos'}
                       </span>
+                      {(t.grupoItens?.length ?? 0) > 0 ? (
+                        t.grupoItens!.map((gi) => (
+                          <span
+                            key={gi.grupo.id}
+                            className="text-xs text-violet-400 flex items-center gap-1"
+                          >
+                            <Layers className="w-3 h-3" />
+                            {gi.grupo.nome}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-amber-400/80 flex items-center gap-1">
+                          <Layers className="w-3 h-3" />
+                          Sem grupo
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -554,6 +655,19 @@ export default function TarefasTemplatesPage() {
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
+
+                    <button
+                      onClick={() => handleDelete(t)}
+                      disabled={deletingId === t.id}
+                      title="Excluir"
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                    >
+                      {deletingId === t.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -573,6 +687,58 @@ export default function TarefasTemplatesPage() {
             {/* Informações básicas */}
             <div className="space-y-4">
               <p className={sectionCls}>Informações básicas</p>
+
+              {(!editingTemplate || (editingTemplate.grupoItens?.length ?? 0) === 0) && (
+                <div>
+                  <label className={labelCls}>
+                    Grupo <span className="text-red-400">*</span>
+                  </label>
+                  {gruposAtivos.length === 0 ? (
+                    <p className="text-sm text-gray-500">
+                      Nenhum grupo ativo.{' '}
+                      <button
+                        type="button"
+                        onClick={() => router.push('/tarefas/grupos')}
+                        className="text-violet-400 hover:underline"
+                      >
+                        Criar um grupo
+                      </button>
+                    </p>
+                  ) : (
+                    <select
+                      value={form.grupoId}
+                      onChange={(e) => setField('grupoId', e.target.value)}
+                      className={inputCls}
+                    >
+                      <option value="">Selecione um grupo</option>
+                      {gruposAtivos.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.nome}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <p className="text-xs text-gray-600 mt-1.5">
+                    Toda tarefa precisa pertencer a um grupo para ser atribuída aos funcionários.
+                  </p>
+                </div>
+              )}
+
+              {editingTemplate && (editingTemplate.grupoItens?.length ?? 0) > 0 && (
+                <div>
+                  <label className={labelCls}>Grupos</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {editingTemplate.grupoItens!.map((gi) => (
+                      <span
+                        key={gi.grupo.id}
+                        className="text-xs px-2 py-1 rounded-lg border border-violet-500/20 text-violet-300 bg-violet-500/5"
+                      >
+                        {gi.grupo.nome}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className={labelCls}>
@@ -767,25 +933,32 @@ export default function TarefasTemplatesPage() {
           </div>
 
           {/* Rodapé do modal */}
-          <div className="flex gap-3 px-6 pb-6 pt-2 border-t border-[#2a2a2e] mt-0">
-            <button
-              onClick={closeModal}
-              className="flex-1 py-2.5 rounded-xl border border-[#2a2a2e] text-sm text-gray-400 hover:text-white hover:bg-[#1c1c1e] transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex-1 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-400 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-            >
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {saving
-                ? 'Salvando...'
-                : editingTemplate
-                  ? 'Salvar alterações'
-                  : 'Criar template'}
-            </button>
+          <div className="px-6 pb-6 pt-2 border-t border-[#2a2a2e] space-y-3">
+            {editingTemplate && (
+              <p className="text-xs text-gray-500">
+                As alterações valem para os funcionários que já têm esta tarefa atribuída.
+              </p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={closeModal}
+                className="flex-1 py-2.5 rounded-xl border border-[#2a2a2e] text-sm text-gray-400 hover:text-white hover:bg-[#1c1c1e] transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-400 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {saving
+                  ? 'Salvando...'
+                  : editingTemplate
+                    ? 'Salvar alterações'
+                    : 'Criar template'}
+              </button>
+            </div>
           </div>
         </Modal>
       )}

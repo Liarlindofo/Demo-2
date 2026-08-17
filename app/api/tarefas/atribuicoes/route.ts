@@ -245,14 +245,22 @@ export async function POST(req: Request) {
     if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const body = await req.json();
-    const { funcionarioId, lojaId, slots } = body as {
+    const { funcionarioId, lojaId, slots, grupoIds } = body as {
       funcionarioId: string;
       lojaId: string;
       slots: SlotInput[];
+      grupoIds?: string[];
     };
 
     if (!funcionarioId || !lojaId || !Array.isArray(slots) || slots.length === 0) {
       return NextResponse.json({ error: 'Dados incompletos.' }, { status: 400 });
+    }
+
+    if (!Array.isArray(grupoIds) || grupoIds.length === 0) {
+      return NextResponse.json(
+        { error: 'Atribua pelo menos um grupo de tarefas.' },
+        { status: 400 },
+      );
     }
 
     // Verificar funcionário e loja pertencem ao tenant
@@ -262,6 +270,21 @@ export async function POST(req: Request) {
     ]);
     if (!func) return NextResponse.json({ error: 'Funcionário não encontrado.' }, { status: 404 });
     if (!loja) return NextResponse.json({ error: 'Loja não encontrada.' }, { status: 404 });
+
+    const uniqueGrupoIds = [...new Set(grupoIds.filter((id) => typeof id === 'string' && id))];
+    const grupos = await prisma.tarefaGrupo.findMany({
+      where: { id: { in: uniqueGrupoIds }, userId: rh.userId, ativo: true },
+      include: { itens: { select: { templateId: true } } },
+    });
+    if (grupos.length !== uniqueGrupoIds.length) {
+      return NextResponse.json(
+        { error: 'Um ou mais grupos são inválidos ou inativos.' },
+        { status: 400 },
+      );
+    }
+    const templatesDosGrupos = new Set(
+      grupos.flatMap((g) => g.itens.map((i) => i.templateId)),
+    );
 
     // Pré-validar lojaExecucaoId distintas (evita busca repetida por loja no loop)
     const lojaExecucaoIds = [...new Set(
@@ -306,6 +329,12 @@ export async function POST(req: Request) {
         return NextResponse.json(
           { error: `Template não encontrado ou inativo: ${slot.templateId}` },
           { status: 404 },
+        );
+      }
+      if (!templatesDosGrupos.has(slot.templateId)) {
+        return NextResponse.json(
+          { error: 'Só é possível atribuir tarefas que fazem parte dos grupos selecionados.' },
+          { status: 400 },
         );
       }
 

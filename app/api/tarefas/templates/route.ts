@@ -14,6 +14,11 @@ export async function GET() {
       include: {
         loja: { select: { id: true, nome: true } },
         cargo: { select: { id: true, nome: true } },
+        grupoItens: {
+          include: {
+            grupo: { select: { id: true, nome: true, ativo: true } },
+          },
+        },
       },
       orderBy: [{ ativo: 'desc' }, { createdAt: 'desc' }],
     });
@@ -41,6 +46,7 @@ export async function POST(req: Request) {
       validacaoIA,
       lojaId,
       cargoId,
+      grupoId,
     } = body;
 
     if (!titulo?.trim()) {
@@ -55,6 +61,25 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+    if (!grupoId || typeof grupoId !== 'string') {
+      return NextResponse.json(
+        { error: 'Selecione um grupo. Toda tarefa precisa pertencer a um grupo.' },
+        { status: 400 },
+      );
+    }
+
+    const grupo = await prisma.tarefaGrupo.findFirst({
+      where: { id: grupoId, userId: rh.userId },
+      select: { id: true },
+    });
+    if (!grupo) {
+      return NextResponse.json({ error: 'Grupo não encontrado.' }, { status: 404 });
+    }
+
+    const maxOrdem = await prisma.tarefaGrupoItem.aggregate({
+      where: { grupoId },
+      _max: { ordem: true },
+    });
 
     const template = await prisma.tarefaTemplate.create({
       data: {
@@ -69,10 +94,18 @@ export async function POST(req: Request) {
         lojaId: lojaId || null,
         cargoId: cargoId || null,
         criadoPor: rh.userId,
+        grupoItens: {
+          create: { grupoId, ordem: (maxOrdem._max.ordem ?? -1) + 1 },
+        },
       },
       include: {
         loja: { select: { id: true, nome: true } },
         cargo: { select: { id: true, nome: true } },
+        grupoItens: {
+          include: {
+            grupo: { select: { id: true, nome: true, ativo: true } },
+          },
+        },
       },
     });
 

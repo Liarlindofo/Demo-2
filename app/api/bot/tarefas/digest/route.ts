@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
     where: {
       status: 'AGENDADA',
       dataAgendada: { gte: inicio, lte: fim },
+      template: { ativo: true },
     },
     include: {
       template: {

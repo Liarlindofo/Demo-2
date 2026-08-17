@@ -154,10 +154,6 @@ export default function TarefasGruposPage() {
       setError('Informe o nome do grupo.');
       return;
     }
-    if (selectedIds.size === 0) {
-      setError('Selecione pelo menos um template.');
-      return;
-    }
     setSaving(true);
     setError(null);
     try {
@@ -201,7 +197,7 @@ export default function TarefasGruposPage() {
   }
 
   async function handleDelete(g: Grupo) {
-    if (!confirm(`Excluir o grupo "${g.nome}"? Os templates em si não serão apagados.`)) {
+    if (!confirm(`Excluir o grupo "${g.nome}"? As tarefas em si não serão apagadas.`)) {
       return;
     }
     setDeletingId(g.id);
@@ -237,7 +233,7 @@ export default function TarefasGruposPage() {
                   Grupos de tarefas
                 </h1>
                 <p className="text-xs text-gray-500">
-                  Pacotes para atribuir várias tarefas de uma vez
+                  Pacotes de tarefas para atribuir aos funcionários
                 </p>
               </div>
             </div>
@@ -260,8 +256,8 @@ export default function TarefasGruposPage() {
             <Layers className="w-10 h-10 text-violet-400/40" />
             <p className="text-white font-medium">Nenhum grupo ainda</p>
             <p className="text-sm text-gray-500 max-w-sm">
-              Crie um grupo como &quot;Tarefas gerentes&quot; e selecione os templates. Na
-              atribuição, escolha o grupo inteiro de uma vez.
+              Crie um grupo como &quot;Tarefas gerentes&quot; e depois adicione as tarefas.
+              Na atribuição, o funcionário recebe o grupo inteiro.
             </p>
             <button
               onClick={openCreate}
@@ -287,7 +283,7 @@ export default function TarefasGruposPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <h2 className="text-sm font-semibold text-white">{g.nome}</h2>
                       <span className="text-xs text-gray-500">
-                        {g.itens.length} template{g.itens.length === 1 ? '' : 's'}
+                        {g.itens.length} tarefa{g.itens.length === 1 ? '' : 's'}
                       </span>
                       {!g.ativo && (
                         <span className="text-xs text-gray-500 bg-[#1c1c1e] px-1.5 py-0.5 rounded">
@@ -314,6 +310,13 @@ export default function TarefasGruposPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-0.5 flex-shrink-0">
+                    <button
+                      onClick={() => router.push(`/tarefas/templates?grupoId=${g.id}`)}
+                      title="Nova tarefa neste grupo"
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:text-violet-300 hover:bg-violet-500/10"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => handleToggle(g)}
                       disabled={togglingId === g.id}
@@ -380,12 +383,13 @@ export default function TarefasGruposPage() {
             </div>
             <div>
               <label className={labelCls}>
-                Templates ({selectedIds.size} selecionado
+                Tarefas existentes ({selectedIds.size} selecionada
                 {selectedIds.size === 1 ? '' : 's'})
               </label>
               {templatesAtivos.length === 0 ? (
                 <p className="text-sm text-gray-500">
-                  Nenhum template ativo. Crie templates antes de montar o grupo.
+                  Nenhuma tarefa ativa ainda. Salve o grupo e use o botão + para criar a
+                  primeira tarefa nele.
                 </p>
               ) : (
                 <div className="max-h-64 overflow-y-auto space-y-1.5 rounded-xl border border-[#2a2a2e] p-2">

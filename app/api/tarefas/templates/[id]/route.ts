@@ -3,6 +3,20 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rhGetUser } from '@/lib/rh-auth';
+import {
+  excluirTemplateEAtribuicoes,
+  syncSessoesAbertasDoTemplate,
+} from '@/lib/tarefas-template';
+
+const includeTemplate = {
+  loja: { select: { id: true, nome: true } },
+  cargo: { select: { id: true, nome: true } },
+  grupoItens: {
+    include: {
+      grupo: { select: { id: true, nome: true, ativo: true } },
+    },
+  },
+};
 
 export async function PATCH(
   req: NextRequest,
@@ -32,6 +46,7 @@ export async function PATCH(
       lojaId,
       cargoId,
       ativo,
+      grupoId,
     } = body;
 
     // Se está editando conteúdo (não apenas toggling ativo), validar campos obrigatórios
@@ -69,15 +84,68 @@ export async function PATCH(
         ...(cargoId !== undefined && { cargoId: cargoId || null }),
         ...(ativo !== undefined && { ativo }),
       },
-      include: {
-        loja: { select: { id: true, nome: true } },
-        cargo: { select: { id: true, nome: true } },
-      },
+      include: includeTemplate,
     });
 
-    return NextResponse.json(updated);
+    if (grupoId && typeof grupoId === 'string') {
+      const grupo = await prisma.tarefaGrupo.findFirst({
+        where: { id: grupoId, userId: rh.userId },
+        select: { id: true },
+      });
+      if (!grupo) {
+        return NextResponse.json({ error: 'Grupo não encontrado.' }, { status: 404 });
+      }
+      const jaNoGrupo = await prisma.tarefaGrupoItem.findFirst({
+        where: { grupoId, templateId: id },
+      });
+      if (!jaNoGrupo) {
+        const maxOrdem = await prisma.tarefaGrupoItem.aggregate({
+          where: { grupoId },
+          _max: { ordem: true },
+        });
+        await prisma.tarefaGrupoItem.create({
+          data: { grupoId, templateId: id, ordem: (maxOrdem._max.ordem ?? -1) + 1 },
+        });
+      }
+    }
+
+    // Conteúdo novo vale para atribuições futuras (join) e sessões WhatsApp abertas
+    if (ativo === undefined) {
+      await syncSessoesAbertasDoTemplate(id, updated);
+    }
+
+    const result = await prisma.tarefaTemplate.findFirst({
+      where: { id },
+      include: includeTemplate,
+    });
+    return NextResponse.json(result);
   } catch (err) {
     console.error('[PATCH /api/tarefas/templates/[id]]', err);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+    const rh = await rhGetUser();
+    if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+
+    const template = await prisma.tarefaTemplate.findFirst({
+      where: { id, userId: rh.userId },
+      select: { id: true },
+    });
+    if (!template) {
+      return NextResponse.json({ error: 'Template não encontrado' }, { status: 404 });
+    }
+
+    await excluirTemplateEAtribuicoes(id, rh.userId);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error('[DELETE /api/tarefas/templates/[id]]', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }
