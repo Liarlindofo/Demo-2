@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Download, Calendar, User, TrendingUp, AlertCircle, CheckCircle, AlertTriangle, Printer } from "lucide-react";
 import { CHECKLIST_TOPICS } from "@/lib/checklist-data";
@@ -38,8 +38,10 @@ interface EvaluationDetail {
 export default function ReportPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const user = useUser({ or: 'redirect' });
   const id = params.id as string;
+  const filterCategoryName = searchParams.get('categoryName');
   
   const [evaluation, setEvaluation] = useState<EvaluationDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -131,7 +133,23 @@ export default function ReportPage() {
     );
   }
 
-  const percentage = evaluation.totalScore;
+  const percentage = (() => {
+    if (filterCategoryName) {
+      const topic = evaluation.topicScores.find((t) => t.topicName === filterCategoryName);
+      if (topic && topic.maxScore && topic.maxScore > 0) {
+        return (topic.topicScore / topic.maxScore) * 100;
+      }
+    }
+    return evaluation.totalScore;
+  })();
+
+  const visibleTopicScores = filterCategoryName
+    ? evaluation.topicScores.filter((t) => t.topicName === filterCategoryName)
+    : evaluation.topicScores;
+
+  const visibleTopicsForDetails = filterCategoryName
+    ? [{ id: filterCategoryName, name: filterCategoryName, items: [] as { id: string; name: string; weight: number }[] }]
+    : CHECKLIST_TOPICS;
 
   const getStatusIcon = (status: string) => {
     if (status === 'DE ACORDO') return <CheckCircle className="w-5 h-5 text-green-400" />;
@@ -150,11 +168,11 @@ export default function ReportPage() {
       <div className="container mx-auto px-4 max-w-6xl">
         <div className="print:hidden mb-6 flex items-center justify-between">
           <Link
-            href="/checklist/relatorios"
+            href={filterCategoryName ? `/checklist` : `/checklist/relatorios`}
             className="flex items-center gap-2 text-green-400 hover:text-green-300 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
-            Voltar para Relatórios
+            {filterCategoryName ? 'Voltar' : 'Voltar para Relatórios'}
           </Link>
           <div className="flex items-center gap-3">
             <button
@@ -180,7 +198,14 @@ export default function ReportPage() {
         <div ref={reportRef} className="bg-[#141415] rounded-2xl shadow-xl overflow-hidden border border-[#374151]">
           {/* Header */}
           <div className="bg-gradient-to-r from-[#001F05] to-[#374151] text-white p-8">
-            <h1 className="text-4xl font-bold mb-4">Relatório de Avaliação</h1>
+            <h1 className="text-4xl font-bold mb-4">
+              Relatório de Avaliação
+              {filterCategoryName && (
+                <span className="block text-xl font-medium text-green-300 mt-2">
+                  {filterCategoryName}
+                </span>
+              )}
+            </h1>
             <div className="grid md:grid-cols-3 gap-4">
               <div className="flex items-center gap-2">
                 <User className="w-5 h-5" />
@@ -212,8 +237,14 @@ export default function ReportPage() {
           <div className="p-8 border-b border-[#374151]">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-2xl font-bold text-white mb-2">Nota Geral</h2>
-                <p className="text-gray-400">Avaliação geral da pizzaria</p>
+                <h2 className="text-2xl font-bold text-white mb-2">
+                  {filterCategoryName ? 'Nota da Categoria' : 'Nota Geral'}
+                </h2>
+                <p className="text-gray-400">
+                  {filterCategoryName
+                    ? `Avaliação de ${filterCategoryName}`
+                    : 'Avaliação geral da pizzaria'}
+                </p>
               </div>
               <div className="text-right">
                 <div className="flex items-center gap-3">
@@ -230,7 +261,7 @@ export default function ReportPage() {
             
             {/* Topic Scores */}
             <div className="grid md:grid-cols-2 gap-4">
-              {evaluation.topicScores.map((topic) => {
+              {visibleTopicScores.map((topic) => {
                 const topicData = CHECKLIST_TOPICS.find(t => t.name === topic.topicName);
                 const topicMaxScore = topic.maxScore || (topicData?.items.reduce((sum, item) => sum + item.weight, 0) || 100);
                 const topicPercentage = (topic.topicScore / topicMaxScore) * 100;
@@ -260,7 +291,7 @@ export default function ReportPage() {
             <h2 className="text-2xl font-bold text-white mb-6">Itens que Precisam de Atenção</h2>
             <p className="text-gray-400 mb-6">Itens marcados como "PARCIAL" ou "FORA DO PADRÃO"</p>
             <div className="space-y-8">
-              {CHECKLIST_TOPICS.map((topic) => {
+              {visibleTopicsForDetails.map((topic) => {
                 const topicItems = evaluation.itemScores.filter(
                   item => item.topicName === topic.name && 
                   (item.status === 'PARCIAL' || item.status === 'FORA DO PADRÃO')

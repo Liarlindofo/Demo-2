@@ -3,8 +3,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Store, Plus, FileText, TrendingUp, Calendar, Edit, Trash2 } from "lucide-react";
+import { Store, Plus, History, TrendingUp, Calendar, Edit, Trash2 } from "lucide-react";
 import { useUser } from "@stackframe/stack";
+import {
+  StoreFlowModals,
+  type ChecklistCategoryOption,
+} from "../../components/StoreFlowModals";
 
 interface StoreData {
   id: string;
@@ -38,6 +42,10 @@ export default function StoreDetailPage() {
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showMaintenanceAlert, setShowMaintenanceAlert] = useState(false);
+  const [modalStep, setModalStep] = useState<"action" | "category" | null>(null);
+  const [modalAction, setModalAction] = useState<"new" | "history" | null>(null);
+  const [categories, setCategories] = useState<ChecklistCategoryOption[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -103,6 +111,49 @@ export default function StoreDetailPage() {
     checkAndAdd(store.lastPestControl, 'Dedetização', threeMonthsInDays, '3 meses');
 
     return alerts;
+  };
+
+  const fetchCategories = async () => {
+    setLoadingCategories(true);
+    try {
+      const res = await fetch("/api/checklist/template");
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(Array.isArray(data) ? data : []);
+      }
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
+
+  const openFlow = (action?: "new" | "history") => {
+    if (action) {
+      setModalAction(action);
+      setModalStep("category");
+    } else {
+      setModalAction(null);
+      setModalStep("action");
+    }
+    if (categories.length === 0) fetchCategories();
+  };
+
+  const closeFlow = () => {
+    setModalStep(null);
+    setModalAction(null);
+  };
+
+  const handleSelectCategory = (category: ChecklistCategoryOption) => {
+    if (!store) return;
+    if (modalAction === "new") {
+      router.push(
+        `/checklist/nova-avaliacao?storeId=${store.id}&categoryId=${category.id}`,
+      );
+    } else {
+      router.push(
+        `/checklist/loja/${store.id}/historico?categoryId=${category.id}&categoryName=${encodeURIComponent(category.name)}`,
+      );
+    }
+    closeFlow();
   };
 
   const fetchStoreDetails = async () => {
@@ -174,6 +225,27 @@ export default function StoreDetailPage() {
 
   return (
     <div className="min-h-screen bg-black text-white">
+      {store && (
+        <StoreFlowModals
+          storeName={store.name}
+          step={modalStep}
+          action={modalAction}
+          categories={categories}
+          loadingCategories={loadingCategories}
+          onClose={closeFlow}
+          onSelectAction={(action) => {
+            setModalAction(action);
+            setModalStep("category");
+            if (categories.length === 0) fetchCategories();
+          }}
+          onSelectCategory={handleSelectCategory}
+          onBack={() => {
+            setModalStep("action");
+            setModalAction(null);
+          }}
+        />
+      )}
+
       {/* Modal de Alerta de Manutenções */}
       {showMaintenanceAlert && maintenanceAlerts.length > 0 && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
@@ -228,7 +300,10 @@ export default function StoreDetailPage() {
 
             <div className="flex gap-3">
               <button
-                onClick={() => router.push(`/checklist/nova-avaliacao?storeId=${store.id}`)}
+                onClick={() => {
+                  setShowMaintenanceAlert(false);
+                  openFlow("new");
+                }}
                 className="flex-1 bg-[#001F05] text-white py-4 rounded-xl font-semibold hover:bg-[#001F05]/80 transition-all"
               >
                 Iniciar Nova Avaliação
@@ -259,7 +334,7 @@ export default function StoreDetailPage() {
                 <h1 className="text-3xl font-bold text-white">{store.name}</h1>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => router.push(`/checklist/loja/${store.id}/editar`)}
                 className="flex items-center gap-2 bg-[#0f0f10] border-2 border-[#374151] text-gray-300 px-6 py-3 rounded-xl hover:border-[#001F05] hover:text-green-400 transition-all font-semibold"
@@ -268,11 +343,18 @@ export default function StoreDetailPage() {
                 Editar
               </button>
               <button
-                onClick={() => router.push(`/checklist/nova-avaliacao?storeId=${store.id}`)}
+                onClick={() => openFlow("new")}
                 className="flex items-center gap-2 bg-[#001F05] text-white px-6 py-3 rounded-xl hover:bg-[#001F05]/80 transition-all font-semibold"
               >
                 <Plus className="w-5 h-5" />
                 Nova Avaliação
+              </button>
+              <button
+                onClick={() => openFlow("history")}
+                className="flex items-center gap-2 bg-[#0f0f10] border-2 border-[#374151] text-gray-300 px-6 py-3 rounded-xl hover:border-blue-500/40 hover:text-blue-400 transition-all font-semibold"
+              >
+                <History className="w-5 h-5" />
+                Verificar Histórico
               </button>
             </div>
           </div>
@@ -300,75 +382,80 @@ export default function StoreDetailPage() {
         </div>
 
         <div className="bg-[#141415] rounded-2xl p-8 shadow-lg border border-[#374151]">
-          <div className="flex items-center gap-3 mb-6">
-            <TrendingUp className="w-6 h-6 text-green-400" />
-            <h2 className="text-2xl font-bold text-white">Histórico de Avaliações</h2>
+          <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+            <div className="flex items-center gap-3">
+              <TrendingUp className="w-6 h-6 text-green-400" />
+              <h2 className="text-2xl font-bold text-white">Avaliações por categoria</h2>
+            </div>
+            <button
+              onClick={() => openFlow("history")}
+              className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 font-medium"
+            >
+              <History className="w-4 h-4" />
+              Ver histórico por categoria
+            </button>
           </div>
 
+          <p className="text-gray-400 text-sm mb-6">
+            Cada categoria é avaliada separadamente. Use &quot;Nova Avaliação&quot; ou
+            &quot;Verificar Histórico&quot; e escolha a categoria desejada.
+          </p>
+
           {evaluations.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-[#0f0f10] rounded-full flex items-center justify-center mx-auto mb-4 border border-[#374151]">
-                <FileText className="w-8 h-8 text-gray-400" />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">Nenhuma avaliação ainda</h3>
-              <p className="text-gray-400 mb-6">Crie a primeira avaliação para esta loja</p>
+            <div className="text-center py-10 border border-dashed border-[#374151] rounded-xl">
+              <h3 className="text-lg font-bold text-white mb-2">Nenhuma avaliação ainda</h3>
+              <p className="text-gray-400 mb-6">Comece escolhendo uma categoria</p>
               <button
-                onClick={() => router.push(`/checklist/nova-avaliacao?storeId=${store.id}`)}
-                className="inline-flex items-center gap-2 bg-[#001F05] text-white px-6 py-3 rounded-xl hover:bg-[#001F05]/80 transition-all font-semibold"
+                onClick={() => openFlow("new")}
+                className="inline-flex items-center gap-2 bg-[#001F05] text-white px-6 py-3 rounded-xl hover:bg-[#001F05]/80 font-semibold"
               >
                 <Plus className="w-5 h-5" />
-                Criar Primeira Avaliação
+                Nova Avaliação
               </button>
             </div>
           ) : (
             <div className="space-y-4">
-              {evaluations.map((evaluation) => (
+              {evaluations.slice(0, 5).map((evaluation) => (
                 <div
                   key={evaluation.id}
-                  className="flex items-center justify-between p-4 border border-[#374151] rounded-xl hover:border-[#001F05] hover:shadow-md transition-all bg-[#0f0f10]"
+                  className="flex items-center justify-between p-4 border border-[#374151] rounded-xl bg-[#0f0f10]"
                 >
-                  <Link
-                    href={`/checklist/relatorio/${evaluation.id}`}
-                    className="flex items-center gap-4 flex-1"
-                  >
-                    <div className="w-12 h-12 bg-[#001F05] rounded-lg flex items-center justify-center hover:bg-[#001F05]/80 transition-colors">
-                      <FileText className="w-6 h-6 text-green-400" />
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-[#001F05] rounded-lg flex items-center justify-center">
+                      <Calendar className="w-6 h-6 text-green-400" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        <p className="font-semibold text-white">
-                          {new Date(evaluation.evaluationDate).toLocaleDateString("pt-BR")}
-                        </p>
-                      </div>
-                      <p className="text-sm text-gray-400">Supervisor: {evaluation.supervisorName}</p>
+                      <p className="font-semibold text-white">
+                        {new Date(evaluation.evaluationDate).toLocaleDateString("pt-BR")}
+                      </p>
+                      <p className="text-sm text-gray-400">
+                        Supervisor: {evaluation.supervisorName}
+                      </p>
                     </div>
-                  </Link>
+                  </div>
                   <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-green-400">{evaluation.totalScore.toFixed(1)}%</p>
-                    </div>
+                    <p className="text-2xl font-bold text-green-400">
+                      {evaluation.totalScore.toFixed(1)}%
+                    </p>
                     {deleteConfirm === evaluation.id ? (
-                      <div className="flex flex-col gap-2">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleDeleteEvaluation(evaluation.id)}
-                            className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-semibold"
-                          >
-                            Confirmar
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirm(null)}
-                            className="px-3 py-1 bg-[#374151] text-gray-300 rounded-lg hover:bg-[#374151]/80 transition-colors text-sm font-semibold"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleDeleteEvaluation(evaluation.id)}
+                          className="px-3 py-1 bg-red-600 text-white rounded-lg text-sm font-semibold"
+                        >
+                          Confirmar
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm(null)}
+                          className="px-3 py-1 bg-[#374151] text-gray-300 rounded-lg text-sm"
+                        >
+                          Cancelar
+                        </button>
                       </div>
                     ) : (
                       <button
                         onClick={() => setDeleteConfirm(evaluation.id)}
-                        className="p-2 hover:bg-red-500/10 rounded-lg transition-colors"
+                        className="p-2 hover:bg-red-500/10 rounded-lg"
                         title="Excluir avaliação"
                       >
                         <Trash2 className="w-5 h-5 text-gray-400 hover:text-red-400" />
@@ -377,6 +464,14 @@ export default function StoreDetailPage() {
                   </div>
                 </div>
               ))}
+              {evaluations.length > 5 && (
+                <button
+                  onClick={() => openFlow("history")}
+                  className="w-full py-3 text-sm text-blue-400 hover:text-blue-300 border border-[#374151] rounded-xl"
+                >
+                  Ver histórico completo por categoria →
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
 import { CHECKLIST_TOPICS } from '@/lib/checklist-data';
@@ -15,15 +15,18 @@ import { CHECKLIST_TOPICS } from '@/lib/checklist-data';
  * Shape de retorno (compatível com ChecklistTopic + fotoObrigatoria):
  * [{ id, name, items: [{ id, name, weight, fotoObrigatoria }] }]
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const stackUser = await stackServerApp.getUser({ or: 'return-null' });
     if (!stackUser) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
 
+    const categoryId = request.nextUrl.searchParams.get('categoryId');
+
     const categories = await prisma.checklistCategory.findMany({
       orderBy: { ordem: 'asc' },
+      ...(categoryId ? { where: { id: categoryId } } : {}),
       include: {
         itens: {
           where:   { ativo: true },
@@ -34,7 +37,7 @@ export async function GET() {
 
     // Fallback: banco vazio → usa array estático (seed ainda não rodou)
     if (categories.length === 0) {
-      const fallback = CHECKLIST_TOPICS.map((t) => ({
+      let fallback = CHECKLIST_TOPICS.map((t) => ({
         id:    t.id,
         name:  t.name,
         items: t.items.map((i) => ({
@@ -44,6 +47,9 @@ export async function GET() {
           fotoObrigatoria: false,
         })),
       }));
+      if (categoryId) {
+        fallback = fallback.filter((t) => t.id === categoryId);
+      }
       return NextResponse.json(fallback);
     }
 

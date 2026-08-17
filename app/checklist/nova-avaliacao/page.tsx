@@ -39,13 +39,12 @@ export default function NewEvaluationPage() {
   const searchParams = useSearchParams();
   const user = useUser({ or: 'redirect' });
   const storeIdParam = searchParams.get('storeId');
+  const categoryIdParam = searchParams.get('categoryId');
   
-  const [checklistTopics, setChecklistTopics] = useState<ChecklistTopicDynamic[]>(
-    CHECKLIST_TOPICS.map((t) => ({
-      ...t,
-      items: t.items.map((i) => ({ ...i, fotoObrigatoria: false })),
-    }))
-  );
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(categoryIdParam);
+  const [selectedCategoryName, setSelectedCategoryName] = useState<string>('');
+  const [checklistTopics, setChecklistTopics] = useState<ChecklistTopicDynamic[]>([]);
+  const [templateReady, setTemplateReady] = useState(false);
   const [currentStep, setCurrentStep] = useState<'info' | 'checklist' | 'final'>('info');
   const [stores, setStores] = useState<StoreData[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(storeIdParam);
@@ -68,11 +67,42 @@ export default function NewEvaluationPage() {
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
   useEffect(() => {
-    fetch('/api/checklist/template')
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (data?.length) setChecklistTopics(data); })
-      .catch(() => {/* mantém o fallback estático */});
-  }, []);
+    if (!categoryIdParam) {
+      router.replace('/checklist');
+      return;
+    }
+
+    const url = `/api/checklist/template?categoryId=${encodeURIComponent(categoryIdParam)}`;
+    fetch(url)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.length) {
+          setChecklistTopics(data);
+          setSelectedCategoryId(data[0].id);
+          setSelectedCategoryName(data[0].name);
+        } else {
+          const fallback = CHECKLIST_TOPICS.filter((t) => t.id === categoryIdParam).map((t) => ({
+            ...t,
+            items: t.items.map((i) => ({ ...i, fotoObrigatoria: false })),
+          }));
+          if (fallback.length) {
+            setChecklistTopics(fallback);
+            setSelectedCategoryName(fallback[0].name);
+          }
+        }
+      })
+      .catch(() => {
+        const fallback = CHECKLIST_TOPICS.filter((t) => t.id === categoryIdParam).map((t) => ({
+          ...t,
+          items: t.items.map((i) => ({ ...i, fotoObrigatoria: false })),
+        }));
+        if (fallback.length) {
+          setChecklistTopics(fallback);
+          setSelectedCategoryName(fallback[0].name);
+        }
+      })
+      .finally(() => setTemplateReady(true));
+  }, [categoryIdParam, router]);
 
   useEffect(() => {
     if (user) {
@@ -527,8 +557,12 @@ export default function NewEvaluationPage() {
       alert('Por favor, preencha todos os campos');
       return;
     }
+    if (checklistTopics.length === 0) {
+      alert('Nenhuma pergunta encontrada para esta categoria.');
+      return;
+    }
     setCurrentStep('checklist');
-    setExpandedTopics(new Set([checklistTopics[0]?.id ?? '']));
+    setExpandedTopics(new Set(checklistTopics.map((t) => t.id)));
   };
 
   const handleFinishChecklist = () => {
@@ -573,6 +607,8 @@ export default function NewEvaluationPage() {
       storeName,
       supervisorName,
       evaluationDate,
+      categoryId: selectedCategoryId || categoryIdParam || undefined,
+      categoryName: selectedCategoryName || checklistTopics[0]?.name,
       topics: topicsData,
       totalScore: percentageScore,
       maxTotalScore,
@@ -627,7 +663,9 @@ export default function NewEvaluationPage() {
         console.warn('Não foi possível deletar rascunho:', e);
       }
 
-      router.push(`/checklist/relatorio/${result.evaluationId}`);
+      router.push(
+        `/checklist/relatorio/${result.evaluationId}?categoryName=${encodeURIComponent(selectedCategoryName || checklistTopics[0]?.name || '')}`,
+      );
     } catch (error) {
       console.error('Error saving evaluation:', error);
       
@@ -656,6 +694,27 @@ export default function NewEvaluationPage() {
 
   if (!user) return null;
 
+  if (!categoryIdParam || (templateReady && checklistTopics.length === 0)) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center text-white">
+        <div className="text-center px-4">
+          <p className="text-gray-400 mb-4">Categoria não encontrada ou sem perguntas.</p>
+          <Link href="/checklist" className="text-green-400 hover:text-green-300">
+            ← Voltar ao início
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!templateReady) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#001F05] border-t-transparent" />
+      </div>
+    );
+  }
+
   if (currentStep === 'info') {
     return (
       <div className="min-h-screen bg-black text-white py-8">
@@ -669,10 +728,20 @@ export default function NewEvaluationPage() {
           </Link>
 
           <div className="bg-[#141415] rounded-2xl shadow-xl p-8 border border-[#374151]">
-            <h1 className="text-3xl font-bold text-white mb-6">Nova Avaliação</h1>
+            <h1 className="text-3xl font-bold text-white mb-2">Nova Avaliação</h1>
+            {selectedCategoryName && (
+              <p className="text-green-400 font-medium mb-6">{selectedCategoryName}</p>
+            )}
             
             <div className="space-y-6">
-              {stores.length > 0 && (
+              {stores.length > 0 && storeIdParam && (
+                <div className="bg-[#0f0f10] border border-[#374151] rounded-xl px-4 py-3">
+                  <p className="text-xs text-gray-500 mb-1">Loja</p>
+                  <p className="font-semibold text-white">{storeName || '—'}</p>
+                </div>
+              )}
+
+              {stores.length > 0 && !storeIdParam && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-300 mb-2">
                     Selecione a Loja
@@ -693,6 +762,7 @@ export default function NewEvaluationPage() {
                 </div>
               )}
 
+              {!storeIdParam && (
               <div>
                 <label className="block text-sm font-semibold text-gray-300 mb-2">
                   Nome da Loja *
@@ -709,6 +779,7 @@ export default function NewEvaluationPage() {
                   placeholder="Ex: Platefull Centro"
                 />
               </div>
+              )}
 
               <div>
                 <label className="block text-sm font-semibold text-gray-300 mb-2">
@@ -832,6 +903,9 @@ export default function NewEvaluationPage() {
               <div>
                 <h2 className="text-2xl font-bold text-white">{storeName}</h2>
                 <p className="text-gray-400">Supervisor: {supervisorName}</p>
+                {selectedCategoryName && (
+                  <p className="text-green-400 text-sm mt-1">{selectedCategoryName}</p>
+                )}
               </div>
               <div className="text-right">
                 <div className="text-3xl font-bold text-green-400">

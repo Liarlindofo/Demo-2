@@ -44,11 +44,20 @@ export async function GET(
       return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 });
     }
 
+    const categoryName = request.nextUrl.searchParams.get('categoryName');
+
     // Buscar avaliações da loja
     const evaluations = await prisma.evaluation.findMany({
       where: {
         storeId: id,
-        userId: user.id
+        userId: user.id,
+        ...(categoryName
+          ? {
+              topicScores: {
+                some: { topicName: categoryName },
+              },
+            }
+          : {}),
       },
       orderBy: [
         { evaluationDate: 'desc' },
