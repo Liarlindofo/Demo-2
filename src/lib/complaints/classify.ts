@@ -117,8 +117,10 @@ NÃO conte como reclamação:
 - dúvidas comuns sobre cardápio, horário, entrega, status do pedido sem tom de insatisfação;
 - conversas puramente operacionais sem queixa.
 
-Se for reclamação, resuma em 1–2 frases objetivas e indique a data aproximada do problema relatado (YYYY-MM-DD), se identificável no transcript; senão use a data da mensagem de evidência principal.
-Liste evidenciaMessageIds SOMENTE com IDs de mensagens IN (cliente) — priorize imagens/mídia enviadas pelo cliente e trechos de texto do cliente que comprovem a queixa.
+Se for reclamação:
+- Escreva "resumo" como UM parágrafo corrido (3 a 6 frases) com base na TRANSCRIÇÃO COMPLETA — todas as mensagens IN e OUT, em ordem. Inclua contexto do atendimento quando for relevante (ex.: o atendente pediu foto de confirmação, o cliente confirmou/enviou, e só depois reclamou). NÃO resuma apenas as mensagens isoladas de evidência; não invente fatos fora da transcrição.
+- Indique dataOcorrencia (YYYY-MM-DD) se identificável; senão use a data da mensagem IN principal da queixa.
+- evidenciaMessageIds: SOMENTE IDs de mensagens IN. Se o cliente enviou foto do problema, inclua o id dessa imagem. Textos IN só como apoio.
 
 Responda APENAS JSON válido, sem markdown:
 {"eReclamacao":true|false,"resumo":string|null,"dataOcorrencia":"YYYY-MM-DD"|null,"evidenciaMessageIds":string[]}${reforco}`;
@@ -148,8 +150,8 @@ export async function classifyConversation(params: {
 
   const content = await callComplaintsOpenRouter({
     system: buildSystemPrompt(palavrasChave),
-    user: `Classifique a conversa abaixo.\n\n${transcript}`,
-    maxTokens: 600,
+    user: `Classifique a conversa COMPLETA abaixo (todas as mensagens, em ordem).\n\n${transcript}`,
+    maxTokens: 900,
     temperature: 0.1,
   });
 
@@ -200,7 +202,7 @@ export async function classifyConversation(params: {
 
   const resumo =
     typeof parsed.resumo === 'string' && parsed.resumo.trim()
-      ? parsed.resumo.trim().slice(0, 2000)
+      ? parsed.resumo.trim().slice(0, 4000)
       : 'Reclamação identificada (sem resumo detalhado da IA).';
 
   const anchor =
@@ -214,4 +216,64 @@ export async function classifyConversation(params: {
     dataOcorrencia: parseOccurrenceDate(parsed.dataOcorrencia, anchor),
     evidenciaMessageIds,
   };
+}
+
+/**
+ * Reescreve o parágrafo da ata a partir da transcrição COMPLETA (IN+OUT).
+ * Também escolhe no máximo UMA foto IN como prova visual.
+ */
+export async function writeAtaNarrative(params: {
+  transcript: string;
+  candidatePhotoIds: string[];
+  fallbackResumo: string;
+}): Promise<{ resumo: string; fotoMessageId: string | null }> {
+  const { transcript, candidatePhotoIds, fallbackResumo } = params;
+  const photoHint =
+    candidatePhotoIds.length > 0
+      ? `IDs de fotos enviadas pelo cliente (escolha no máximo UMA — a que melhor mostra o problema relatado; se empatar, a primeira da lista): ${candidatePhotoIds.join(', ')}`
+      : 'O cliente não enviou foto nesta conversa. fotoMessageId deve ser null.';
+
+  try {
+    const content = await callComplaintsOpenRouter({
+      system: `Você redige o parágrafo de uma ata de reclamações de restaurante/delivery.
+
+REGRAS:
+- Leia a TRANSCRIÇÃO COMPLETA (mensagens IN e OUT, em ordem). O resumo NÃO pode se basear só em trechos isolados de evidência.
+- Escreva UM parágrafo corrido em português (3 a 6 frases) explicando o porquê da reclamação e o que aconteceu no atendimento.
+- Inclua contexto relevante do atendente/IA quando ajudar a entender (ex.: pedido de foto de confirmação, resposta positiva do cliente, e a reclamação em seguida).
+- A queixa em si é o que o CLIENTE disse ou mostrou (IN). Não invente fatos fora da transcrição.
+- Sem lista, bullets ou citações entre aspas de mensagens isoladas.
+
+Responda APENAS JSON:
+{"resumo":"parágrafo...","fotoMessageId":"id"|null}`,
+      user: `${photoHint}\n\nTranscrição completa:\n\n${transcript}`,
+      maxTokens: 900,
+      temperature: 0.2,
+    });
+
+    const parsed = extractJsonObject(content) as {
+      resumo?: unknown;
+      fotoMessageId?: unknown;
+    };
+
+    const resumo =
+      typeof parsed.resumo === 'string' && parsed.resumo.trim()
+        ? parsed.resumo.trim().slice(0, 4000)
+        : fallbackResumo;
+
+    const rawFoto =
+      typeof parsed.fotoMessageId === 'string' ? parsed.fotoMessageId.trim() : '';
+    const fotoMessageId = candidatePhotoIds.includes(rawFoto) ? rawFoto : null;
+
+    return {
+      resumo,
+      fotoMessageId: fotoMessageId ?? candidatePhotoIds[0] ?? null,
+    };
+  } catch (err) {
+    console.warn('[complaints/narrative] falha ao reescrever resumo:', err);
+    return {
+      resumo: fallbackResumo,
+      fotoMessageId: candidatePhotoIds[0] ?? null,
+    };
+  }
 }

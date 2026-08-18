@@ -21,10 +21,14 @@ import {
 } from '@/lib/whatsapp-evidence-storage';
 import { saoPauloYmd } from '@/lib/complaints/period';
 import { formatClientHeading, pickClientContactName } from '@/lib/complaints/contact';
+import {
+  buildTranscript,
+  writeAtaNarrative,
+  type ConversationMessage,
+} from '@/lib/complaints/classify';
 
 const MAX_IMAGE_WIDTH = 480;
 const MAX_IMAGE_HEIGHT = 360;
-const MAX_IMAGES_PER_COMPLAINT = 6;
 
 type ThemeItem = {
   tema?: unknown;
@@ -175,77 +179,31 @@ async function downloadEvidenceImage(
   return { data: buf, type: imageTypeFromPath(path) };
 }
 
-async function evidenceParagraphs(messageIds: string[], userId: string): Promise<Paragraph[]> {
-  if (!messageIds.length) return [muted('Sem evidências anexadas.')];
-
-  const messages = await prisma.whatsAppMessage.findMany({
-    where: {
-      id: { in: messageIds },
-      userId,
-      direction: 'IN',
-      messageType: { in: ['image', 'sticker'] },
-      mediaUrl: { not: null },
-    },
-    select: { id: true, mediaUrl: true, messageType: true },
-  });
-
-  const byId = new Map(messages.map((m) => [m.id, m]));
-  const ordered = messageIds.map((id) => byId.get(id)).filter(Boolean).slice(0, MAX_IMAGES_PER_COMPLAINT);
-
-  if (ordered.length === 0) {
-    // Mostra trechos de texto das evidências se não houver imagem
-    const texts = await prisma.whatsAppMessage.findMany({
-      where: { id: { in: messageIds }, userId, direction: 'IN' },
-      select: { textContent: true, messageType: true, direction: true },
-      take: 5,
-    });
-    const lines = texts
-      .map((t) => {
-        const raw = (t.textContent || '').trim();
-        if (!raw || raw.length > 300 || raw.startsWith('/9j/') || raw.startsWith('data:')) {
-          return t.messageType !== 'text' ? `[${t.messageType}]` : null;
-        }
-        return `"${raw}"`;
-      })
-      .filter(Boolean);
-    if (!lines.length) return [muted('Evidências sem mídia visual disponível.')];
-    return lines.map((l) => muted(`• ${l}`));
-  }
-
-  const out: Paragraph[] = [muted('Evidências (imagens):')];
-  for (const msg of ordered) {
-    if (!msg?.mediaUrl) continue;
-    try {
-      const img = await downloadEvidenceImage(msg.mediaUrl);
-      if (!img) {
-        out.push(muted('(imagem indisponível no storage)'));
-        continue;
-      }
-      const natural = readImageSize(img.data) ?? { width: MAX_IMAGE_WIDTH, height: MAX_IMAGE_HEIGHT };
-      const size = fitSize(natural.width, natural.height);
-      out.push(
-        new Paragraph({
-          children: [
-            new ImageRun({
-              type: img.type,
-              data: img.data,
-              transformation: size,
-              altText: {
-                title: 'Evidência',
-                description: 'Foto anexada pelo cliente como evidência da reclamação',
-                name: msg.id,
-              },
-            }),
-          ],
-          spacing: { before: 80, after: 160 },
+async function embedSinglePhoto(mediaUrl: string): Promise<Paragraph | null> {
+  try {
+    const img = await downloadEvidenceImage(mediaUrl);
+    if (!img) return null;
+    const natural = readImageSize(img.data) ?? { width: MAX_IMAGE_WIDTH, height: MAX_IMAGE_HEIGHT };
+    const size = fitSize(natural.width, natural.height);
+    return new Paragraph({
+      children: [
+        new ImageRun({
+          type: img.type,
+          data: img.data,
+          transformation: size,
+          altText: {
+            title: 'Foto',
+            description: 'Foto enviada pelo cliente',
+            name: 'foto-reclamacao',
+          },
         }),
-      );
-    } catch (err) {
-      console.warn('[generate-ata] falha ao embutir imagem:', err);
-      out.push(muted('(falha ao embutir imagem)'));
-    }
+      ],
+      spacing: { before: 80, after: 160 },
+    });
+  } catch (err) {
+    console.warn('[generate-ata] falha ao embutir imagem:', err);
+    return null;
   }
-  return out;
 }
 
 function comparisonSection(
@@ -349,30 +307,78 @@ export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buf
     );
 
     const contactIds = [...new Set(run.complaints.map((c) => c.contactId))];
-    const inNameRows =
+    const periodMessages =
       contactIds.length > 0
         ? await prisma.whatsAppMessage.findMany({
             where: {
               userId: run.userId,
               contactId: { in: contactIds },
-              direction: 'IN',
               timestamp: { gte: run.periodStart, lte: run.periodEnd },
-              contactName: { not: null },
             },
-            select: { contactId: true, contactName: true, timestamp: true },
+            select: {
+              id: true,
+              contactId: true,
+              contactName: true,
+              direction: true,
+              messageType: true,
+              textContent: true,
+              sentByAgent: true,
+              mediaUrl: true,
+              timestamp: true,
+            },
             orderBy: { timestamp: 'asc' },
           })
         : [];
+
+    const byContact = new Map<string, typeof periodMessages>();
     const clientNameByContact = new Map<string, string>();
-    for (const row of inNameRows) {
-      if (clientNameByContact.has(row.contactId)) continue;
-      const name = pickClientContactName([{ direction: 'IN', contactName: row.contactName }]);
-      if (name) clientNameByContact.set(row.contactId, name);
+    for (const row of periodMessages) {
+      const list = byContact.get(row.contactId) ?? [];
+      list.push(row);
+      byContact.set(row.contactId, list);
+      if (!clientNameByContact.has(row.contactId)) {
+        const name = pickClientContactName([{ direction: row.direction, contactName: row.contactName }]);
+        if (name) clientNameByContact.set(row.contactId, name);
+      }
     }
 
     let idx = 0;
     for (const c of run.complaints) {
       idx += 1;
+      const convRows = byContact.get(c.contactId) ?? [];
+      const convMessages: ConversationMessage[] = convRows.map((m) => ({
+        id: m.id,
+        direction: m.direction,
+        messageType: m.messageType,
+        textContent: m.textContent,
+        sentByAgent: m.sentByAgent,
+        timestamp: m.timestamp,
+      }));
+
+      const evidenceSet = new Set(c.evidenciaMessageIds);
+      const photoRows = convRows.filter(
+        (m) =>
+          m.direction === 'IN' &&
+          (m.messageType === 'image' || m.messageType === 'sticker') &&
+          !!m.mediaUrl,
+      );
+      const preferredPhotos = photoRows.filter((m) => evidenceSet.has(m.id));
+      const orderedPhotos = [...preferredPhotos, ...photoRows.filter((m) => !evidenceSet.has(m.id))];
+      const candidatePhotoIds = [...new Set(orderedPhotos.map((m) => m.id))];
+
+      const narrative = await writeAtaNarrative({
+        transcript: buildTranscript(convMessages),
+        candidatePhotoIds,
+        fallbackResumo: c.resumo,
+      });
+
+      if (narrative.resumo !== c.resumo) {
+        await prisma.complaint.update({
+          where: { id: c.id },
+          data: { resumo: narrative.resumo },
+        });
+      }
+
       const cliente = formatClientHeading(
         clientNameByContact.get(c.contactId) ?? c.contactName,
         c.contactId,
@@ -387,9 +393,15 @@ export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buf
         }),
       );
       children.push(muted(`Data aproximada: ${formatDatePt(c.dataOcorrencia)}`));
-      children.push(body(c.resumo));
-      const imgs = await evidenceParagraphs(c.evidenciaMessageIds, run.userId);
-      children.push(...imgs);
+
+      const fotoId = narrative.fotoMessageId;
+      const fotoRow = fotoId ? orderedPhotos.find((m) => m.id === fotoId) : undefined;
+      if (fotoRow?.mediaUrl) {
+        const photoPara = await embedSinglePhoto(fotoRow.mediaUrl);
+        if (photoPara) children.push(photoPara);
+      }
+
+      children.push(body(narrative.resumo));
     }
   }
 

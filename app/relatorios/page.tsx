@@ -98,6 +98,7 @@ interface ComplaintConversationMessage {
   speaker: 'CLIENTE' | 'ATENDENTE' | 'IA';
   messageType: string;
   snippet: string;
+  hasMedia?: boolean;
   timestamp: string;
 }
 
@@ -222,6 +223,51 @@ function Modal({
         {children}
       </div>
     </div>
+  );
+}
+
+function ConversationMedia({
+  messageId,
+  messageType,
+}: {
+  messageId: string;
+  messageType: string;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/whatsapp-messages/${messageId}/media`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.url) {
+          if (!cancelled) setFailed(true);
+          return;
+        }
+        if (!cancelled) setUrl(data.url as string);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [messageId]);
+
+  if (failed) {
+    return <p className="text-xs text-gray-500 mt-1">[{messageType} indisponível]</p>;
+  }
+  if (!url) {
+    return <Loader2 className="w-4 h-4 text-gray-500 animate-spin mt-2" />;
+  }
+  return (
+    <img
+      src={url}
+      alt="Foto da conversa"
+      className="mt-2 max-h-72 w-auto max-w-full rounded-lg border border-[#2a2a2e]"
+    />
   );
 }
 
@@ -1281,13 +1327,24 @@ function RelatoriosContent() {
                           <span className="text-[11px] text-gray-500">
                             {ptDateTime(m.timestamp)}
                           </span>
-                          {m.messageType !== 'text' && (
+                          {m.messageType !== 'text' && !m.hasMedia && (
                             <span className="text-[11px] text-gray-500">[{m.messageType}]</span>
                           )}
                         </div>
-                        <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">
-                          {m.snippet}
-                        </p>
+                        {m.hasMedia ? (
+                          <>
+                            <ConversationMedia messageId={m.id} messageType={m.messageType} />
+                            {m.snippet && !/^\[.+\]$/.test(m.snippet) && (
+                              <p className="text-sm text-gray-200 whitespace-pre-wrap break-words mt-1.5">
+                                {m.snippet}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">
+                            {m.snippet}
+                          </p>
+                        )}
                       </div>
                     );
                   })}

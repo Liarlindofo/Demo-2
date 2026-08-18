@@ -61,6 +61,7 @@ export async function GET(
       messageType: true,
       textContent: true,
       contactName: true,
+      mediaUrl: true,
       timestamp: true,
     },
     orderBy: { timestamp: 'asc' },
@@ -85,6 +86,7 @@ export async function GET(
       speaker: speakerFromMessage(m.direction, m.sentByAgent),
       messageType: m.messageType,
       snippet: messageSnippet(m.textContent, m.messageType),
+      hasMedia: Boolean(m.mediaUrl) && (m.messageType === 'image' || m.messageType === 'sticker'),
       timestamp: m.timestamp,
     })),
   });
