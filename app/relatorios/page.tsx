@@ -17,6 +17,11 @@ import {
   Clock,
   Download,
   MessageSquareWarning,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import ToolProtection from '@/components/auth/ToolProtection';
 import { SystemTool } from '@/types/admin';
@@ -64,6 +69,34 @@ interface ComplaintRunRow {
   ataStoragePath: string | null;
   executadoEm: string;
   erro: string | null;
+  confirmadasCount?: number;
+}
+
+interface ComplaintEvidence {
+  id: string;
+  messageType: string;
+  snippet: string;
+  timestamp: string;
+}
+
+interface ComplaintReviewItem {
+  id: string;
+  contactId: string;
+  contactName: string | null;
+  resumo: string;
+  dataOcorrencia: string;
+  confirmadoPorHumano: boolean;
+  evidencias: ComplaintEvidence[];
+}
+
+interface ComplaintReviewData {
+  id: string;
+  periodStart: string;
+  status: string;
+  totalReclamacoes: number | null;
+  confirmadasCount: number;
+  hasAta: boolean;
+  complaints: ComplaintReviewItem[];
 }
 
 interface ReportForm {
@@ -186,6 +219,11 @@ function RelatoriosContent() {
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [reviewRunId, setReviewRunId] = useState<string | null>(null);
+  const [reviewData, setReviewData] = useState<ComplaintReviewData | null>(null);
+  const [loadingReview, setLoadingReview] = useState(false);
+  const [togglingComplaintId, setTogglingComplaintId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [showModal, setShowModal] = useState(false);
@@ -274,6 +312,93 @@ function RelatoriosContent() {
       alert('Falha de rede ao baixar a ata.');
     } finally {
       setDownloadingId(null);
+    }
+  }
+
+  async function openReview(runId: string) {
+    if (reviewRunId === runId) {
+      setReviewRunId(null);
+      setReviewData(null);
+      return;
+    }
+
+    setReviewRunId(runId);
+    setLoadingReview(true);
+    setReviewData(null);
+    try {
+      const res = await fetch(`/api/reports/complaints/${runId}/review`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || 'Não foi possível carregar a revisão.');
+        setReviewRunId(null);
+        return;
+      }
+      setReviewData(data as ComplaintReviewData);
+    } catch {
+      alert('Falha de rede ao carregar revisão.');
+      setReviewRunId(null);
+    } finally {
+      setLoadingReview(false);
+    }
+  }
+
+  async function toggleComplaintConfirm(complaintId: string, next: boolean) {
+    if (!reviewData) return;
+    setTogglingComplaintId(complaintId);
+    try {
+      const res = await fetch(`/api/reports/complaints/complaints/${complaintId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmadoPorHumano: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || 'Não foi possível salvar.');
+        return;
+      }
+
+      setReviewData((prev) => {
+        if (!prev) return prev;
+        const complaints = prev.complaints.map((c) =>
+          c.id === complaintId ? { ...c, confirmadoPorHumano: next } : c,
+        );
+        const confirmadasCount = complaints.filter((c) => c.confirmadoPorHumano).length;
+        setComplaintRuns((runs) =>
+          runs.map((r) =>
+            r.id === prev.id ? { ...r, confirmadasCount } : r,
+          ),
+        );
+        return { ...prev, complaints, confirmadasCount };
+      });
+    } catch {
+      alert('Falha de rede ao salvar.');
+    } finally {
+      setTogglingComplaintId(null);
+    }
+  }
+
+  async function handleGenerateAta(runId: string) {
+    setGeneratingId(runId);
+    try {
+      const res = await fetch(`/api/reports/complaints/${runId}/document`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || 'Não foi possível gerar a ata.');
+        return;
+      }
+      setComplaintRuns((runs) =>
+        runs.map((r) =>
+          r.id === runId ? { ...r, ataStoragePath: data.ataStoragePath ?? 'generated' } : r,
+        ),
+      );
+      if (reviewData?.id === runId) {
+        setReviewData((prev) => (prev ? { ...prev, hasAta: true } : prev));
+      }
+      alert('Ata gerada com sucesso. Use "Baixar ata" para obter o arquivo.');
+    } catch {
+      alert('Falha de rede ao gerar a ata.');
+    } finally {
+      setGeneratingId(null);
     }
   }
 
@@ -467,8 +592,8 @@ function RelatoriosContent() {
               <MessageSquareWarning className="w-8 h-8 text-amber-400/50" />
               <p className="text-white font-medium">Nenhuma revisão de reclamações ainda</p>
               <p className="text-sm text-gray-500 max-w-md">
-                As atas aparecem aqui após o n8n (ou um teste) chamar o endpoint mensal de
-                classificação.
+                Após a classificação mensal, revise as reclamações detectadas, marque quais
+                entram na ata e gere o documento manualmente.
               </p>
             </div>
           ) : (
@@ -490,12 +615,19 @@ function RelatoriosContent() {
                         Executado em
                       </th>
                       <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">
-                        Ata
+                        Ações
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {complaintRuns.map((run) => (
+                    {complaintRuns.map((run) => {
+                      const canReview =
+                        run.status === 'CONCLUIDO' && (run.totalReclamacoes ?? 0) > 0;
+                      const confirmadas = run.confirmadasCount ?? 0;
+                      const canGenerate = canReview && confirmadas > 0;
+                      const hasAta = Boolean(run.ataStoragePath);
+
+                      return (
                       <tr key={run.id} className="border-b border-[#2a2a2e] last:border-0">
                         <td className="px-4 py-3.5 font-medium text-white">
                           {periodLabel(run.periodStart)}
@@ -505,6 +637,11 @@ function RelatoriosContent() {
                           <span className="text-xs text-gray-500 ml-1">
                             / {run.totalConversas ?? '—'} conversas
                           </span>
+                          {confirmadas > 0 && (
+                            <span className="block text-xs text-green-400/80 mt-0.5">
+                              {confirmadas} na ata
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3.5">
                           <span
@@ -516,26 +653,167 @@ function RelatoriosContent() {
                         <td className="px-4 py-3.5 text-gray-400 text-xs">
                           {ptDateTime(run.executadoEm)}
                         </td>
-                        <td className="px-4 py-3.5 text-right">
-                          <button
-                            type="button"
-                            disabled={run.status !== 'CONCLUIDO' || downloadingId === run.id}
-                            onClick={() => handleDownloadAta(run.id)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                          >
-                            {downloadingId === run.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Download className="w-3.5 h-3.5" />
+                        <td className="px-4 py-3.5">
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
+                            {canReview && (
+                              <button
+                                type="button"
+                                onClick={() => openReview(run.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1a1a1e] text-gray-200 border border-[#2a2a2e] hover:border-amber-500/30 transition-colors"
+                              >
+                                {reviewRunId === run.id ? (
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                )}
+                                Revisar
+                              </button>
                             )}
-                            Baixar ata
-                          </button>
+                            {canReview && (
+                              <button
+                                type="button"
+                                disabled={!canGenerate || generatingId === run.id}
+                                title={
+                                  canGenerate
+                                    ? hasAta
+                                      ? 'Regenerar ata com as marcações atuais'
+                                      : 'Gerar ata com reclamações marcadas'
+                                    : 'Marque ao menos uma reclamação na revisão'
+                                }
+                                onClick={() => handleGenerateAta(run.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              >
+                                {generatingId === run.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <FileText className="w-3.5 h-3.5" />
+                                )}
+                                {hasAta ? 'Regenerar ata' : 'Gerar ata'}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              disabled={!hasAta || downloadingId === run.id}
+                              onClick={() => handleDownloadAta(run.id)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1a1a1e] text-gray-300 border border-[#2a2a2e] hover:border-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {downloadingId === run.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Download className="w-3.5 h-3.5" />
+                              )}
+                              Baixar ata
+                            </button>
+                          </div>
                         </td>
                       </tr>
-                    ))}
+                    );
+                    })}
                   </tbody>
                 </table>
               </div>
+
+              {reviewRunId && (
+                <div className="border-t border-[#2a2a2e] p-4 md:p-6 bg-[#0d0d0f]">
+                  {loadingReview ? (
+                    <div className="flex items-center justify-center py-10">
+                      <Loader2 className="w-5 h-5 text-gray-500 animate-spin" />
+                    </div>
+                  ) : reviewData ? (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-semibold text-white">
+                            Revisão — {periodLabel(reviewData.periodStart)}
+                          </h3>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Marque quais reclamações detectadas pela IA entram na ata. Só mensagens
+                            do cliente são usadas como evidência.
+                          </p>
+                        </div>
+                        <p className="text-xs text-amber-300/90">
+                          {reviewData.confirmadasCount} de {reviewData.complaints.length} incluídas
+                        </p>
+                      </div>
+
+                      {reviewData.complaints.length === 0 ? (
+                        <p className="text-sm text-gray-500">Nenhuma reclamação neste run.</p>
+                      ) : (
+                        <ul className="space-y-3">
+                          {reviewData.complaints.map((c) => (
+                            <li
+                              key={c.id}
+                              className="rounded-xl border border-[#2a2a2e] bg-[#111113] p-4"
+                            >
+                              <label className="flex items-start gap-3 cursor-pointer">
+                                <button
+                                  type="button"
+                                  disabled={togglingComplaintId === c.id}
+                                  onClick={() =>
+                                    toggleComplaintConfirm(c.id, !c.confirmadoPorHumano)
+                                  }
+                                  className="mt-0.5 shrink-0 text-amber-400 disabled:opacity-50"
+                                  aria-label={
+                                    c.confirmadoPorHumano
+                                      ? 'Remover da ata'
+                                      : 'Incluir na ata'
+                                  }
+                                >
+                                  {togglingComplaintId === c.id ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                  ) : c.confirmadoPorHumano ? (
+                                    <CheckSquare className="w-5 h-5" />
+                                  ) : (
+                                    <Square className="w-5 h-5 text-gray-500" />
+                                  )}
+                                </button>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-sm font-medium text-white">
+                                      {c.contactName?.trim() || c.contactId}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {new Date(c.dataOcorrencia).toLocaleDateString('pt-BR', {
+                                        timeZone: 'America/Sao_Paulo',
+                                      })}
+                                    </span>
+                                    {c.confirmadoPorHumano && (
+                                      <span className="text-xs text-green-400/90">
+                                        Incluir na ata
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-gray-300 mt-1.5">{c.resumo}</p>
+                                  {c.evidencias.length > 0 && (
+                                    <div className="mt-2 space-y-1">
+                                      <p className="text-xs text-gray-500 uppercase tracking-wide">
+                                        Evidências (cliente)
+                                      </p>
+                                      {c.evidencias.map((ev) => (
+                                        <p
+                                          key={ev.id}
+                                          className="text-xs text-gray-400 pl-2 border-l border-[#2a2a2e]"
+                                        >
+                                          {ev.messageType !== 'text' && (
+                                            <span className="text-amber-400/80 mr-1">
+                                              [{ev.messageType}]
+                                            </span>
+                                          )}
+                                          {ev.snippet}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </label>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           )
         ) : loading ? (

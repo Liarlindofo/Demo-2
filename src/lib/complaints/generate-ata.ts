@@ -181,6 +181,7 @@ async function evidenceParagraphs(messageIds: string[], userId: string): Promise
     where: {
       id: { in: messageIds },
       userId,
+      direction: 'IN',
       messageType: { in: ['image', 'sticker'] },
       mediaUrl: { not: null },
     },
@@ -193,7 +194,7 @@ async function evidenceParagraphs(messageIds: string[], userId: string): Promise
   if (ordered.length === 0) {
     // Mostra trechos de texto das evidências se não houver imagem
     const texts = await prisma.whatsAppMessage.findMany({
-      where: { id: { in: messageIds }, userId },
+      where: { id: { in: messageIds }, userId, direction: 'IN' },
       select: { textContent: true, messageType: true, direction: true },
       take: 5,
     });
@@ -282,7 +283,10 @@ export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buf
     where: { id: reviewRunId },
     include: {
       user: { select: { name: true, fullName: true, email: true } },
-      complaints: { orderBy: { dataOcorrencia: 'asc' } },
+      complaints: {
+        where: { confirmadoPorHumano: true },
+        orderBy: { dataOcorrencia: 'asc' },
+      },
       comparison: true,
     },
   });
@@ -331,7 +335,11 @@ export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buf
   ];
 
   if (run.complaints.length === 0) {
-    children.push(muted('Nenhuma reclamação registrada neste período.'));
+    children.push(
+      muted(
+        'Nenhuma reclamação confirmada para inclusão nesta ata. Revise as reclamações detectadas e marque "Incluir na ata" antes de gerar.',
+      ),
+    );
   } else {
     children.push(
       muted(

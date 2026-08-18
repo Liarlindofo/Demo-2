@@ -11,8 +11,8 @@ const SIGNED_TTL_SECONDS = 3600;
 /**
  * GET /api/reports/complaints/:runId/document
  *
- * Signed URL temporária da ata (.docx). Auth por sessão logada (não ServiceApiKey).
- * Se a ata ainda não existir no storage mas o run está CONCLUIDO, tenta gerar sob demanda.
+ * Signed URL temporária da ata (.docx). Auth por sessão logada.
+ * Só retorna URL se a ata já foi gerada (POST). Não gera automaticamente.
  */
 export async function GET(
   _req: NextRequest,
@@ -23,12 +23,10 @@ export async function GET(
 
   const { runId } = await params;
 
-  let run = await prisma.complaintReviewRun.findFirst({
+  const run = await prisma.complaintReviewRun.findFirst({
     where: { id: runId, userId: dbUser.id },
     select: {
       id: true,
-      userId: true,
-      status: true,
       ataStoragePath: true,
     },
   });
@@ -37,24 +35,12 @@ export async function GET(
     return NextResponse.json({ error: 'Review run não encontrado.' }, { status: 404 });
   }
 
-  if (!run.ataStoragePath && run.status === 'CONCLUIDO') {
-    const generated = await buildAndSaveAta({
-      userId: run.userId,
-      reviewRunId: run.id,
-    });
-    if ('ataStoragePath' in generated) {
-      run = { ...run, ataStoragePath: generated.ataStoragePath };
-    } else {
-      return NextResponse.json(
-        { error: `Não foi possível gerar a ata: ${generated.error}` },
-        { status: 502 },
-      );
-    }
-  }
-
   if (!run.ataStoragePath) {
     return NextResponse.json(
-      { error: 'Ata ainda não disponível para este run.' },
+      {
+        error:
+          'Ata ainda não gerada. Revise as reclamações, marque as que entram na ata e clique em "Gerar ata".',
+      },
       { status: 404 },
     );
   }
@@ -71,4 +57,67 @@ export async function GET(
   }
 
   return NextResponse.json({ url, expiresIn: SIGNED_TTL_SECONDS });
+}
+
+/**
+ * POST /api/reports/complaints/:runId/document
+ *
+ * Gera (ou regenera) a ata .docx com reclamações confirmadoPorHumano=true.
+ */
+export async function POST(
+  _req: NextRequest,
+  { params }: { params: Promise<{ runId: string }> },
+) {
+  const dbUser = await getSessionDbUser();
+  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+
+  const { runId } = await params;
+
+  const run = await prisma.complaintReviewRun.findFirst({
+    where: { id: runId, userId: dbUser.id },
+    select: { id: true, status: true },
+  });
+
+  if (!run) {
+    return NextResponse.json({ error: 'Review run não encontrado.' }, { status: 404 });
+  }
+
+  if (run.status !== 'CONCLUIDO') {
+    return NextResponse.json(
+      { error: 'Só é possível gerar ata de runs concluídos.' },
+      { status: 400 },
+    );
+  }
+
+  const confirmadas = await prisma.complaint.count({
+    where: { reviewRunId: runId, userId: dbUser.id, confirmadoPorHumano: true },
+  });
+
+  if (confirmadas === 0) {
+    return NextResponse.json(
+      {
+        error:
+          'Marque ao menos uma reclamação como "Incluir na ata" antes de gerar o documento.',
+      },
+      { status: 400 },
+    );
+  }
+
+  const generated = await buildAndSaveAta({
+    userId: dbUser.id,
+    reviewRunId: runId,
+  });
+
+  if ('error' in generated) {
+    return NextResponse.json(
+      { error: `Não foi possível gerar a ata: ${generated.error}` },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json({
+    ok: true,
+    ataStoragePath: generated.ataStoragePath,
+    confirmadas,
+  });
 }

@@ -9,10 +9,10 @@ import { requireServiceApiKey } from '@/lib/auth/service-api-key';
 import { resolveStackUserIdsForTenant } from '@/lib/whatsapp-sessions';
 import {
   classifyConversation,
+  filterClientEvidenceIds,
   type ConversationMessage,
 } from '@/lib/complaints/classify';
 import { buildAndSaveComparison } from '@/lib/complaints/compare';
-import { buildAndSaveAta } from '@/lib/complaints/build-ata';
 import {
   currentMonthPeriod,
   monthPeriod,
@@ -68,11 +68,6 @@ async function finishWithComparison(params: {
     period: params.period,
   });
 
-  const ata = await buildAndSaveAta({
-    userId: params.userId,
-    reviewRunId: updated.id,
-  });
-
   return NextResponse.json({
     reviewRunId: updated.id,
     status: updated.status,
@@ -87,8 +82,6 @@ async function finishWithComparison(params: {
       resolvidos: comparison.resolvidos,
       resumoTexto: comparison.resumoTexto,
     },
-    ataStoragePath: 'ataStoragePath' in ata ? ata.ataStoragePath : null,
-    ataError: 'error' in ata ? ata.error : undefined,
     ...(params.mensagem ? { mensagem: params.mensagem } : {}),
   });
 }
@@ -99,6 +92,7 @@ async function finishWithComparison(params: {
  * Classifica conversas WhatsApp do período (padrão: mês anterior completo)
  * usando IA. Só sessões com monitorarReclamacoes=true.
  * Ao concluir, gera ComplaintComparison vs. mês imediatamente anterior.
+ * A ata (.docx) NÃO é gerada aqui — só após revisão humana via POST .../document.
  *
  * Auth: header x-api-key (ServiceApiKey)
  *
@@ -233,6 +227,12 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
+      const evidenciaMessageIds = filterClientEvidenceIds(
+        conv.messages,
+        result.evidenciaMessageIds,
+      );
+      if (evidenciaMessageIds.length === 0) continue;
+
       await prisma.complaint.create({
         data: {
           reviewRunId: run.id,
@@ -241,7 +241,7 @@ export async function POST(req: NextRequest) {
           contactName: conv.contactName,
           resumo: result.resumo,
           dataOcorrencia: result.dataOcorrencia,
-          evidenciaMessageIds: result.evidenciaMessageIds,
+          evidenciaMessageIds,
         },
       });
       totalReclamacoes += 1;

@@ -41,7 +41,20 @@ function formatTs(d: Date): string {
   }).format(d);
 }
 
+function looksLikeInternalLog(msg: ConversationMessage): boolean {
+  if (msg.direction === 'IN') return false;
+  const raw = msg.textContent?.trim() || '';
+  if (!raw) return false;
+  if (/^\{[\s\S]*"(level|timestamp|message|stack)"[\s\S]*\}$/.test(raw)) return true;
+  if (/^\[?(ERROR|INFO|DEBUG|WARN|TRACE)/i.test(raw)) return true;
+  if (/print de log|console\.(log|error|warn)|stack trace/i.test(raw)) return true;
+  return false;
+}
+
 function bodyForTranscript(msg: ConversationMessage): string {
+  if (looksLikeInternalLog(msg)) {
+    return '[sistema interno — NÃO usar como evidência de reclamação]';
+  }
   const raw = msg.textContent?.trim() || '';
   // Evita despejar base64 de imagem no prompt
   if (raw.length > 500 || /^\/9j\//.test(raw) || raw.startsWith('data:')) {
@@ -51,6 +64,17 @@ function bodyForTranscript(msg: ConversationMessage): string {
   }
   if (raw) return raw;
   return msg.messageType !== 'text' ? `[mídia: ${msg.messageType}]` : '[sem texto]';
+}
+
+/** IDs de mensagens IN válidas como evidência de reclamação. */
+export function filterClientEvidenceIds(
+  messages: ConversationMessage[],
+  ids: string[],
+): string[] {
+  const inIds = new Set(
+    messages.filter((m) => m.direction === 'IN').map((m) => m.id),
+  );
+  return [...new Set(ids.filter((id) => inIds.has(id)))];
 }
 
 /** Transcript ordenado com IDs reais pra a IA apontar evidências. */
@@ -74,7 +98,14 @@ function buildSystemPrompt(palavrasChave: string[]): string {
 
   return `Você revisa conversas de atendimento (WhatsApp) de um restaurante/delivery e decide se há RECLAMAÇÃO do cliente — com o mesmo julgamento de contexto que um humano experiente usaria. Não existe lista fixa de palavras-chave da empresa; a decisão é por contexto.
 
-Considere RECLAMAÇÃO quando o cliente:
+REGRAS CRÍTICAS SOBRE MENSAGENS:
+- Mensagens CLIENTE (IN) são a ÚNICA fonte válida para decidir se há reclamação e para evidenciaMessageIds.
+- Mensagens ATENDENTE ou IA (OUT) servem APENAS como contexto para interpretar o que o cliente quis dizer — NUNCA conte como reclamação algo que só o atendente ou a IA disse.
+- NUNCA inclua mensagens OUT em evidenciaMessageIds — somente IDs de mensagens IN (cliente).
+- Prints de log interno, mensagens de sistema ou respostas automáticas do atendente NÃO são reclamação nem evidência.
+- Se o cliente apenas disse que "quer fazer uma reclamação" mas não detalhou o problema em mensagens IN, NÃO é reclamação classificável (eReclamacao=false).
+
+Considere RECLAMAÇÃO quando o cliente (em mensagens IN):
 - expressa insatisfação ou frustração explícita;
 - relata problema com o pedido (errado, atrasado, com defeito, item faltando, qualidade ruim, etc.);
 - aponta cobrança incorreta;
@@ -87,7 +118,7 @@ NÃO conte como reclamação:
 - conversas puramente operacionais sem queixa.
 
 Se for reclamação, resuma em 1–2 frases objetivas e indique a data aproximada do problema relatado (YYYY-MM-DD), se identificável no transcript; senão use a data da mensagem de evidência principal.
-Liste evidenciaMessageIds com os IDs reais das mensagens (campo id=...) que comprovam a reclamação — priorize imagens/mídia do cliente e trechos de texto relevantes do cliente.
+Liste evidenciaMessageIds SOMENTE com IDs de mensagens IN (cliente) — priorize imagens/mídia enviadas pelo cliente e trechos de texto do cliente que comprovem a queixa.
 
 Responda APENAS JSON válido, sem markdown:
 {"eReclamacao":true|false,"resumo":string|null,"dataOcorrencia":"YYYY-MM-DD"|null,"evidenciaMessageIds":string[]}${reforco}`;
@@ -142,15 +173,29 @@ export async function classifyConversation(params: {
   const rawIds = Array.isArray(parsed.evidenciaMessageIds)
     ? parsed.evidenciaMessageIds.filter((id): id is string => typeof id === 'string')
     : [];
-  const evidenciaMessageIds = [...new Set(rawIds.filter((id) => validIds.has(id)))];
+  const knownIds = rawIds.filter((id) => validIds.has(id));
+  let evidenciaMessageIds = filterClientEvidenceIds(messages, knownIds);
 
-  // Se a IA não apontou IDs válidos, usa mensagens IN (texto/imagem) como fallback mínimo
+  // Fallback: últimas mensagens IN com conteúdo substantivo (nunca OUT)
   if (evidenciaMessageIds.length === 0) {
-    const fallback = messages
-      .filter((m) => m.direction === 'IN')
-      .slice(-5)
+    evidenciaMessageIds = messages
+      .filter(
+        (m) =>
+          m.direction === 'IN' &&
+          (m.messageType !== 'text' ||
+            (m.textContent?.trim().length ?? 0) > 0),
+      )
+      .slice(-3)
       .map((m) => m.id);
-    evidenciaMessageIds.push(...fallback);
+  }
+
+  if (evidenciaMessageIds.length === 0) {
+    return {
+      eReclamacao: false,
+      resumo: null,
+      dataOcorrencia: null,
+      evidenciaMessageIds: [],
+    };
   }
 
   const resumo =

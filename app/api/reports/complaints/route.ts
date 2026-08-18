@@ -28,8 +28,17 @@ export async function GET() {
       ataStoragePath: true,
       executadoEm: true,
       erro: true,
+      complaints: {
+        where: { confirmadoPorHumano: true },
+        select: { id: true },
+      },
     },
   });
 
-  return NextResponse.json(runs);
+  return NextResponse.json(
+    runs.map(({ complaints, ...run }) => ({
+      ...run,
+      confirmadasCount: complaints.length,
+    })),
+  );
 }
