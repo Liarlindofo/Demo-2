@@ -361,10 +361,14 @@ export async function processComplaintsBatch(runId: string): Promise<{
   }
 }
 
-export async function tickStaleComplaintRuns(): Promise<{ ticked: number }> {
+export async function tickStaleComplaintRuns(userId: string): Promise<{
+  ticked: number;
+  runIds: string[];
+}> {
   const staleBefore = new Date(Date.now() - STALE_LOCK_MS);
   const runs = await prisma.complaintReviewRun.findMany({
     where: {
+      userId,
       status: 'PROCESSANDO',
       pendingContactIds: { isEmpty: false },
       OR: [{ batchLockAt: null }, { batchLockAt: { lt: staleBefore } }],
@@ -373,15 +377,15 @@ export async function tickStaleComplaintRuns(): Promise<{ ticked: number }> {
     take: 5,
   });
 
-  let ticked = 0;
+  const runIds: string[] = [];
   for (const run of runs) {
     if (!run.jobToken) continue;
     try {
       await enqueueComplaintsTick({ runId: run.id, jobToken: run.jobToken });
-      ticked += 1;
+      runIds.push(run.id);
     } catch (err) {
-      console.error('[complaints/tick] falha ao retomar run', run.id, err);
+      console.error('[complaints/resume] falha ao retomar run', run.id, err);
     }
   }
-  return { ticked };
+  return { ticked: runIds.length, runIds };
 }

@@ -18,10 +18,6 @@
     {
       "path": "/api/cron/ifood-polling",
       "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/complaints-tick",
-      "schedule": "*/5 * * * *"
     }
   ]
 }
