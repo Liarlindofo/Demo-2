@@ -19,6 +19,7 @@ import {
   previousMonthPeriod,
   type MonthPeriod,
 } from '@/lib/complaints/period';
+import { pickClientContactName } from '@/lib/complaints/contact';
 
 type RunBody = {
   /** "previous" (default, n8n dia 1) | "current" (teste do mês incompleto) */
@@ -183,7 +184,10 @@ export async function POST(req: NextRequest) {
   /** Agrupa por contactId (uma conversa = um contato). */
   const byContact = new Map<
     string,
-    { contactName: string | null; messages: ConversationMessage[] }
+    {
+      nameRows: Array<{ direction: string; contactName: string | null }>;
+      messages: ConversationMessage[];
+    }
   >();
 
   for (const msg of messages) {
@@ -196,14 +200,13 @@ export async function POST(req: NextRequest) {
       sentByAgent: msg.sentByAgent,
       timestamp: msg.timestamp,
     };
+    const nameRow = { direction: msg.direction, contactName: msg.contactName };
     if (existing) {
       existing.messages.push(entry);
-      if (!existing.contactName && msg.contactName) {
-        existing.contactName = msg.contactName;
-      }
+      existing.nameRows.push(nameRow);
     } else {
       byContact.set(msg.contactId, {
-        contactName: msg.contactName,
+        nameRows: [nameRow],
         messages: [entry],
       });
     }
@@ -238,7 +241,7 @@ export async function POST(req: NextRequest) {
           reviewRunId: run.id,
           userId,
           contactId,
-          contactName: conv.contactName,
+          contactName: pickClientContactName(conv.nameRows),
           resumo: result.resumo,
           dataOcorrencia: result.dataOcorrencia,
           evidenciaMessageIds,

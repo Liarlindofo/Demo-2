@@ -22,6 +22,7 @@ import {
   ChevronUp,
   CheckSquare,
   Square,
+  MessagesSquare,
 } from 'lucide-react';
 import ToolProtection from '@/components/auth/ToolProtection';
 import { SystemTool } from '@/types/admin';
@@ -83,10 +84,30 @@ interface ComplaintReviewItem {
   id: string;
   contactId: string;
   contactName: string | null;
+  contactPhone: string;
+  clientLabel: string;
   resumo: string;
   dataOcorrencia: string;
   confirmadoPorHumano: boolean;
   evidencias: ComplaintEvidence[];
+}
+
+interface ComplaintConversationMessage {
+  id: string;
+  direction: string;
+  speaker: 'CLIENTE' | 'ATENDENTE' | 'IA';
+  messageType: string;
+  snippet: string;
+  timestamp: string;
+}
+
+interface ComplaintConversation {
+  contactId: string;
+  contactPhone: string;
+  contactName: string | null;
+  clientLabel: string;
+  truncated: boolean;
+  messages: ComplaintConversationMessage[];
 }
 
 interface ComplaintReviewData {
@@ -224,6 +245,8 @@ function RelatoriosContent() {
   const [reviewData, setReviewData] = useState<ComplaintReviewData | null>(null);
   const [loadingReview, setLoadingReview] = useState(false);
   const [togglingComplaintId, setTogglingComplaintId] = useState<string | null>(null);
+  const [conversation, setConversation] = useState<ComplaintConversation | null>(null);
+  const [loadingConversation, setLoadingConversation] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [showModal, setShowModal] = useState(false);
@@ -399,6 +422,26 @@ function RelatoriosContent() {
       alert('Falha de rede ao gerar a ata.');
     } finally {
       setGeneratingId(null);
+    }
+  }
+
+  async function openConversation(runId: string, contactId: string) {
+    setConversation(null);
+    setLoadingConversation(true);
+    try {
+      const res = await fetch(
+        `/api/reports/complaints/${runId}/conversation?contactId=${encodeURIComponent(contactId)}`,
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || 'Não foi possível carregar a conversa.');
+        return;
+      }
+      setConversation(data as ComplaintConversation);
+    } catch {
+      alert('Falha de rede ao carregar a conversa.');
+    } finally {
+      setLoadingConversation(false);
     }
   }
 
@@ -745,7 +788,7 @@ function RelatoriosContent() {
                               key={c.id}
                               className="rounded-xl border border-[#2a2a2e] bg-[#111113] p-4"
                             >
-                              <label className="flex items-start gap-3 cursor-pointer">
+                              <div className="flex items-start gap-3">
                                 <button
                                   type="button"
                                   disabled={togglingComplaintId === c.id}
@@ -770,7 +813,7 @@ function RelatoriosContent() {
                                 <div className="min-w-0 flex-1">
                                   <div className="flex flex-wrap items-center gap-2">
                                     <span className="text-sm font-medium text-white">
-                                      {c.contactName?.trim() || c.contactId}
+                                      {c.clientLabel || `${c.contactName || 'Cliente'} — ${c.contactPhone || c.contactId}`}
                                     </span>
                                     <span className="text-xs text-gray-500">
                                       {new Date(c.dataOcorrencia).toLocaleDateString('pt-BR', {
@@ -804,8 +847,18 @@ function RelatoriosContent() {
                                       ))}
                                     </div>
                                   )}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      reviewData.id && openConversation(reviewData.id, c.contactId)
+                                    }
+                                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-amber-300/90 hover:text-amber-200"
+                                  >
+                                    <MessagesSquare className="w-3.5 h-3.5" />
+                                    Ver conversa completa
+                                  </button>
                                 </div>
-                              </label>
+                              </div>
                             </li>
                           ))}
                         </ul>
@@ -1170,6 +1223,79 @@ function RelatoriosContent() {
             </button>
           </div>
         </Modal>
+      )}
+
+      {(loadingConversation || conversation) && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl w-full max-w-3xl shadow-2xl my-6">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a2a2e]">
+              <h2 className="text-base font-semibold text-white">
+                {conversation?.clientLabel || 'Conversa completa'}
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setConversation(null);
+                  setLoadingConversation(false);
+                }}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-500 hover:text-white hover:bg-[#2a2a2e] transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
+              {loadingConversation ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
+                </div>
+              ) : conversation?.messages.length === 0 ? (
+                <p className="text-sm text-gray-500">Nenhuma mensagem neste período.</p>
+              ) : (
+                <div className="space-y-3">
+                  {conversation?.truncated && (
+                    <p className="text-xs text-amber-300/80">
+                      Conversa longa: mostrando as primeiras 500 mensagens do período.
+                    </p>
+                  )}
+                  {conversation?.messages.map((m) => {
+                    const isClient = m.speaker === 'CLIENTE';
+                    const speakerCls =
+                      m.speaker === 'CLIENTE'
+                        ? 'text-sky-300'
+                        : m.speaker === 'ATENDENTE'
+                          ? 'text-amber-300'
+                          : 'text-gray-400';
+                    return (
+                      <div
+                        key={m.id}
+                        className={`rounded-xl border px-3 py-2 ${
+                          isClient
+                            ? 'border-sky-500/20 bg-sky-500/5'
+                            : 'border-[#2a2a2e] bg-[#0d0d0f]'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <span className={`text-[11px] font-semibold uppercase ${speakerCls}`}>
+                            {m.speaker}
+                          </span>
+                          <span className="text-[11px] text-gray-500">
+                            {ptDateTime(m.timestamp)}
+                          </span>
+                          {m.messageType !== 'text' && (
+                            <span className="text-[11px] text-gray-500">[{m.messageType}]</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">
+                          {m.snippet}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

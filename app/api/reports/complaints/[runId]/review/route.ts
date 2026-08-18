@@ -3,16 +3,12 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionDbUser } from '@/lib/rh-api-auth';
-
-function evidenceSnippet(text: string | null, messageType: string): string {
-  const raw = text?.trim() || '';
-  if (raw.length > 0 && raw.length <= 200 && !raw.startsWith('/9j/') && !raw.startsWith('data:')) {
-    return raw;
-  }
-  if (messageType !== 'text') return `[${messageType}]`;
-  if (raw.length > 200) return `${raw.slice(0, 200)}…`;
-  return raw || '[sem texto]';
-}
+import {
+  formatClientHeading,
+  formatContactPhone,
+  messageSnippet,
+  pickClientContactName,
+} from '@/lib/complaints/contact';
 
 /**
  * GET /api/reports/complaints/:runId/review
@@ -58,10 +54,12 @@ export async function GET(
     return NextResponse.json({ error: 'Review run não encontrado.' }, { status: 404 });
   }
 
+  const contactIds = [...new Set(run.complaints.map((c) => c.contactId))];
   const allEvidenceIds = [...new Set(run.complaints.flatMap((c) => c.evidenciaMessageIds))];
-  const evidenceMessages =
+
+  const [evidenceMessages, inNameRows] = await Promise.all([
     allEvidenceIds.length > 0
-      ? await prisma.whatsAppMessage.findMany({
+      ? prisma.whatsAppMessage.findMany({
           where: {
             id: { in: allEvidenceIds },
             userId: dbUser.id,
@@ -74,22 +72,67 @@ export async function GET(
             timestamp: true,
           },
         })
-      : [];
+      : Promise.resolve([]),
+    contactIds.length > 0
+      ? prisma.whatsAppMessage.findMany({
+          where: {
+            userId: dbUser.id,
+            contactId: { in: contactIds },
+            direction: 'IN',
+            timestamp: { gte: run.periodStart, lte: run.periodEnd },
+            contactName: { not: null },
+          },
+          select: { contactId: true, contactName: true, timestamp: true },
+          orderBy: { timestamp: 'asc' },
+        })
+      : Promise.resolve([]),
+  ]);
 
   const evidenceById = new Map(evidenceMessages.map((m) => [m.id, m]));
+  const clientNameByContact = new Map<string, string>();
+  for (const row of inNameRows) {
+    if (clientNameByContact.has(row.contactId)) continue;
+    const name = pickClientContactName([{ direction: 'IN', contactName: row.contactName }]);
+    if (name) clientNameByContact.set(row.contactId, name);
+  }
 
-  const complaints = run.complaints.map((c) => ({
-    ...c,
-    evidencias: c.evidenciaMessageIds
-      .map((id) => evidenceById.get(id))
-      .filter(Boolean)
-      .map((m) => ({
-        id: m!.id,
-        messageType: m!.messageType,
-        snippet: evidenceSnippet(m!.textContent, m!.messageType),
-        timestamp: m!.timestamp,
-      })),
-  }));
+  const missingNameIds = contactIds.filter((id) => !clientNameByContact.has(id));
+  if (missingNameIds.length > 0) {
+    const extra = await prisma.whatsAppMessage.findMany({
+      where: {
+        userId: dbUser.id,
+        contactId: { in: missingNameIds },
+        direction: 'IN',
+        contactName: { not: null },
+      },
+      select: { contactId: true, contactName: true, timestamp: true },
+      orderBy: { timestamp: 'asc' },
+    });
+    for (const row of extra) {
+      if (clientNameByContact.has(row.contactId)) continue;
+      const name = pickClientContactName([{ direction: 'IN', contactName: row.contactName }]);
+      if (name) clientNameByContact.set(row.contactId, name);
+    }
+  }
+
+  const complaints = run.complaints.map((c) => {
+    const contactName = clientNameByContact.get(c.contactId) ?? null;
+    return {
+      ...c,
+      contactName,
+      contactPhone: formatContactPhone(c.contactId),
+      clientLabel: formatClientHeading(contactName, c.contactId),
+      evidencias: c.evidenciaMessageIds
+        .map((id) => evidenceById.get(id))
+        .filter(Boolean)
+        .map((m) => ({
+          id: m!.id,
+          messageType: m!.messageType,
+          snippet: messageSnippet(m!.textContent, m!.messageType),
+          timestamp: m!.timestamp,
+        })),
+    };
+  });
 
   const confirmadasCount = complaints.filter((c) => c.confirmadoPorHumano).length;
 

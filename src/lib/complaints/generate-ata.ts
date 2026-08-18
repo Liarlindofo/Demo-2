@@ -20,6 +20,7 @@ import {
   WHATSAPP_EVIDENCIAS_BUCKET,
 } from '@/lib/whatsapp-evidence-storage';
 import { saoPauloYmd } from '@/lib/complaints/period';
+import { formatClientHeading, pickClientContactName } from '@/lib/complaints/contact';
 
 const MAX_IMAGE_WIDTH = 480;
 const MAX_IMAGE_HEIGHT = 360;
@@ -347,10 +348,35 @@ export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buf
       ),
     );
 
+    const contactIds = [...new Set(run.complaints.map((c) => c.contactId))];
+    const inNameRows =
+      contactIds.length > 0
+        ? await prisma.whatsAppMessage.findMany({
+            where: {
+              userId: run.userId,
+              contactId: { in: contactIds },
+              direction: 'IN',
+              timestamp: { gte: run.periodStart, lte: run.periodEnd },
+              contactName: { not: null },
+            },
+            select: { contactId: true, contactName: true, timestamp: true },
+            orderBy: { timestamp: 'asc' },
+          })
+        : [];
+    const clientNameByContact = new Map<string, string>();
+    for (const row of inNameRows) {
+      if (clientNameByContact.has(row.contactId)) continue;
+      const name = pickClientContactName([{ direction: 'IN', contactName: row.contactName }]);
+      if (name) clientNameByContact.set(row.contactId, name);
+    }
+
     let idx = 0;
     for (const c of run.complaints) {
       idx += 1;
-      const cliente = c.contactName?.trim() || c.contactId;
+      const cliente = formatClientHeading(
+        clientNameByContact.get(c.contactId) ?? c.contactName,
+        c.contactId,
+      );
       children.push(divider());
       children.push(
         new Paragraph({
