@@ -1661,7 +1661,16 @@ model ComplaintReviewRun {
   /// "PROCESSANDO" | "CONCLUIDO" | "ERRO"
   status           String
   totalConversas   Int?
+  conversasProcessadas Int             @default(0)
   totalReclamacoes Int?
+  /// contactIds ainda não classificados neste run (retomada).
+  pendingContactIds  String[]          @default([])
+  /// contactIds já classificados (com ou sem reclamação).
+  processedContactIds String[]         @default([])
+  /// Lock de batch; se ficar velho, outro tick pode retomar.
+  batchLockAt      DateTime?
+  /// Token interno para encadear ticks sem reenviar a API key.
+  jobToken         String?
   erro             String?
   /// Path interno no bucket privado atas-reclamacoes (nunca URL pública).
   ataStoragePath   String?
@@ -1687,6 +1696,8 @@ model Complaint {
   dataOcorrencia      DateTime
   /// IDs de WhatsAppMessage usados como evidência
   evidenciaMessageIds String[]
+  /// Número do pedido citado pelo cliente na conversa (nunca inventado).
+  numeroPedido        String?
   /// Vany (ou humano) revisa e confirma depois
   confirmadoPorHumano Boolean            @default(false)
   createdAt           DateTime           @default(now())

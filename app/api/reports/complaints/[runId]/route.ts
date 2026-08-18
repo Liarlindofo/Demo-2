@@ -33,6 +33,7 @@ export async function GET(
           resumo: true,
           dataOcorrencia: true,
           evidenciaMessageIds: true,
+          numeroPedido: true,
           confirmadoPorHumano: true,
           createdAt: true,
         },

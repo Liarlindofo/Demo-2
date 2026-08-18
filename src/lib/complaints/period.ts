@@ -54,3 +54,8 @@ export function currentMonthPeriod(now = new Date()): MonthPeriod {
   const { year, month } = saoPauloYmd(now);
   return monthPeriod(year, month);
 }
+
+export function monthPeriodFromDate(date: Date): MonthPeriod {
+  const { year, month } = saoPauloYmd(date);
+  return monthPeriod(year, month);
+}

@@ -44,6 +44,7 @@ export async function GET(
           resumo: true,
           dataOcorrencia: true,
           evidenciaMessageIds: true,
+          numeroPedido: true,
           confirmadoPorHumano: true,
         },
       },
@@ -129,6 +130,7 @@ export async function GET(
           id: m!.id,
           messageType: m!.messageType,
           snippet: messageSnippet(m!.textContent, m!.messageType),
+          hasMedia: m!.messageType === 'image' || m!.messageType === 'sticker',
           timestamp: m!.timestamp,
         })),
     };

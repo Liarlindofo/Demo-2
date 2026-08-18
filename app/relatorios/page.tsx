@@ -66,6 +66,7 @@ interface ComplaintRunRow {
   periodEnd: string;
   status: string;
   totalConversas: number | null;
+  conversasProcessadas?: number | null;
   totalReclamacoes: number | null;
   ataStoragePath: string | null;
   executadoEm: string;
@@ -77,6 +78,7 @@ interface ComplaintEvidence {
   id: string;
   messageType: string;
   snippet: string;
+  hasMedia?: boolean;
   timestamp: string;
 }
 
@@ -86,6 +88,7 @@ interface ComplaintReviewItem {
   contactName: string | null;
   contactPhone: string;
   clientLabel: string;
+  numeroPedido: string | null;
   resumo: string;
   dataOcorrencia: string;
   confirmadoPorHumano: boolean;
@@ -257,7 +260,7 @@ function ConversationMedia({
   }, [messageId]);
 
   if (failed) {
-    return <p className="text-xs text-gray-500 mt-1">[{messageType} indisponível]</p>;
+    return <p className="text-xs text-gray-500 mt-1">Foto indisponível</p>;
   }
   if (!url) {
     return <Loader2 className="w-4 h-4 text-gray-500 animate-spin mt-2" />;
@@ -348,8 +351,8 @@ function RelatoriosContent() {
     fetchAll();
   }, [fetchAll]);
 
-  const fetchComplaintRuns = useCallback(async () => {
-    setLoadingComplaints(true);
+  const fetchComplaintRuns = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoadingComplaints(true);
     try {
       const res = await fetch('/api/reports/complaints');
       if (res.ok) {
@@ -359,13 +362,21 @@ function RelatoriosContent() {
     } catch {
       // silent
     } finally {
-      setLoadingComplaints(false);
+      if (!opts?.silent) setLoadingComplaints(false);
     }
   }, []);
 
   useEffect(() => {
     if (tab === 'reclamacoes') fetchComplaintRuns();
   }, [tab, fetchComplaintRuns]);
+
+  useEffect(() => {
+    if (tab !== 'reclamacoes') return;
+    const processing = complaintRuns.some((r) => r.status === 'PROCESSANDO');
+    if (!processing) return;
+    const id = window.setInterval(() => fetchComplaintRuns({ silent: true }), 2500);
+    return () => window.clearInterval(id);
+  }, [tab, complaintRuns, fetchComplaintRuns]);
 
   async function handleDownloadAta(runId: string) {
     setDownloadingId(runId);
@@ -733,17 +744,31 @@ function RelatoriosContent() {
                           )}
                         </td>
                         <td className="px-4 py-3.5">
-                          <span
-                            className={`inline-flex px-2 py-0.5 rounded-lg text-xs border ${statusBadge(run.status)}`}
-                          >
-                            {run.status}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span
+                              className={`inline-flex w-fit px-2 py-0.5 rounded-lg text-xs border ${statusBadge(run.status)}`}
+                            >
+                              {run.status}
+                            </span>
+                            {run.status === 'PROCESSANDO' && (
+                              <span className="text-xs text-amber-300/90">
+                                {run.conversasProcessadas ?? 0} de {run.totalConversas ?? '—'}{' '}
+                                conversas processadas
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3.5 text-gray-400 text-xs">
                           {ptDateTime(run.executadoEm)}
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex flex-wrap items-center justify-end gap-1.5">
+                            {run.status === 'PROCESSANDO' && (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-500 border border-[#2a2a2e] opacity-60">
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Aguardando término
+                              </span>
+                            )}
                             {canReview && (
                               <button
                                 type="button"
@@ -866,6 +891,11 @@ function RelatoriosContent() {
                                         timeZone: 'America/Sao_Paulo',
                                       })}
                                     </span>
+                                    {c.numeroPedido && (
+                                      <span className="text-xs text-amber-300/90">
+                                        Pedido {c.numeroPedido}
+                                      </span>
+                                    )}
                                     {c.confirmadoPorHumano && (
                                       <span className="text-xs text-green-400/90">
                                         Incluir na ata
@@ -879,17 +909,26 @@ function RelatoriosContent() {
                                         Evidências (cliente)
                                       </p>
                                       {c.evidencias.map((ev) => (
-                                        <p
+                                        <div
                                           key={ev.id}
                                           className="text-xs text-gray-400 pl-2 border-l border-[#2a2a2e]"
                                         >
-                                          {ev.messageType !== 'text' && (
-                                            <span className="text-amber-400/80 mr-1">
-                                              [{ev.messageType}]
-                                            </span>
+                                          {ev.hasMedia || ev.messageType === 'image' || ev.messageType === 'sticker' ? (
+                                            <ConversationMedia
+                                              messageId={ev.id}
+                                              messageType={ev.messageType}
+                                            />
+                                          ) : (
+                                            <p>
+                                              {ev.messageType !== 'text' && (
+                                                <span className="text-amber-400/80 mr-1">
+                                                  [{ev.messageType}]
+                                                </span>
+                                              )}
+                                              {ev.snippet}
+                                            </p>
                                           )}
-                                          {ev.snippet}
-                                        </p>
+                                        </div>
                                       ))}
                                     </div>
                                   )}
@@ -1327,14 +1366,18 @@ function RelatoriosContent() {
                           <span className="text-[11px] text-gray-500">
                             {ptDateTime(m.timestamp)}
                           </span>
-                          {m.messageType !== 'text' && !m.hasMedia && (
+                          {m.messageType !== 'text' &&
+                            m.messageType !== 'image' &&
+                            m.messageType !== 'sticker' && (
                             <span className="text-[11px] text-gray-500">[{m.messageType}]</span>
                           )}
                         </div>
-                        {m.hasMedia ? (
+                        {m.messageType === 'image' || m.messageType === 'sticker' || m.hasMedia ? (
                           <>
                             <ConversationMedia messageId={m.id} messageType={m.messageType} />
-                            {m.snippet && !/^\[.+\]$/.test(m.snippet) && (
+                            {m.snippet &&
+                              !/^\[.+\]$/.test(m.snippet) &&
+                              !m.snippet.startsWith('/9j/') && (
                               <p className="text-sm text-gray-200 whitespace-pre-wrap break-words mt-1.5">
                                 {m.snippet}
                               </p>
@@ -1342,7 +1385,7 @@ function RelatoriosContent() {
                           </>
                         ) : (
                           <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">
-                            {m.snippet}
+                            {m.snippet === `[${m.messageType}]` ? '' : m.snippet}
                           </p>
                         )}
                       </div>

@@ -24,6 +24,7 @@ export async function GET() {
       periodEnd: true,
       status: true,
       totalConversas: true,
+      conversasProcessadas: true,
       totalReclamacoes: true,
       ataStoragePath: true,
       executadoEm: true,

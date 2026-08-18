@@ -26,6 +26,7 @@ import {
   writeAtaNarrative,
   type ConversationMessage,
 } from '@/lib/complaints/classify';
+import { selectRelevantClientPhoto } from '@/lib/complaints/photo';
 
 const MAX_IMAGE_WIDTH = 480;
 const MAX_IMAGE_HEIGHT = 360;
@@ -355,27 +356,26 @@ export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buf
         timestamp: m.timestamp,
       }));
 
-      const evidenceSet = new Set(c.evidenciaMessageIds);
-      const photoRows = convRows.filter(
-        (m) =>
-          m.direction === 'IN' &&
-          (m.messageType === 'image' || m.messageType === 'sticker') &&
-          !!m.mediaUrl,
-      );
-      const preferredPhotos = photoRows.filter((m) => evidenceSet.has(m.id));
-      const orderedPhotos = [...preferredPhotos, ...photoRows.filter((m) => !evidenceSet.has(m.id))];
-      const candidatePhotoIds = [...new Set(orderedPhotos.map((m) => m.id))];
-
       const narrative = await writeAtaNarrative({
         transcript: buildTranscript(convMessages),
-        candidatePhotoIds,
         fallbackResumo: c.resumo,
+        messages: convMessages,
+        fallbackNumeroPedido: c.numeroPedido,
       });
 
-      if (narrative.resumo !== c.resumo) {
+      const selectedPhoto = await selectRelevantClientPhoto({
+        messages: convRows,
+        evidenciaMessageIds: c.evidenciaMessageIds,
+        numeroPedido: narrative.numeroPedido,
+      });
+
+      if (narrative.resumo !== c.resumo || narrative.numeroPedido !== c.numeroPedido) {
         await prisma.complaint.update({
           where: { id: c.id },
-          data: { resumo: narrative.resumo },
+          data: {
+            resumo: narrative.resumo,
+            numeroPedido: narrative.numeroPedido,
+          },
         });
       }
 
@@ -392,12 +392,19 @@ export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buf
           spacing: { after: 60 },
         }),
       );
-      children.push(muted(`Data aproximada: ${formatDatePt(c.dataOcorrencia)}`));
+      if (narrative.numeroPedido) {
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: `Pedido ${narrative.numeroPedido}`, size: 22, bold: true }),
+            ],
+            spacing: { after: 80 },
+          }),
+        );
+      }
 
-      const fotoId = narrative.fotoMessageId;
-      const fotoRow = fotoId ? orderedPhotos.find((m) => m.id === fotoId) : undefined;
-      if (fotoRow?.mediaUrl) {
-        const photoPara = await embedSinglePhoto(fotoRow.mediaUrl);
+      if (selectedPhoto?.mediaUrl) {
+        const photoPara = await embedSinglePhoto(selectedPhoto.mediaUrl);
         if (photoPara) children.push(photoPara);
       }
 

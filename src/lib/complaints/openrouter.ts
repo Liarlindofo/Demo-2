@@ -12,6 +12,8 @@ export function complaintsOpenRouterModel(): string {
 export async function callComplaintsOpenRouter(params: {
   system: string;
   user: string;
+  /** data URL (data:image/jpeg;base64,...) para verificação multimodal. */
+  imageDataUrl?: string;
   maxTokens?: number;
   temperature?: number;
 }): Promise<string> {
@@ -23,13 +25,20 @@ export async function callComplaintsOpenRouter(params: {
   }
 
   const model = complaintsOpenRouterModel();
+  const userContent = params.imageDataUrl
+    ? [
+        { type: 'text', text: params.user },
+        { type: 'image_url', image_url: { url: params.imageDataUrl } },
+      ]
+    : params.user;
+
   const body = JSON.stringify({
     model,
     temperature: params.temperature ?? 0.2,
     max_tokens: params.maxTokens ?? 1500,
     messages: [
       { role: 'system', content: params.system },
-      { role: 'user', content: params.user },
+      { role: 'user', content: userContent },
     ],
   });
 

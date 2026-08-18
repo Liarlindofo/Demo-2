@@ -20,6 +20,7 @@ export type ClassificationResult = {
   resumo: string | null;
   dataOcorrencia: Date | null;
   evidenciaMessageIds: string[];
+  numeroPedido: string | null;
 };
 
 function speakerLabel(msg: ConversationMessage): string {
@@ -120,10 +121,37 @@ NÃO conte como reclamação:
 Se for reclamação:
 - Escreva "resumo" como UM parágrafo corrido (3 a 6 frases) com base na TRANSCRIÇÃO COMPLETA — todas as mensagens IN e OUT, em ordem. Inclua contexto do atendimento quando for relevante (ex.: o atendente pediu foto de confirmação, o cliente confirmou/enviou, e só depois reclamou). NÃO resuma apenas as mensagens isoladas de evidência; não invente fatos fora da transcrição.
 - Indique dataOcorrencia (YYYY-MM-DD) se identificável; senão use a data da mensagem IN principal da queixa.
-- evidenciaMessageIds: SOMENTE IDs de mensagens IN. Se o cliente enviou foto do problema, inclua o id dessa imagem. Textos IN só como apoio.
+- evidenciaMessageIds: SOMENTE IDs de mensagens IN. Se o cliente enviou foto do produto/comida com problema, inclua esse id. NÃO use comprovante de Pix, print de tela ou documento como evidência.
+- numeroPedido: o número do pedido que o CLIENTE citou (ex.: "pedido 48", "pedido 150"). Se não aparecer nas mensagens IN, use null. NUNCA invente.
 
 Responda APENAS JSON válido, sem markdown:
-{"eReclamacao":true|false,"resumo":string|null,"dataOcorrencia":"YYYY-MM-DD"|null,"evidenciaMessageIds":string[]}${reforco}`;
+{"eReclamacao":true|false,"resumo":string|null,"dataOcorrencia":"YYYY-MM-DD"|null,"evidenciaMessageIds":string[],"numeroPedido":string|null}${reforco}`;
+}
+
+function inMessagesText(messages: ConversationMessage[]): string {
+  return messages
+    .filter((m) => m.direction === 'IN')
+    .map((m) => m.textContent || '')
+    .join('\n');
+}
+
+/** Só aceita número que o cliente realmente escreveu. Nunca inventa. */
+export function resolveNumeroPedido(
+  extracted: unknown,
+  messages: ConversationMessage[],
+): string | null {
+  const inText = inMessagesText(messages);
+  const fromIa =
+    extracted == null
+      ? null
+      : String(extracted)
+          .trim()
+          .match(/(\d{1,8})/)?.[1] ?? null;
+  if (fromIa && inText.includes(fromIa)) return fromIa;
+
+  const matches = [...inText.matchAll(/pedido\s*#?\s*(\d{1,8})/gi)];
+  if (matches.length === 0) return null;
+  return matches[matches.length - 1][1];
 }
 
 function parseOccurrenceDate(
@@ -160,6 +188,7 @@ export async function classifyConversation(params: {
     resumo?: unknown;
     dataOcorrencia?: unknown;
     evidenciaMessageIds?: unknown;
+    numeroPedido?: unknown;
   };
 
   const eReclamacao = parsed.eReclamacao === true;
@@ -169,6 +198,7 @@ export async function classifyConversation(params: {
       resumo: null,
       dataOcorrencia: null,
       evidenciaMessageIds: [],
+      numeroPedido: null,
     };
   }
 
@@ -197,6 +227,7 @@ export async function classifyConversation(params: {
       resumo: null,
       dataOcorrencia: null,
       evidenciaMessageIds: [],
+      numeroPedido: null,
     };
   }
 
@@ -215,23 +246,20 @@ export async function classifyConversation(params: {
     resumo,
     dataOcorrencia: parseOccurrenceDate(parsed.dataOcorrencia, anchor),
     evidenciaMessageIds,
+    numeroPedido: resolveNumeroPedido(parsed.numeroPedido, messages),
   };
 }
 
 /**
  * Reescreve o parágrafo da ata a partir da transcrição COMPLETA (IN+OUT).
- * Também escolhe no máximo UMA foto IN como prova visual.
  */
 export async function writeAtaNarrative(params: {
   transcript: string;
-  candidatePhotoIds: string[];
   fallbackResumo: string;
-}): Promise<{ resumo: string; fotoMessageId: string | null }> {
-  const { transcript, candidatePhotoIds, fallbackResumo } = params;
-  const photoHint =
-    candidatePhotoIds.length > 0
-      ? `IDs de fotos enviadas pelo cliente (escolha no máximo UMA — a que melhor mostra o problema relatado; se empatar, a primeira da lista): ${candidatePhotoIds.join(', ')}`
-      : 'O cliente não enviou foto nesta conversa. fotoMessageId deve ser null.';
+  messages: ConversationMessage[];
+  fallbackNumeroPedido: string | null;
+}): Promise<{ resumo: string; numeroPedido: string | null }> {
+  const { transcript, fallbackResumo, messages, fallbackNumeroPedido } = params;
 
   try {
     const content = await callComplaintsOpenRouter({
@@ -243,17 +271,18 @@ REGRAS:
 - Inclua contexto relevante do atendente/IA quando ajudar a entender (ex.: pedido de foto de confirmação, resposta positiva do cliente, e a reclamação em seguida).
 - A queixa em si é o que o CLIENTE disse ou mostrou (IN). Não invente fatos fora da transcrição.
 - Sem lista, bullets ou citações entre aspas de mensagens isoladas.
+- numeroPedido: só o número que o CLIENTE citou (ex. "pedido 48"). Se não houver, null. Nunca invente.
 
 Responda APENAS JSON:
-{"resumo":"parágrafo...","fotoMessageId":"id"|null}`,
-      user: `${photoHint}\n\nTranscrição completa:\n\n${transcript}`,
+{"resumo":"parágrafo...","numeroPedido":"48"|null}`,
+      user: `Transcrição completa:\n\n${transcript}`,
       maxTokens: 900,
       temperature: 0.2,
     });
 
     const parsed = extractJsonObject(content) as {
       resumo?: unknown;
-      fotoMessageId?: unknown;
+      numeroPedido?: unknown;
     };
 
     const resumo =
@@ -261,19 +290,16 @@ Responda APENAS JSON:
         ? parsed.resumo.trim().slice(0, 4000)
         : fallbackResumo;
 
-    const rawFoto =
-      typeof parsed.fotoMessageId === 'string' ? parsed.fotoMessageId.trim() : '';
-    const fotoMessageId = candidatePhotoIds.includes(rawFoto) ? rawFoto : null;
-
     return {
       resumo,
-      fotoMessageId: fotoMessageId ?? candidatePhotoIds[0] ?? null,
+      numeroPedido:
+        resolveNumeroPedido(parsed.numeroPedido, messages) ?? fallbackNumeroPedido,
     };
   } catch (err) {
     console.warn('[complaints/narrative] falha ao reescrever resumo:', err);
     return {
       resumo: fallbackResumo,
-      fotoMessageId: candidatePhotoIds[0] ?? null,
+      numeroPedido: fallbackNumeroPedido,
     };
   }
 }
