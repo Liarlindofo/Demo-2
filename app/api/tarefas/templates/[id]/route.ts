@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rhGetUser } from '@/lib/rh-auth';
+import { parseDiasSemana } from '@/lib/tarefas-dias';
 import {
   excluirTemplateEAtribuicoes,
   syncSessoesAbertasDoTemplate,
@@ -47,6 +48,7 @@ export async function PATCH(
       cargoId,
       ativo,
       grupoId,
+      diasSemana: diasSemanaRaw,
     } = body;
 
     // Se está editando conteúdo (não apenas toggling ativo), validar campos obrigatórios
@@ -70,6 +72,18 @@ export async function PATCH(
       }
     }
 
+    let diasSemana: number[] | undefined;
+    if (diasSemanaRaw !== undefined) {
+      const parsed = parseDiasSemana(diasSemanaRaw);
+      if (!parsed || parsed.length === 0) {
+        return NextResponse.json(
+          { error: 'Selecione pelo menos um dia da semana em que a tarefa deve ser feita.' },
+          { status: 400 },
+        );
+      }
+      diasSemana = parsed;
+    }
+
     const updated = await prisma.tarefaTemplate.update({
       where: { id },
       data: {
@@ -83,6 +97,7 @@ export async function PATCH(
         ...(lojaId !== undefined && { lojaId: lojaId || null }),
         ...(cargoId !== undefined && { cargoId: cargoId || null }),
         ...(ativo !== undefined && { ativo }),
+        ...(diasSemana !== undefined && { diasSemana }),
       },
       include: includeTemplate,
     });

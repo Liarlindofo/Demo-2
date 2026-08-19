@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rhGetUser } from '@/lib/rh-auth';
+import { parseDiasSemana } from '@/lib/tarefas-dias';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +48,7 @@ export async function POST(req: Request) {
       lojaId,
       cargoId,
       grupoId,
+      diasSemana: diasSemanaRaw,
     } = body;
 
     if (!titulo?.trim()) {
@@ -58,6 +60,13 @@ export async function POST(req: Request) {
     if (!exigeFoto && !exigeConfirmacaoTexto && !exigeLocalizacao && !exigeArquivo) {
       return NextResponse.json(
         { error: 'Pelo menos um tipo de evidência deve ser selecionado.' },
+        { status: 400 },
+      );
+    }
+    const diasSemana = parseDiasSemana(diasSemanaRaw);
+    if (!diasSemana || diasSemana.length === 0) {
+      return NextResponse.json(
+        { error: 'Selecione pelo menos um dia da semana em que a tarefa deve ser feita.' },
         { status: 400 },
       );
     }
@@ -93,6 +102,7 @@ export async function POST(req: Request) {
         validacaoIA: validacaoIA ?? null,
         lojaId: lojaId || null,
         cargoId: cargoId || null,
+        diasSemana,
         criadoPor: rh.userId,
         grupoItens: {
           create: { grupoId, ordem: (maxOrdem._max.ordem ?? -1) + 1 },

@@ -1415,6 +1415,8 @@ model TarefaTemplate {
   exigeArquivo          Boolean  @default(false)
   /// Metadados para validação por visão: { objeto_esperado, extrair, faixa_ok: { min, max }, unidade }
   validacaoIA           Json?
+  /// Dias em que a tarefa deve ser feita (0=Dom … 6=Sáb). Usado como padrão na atribuição.
+  diasSemana            Int[]    @default([])
   lojaId                String?  // null = global
   cargoId               String?  // null = todos os cargos
   ativo                 Boolean  @default(true)

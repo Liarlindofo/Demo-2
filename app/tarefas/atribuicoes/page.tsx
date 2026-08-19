@@ -70,6 +70,7 @@ interface Template {
   lojaId: string | null;
   cargoId: string | null;
   ativo: boolean;
+  diasSemana?: number[];
 }
 
 interface GrupoTemplate {
@@ -573,21 +574,26 @@ export default function AtribuicoesPage() {
       }
       const dayOfMonth = Number(selectedDate.split('-')[2]) || 1;
       const weekdayDefault = new Date(`${selectedDate}T12:00:00`).getDay();
-      const slots: SlotConfig[] = Array.from(selectedTemplateIds).map((tid) => ({
-        templateId: tid,
-        data: selectedDate,
-        horario: '08:00',
-        repetir: false,
-        recorrenciaTipo: 'diaria',
-        diasSemana: [],
-        dataFim: addDays(selectedDate, 7),
-        semDataFim: false,
-        mensalModo: 'dia_do_mes',
-        diaDoMes: dayOfMonth,
-        nth: 1,
-        weekday: weekdayDefault,
-        lojaExecucaoId: wLojaId, // padrão: mesma loja do funcionário
-      }));
+      const slots: SlotConfig[] = Array.from(selectedTemplateIds).map((tid) => {
+        const tpl = templates.find((t) => t.id === tid);
+        const dias = (tpl?.diasSemana ?? []).filter((d) => d >= 0 && d <= 6);
+        const temDias = dias.length > 0;
+        return {
+          templateId: tid,
+          data: selectedDate,
+          horario: '08:00',
+          repetir: temDias,
+          recorrenciaTipo: temDias ? 'semanal' : 'diaria',
+          diasSemana: dias,
+          dataFim: addDays(selectedDate, 7),
+          semDataFim: false,
+          mensalModo: 'dia_do_mes',
+          diaDoMes: dayOfMonth,
+          nth: 1,
+          weekday: weekdayDefault,
+          lojaExecucaoId: wLojaId, // padrão: mesma loja do funcionário
+        };
+      });
       setWSlots(slots);
       setWizardStep(3);
       return;

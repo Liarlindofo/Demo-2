@@ -17,7 +17,9 @@ import {
   Filter,
   Trash2,
   Layers,
+  CalendarDays,
 } from 'lucide-react';
+import { DIAS_SEMANA_PT, formatDiasSemana } from '@/lib/tarefas-dias';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -43,6 +45,7 @@ interface TarefaTemplate {
   loja?: { id: string; nome: string } | null;
   cargo?: { id: string; nome: string } | null;
   grupoItens?: Array<{ grupo: { id: string; nome: string; ativo: boolean } }>;
+  diasSemana?: number[];
 }
 
 interface Loja {
@@ -76,6 +79,7 @@ interface TemplateForm {
   ia_max: string;
   ia_unidade: string;
   grupoId: string;
+  diasSemana: number[];
 }
 
 const EMPTY_FORM: TemplateForm = {
@@ -93,6 +97,7 @@ const EMPTY_FORM: TemplateForm = {
   ia_max: '',
   ia_unidade: '',
   grupoId: '',
+  diasSemana: [],
 };
 
 const EVIDENCIAS: {
@@ -251,6 +256,7 @@ export default function TarefasTemplatesPage() {
       ia_max: ia?.faixa_ok?.max != null ? String(ia.faixa_ok.max) : '',
       ia_unidade: ia?.unidade ?? '',
       grupoId: t.grupoItens?.[0]?.grupo.id ?? '',
+      diasSemana: t.diasSemana ?? [],
     });
     setError(null);
     setShowModal(true);
@@ -267,9 +273,21 @@ export default function TarefasTemplatesPage() {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  function toggleDiaSemana(dow: number) {
+    setForm((f) => ({
+      ...f,
+      diasSemana: f.diasSemana.includes(dow)
+        ? f.diasSemana.filter((d) => d !== dow)
+        : [...f.diasSemana, dow].sort((a, b) => a - b),
+    }));
+  }
+
   function validate(): string | null {
     if (!form.titulo.trim()) return 'O título é obrigatório.';
     if (!form.descricao.trim()) return 'A descrição é obrigatória.';
+    if (form.diasSemana.length === 0) {
+      return 'Selecione pelo menos um dia da semana em que a tarefa deve ser feita.';
+    }
     if (
       !form.exigeFoto &&
       !form.exigeConfirmacaoTexto &&
@@ -326,6 +344,7 @@ export default function TarefasTemplatesPage() {
         validacaoIA,
         lojaId: form.lojaId || null,
         cargoId: form.cargoId || null,
+        diasSemana: form.diasSemana,
         ...(form.grupoId && { grupoId: form.grupoId }),
       };
 
@@ -578,6 +597,13 @@ export default function TarefasTemplatesPage() {
                     {/* Descrição */}
                     <p className="text-sm text-gray-400 mt-1 line-clamp-2">{t.descricao}</p>
 
+                    {(t.diasSemana?.length ?? 0) > 0 && (
+                      <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1">
+                        <CalendarDays className="w-3 h-3" />
+                        {formatDiasSemana(t.diasSemana!)}
+                      </p>
+                    )}
+
                     {/* Evidências */}
                     <div className="flex flex-wrap gap-1.5 mt-2.5">
                       {t.exigeFoto && (
@@ -688,6 +714,64 @@ export default function TarefasTemplatesPage() {
             <div className="space-y-4">
               <p className={sectionCls}>Informações básicas</p>
 
+              <div>
+                <label className={labelCls}>
+                  Título <span className="text-red-400">*</span>
+                </label>
+                <input
+                  autoFocus
+                  type="text"
+                  value={form.titulo}
+                  onChange={(e) => setField('titulo', e.target.value)}
+                  placeholder="Ex: Aferição de temperatura do forno"
+                  className={inputCls}
+                />
+              </div>
+
+              <div>
+                <label className={labelCls}>
+                  Descrição <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={form.descricao}
+                  onChange={(e) => setField('descricao', e.target.value)}
+                  placeholder="Descreva a tarefa em detalhes..."
+                  rows={4}
+                  className={`${inputCls} resize-none`}
+                />
+                <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                  Descreva a tarefa em detalhes. A IA usará este texto para validar a evidência
+                  enviada pelo funcionário. Ex: &ldquo;Aferir a temperatura do forno principal.
+                  O display deve mostrar entre 300°C e 350°C.&rdquo;
+                </p>
+              </div>
+
+              <div>
+                <label className={labelCls}>
+                  Dias da semana <span className="text-red-400">*</span>
+                </label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {DIAS_SEMANA_PT.map((dia, dow) => (
+                    <button
+                      key={dow}
+                      type="button"
+                      onClick={() => toggleDiaSemana(dow)}
+                      className={`w-10 h-10 rounded-xl text-xs font-medium border transition-colors ${
+                        form.diasSemana.includes(dow)
+                          ? 'bg-blue-500/10 border-blue-500/40 text-blue-300'
+                          : 'bg-[#0a0a0a] border-[#2a2a2e] text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {dia}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-600 mt-1.5">
+                  Esses dias serão o padrão ao atribuir este template a um funcionário — não precisa
+                  configurar um a um.
+                </p>
+              </div>
+
               {(!editingTemplate || (editingTemplate.grupoItens?.length ?? 0) === 0) && (
                 <div>
                   <label className={labelCls}>
@@ -739,38 +823,6 @@ export default function TarefasTemplatesPage() {
                   </div>
                 </div>
               )}
-
-              <div>
-                <label className={labelCls}>
-                  Título <span className="text-red-400">*</span>
-                </label>
-                <input
-                  autoFocus
-                  type="text"
-                  value={form.titulo}
-                  onChange={(e) => setField('titulo', e.target.value)}
-                  placeholder="Ex: Aferição de temperatura do forno"
-                  className={inputCls}
-                />
-              </div>
-
-              <div>
-                <label className={labelCls}>
-                  Descrição <span className="text-red-400">*</span>
-                </label>
-                <textarea
-                  value={form.descricao}
-                  onChange={(e) => setField('descricao', e.target.value)}
-                  placeholder="Descreva a tarefa em detalhes..."
-                  rows={4}
-                  className={`${inputCls} resize-none`}
-                />
-                <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                  Descreva a tarefa em detalhes. A IA usará este texto para validar a evidência
-                  enviada pelo funcionário. Ex: &ldquo;Aferir a temperatura do forno principal.
-                  O display deve mostrar entre 300°C e 350°C.&rdquo;
-                </p>
-              </div>
             </div>
 
             {/* Evidências exigidas */}
