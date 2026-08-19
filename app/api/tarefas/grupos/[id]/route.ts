@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rhGetUser } from '@/lib/rh-auth';
+import { propagarTemplatesNovosNoGrupo } from '@/lib/tarefas-propagar-grupo';
 
 const includeGrupo = {
   itens: {
@@ -98,6 +99,13 @@ export async function PUT(
         }
       }
 
+      const itensAntes = await prisma.tarefaGrupoItem.findMany({
+        where: { grupoId: id },
+        select: { templateId: true },
+      });
+      const idsAntes = new Set(itensAntes.map((i) => i.templateId));
+      const idsNovos = uniqueIds.filter((tid) => !idsAntes.has(tid));
+
       await prisma.$transaction([
         prisma.tarefaGrupoItem.deleteMany({ where: { grupoId: id } }),
         prisma.tarefaGrupo.update({
@@ -114,6 +122,10 @@ export async function PUT(
           },
         }),
       ]);
+
+      if (idsNovos.length > 0) {
+        await propagarTemplatesNovosNoGrupo(rh.userId, id, idsNovos);
+      }
     } else {
       await prisma.tarefaGrupo.update({
         where: { id },

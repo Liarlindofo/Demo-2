@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rhGetUser } from '@/lib/rh-auth';
 import { parseDiasSemana, parseHorarioHHmm } from '@/lib/tarefas-dias';
+import { propagarTemplateNoGrupo } from '@/lib/tarefas-propagar-grupo';
 
 export const dynamic = 'force-dynamic';
 
@@ -128,7 +129,9 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json(template, { status: 201 });
+    const propagacao = await propagarTemplateNoGrupo(rh.userId, grupoId, template.id);
+
+    return NextResponse.json({ ...template, propagacao }, { status: 201 });
   } catch (err) {
     console.error('[POST /api/tarefas/templates]', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });

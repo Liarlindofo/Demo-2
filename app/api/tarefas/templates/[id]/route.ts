@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rhGetUser } from '@/lib/rh-auth';
 import { parseDiasSemana, parseHorarioHHmm } from '@/lib/tarefas-dias';
+import { propagarTemplateNoGrupo } from '@/lib/tarefas-propagar-grupo';
 import {
   excluirTemplateEAtribuicoes,
   syncSessoesAbertasDoTemplate,
@@ -135,6 +136,7 @@ export async function PATCH(
         await prisma.tarefaGrupoItem.create({
           data: { grupoId, templateId: id, ordem: (maxOrdem._max.ordem ?? -1) + 1 },
         });
+        await propagarTemplateNoGrupo(rh.userId, grupoId, id);
       }
     }
 
