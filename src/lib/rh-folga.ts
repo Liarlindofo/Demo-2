@@ -89,7 +89,7 @@ export function labelFolga(func: FolgaFuncionario): string {
       ? 'último domingo'
       : `${func.domingoFolga}º domingo`
     : null;
-  const parts = [...dias];
+  const parts: string[] = [...dias];
   if (dsr && !dias.includes('Dom')) parts.push(`DSR ${dsr}`);
   return parts.join(', ') || '—';
 }
