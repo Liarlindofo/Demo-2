@@ -1595,7 +1595,10 @@ export default function AtribuicoesPage() {
                             <span className="text-amber-400 font-semibold">{nDatas}</span>{' '}
                             atribuiç{nDatas === 1 ? 'ão' : 'ões'}
                             {slot.repetir && slot.semDataFim && (
-                              <span className="text-gray-600"> (próx. 90 dias)</span>
+                              <span className="text-gray-600">
+                                {' '}
+                                (próx. 90 dias; renovação automática)
+                              </span>
                             )}
                             {slot.repetir && slot.recorrenciaTipo === 'mensal' && (
                               <span className="text-gray-600">

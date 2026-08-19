@@ -78,6 +78,7 @@ model User {
   tarefaTemplates        TarefaTemplate[]
   tarefaGrupos           TarefaGrupo[]
   tarefasAtribuidas      TarefaAtribuida[]
+  tarefaSeries           TarefaSerie[]
   reportDefinitions      ReportDefinition[]
   serviceApiKeys         ServiceApiKey[]
   /// Slot WhatsApp usado pelo scheduler de tarefas (digest/pendentes). Null = slot 1.
@@ -888,6 +889,7 @@ model RhLoja {
   plrs                  RhPLRTrimestral[]
   tarefaTemplates       TarefaTemplate[]
   tarefasAtribuidas     TarefaAtribuida[]
+  tarefaSeries          TarefaSerie[]
   taxas                 RhTaxaLoja[]
   riders                DeliveryRider[]
 
@@ -961,6 +963,7 @@ model RhFuncionario {
   bonificacoesAssiduidade RhBonificacaoAssiduidade[]
   plrPagamentos           RhPLRPagamento[]
   tarefasAtribuidas       TarefaAtribuida[]
+  tarefaSeries            TarefaSerie[]
 
   @@index([userId, cpf])
   @@index([userId])
@@ -1431,6 +1434,7 @@ model TarefaTemplate {
   cargo       RhCargo?           @relation(fields: [cargoId], references: [id])
   atribuicoes TarefaAtribuida[]
   grupoItens  TarefaGrupoItem[]
+  series      TarefaSerie[]
 
   @@index([userId])
   @@index([lojaId])
@@ -1469,6 +1473,36 @@ model TarefaGrupoItem {
   @@map("tarefa_grupo_itens")
 }
 
+/// Recorrência aberta (sem data de término). O cron renova o horizonte de 90 dias.
+model TarefaSerie {
+  id            String   @id @default(cuid())
+  userId        String
+  templateId    String
+  funcionarioId String
+  lojaId        String
+  horario       String
+  tipo          String
+  diasSemana    Int[]    @default([])
+  mensalModo    String?
+  diaDoMes      Int?
+  nth           Int?
+  weekday       Int?
+  renovarAuto   Boolean  @default(true)
+  ativo         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template    TarefaTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  funcionario RhFuncionario  @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+  loja        RhLoja         @relation(fields: [lojaId], references: [id], onDelete: Cascade)
+  atribuicoes TarefaAtribuida[]
+
+  @@unique([templateId, funcionarioId, lojaId])
+  @@index([userId, ativo])
+  @@map("tarefa_series")
+}
+
 /// Instância de tarefa atribuída a um funcionário em data/hora específica
 model TarefaAtribuida {
   id            String       @id @default(cuid())
@@ -1476,6 +1510,7 @@ model TarefaAtribuida {
   templateId    String
   funcionarioId String
   lojaId        String
+  serieId       String?
   dataAgendada  DateTime     // data + horário limite de conclusão
   status        StatusTarefa @default(AGENDADA)
   enviadaEm     DateTime?
@@ -1492,12 +1527,14 @@ model TarefaAtribuida {
   template    TarefaTemplate    @relation(fields: [templateId], references: [id])
   funcionario RhFuncionario     @relation(fields: [funcionarioId], references: [id])
   loja        RhLoja            @relation(fields: [lojaId], references: [id])
+  serie       TarefaSerie?      @relation(fields: [serieId], references: [id], onDelete: SetNull)
   evidencias  TarefaEvidencia[]
 
   @@index([funcionarioId, dataAgendada])
   @@index([lojaId, dataAgendada])
   @@index([userId])
   @@index([userId, status])
+  @@index([serieId])
   @@map("tarefa_atribuidas")
 }
 

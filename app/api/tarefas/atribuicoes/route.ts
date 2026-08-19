@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rhGetUser } from '@/lib/rh-auth';
 import { funcionarioEstaDeFolga } from '@/lib/rh-folga';
+import {
+  gerarDatas,
+  isSerieAberta,
+  validarRecorrenciaMensal,
+  type SlotInput,
+} from '@/lib/tarefas-recorrencia';
 
 export const dynamic = 'force-dynamic';
-
-// ── GET — lista atribuições de um dia ────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,14 +17,13 @@ export async function GET(req: NextRequest) {
     if (!rh) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const { searchParams } = req.nextUrl;
-    const data = searchParams.get('data'); // "YYYY-MM-DD"
+    const data = searchParams.get('data');
     const lojaId = searchParams.get('lojaId');
 
     if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) {
       return NextResponse.json({ error: 'Parâmetro data é obrigatório (YYYY-MM-DD).' }, { status: 400 });
     }
 
-    // Interpreta como meia-noite e fim do dia em America/Sao_Paulo (UTC-3 fixo)
     const inicio = new Date(`${data}T00:00:00-03:00`);
     const fim = new Date(`${data}T23:59:59.999-03:00`);
 
@@ -51,195 +54,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// ── POST — cria atribuições (com recorrência materializada) ──────────────
-
-interface SlotInput {
-  templateId: string;
-  dataBase: string; // "YYYY-MM-DD"
-  horario: string;  // "HH:mm"
-  /** Loja onde a tarefa será realizada. Se omitido, usa lojaId do funcionário. */
-  lojaExecucaoId?: string;
-  recorrencia?: {
-    tipo?: 'unica' | 'diaria' | 'semanal' | 'mensal';
-    diasSemana?: number[];
-    dataFim?: string; // "YYYY-MM-DD"
-    mensalModo?: 'dia_do_mes' | 'nth_weekday';
-    diaDoMes?: number; // 1–31
-    nth?: 1 | 2 | 3 | 4 | -1;
-    weekday?: number; // 0–6 (Dom–Sáb)
-  };
-}
-
-/** Último dia do mês (ano/mês 1-indexado). */
-function ultimoDiaDoMes(year: number, month: number): number {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
-
-/** Dia do mês com clamp: se dia 31 não existir, usa o último dia. */
-function diaDoMesNoMes(year: number, month: number, diaDoMes: number): string {
-  const last = ultimoDiaDoMes(year, month);
-  const day = Math.min(Math.max(1, diaDoMes), last);
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
-
-/**
- * N-ésimo weekday do mês (nth=1..4 ou -1 = última).
- * weekday: 0=Dom … 6=Sáb.
- */
-function nthWeekdayNoMes(
-  year: number,
-  month: number,
-  nth: number,
-  weekday: number,
-): string | null {
-  if (nth === -1) {
-    const lastDay = ultimoDiaDoMes(year, month);
-    for (let day = lastDay; day >= 1; day--) {
-      const d = new Date(Date.UTC(year, month - 1, day));
-      if (d.getUTCDay() === weekday) {
-        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      }
-    }
-    return null;
-  }
-
-  let count = 0;
-  const lastDay = ultimoDiaDoMes(year, month);
-  for (let day = 1; day <= lastDay; day++) {
-    const d = new Date(Date.UTC(year, month - 1, day));
-    if (d.getUTCDay() === weekday) {
-      count++;
-      if (count === nth) {
-        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      }
-    }
-  }
-  return null;
-}
-
-function parseYm(dateStr: string): { year: number; month: number } {
-  const [y, m] = dateStr.split('-').map(Number);
-  return { year: y, month: m };
-}
-
-function addMonthsYm(year: number, month: number, n: number): { year: number; month: number } {
-  const total = year * 12 + (month - 1) + n;
-  return { year: Math.floor(total / 12), month: (total % 12) + 1 };
-}
-
-/**
- * Gera os instantes UTC para cada ocorrência do slot.
- * dataBase e horario são interpretados como America/Sao_Paulo (UTC-3 fixo;
- * Brasil aboliu horário de verão em 2019, portanto o offset é constante).
- */
-function gerarDatas(slot: SlotInput): Date[] {
-  const tipo = slot.recorrencia?.tipo ?? 'unica';
-
-  if (tipo === 'unica') {
-    // Converte diretamente: "YYYY-MM-DDTHH:mm:00-03:00" → UTC correto
-    return [new Date(`${slot.dataBase}T${slot.horario}:00-03:00`)];
-  }
-
-  // Meia-noite BRT do dia de início em UTC
-  const dataInicioMs = new Date(`${slot.dataBase}T00:00:00-03:00`).getTime();
-
-  const dataFimStr = slot.recorrencia?.dataFim;
-  const dataFimBaseMs = dataFimStr
-    ? new Date(`${dataFimStr}T23:59:59.999-03:00`).getTime()
-    : null;
-  const maxMs = dataInicioMs + 90 * 24 * 60 * 60 * 1000;
-  const efetiveFimMs = dataFimBaseMs !== null && dataFimBaseMs < maxMs
-    ? dataFimBaseMs
-    : maxMs;
-
-  if (tipo === 'mensal') {
-    const modo = slot.recorrencia?.mensalModo ?? 'dia_do_mes';
-    const datas: Date[] = [];
-    let { year, month } = parseYm(slot.dataBase);
-    const fimDateStr = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Sao_Paulo',
-    }).format(new Date(efetiveFimMs));
-    const fimYm = parseYm(fimDateStr);
-
-    while (
-      year < fimYm.year ||
-      (year === fimYm.year && month <= fimYm.month)
-    ) {
-      let dateStr: string | null = null;
-      if (modo === 'dia_do_mes') {
-        const dia = slot.recorrencia?.diaDoMes ?? 1;
-        dateStr = diaDoMesNoMes(year, month, dia);
-      } else {
-        const nth = slot.recorrencia?.nth ?? 1;
-        const weekday = slot.recorrencia?.weekday ?? 1;
-        dateStr = nthWeekdayNoMes(year, month, nth, weekday);
-      }
-
-      if (dateStr) {
-        const d = new Date(`${dateStr}T${slot.horario}:00-03:00`);
-        const ms = d.getTime();
-        if (ms >= dataInicioMs && ms <= efetiveFimMs) {
-          datas.push(d);
-        }
-      }
-
-      ({ year, month } = addMonthsYm(year, month, 1));
-    }
-
-    return datas;
-  }
-
-  const diasSemana = slot.recorrencia?.diasSemana ?? [];
-  const datas: Date[] = [];
-
-  // Itera adicionando 24h exatas por dia (sem DST → seguro)
-  let currentMs = dataInicioMs;
-  while (currentMs <= efetiveFimMs) {
-    // Obtém a string de data no fuso BRT a partir do timestamp UTC
-    // (currentMs está em meia-noite BRT = 03:00 UTC, então slice(0,10) dá a data BRT)
-    const dateStrBRT = new Date(currentMs).toISOString().slice(0, 10);
-    // Monta o instante exato no fuso BRT
-    const d = new Date(`${dateStrBRT}T${slot.horario}:00-03:00`);
-    // getDay() em UTC no servidor retorna o dia da data BRT
-    // porque currentMs está em T03:00Z, que é T00:00 BRT do mesmo dia
-    const dow = d.getUTCDay(); // dia da semana da data BRT (sem ambiguidade)
-    if (tipo === 'diaria' || (tipo === 'semanal' && diasSemana.includes(dow))) {
-      datas.push(d);
-    }
-    currentMs += 24 * 60 * 60 * 1000;
-  }
-
-  return datas;
-}
-
-function validarRecorrenciaMensal(slot: SlotInput): string | null {
-  const rec = slot.recorrencia;
-  if (!rec || rec.tipo !== 'mensal') return null;
-
-  const modo = rec.mensalModo ?? 'dia_do_mes';
-  if (modo === 'dia_do_mes') {
-    const dia = rec.diaDoMes;
-    if (typeof dia !== 'number' || !Number.isInteger(dia) || dia < 1 || dia > 31) {
-      return 'Informe um dia do mês válido (1–31) para a recorrência mensal.';
-    }
-    return null;
-  }
-
-  if (modo === 'nth_weekday') {
-    const nth = rec.nth;
-    const weekday = rec.weekday;
-    if (nth !== 1 && nth !== 2 && nth !== 3 && nth !== 4 && nth !== -1) {
-      return 'Informe a ocorrência do mês (1ª–4ª ou última).';
-    }
-    if (typeof weekday !== 'number' || !Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
-      return 'Selecione o dia da semana para a recorrência mensal.';
-    }
-    return null;
-  }
-
-  return 'Modo de recorrência mensal inválido.';
-}
-
 export async function POST(req: Request) {
   try {
     const rh = await rhGetUser();
@@ -264,7 +78,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Verificar funcionário e loja pertencem ao tenant
     const [func, loja] = await Promise.all([
       prisma.rhFuncionario.findFirst({
         where: { id: funcionarioId, userId: rh.userId },
@@ -296,7 +109,6 @@ export async function POST(req: Request) {
       grupos.flatMap((g) => g.itens.map((i) => i.templateId)),
     );
 
-    // Pré-validar lojaExecucaoId distintas (evita busca repetida por loja no loop)
     const lojaExecucaoIds = [...new Set(
       slots.map((s) => s.lojaExecucaoId).filter((id): id is string => !!id && id !== lojaId),
     )];
@@ -314,13 +126,13 @@ export async function POST(req: Request) {
     }
 
     const agora = new Date();
-    // Tolerância de 60s para acomodar latência entre browser e servidor
     const limitePassado = new Date(agora.getTime() - 60_000);
     const registros: Array<{
       userId: string;
       templateId: string;
       funcionarioId: string;
       lojaId: string;
+      serieId: string | null;
       dataAgendada: Date;
     }> = [];
 
@@ -364,6 +176,59 @@ export async function POST(req: Request) {
         );
       }
 
+      const lojaEfetiva = slot.lojaExecucaoId ?? lojaId;
+      const aberta = isSerieAberta(slot.recorrencia);
+      let serieId: string | null = null;
+
+      if (aberta) {
+        const rec = slot.recorrencia!;
+        const serie = await prisma.tarefaSerie.upsert({
+          where: {
+            templateId_funcionarioId_lojaId: {
+              templateId: slot.templateId,
+              funcionarioId,
+              lojaId: lojaEfetiva,
+            },
+          },
+          create: {
+            userId: rh.userId,
+            templateId: slot.templateId,
+            funcionarioId,
+            lojaId: lojaEfetiva,
+            horario: slot.horario,
+            tipo: rec.tipo ?? 'semanal',
+            diasSemana: rec.diasSemana ?? [],
+            mensalModo: rec.mensalModo ?? null,
+            diaDoMes: rec.diaDoMes ?? null,
+            nth: rec.nth ?? null,
+            weekday: rec.weekday ?? null,
+            renovarAuto: true,
+            ativo: true,
+          },
+          update: {
+            horario: slot.horario,
+            tipo: rec.tipo ?? 'semanal',
+            diasSemana: rec.diasSemana ?? [],
+            mensalModo: rec.mensalModo ?? null,
+            diaDoMes: rec.diaDoMes ?? null,
+            nth: rec.nth ?? null,
+            weekday: rec.weekday ?? null,
+            renovarAuto: true,
+            ativo: true,
+          },
+        });
+        serieId = serie.id;
+      } else {
+        await prisma.tarefaSerie.updateMany({
+          where: {
+            templateId: slot.templateId,
+            funcionarioId,
+            lojaId: lojaEfetiva,
+          },
+          data: { renovarAuto: false, ativo: false },
+        });
+      }
+
       for (const d of datas) {
         if (d <= limitePassado) {
           return NextResponse.json(
@@ -373,13 +238,12 @@ export async function POST(req: Request) {
             { status: 400 },
           );
         }
-        // Usa lojaExecucaoId se informado; caso contrário, usa a loja do funcionário
-        const lojaEfetiva = slot.lojaExecucaoId ?? lojaId;
         registros.push({
           userId: rh.userId,
           templateId: slot.templateId,
           funcionarioId,
           lojaId: lojaEfetiva,
+          serieId,
           dataAgendada: d,
         });
       }
