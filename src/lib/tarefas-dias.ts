@@ -19,3 +19,14 @@ export function formatDiasSemana(dias: number[]): string {
     .map((d) => DIAS_SEMANA_PT[d])
     .join(', ');
 }
+
+/** Normaliza "8:00" / "08:00" → "HH:mm". Null se inválido. */
+export function parseHorarioHHmm(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const m = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return `${String(h).padStart(2, '0')}:${m[2]}`;
+}

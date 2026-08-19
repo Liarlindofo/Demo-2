@@ -71,6 +71,7 @@ interface Template {
   cargoId: string | null;
   ativo: boolean;
   diasSemana?: number[];
+  horarioPadrao?: string;
 }
 
 interface GrupoTemplate {
@@ -578,10 +579,14 @@ export default function AtribuicoesPage() {
         const tpl = templates.find((t) => t.id === tid);
         const dias = (tpl?.diasSemana ?? []).filter((d) => d >= 0 && d <= 6);
         const temDias = dias.length > 0;
+        const horario =
+          tpl?.horarioPadrao && /^\d{2}:\d{2}$/.test(tpl.horarioPadrao)
+            ? tpl.horarioPadrao
+            : '08:00';
         return {
           templateId: tid,
           data: selectedDate,
-          horario: '08:00',
+          horario,
           repetir: temDias,
           recorrenciaTipo: temDias ? 'semanal' : 'diaria',
           diasSemana: dias,

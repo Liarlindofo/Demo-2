@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireBotAuth } from '@/lib/bot-auth';
+import { funcionarioEstaDeFolga } from '@/lib/rh-folga';
 
 /**
  * GET /api/bot/tarefas/digest?data=YYYY-MM-DD
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
         },
       },
       funcionario: {
-        select: { id: true, nome: true, telefone: true, horarioDigest: true },
+        select: { id: true, nome: true, telefone: true, horarioDigest: true, diasFolga: true, domingoFolga: true, ativo: true, statusFerias: true },
       },
       loja: { select: { id: true, nome: true } },
     },
@@ -72,6 +73,8 @@ export async function GET(req: NextRequest) {
   >();
 
   for (const a of atribuicoes) {
+    if (funcionarioEstaDeFolga(a.funcionario, a.dataAgendada)) continue;
+
     if (!map.has(a.funcionarioId)) {
       map.set(a.funcionarioId, {
         userId: a.userId,

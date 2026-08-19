@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rhGetUser } from '@/lib/rh-auth';
+import { funcionarioEstaDeFolga } from '@/lib/rh-folga';
 
 export const dynamic = 'force-dynamic';
 
@@ -265,7 +266,16 @@ export async function POST(req: Request) {
 
     // Verificar funcionário e loja pertencem ao tenant
     const [func, loja] = await Promise.all([
-      prisma.rhFuncionario.findFirst({ where: { id: funcionarioId, userId: rh.userId } }),
+      prisma.rhFuncionario.findFirst({
+        where: { id: funcionarioId, userId: rh.userId },
+        select: {
+          id: true,
+          ativo: true,
+          diasFolga: true,
+          domingoFolga: true,
+          statusFerias: true,
+        },
+      }),
       prisma.rhLoja.findFirst({ where: { id: lojaId, userId: rh.userId } }),
     ]);
     if (!func) return NextResponse.json({ error: 'Funcionário não encontrado.' }, { status: 404 });
@@ -343,10 +353,13 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: erroMensal }, { status: 400 });
       }
 
-      const datas = gerarDatas(slot);
+      const datas = gerarDatas(slot).filter((d) => !funcionarioEstaDeFolga(func, d));
       if (datas.length === 0) {
         return NextResponse.json(
-          { error: 'Nenhuma data gerada para o slot. Verifique os parâmetros de recorrência.' },
+          {
+            error:
+              'Nenhuma data gerada: os dias escolhidos coincidem com a folga deste funcionário (ficha de RH). Ajuste os dias do template ou a escala do funcionário.',
+          },
           { status: 400 },
         );
       }

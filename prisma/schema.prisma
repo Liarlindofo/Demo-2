@@ -1417,6 +1417,8 @@ model TarefaTemplate {
   validacaoIA           Json?
   /// Dias em que a tarefa deve ser feita (0=Dom … 6=Sáb). Usado como padrão na atribuição.
   diasSemana            Int[]    @default([])
+  /// Horário limite padrão (HH:mm, BRT) ao atribuir este template.
+  horarioPadrao         String   @default("08:00")
   lojaId                String?  // null = global
   cargoId               String?  // null = todos os cargos
   ativo                 Boolean  @default(true)

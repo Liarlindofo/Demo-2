@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireBotAuth } from '@/lib/bot-auth';
+import { funcionarioEstaDeFolga } from '@/lib/rh-folga';
 
 /**
  * GET /api/bot/tarefas/pendentes?ate=ISO_DATETIME
@@ -42,12 +43,14 @@ export async function GET(req: NextRequest) {
         },
       },
       funcionario: {
-        select: { id: true, nome: true, telefone: true },
+        select: { id: true, nome: true, telefone: true, diasFolga: true, domingoFolga: true, ativo: true, statusFerias: true },
       },
       loja: { select: { id: true, nome: true } },
     },
     orderBy: { dataAgendada: 'asc' },
   });
 
-  return NextResponse.json(pendentes);
+  return NextResponse.json(
+    pendentes.filter((t) => !funcionarioEstaDeFolga(t.funcionario, t.dataAgendada)),
+  );
 }

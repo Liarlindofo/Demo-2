@@ -18,6 +18,7 @@ import {
   Trash2,
   Layers,
   CalendarDays,
+  Clock,
 } from 'lucide-react';
 import { DIAS_SEMANA_PT, formatDiasSemana } from '@/lib/tarefas-dias';
 
@@ -46,6 +47,7 @@ interface TarefaTemplate {
   cargo?: { id: string; nome: string } | null;
   grupoItens?: Array<{ grupo: { id: string; nome: string; ativo: boolean } }>;
   diasSemana?: number[];
+  horarioPadrao?: string;
 }
 
 interface Loja {
@@ -80,6 +82,7 @@ interface TemplateForm {
   ia_unidade: string;
   grupoId: string;
   diasSemana: number[];
+  horarioPadrao: string;
 }
 
 const EMPTY_FORM: TemplateForm = {
@@ -98,6 +101,7 @@ const EMPTY_FORM: TemplateForm = {
   ia_unidade: '',
   grupoId: '',
   diasSemana: [],
+  horarioPadrao: '08:00',
 };
 
 const EVIDENCIAS: {
@@ -257,6 +261,7 @@ export default function TarefasTemplatesPage() {
       ia_unidade: ia?.unidade ?? '',
       grupoId: t.grupoItens?.[0]?.grupo.id ?? '',
       diasSemana: t.diasSemana ?? [],
+      horarioPadrao: t.horarioPadrao ?? '08:00',
     });
     setError(null);
     setShowModal(true);
@@ -287,6 +292,9 @@ export default function TarefasTemplatesPage() {
     if (!form.descricao.trim()) return 'A descrição é obrigatória.';
     if (form.diasSemana.length === 0) {
       return 'Selecione pelo menos um dia da semana em que a tarefa deve ser feita.';
+    }
+    if (!form.horarioPadrao || !/^\d{2}:\d{2}$/.test(form.horarioPadrao)) {
+      return 'Informe o horário da tarefa.';
     }
     if (
       !form.exigeFoto &&
@@ -345,6 +353,7 @@ export default function TarefasTemplatesPage() {
         lojaId: form.lojaId || null,
         cargoId: form.cargoId || null,
         diasSemana: form.diasSemana,
+        horarioPadrao: form.horarioPadrao,
         ...(form.grupoId && { grupoId: form.grupoId }),
       };
 
@@ -598,9 +607,15 @@ export default function TarefasTemplatesPage() {
                     <p className="text-sm text-gray-400 mt-1 line-clamp-2">{t.descricao}</p>
 
                     {(t.diasSemana?.length ?? 0) > 0 && (
-                      <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1">
+                      <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1.5 flex-wrap">
                         <CalendarDays className="w-3 h-3" />
                         {formatDiasSemana(t.diasSemana!)}
+                        {t.horarioPadrao && (
+                          <span className="inline-flex items-center gap-1 text-blue-300/70">
+                            <Clock className="w-3 h-3" />
+                            {t.horarioPadrao}
+                          </span>
+                        )}
                       </p>
                     )}
 
@@ -768,7 +783,23 @@ export default function TarefasTemplatesPage() {
                 </div>
                 <p className="text-xs text-gray-600 mt-1.5">
                   Esses dias serão o padrão ao atribuir este template a um funcionário — não precisa
-                  configurar um a um.
+                  configurar um a um. No dia de folga do funcionário (ficha de RH) a tarefa não é
+                  enviada.
+                </p>
+              </div>
+
+              <div>
+                <label className={labelCls}>
+                  Horário <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="time"
+                  value={form.horarioPadrao}
+                  onChange={(e) => setField('horarioPadrao', e.target.value)}
+                  className={inputCls}
+                />
+                <p className="text-xs text-gray-600 mt-1.5">
+                  Horário em que o bot avisa o funcionário (Brasília). Também é o padrão na atribuição.
                 </p>
               </div>
 

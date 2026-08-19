@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rhGetUser } from '@/lib/rh-auth';
-import { parseDiasSemana } from '@/lib/tarefas-dias';
+import { parseDiasSemana, parseHorarioHHmm } from '@/lib/tarefas-dias';
 import {
   excluirTemplateEAtribuicoes,
   syncSessoesAbertasDoTemplate,
@@ -49,6 +49,7 @@ export async function PATCH(
       ativo,
       grupoId,
       diasSemana: diasSemanaRaw,
+      horarioPadrao: horarioRaw,
     } = body;
 
     // Se está editando conteúdo (não apenas toggling ativo), validar campos obrigatórios
@@ -84,6 +85,18 @@ export async function PATCH(
       diasSemana = parsed;
     }
 
+    let horarioPadrao: string | undefined;
+    if (horarioRaw !== undefined) {
+      const parsedH = parseHorarioHHmm(horarioRaw);
+      if (!parsedH) {
+        return NextResponse.json(
+          { error: 'Informe o horário da tarefa no formato HH:mm.' },
+          { status: 400 },
+        );
+      }
+      horarioPadrao = parsedH;
+    }
+
     const updated = await prisma.tarefaTemplate.update({
       where: { id },
       data: {
@@ -98,6 +111,7 @@ export async function PATCH(
         ...(cargoId !== undefined && { cargoId: cargoId || null }),
         ...(ativo !== undefined && { ativo }),
         ...(diasSemana !== undefined && { diasSemana }),
+        ...(horarioPadrao !== undefined && { horarioPadrao }),
       },
       include: includeTemplate,
     });

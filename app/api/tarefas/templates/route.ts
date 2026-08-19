@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rhGetUser } from '@/lib/rh-auth';
-import { parseDiasSemana } from '@/lib/tarefas-dias';
+import { parseDiasSemana, parseHorarioHHmm } from '@/lib/tarefas-dias';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +49,7 @@ export async function POST(req: Request) {
       cargoId,
       grupoId,
       diasSemana: diasSemanaRaw,
+      horarioPadrao: horarioRaw,
     } = body;
 
     if (!titulo?.trim()) {
@@ -67,6 +68,13 @@ export async function POST(req: Request) {
     if (!diasSemana || diasSemana.length === 0) {
       return NextResponse.json(
         { error: 'Selecione pelo menos um dia da semana em que a tarefa deve ser feita.' },
+        { status: 400 },
+      );
+    }
+    const horarioPadrao = parseHorarioHHmm(horarioRaw);
+    if (!horarioPadrao) {
+      return NextResponse.json(
+        { error: 'Informe o horário da tarefa no formato HH:mm.' },
         { status: 400 },
       );
     }
@@ -103,6 +111,7 @@ export async function POST(req: Request) {
         lojaId: lojaId || null,
         cargoId: cargoId || null,
         diasSemana,
+        horarioPadrao,
         criadoPor: rh.userId,
         grupoItens: {
           create: { grupoId, ordem: (maxOrdem._max.ordem ?? -1) + 1 },
