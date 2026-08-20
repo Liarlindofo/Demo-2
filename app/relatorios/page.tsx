@@ -23,6 +23,8 @@ import {
   CheckSquare,
   Square,
   MessagesSquare,
+  Trash2,
+  Settings2,
 } from 'lucide-react';
 import ToolProtection from '@/components/auth/ToolProtection';
 import { SystemTool } from '@/types/admin';
@@ -92,7 +94,27 @@ interface ComplaintReviewItem {
   resumo: string;
   dataOcorrencia: string;
   confirmadoPorHumano: boolean;
+  sessionSlot?: number;
+  origem?: string;
+  lojaGrupo?: string | null;
+  sessionLabel?: string;
+  origemLabel?: string;
   evidencias: ComplaintEvidence[];
+}
+
+interface IfoodGroupRow {
+  id: string;
+  groupWhatsAppId: string;
+  lojaSlug: string;
+  lojaNome: string;
+  sessionSlot: number;
+  ativo: boolean;
+  createdAt: string;
+}
+
+interface WppGroupOpt {
+  id: string;
+  name: string;
 }
 
 interface ComplaintConversationMessage {
@@ -298,6 +320,18 @@ function RelatoriosContent() {
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [ifoodGroups, setIfoodGroups] = useState<IfoodGroupRow[]>([]);
+  const [loadingIfoodGroups, setLoadingIfoodGroups] = useState(false);
+  const [showAddIfoodGroup, setShowAddIfoodGroup] = useState(false);
+  const [ifoodFormSlot, setIfoodFormSlot] = useState<number | null>(null);
+  const [ifoodFormGroupId, setIfoodFormGroupId] = useState('');
+  const [ifoodFormLojaNome, setIfoodFormLojaNome] = useState('');
+  const [ifoodFormLojaSlug, setIfoodFormLojaSlug] = useState('');
+  const [wppGroupsForSlot, setWppGroupsForSlot] = useState<WppGroupOpt[]>([]);
+  const [loadingWppGroups, setLoadingWppGroups] = useState(false);
+  const [savingIfoodGroup, setSavingIfoodGroup] = useState(false);
+  const [deletingIfoodGroupId, setDeletingIfoodGroupId] = useState<string | null>(null);
+
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<ReportRow | null>(null);
   const [form, setForm] = useState<ReportForm>(EMPTY_FORM);
@@ -366,9 +400,112 @@ function RelatoriosContent() {
     }
   }, []);
 
+  const fetchIfoodGroups = useCallback(async () => {
+    setLoadingIfoodGroups(true);
+    try {
+      const res = await fetch('/api/reports/complaints/ifood-groups');
+      if (res.ok) {
+        const data = await res.json();
+        setIfoodGroups(Array.isArray(data.groups) ? data.groups : []);
+      }
+    } catch {
+      // silent
+    } finally {
+      setLoadingIfoodGroups(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (tab === 'reclamacoes') fetchComplaintRuns();
-  }, [tab, fetchComplaintRuns]);
+    if (tab === 'reclamacoes') {
+      fetchComplaintRuns();
+      fetchIfoodGroups();
+    }
+  }, [tab, fetchComplaintRuns, fetchIfoodGroups]);
+
+  useEffect(() => {
+    if (!showAddIfoodGroup || !ifoodFormSlot) {
+      setWppGroupsForSlot([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoadingWppGroups(true);
+      setIfoodFormGroupId('');
+      try {
+        const res = await fetch(`/api/whatsapp-sessions/slot/${ifoodFormSlot}/groups`);
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        const raw = Array.isArray(data.groups) ? data.groups : [];
+        setWppGroupsForSlot(
+          raw.map((g: { id?: string; name?: string }) => ({
+            id: String(g.id || ''),
+            name: String(g.name || g.id || 'Grupo'),
+          })).filter((g: WppGroupOpt) => g.id),
+        );
+      } catch {
+        if (!cancelled) setWppGroupsForSlot([]);
+      } finally {
+        if (!cancelled) setLoadingWppGroups(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showAddIfoodGroup, ifoodFormSlot]);
+
+  async function saveIfoodGroup() {
+    if (!ifoodFormSlot || !ifoodFormGroupId || !ifoodFormLojaNome.trim()) {
+      alert('Selecione sessão, grupo e informe o nome da loja.');
+      return;
+    }
+    setSavingIfoodGroup(true);
+    try {
+      const res = await fetch('/api/reports/complaints/ifood-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionSlot: ifoodFormSlot,
+          groupWhatsAppId: ifoodFormGroupId,
+          lojaNome: ifoodFormLojaNome.trim(),
+          lojaSlug: ifoodFormLojaSlug.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || 'Falha ao salvar grupo.');
+        return;
+      }
+      setShowAddIfoodGroup(false);
+      setIfoodFormGroupId('');
+      setIfoodFormLojaNome('');
+      setIfoodFormLojaSlug('');
+      await fetchIfoodGroups();
+    } catch {
+      alert('Falha de rede ao salvar grupo.');
+    } finally {
+      setSavingIfoodGroup(false);
+    }
+  }
+
+  async function deleteIfoodGroup(id: string) {
+    if (!confirm('Remover este grupo da captura de reclamações iFood?')) return;
+    setDeletingIfoodGroupId(id);
+    try {
+      const res = await fetch(`/api/reports/complaints/ifood-groups/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Falha ao remover.');
+        return;
+      }
+      await fetchIfoodGroups();
+    } catch {
+      alert('Falha de rede ao remover.');
+    } finally {
+      setDeletingIfoodGroupId(null);
+    }
+  }
 
   useEffect(() => {
     if (tab !== 'reclamacoes') return;
@@ -683,7 +820,177 @@ function RelatoriosContent() {
         </div>
 
         {tab === 'reclamacoes' ? (
-          loadingComplaints ? (
+          <div className="space-y-6">
+            {/* Configuração grupos iFood */}
+            <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl p-4 md:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-white inline-flex items-center gap-2">
+                    <Settings2 className="w-4 h-4 text-amber-400/80" />
+                    Grupos iFood (por loja)
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-1 max-w-xl">
+                    Grupos WhatsApp onde os atendentes registram reclamações de pedidos iFood
+                    (foto + legenda). Só esses grupos são capturados — não qualquer grupo da sessão.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddIfoodGroup((v) => !v);
+                    if (!ifoodFormSlot && sessions[0]) setIfoodFormSlot(sessions[0].slot);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Adicionar grupo
+                </button>
+              </div>
+
+              {showAddIfoodGroup && (
+                <div className="mb-4 rounded-xl border border-[#2a2a2e] bg-[#0d0d0f] p-4 space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelCls}>Sessão WhatsApp</label>
+                      <select
+                        className={inputCls}
+                        value={ifoodFormSlot ?? ''}
+                        onChange={(e) =>
+                          setIfoodFormSlot(e.target.value ? Number(e.target.value) : null)
+                        }
+                      >
+                        <option value="">Selecione…</option>
+                        {sessions.map((s) => (
+                          <option key={s.slot} value={s.slot}>
+                            {s.label || `Sessão ${s.slot}`}
+                            {s.isConnected ? '' : ' (offline)'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Grupo</label>
+                      <select
+                        className={inputCls}
+                        value={ifoodFormGroupId}
+                        disabled={!ifoodFormSlot || loadingWppGroups}
+                        onChange={(e) => setIfoodFormGroupId(e.target.value)}
+                      >
+                        <option value="">
+                          {loadingWppGroups
+                            ? 'Carregando grupos…'
+                            : !ifoodFormSlot
+                              ? 'Escolha a sessão'
+                              : wppGroupsForSlot.length === 0
+                                ? 'Nenhum grupo nesta sessão'
+                                : 'Selecione o grupo…'}
+                        </option>
+                        {wppGroupsForSlot.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Nome da loja</label>
+                      <input
+                        className={inputCls}
+                        placeholder="ex: AHU, Pilarzinho…"
+                        value={ifoodFormLojaNome}
+                        onChange={(e) => setIfoodFormLojaNome(e.target.value)}
+                        list="ifood-lojas-sugeridas"
+                      />
+                      <datalist id="ifood-lojas-sugeridas">
+                        <option value="AHU" />
+                        <option value="Pilarzinho" />
+                        <option value="Portão" />
+                        <option value="Uberaba" />
+                      </datalist>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Slug (opcional)</label>
+                      <input
+                        className={inputCls}
+                        placeholder="ex: ahu, pilarzinho…"
+                        value={ifoodFormLojaSlug}
+                        onChange={(e) => setIfoodFormLojaSlug(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddIfoodGroup(false)}
+                      className="px-3 py-1.5 rounded-lg text-xs text-gray-400 border border-[#2a2a2e]"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={savingIfoodGroup}
+                      onClick={() => void saveIfoodGroup()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 text-black disabled:opacity-50"
+                    >
+                      {savingIfoodGroup ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : null}
+                      Salvar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {loadingIfoodGroups ? (
+                <div className="flex py-4 justify-center">
+                  <Loader2 className="w-5 h-5 text-gray-500 animate-spin" />
+                </div>
+              ) : ifoodGroups.length === 0 ? (
+                <p className="text-sm text-gray-500">Nenhum grupo cadastrado ainda.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {ifoodGroups.map((g) => {
+                    const session = sessions.find((s) => s.slot === g.sessionSlot);
+                    return (
+                      <li
+                        key={g.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#2a2a2e] bg-[#0d0d0f] px-3 py-2.5"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm text-white font-medium">
+                            {g.lojaNome}
+                            <span className="text-xs text-gray-500 font-normal ml-2">
+                              ({g.lojaSlug})
+                            </span>
+                            {!g.ativo && (
+                              <span className="ml-2 text-xs text-red-400">inativo</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {session?.label || `Sessão ${g.sessionSlot}`} · {g.groupWhatsAppId}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={deletingIfoodGroupId === g.id}
+                          onClick={() => void deleteIfoodGroup(g.id)}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-300/90 border border-red-500/20 hover:bg-red-500/10 disabled:opacity-50"
+                        >
+                          {deletingIfoodGroupId === g.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                          Remover
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            {loadingComplaints ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
             </div>
@@ -841,8 +1148,8 @@ function RelatoriosContent() {
                             Revisão — {periodLabel(reviewData.periodStart)}
                           </h3>
                           <p className="text-xs text-gray-500 mt-1">
-                            Marque quais reclamações detectadas pela IA entram na ata. Só mensagens
-                            do cliente são usadas como evidência.
+                            Marque quais reclamações entram na ata. Canal Cliente usa mensagens IN;
+                            canal iFood usa os registros do atendente no grupo da loja.
                           </p>
                         </div>
                         <p className="text-xs text-amber-300/90">
@@ -886,6 +1193,20 @@ function RelatoriosContent() {
                                     <span className="text-sm font-medium text-white">
                                       {c.clientLabel || `${c.contactName || 'Cliente'} — ${c.contactPhone || c.contactId}`}
                                     </span>
+                                    {c.sessionLabel && (
+                                      <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#1a1a1e] text-gray-300 border border-[#2a2a2e]">
+                                        {c.sessionLabel}
+                                      </span>
+                                    )}
+                                    <span
+                                      className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                                        c.origem === 'GRUPO_IFOOD'
+                                          ? 'bg-orange-500/10 text-orange-300 border-orange-500/25'
+                                          : 'bg-sky-500/10 text-sky-300 border-sky-500/25'
+                                      }`}
+                                    >
+                                      {c.origemLabel || (c.origem === 'GRUPO_IFOOD' ? 'iFood' : 'Cliente')}
+                                    </span>
                                     <span className="text-xs text-gray-500">
                                       {new Date(c.dataOcorrencia).toLocaleDateString('pt-BR', {
                                         timeZone: 'America/Sao_Paulo',
@@ -906,7 +1227,9 @@ function RelatoriosContent() {
                                   {c.evidencias.length > 0 && (
                                     <div className="mt-2 space-y-1">
                                       <p className="text-xs text-gray-500 uppercase tracking-wide">
-                                        Evidências (cliente)
+                                        {c.origem === 'GRUPO_IFOOD'
+                                          ? 'Evidências (grupo iFood)'
+                                          : 'Evidências (cliente)'}
                                       </p>
                                       {c.evidencias.map((ev) => (
                                         <div
@@ -953,7 +1276,8 @@ function RelatoriosContent() {
                 </div>
               )}
             </div>
-          )
+          )}
+          </div>
         ) : loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />

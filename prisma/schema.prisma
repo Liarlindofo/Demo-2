@@ -88,6 +88,7 @@ model User {
   palavrasChaveReclamacao String[] @default([])
   complaintReviewRuns    ComplaintReviewRun[]
   complaints             Complaint[]
+  ifoodComplaintGroups   IFoodComplaintGroup[]
 
   @@map("users")
 }
@@ -1724,6 +1725,25 @@ model ComplaintReviewRun {
   @@map("complaint_review_runs")
 }
 
+/// Grupo WhatsApp (por loja) onde atendentes registram reclamações iFood.
+model IFoodComplaintGroup {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// JID completo do grupo, ex: "120363...@g.us"
+  groupWhatsAppId String
+  lojaSlug        String
+  lojaNome        String
+  /// Sessão WhatsApp que é membro deste grupo
+  sessionSlot     Int
+  ativo           Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@unique([userId, groupWhatsAppId])
+  @@index([userId, sessionSlot, ativo])
+  @@map("ifood_complaint_groups")
+}
+
 /// Reclamação detectada pela IA em uma conversa (contactId) de um ComplaintReviewRun.
 model Complaint {
   id                  String             @id @default(cuid())
@@ -1739,6 +1759,12 @@ model Complaint {
   evidenciaMessageIds String[]
   /// Número do pedido citado pelo cliente na conversa (nunca inventado).
   numeroPedido        String?
+  /// Slot da sessão que capturou a mensagem
+  sessionSlot         Int                @default(1)
+  /// "CLIENTE" | "GRUPO_IFOOD"
+  origem              String             @default("CLIENTE")
+  /// lojaSlug/lojaNome quando origem=GRUPO_IFOOD
+  lojaGrupo           String?
   /// Vany (ou humano) revisa e confirma depois
   confirmadoPorHumano Boolean            @default(false)
   createdAt           DateTime           @default(now())
@@ -1746,6 +1772,7 @@ model Complaint {
   @@index([reviewRunId])
   @@index([userId, dataOcorrencia])
   @@index([userId, contactId])
+  @@index([userId, origem])
   @@map("complaints")
 }
 

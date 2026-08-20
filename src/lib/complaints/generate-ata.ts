@@ -26,7 +26,7 @@ import {
   writeAtaNarrative,
   type ConversationMessage,
 } from '@/lib/complaints/classify';
-import { selectRelevantClientPhoto } from '@/lib/complaints/photo';
+import { selectIfoodGroupEvidencePhoto, selectRelevantClientPhoto } from '@/lib/complaints/photo';
 
 const MAX_IMAGE_WIDTH = 480;
 const MAX_IMAGE_HEIGHT = 360;
@@ -356,20 +356,32 @@ export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buf
         timestamp: m.timestamp,
       }));
 
-      const narrative = await writeAtaNarrative({
-        transcript: buildTranscript(convMessages),
-        fallbackResumo: c.resumo,
-        messages: convMessages,
-        fallbackNumeroPedido: c.numeroPedido,
-      });
+      const narrative =
+        c.origem === 'GRUPO_IFOOD'
+          ? { resumo: c.resumo, numeroPedido: c.numeroPedido }
+          : await writeAtaNarrative({
+              transcript: buildTranscript(convMessages),
+              fallbackResumo: c.resumo,
+              messages: convMessages,
+              fallbackNumeroPedido: c.numeroPedido,
+            });
 
-      const selectedPhoto = await selectRelevantClientPhoto({
-        messages: convRows,
-        evidenciaMessageIds: c.evidenciaMessageIds,
-        numeroPedido: narrative.numeroPedido,
-      });
+      const selectedPhoto =
+        c.origem === 'GRUPO_IFOOD'
+          ? selectIfoodGroupEvidencePhoto({
+              messages: convRows,
+              evidenciaMessageIds: c.evidenciaMessageIds,
+            })
+          : await selectRelevantClientPhoto({
+              messages: convRows,
+              evidenciaMessageIds: c.evidenciaMessageIds,
+              numeroPedido: narrative.numeroPedido,
+            });
 
-      if (narrative.resumo !== c.resumo || narrative.numeroPedido !== c.numeroPedido) {
+      if (
+        c.origem !== 'GRUPO_IFOOD' &&
+        (narrative.resumo !== c.resumo || narrative.numeroPedido !== c.numeroPedido)
+      ) {
         await prisma.complaint.update({
           where: { id: c.id },
           data: {
@@ -379,10 +391,13 @@ export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buf
         });
       }
 
-      const cliente = formatClientHeading(
-        clientNameByContact.get(c.contactId) ?? c.contactName,
-        c.contactId,
-      );
+      const cliente =
+        c.origem === 'GRUPO_IFOOD'
+          ? `iFood — ${c.lojaGrupo || c.contactName || 'loja'}`
+          : formatClientHeading(
+              clientNameByContact.get(c.contactId) ?? c.contactName,
+              c.contactId,
+            );
       children.push(divider());
       children.push(
         new Paragraph({

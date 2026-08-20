@@ -12,6 +12,11 @@ import {
   filterClientEvidenceIds,
   type ConversationMessage,
 } from '@/lib/complaints/classify';
+import {
+  clusterHasContent,
+  clusterIfoodMessages,
+  extractIfoodGroupComplaint,
+} from '@/lib/complaints/ifood-group';
 import { pickClientContactName } from '@/lib/complaints/contact';
 import { buildAndSaveComparison } from '@/lib/complaints/compare';
 import { monthPeriodFromDate } from '@/lib/complaints/period';
@@ -63,28 +68,59 @@ export async function listPeriodContacts(params: {
         })
       : [];
   const monitoredSlots = [...new Set(monitoredBots.map((b) => b.slot))];
-  if (monitoredSlots.length === 0) {
-    return { all: [], withIn: [], outOnly: [] };
-  }
-
-  const rows = await prisma.whatsAppMessage.findMany({
-    where: {
-      userId: params.userId,
-      sessionSlot: { in: monitoredSlots },
-      timestamp: { gte: params.periodStart, lte: params.periodEnd },
-    },
-    select: { contactId: true, direction: true },
-    orderBy: { timestamp: 'asc' },
-  });
 
   const hasIn = new Map<string, boolean>();
   const order: string[] = [];
-  for (const row of rows) {
-    if (!hasIn.has(row.contactId)) {
-      hasIn.set(row.contactId, false);
-      order.push(row.contactId);
+
+  if (monitoredSlots.length > 0) {
+    const rows = await prisma.whatsAppMessage.findMany({
+      where: {
+        userId: params.userId,
+        sessionSlot: { in: monitoredSlots },
+        timestamp: { gte: params.periodStart, lte: params.periodEnd },
+        // 1:1: contactId só dígitos (grupos @g.us entram pelo fluxo iFood abaixo)
+        NOT: { contactId: { contains: '@g.us' } },
+      },
+      select: { contactId: true, direction: true },
+      orderBy: { timestamp: 'asc' },
+    });
+
+    for (const row of rows) {
+      if (!hasIn.has(row.contactId)) {
+        hasIn.set(row.contactId, false);
+        order.push(row.contactId);
+      }
+      if (row.direction === 'IN') hasIn.set(row.contactId, true);
     }
-    if (row.direction === 'IN') hasIn.set(row.contactId, true);
+  }
+
+  // Grupos iFood cadastrados com mensagens no período (fonte direta do atendente)
+  const ifoodGroups = await prisma.iFoodComplaintGroup.findMany({
+    where: { userId: params.userId, ativo: true },
+    select: { groupWhatsAppId: true, sessionSlot: true },
+  });
+  if (ifoodGroups.length > 0) {
+    const groupIds = ifoodGroups.map((g) => g.groupWhatsAppId);
+    const groupSlots = [...new Set(ifoodGroups.map((g) => g.sessionSlot))];
+    const groupMsgs = await prisma.whatsAppMessage.findMany({
+      where: {
+        userId: params.userId,
+        contactId: { in: groupIds },
+        sessionSlot: { in: groupSlots },
+        timestamp: { gte: params.periodStart, lte: params.periodEnd },
+        direction: 'OUT',
+      },
+      select: { contactId: true },
+      distinct: ['contactId'],
+    });
+    for (const row of groupMsgs) {
+      if (!hasIn.has(row.contactId)) {
+        hasIn.set(row.contactId, true);
+        order.push(row.contactId);
+      } else {
+        hasIn.set(row.contactId, true);
+      }
+    }
   }
 
   const withIn = order.filter((id) => hasIn.get(id));
@@ -95,7 +131,7 @@ export async function listPeriodContacts(params: {
 async function markContactProcessed(params: {
   runId: string;
   contactId: string;
-  addedComplaint: boolean;
+  addedComplaintCount: number;
 }): Promise<void> {
   const run = await prisma.complaintReviewRun.findUnique({
     where: { id: params.runId },
@@ -117,9 +153,96 @@ async function markContactProcessed(params: {
         ? run.processedContactIds
         : [...run.processedContactIds, params.contactId],
       conversasProcessadas: (run.conversasProcessadas ?? 0) + 1,
-      totalReclamacoes: (run.totalReclamacoes ?? 0) + (params.addedComplaint ? 1 : 0),
+      totalReclamacoes: (run.totalReclamacoes ?? 0) + Math.max(0, params.addedComplaintCount),
     },
   });
+}
+
+async function classifyIfoodGroupContact(params: {
+  userId: string;
+  runId: string;
+  contactId: string;
+  periodStart: Date;
+  periodEnd: Date;
+}): Promise<number> {
+  const group = await prisma.iFoodComplaintGroup.findFirst({
+    where: {
+      userId: params.userId,
+      groupWhatsAppId: params.contactId,
+      ativo: true,
+    },
+    select: {
+      lojaSlug: true,
+      lojaNome: true,
+      sessionSlot: true,
+    },
+  });
+  if (!group) return 0;
+
+  const alreadyCount = await prisma.complaint.count({
+    where: {
+      reviewRunId: params.runId,
+      userId: params.userId,
+      contactId: params.contactId,
+      origem: 'GRUPO_IFOOD',
+    },
+  });
+  if (alreadyCount > 0) return 0;
+
+  const messages = await prisma.whatsAppMessage.findMany({
+    where: {
+      userId: params.userId,
+      sessionSlot: group.sessionSlot,
+      contactId: params.contactId,
+      direction: 'OUT',
+      timestamp: { gte: params.periodStart, lte: params.periodEnd },
+    },
+    select: {
+      id: true,
+      direction: true,
+      messageType: true,
+      textContent: true,
+      sentByAgent: true,
+      timestamp: true,
+    },
+    orderBy: { timestamp: 'asc' },
+  });
+
+  const conv: ConversationMessage[] = messages.map((m) => ({
+    id: m.id,
+    direction: m.direction,
+    messageType: m.messageType,
+    textContent: m.textContent,
+    sentByAgent: m.sentByAgent,
+    timestamp: m.timestamp,
+  }));
+
+  const clusters = clusterIfoodMessages(conv).filter(clusterHasContent);
+  let added = 0;
+
+  for (const cluster of clusters) {
+    const extracted = await extractIfoodGroupComplaint(cluster);
+    if (extracted.evidenciaMessageIds.length === 0) continue;
+
+    await prisma.complaint.create({
+      data: {
+        reviewRunId: params.runId,
+        userId: params.userId,
+        contactId: params.contactId,
+        contactName: group.lojaNome,
+        resumo: extracted.resumo,
+        dataOcorrencia: extracted.dataOcorrencia,
+        evidenciaMessageIds: extracted.evidenciaMessageIds,
+        numeroPedido: extracted.numeroPedido,
+        sessionSlot: group.sessionSlot,
+        origem: 'GRUPO_IFOOD',
+        lojaGrupo: group.lojaNome,
+      },
+    });
+    added += 1;
+  }
+
+  return added;
 }
 
 async function classifyOneContact(params: {
@@ -130,7 +253,11 @@ async function classifyOneContact(params: {
   periodEnd: Date;
   palavrasChave: string[];
   monitoredSlots: number[];
-}): Promise<boolean> {
+}): Promise<number> {
+  if (params.contactId.includes('@g.us')) {
+    return classifyIfoodGroupContact(params);
+  }
+
   const already = await prisma.complaint.findFirst({
     where: {
       reviewRunId: params.runId,
@@ -139,7 +266,7 @@ async function classifyOneContact(params: {
     },
     select: { id: true },
   });
-  if (already) return false;
+  if (already) return 0;
 
   const messages = await prisma.whatsAppMessage.findMany({
     where: {
@@ -156,6 +283,7 @@ async function classifyOneContact(params: {
       sentByAgent: true,
       contactName: true,
       timestamp: true,
+      sessionSlot: true,
     },
     orderBy: { timestamp: 'asc' },
   });
@@ -169,7 +297,7 @@ async function classifyOneContact(params: {
     timestamp: m.timestamp,
   }));
 
-  if (!conv.some((m) => m.direction === 'IN')) return false;
+  if (!conv.some((m) => m.direction === 'IN')) return 0;
 
   const result = await classifyConversation({
     messages: conv,
@@ -177,11 +305,13 @@ async function classifyOneContact(params: {
   });
 
   if (!result.eReclamacao || !result.resumo || !result.dataOcorrencia) {
-    return false;
+    return 0;
   }
 
   const evidenciaMessageIds = filterClientEvidenceIds(conv, result.evidenciaMessageIds);
-  if (evidenciaMessageIds.length === 0) return false;
+  if (evidenciaMessageIds.length === 0) return 0;
+
+  const sessionSlot = messages[0]?.sessionSlot ?? params.monitoredSlots[0] ?? 1;
 
   await prisma.complaint.create({
     data: {
@@ -193,9 +323,12 @@ async function classifyOneContact(params: {
       dataOcorrencia: result.dataOcorrencia,
       evidenciaMessageIds,
       numeroPedido: result.numeroPedido,
+      sessionSlot,
+      origem: 'CLIENTE',
+      lojaGrupo: null,
     },
   });
-  return true;
+  return 1;
 }
 
 async function finishRun(runId: string, userId: string, periodStart: Date): Promise<void> {
@@ -300,7 +433,7 @@ export async function processComplaintsBatch(runId: string): Promise<{
 
     for (const contactId of batch) {
       try {
-        const added = await classifyOneContact({
+        const addedCount = await classifyOneContact({
           userId: run.userId,
           runId: run.id,
           contactId,
@@ -312,7 +445,7 @@ export async function processComplaintsBatch(runId: string): Promise<{
         await markContactProcessed({
           runId: run.id,
           contactId,
-          addedComplaint: added,
+          addedComplaintCount: addedCount,
         });
         processed += 1;
       } catch (err) {
@@ -321,7 +454,7 @@ export async function processComplaintsBatch(runId: string): Promise<{
         await markContactProcessed({
           runId: run.id,
           contactId,
-          addedComplaint: false,
+          addedComplaintCount: 0,
         });
         processed += 1;
       }

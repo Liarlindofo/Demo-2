@@ -19,6 +19,8 @@ const TIMEOUT_MIDIA_MS = 30_000;
 const tenantCache = new Map();
 /** @type {Map<string, { on: boolean, at: number }>} */
 const monitorCache = new Map();
+/** @type {Map<string, { allowed: Set<string>, at: number }>} */
+const ifoodGroupCache = new Map();
 /** @type {Map<string, Array<{ to: string, text: string, at: number }>>} */
 const iaOutbound = new Map();
 
@@ -41,6 +43,28 @@ function digitsOf(jid) {
   const raw = typeof jid === 'object' ? (jid._serialized || jid.user || '') : String(jid);
   const beforeAt = raw.split('@')[0];
   return String(beforeAt).replace(/\D/g, '') || String(beforeAt);
+}
+
+/** JID completo do grupo (ex: 120363...@g.us). */
+function groupJidOf(jid) {
+  if (!jid) return '';
+  const raw = typeof jid === 'object' ? (jid._serialized || jid.user || '') : String(jid);
+  const s = String(raw).trim();
+  if (s.includes('@g.us')) {
+    const match = s.match(/[\w.-]+@g\.us/i);
+    return match ? match[0] : s.split(/[\s,]/)[0];
+  }
+  const digits = digitsOf(s);
+  return digits ? `${digits}@g.us` : '';
+}
+
+function isGroupMessage(message) {
+  if (!message) return false;
+  if (message.isGroupMsg) return true;
+  const from = String(message.from || '');
+  const to = String(message.to || '');
+  const chatId = String(message.chatId || '');
+  return from.includes('@g.us') || to.includes('@g.us') || chatId.includes('@g.us');
 }
 
 function extractWppId(message) {
@@ -171,6 +195,27 @@ async function isMonitoringOn(stackUserId, slot) {
   return on;
 }
 
+/** Whitelist: só grupos cadastrados em IFoodComplaintGroup (tenant + slot + ativo). */
+async function allowedIfoodGroupIds(tenantUserId, slot) {
+  const key = `${tenantUserId}:${slot}`;
+  const cached = ifoodGroupCache.get(key);
+  if (cached && Date.now() - cached.at < CACHE_MS) return cached.allowed;
+
+  /** @type {Set<string>} */
+  let allowed = new Set();
+  try {
+    const rows = await prisma.iFoodComplaintGroup.findMany({
+      where: { userId: tenantUserId, sessionSlot: slot, ativo: true },
+      select: { groupWhatsAppId: true },
+    });
+    allowed = new Set(rows.map((r) => String(r.groupWhatsAppId).trim()).filter(Boolean));
+  } catch (err) {
+    logger.warn(`[messageArchive] Falha ao ler IFoodComplaintGroup [${key}]: ${err?.message}`);
+  }
+  ifoodGroupCache.set(key, { allowed, at: Date.now() });
+  return allowed;
+}
+
 function getSupabase() {
   if (supabaseClient) return supabaseClient;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -250,7 +295,7 @@ async function uploadMedia({ tenantUserId, slot, contactId, message, client, typ
 
 function shouldSkip(message) {
   if (!message) return true;
-  if (message.isGroupMsg) return true;
+  // Grupos: NÃO skip aqui — persistSafe decide via whitelist IFoodComplaintGroup.
   if (message.isStatus || message.isStory) return true;
   const from = String(message.from || '');
   if (from.includes('status') || from.includes('broadcast')) return true;
@@ -268,7 +313,6 @@ export function recordWhatsAppMessage(message, client, stackUserId, slot) {
 async function persistSafe(message, client, stackUserId, slot) {
   try {
     if (shouldSkip(message)) return;
-    if (!(await isMonitoringOn(stackUserId, slot))) return;
 
     const tenantUserId = await resolveTenantUserId(stackUserId);
     if (!tenantUserId) {
@@ -276,13 +320,28 @@ async function persistSafe(message, client, stackUserId, slot) {
       return;
     }
 
-    const direction = message.fromMe ? 'OUT' : 'IN';
-    const contactRaw = direction === 'OUT'
-      ? (message.to || message.chatId || message.from)
-      : message.from;
-    const contactId = digitsOf(contactRaw);
-    if (!contactId) return;
+    const groupMsg = isGroupMessage(message);
+    let contactId = '';
 
+    if (groupMsg) {
+      const groupRaw = message.fromMe
+        ? (message.to || message.chatId || message.from)
+        : (message.chatId || message.from);
+      const groupId = groupJidOf(groupRaw);
+      if (!groupId) return;
+      const allowed = await allowedIfoodGroupIds(tenantUserId, slot);
+      if (!allowed.has(groupId)) return;
+      contactId = groupId;
+    } else {
+      if (!(await isMonitoringOn(stackUserId, slot))) return;
+      const contactRaw = message.fromMe
+        ? (message.to || message.chatId || message.from)
+        : message.from;
+      contactId = digitsOf(contactRaw);
+      if (!contactId) return;
+    }
+
+    const direction = message.fromMe ? 'OUT' : 'IN';
     const whatsappMessageId = extractWppId(message);
     if (whatsappMessageId) {
       const dup = await prisma.whatsAppMessage.findFirst({
@@ -318,7 +377,7 @@ async function persistSafe(message, client, stackUserId, slot) {
         sessionSlot: slot,
         direction,
         contactId,
-        contactName: contactNameOf(message),
+        contactName: groupMsg ? null : contactNameOf(message),
         messageType,
         textContent,
         mediaUrl,

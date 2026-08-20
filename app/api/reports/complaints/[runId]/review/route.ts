@@ -9,6 +9,7 @@ import {
   messageSnippet,
   pickClientContactName,
 } from '@/lib/complaints/contact';
+import { resolveStackUserIdsForTenant } from '@/lib/whatsapp-sessions';
 
 /**
  * GET /api/reports/complaints/:runId/review
@@ -46,6 +47,9 @@ export async function GET(
           evidenciaMessageIds: true,
           numeroPedido: true,
           confirmadoPorHumano: true,
+          sessionSlot: true,
+          origem: true,
+          lojaGrupo: true,
         },
       },
     },
@@ -57,20 +61,22 @@ export async function GET(
 
   const contactIds = [...new Set(run.complaints.map((c) => c.contactId))];
   const allEvidenceIds = [...new Set(run.complaints.flatMap((c) => c.evidenciaMessageIds))];
+  const slotsUsed = [...new Set(run.complaints.map((c) => c.sessionSlot).filter(Boolean))];
 
-  const [evidenceMessages, inNameRows] = await Promise.all([
+  const stackIds = await resolveStackUserIdsForTenant(dbUser.id);
+  const [evidenceMessages, inNameRows, bots] = await Promise.all([
     allEvidenceIds.length > 0
       ? prisma.whatsAppMessage.findMany({
           where: {
             id: { in: allEvidenceIds },
             userId: dbUser.id,
-            direction: 'IN',
           },
           select: {
             id: true,
             messageType: true,
             textContent: true,
             timestamp: true,
+            direction: true,
           },
         })
       : Promise.resolve([]),
@@ -87,7 +93,20 @@ export async function GET(
           orderBy: { timestamp: 'asc' },
         })
       : Promise.resolve([]),
+    stackIds.length > 0 && slotsUsed.length > 0
+      ? prisma.whatsAppBot.findMany({
+          where: { userId: { in: stackIds }, slot: { in: slotsUsed } },
+          select: { slot: true, label: true },
+        })
+      : Promise.resolve([]),
   ]);
+
+  const sessionLabelBySlot = new Map<number, string>();
+  for (const b of bots) {
+    if (!sessionLabelBySlot.has(b.slot)) {
+      sessionLabelBySlot.set(b.slot, b.label?.trim() || `Sessão ${b.slot}`);
+    }
+  }
 
   const evidenceById = new Map(evidenceMessages.map((m) => [m.id, m]));
   const clientNameByContact = new Map<string, string>();
@@ -97,7 +116,9 @@ export async function GET(
     if (name) clientNameByContact.set(row.contactId, name);
   }
 
-  const missingNameIds = contactIds.filter((id) => !clientNameByContact.has(id));
+  const missingNameIds = contactIds.filter(
+    (id) => !clientNameByContact.has(id) && !id.includes('@g.us'),
+  );
   if (missingNameIds.length > 0) {
     const extra = await prisma.whatsAppMessage.findMany({
       where: {
@@ -117,12 +138,26 @@ export async function GET(
   }
 
   const complaints = run.complaints.map((c) => {
-    const contactName = clientNameByContact.get(c.contactId) ?? null;
+    const isIfood = c.origem === 'GRUPO_IFOOD';
+    const contactName = isIfood
+      ? c.lojaGrupo || c.contactName
+      : clientNameByContact.get(c.contactId) ?? null;
+    const clientLabel = isIfood
+      ? `iFood — ${c.lojaGrupo || c.contactName || 'loja'}`
+      : formatClientHeading(contactName, c.contactId);
+    const sessionLabel =
+      sessionLabelBySlot.get(c.sessionSlot) || `Sessão ${c.sessionSlot}`;
+    const origemLabel = isIfood
+      ? `iFood — ${c.lojaGrupo || 'loja'}`
+      : 'Cliente';
+
     return {
       ...c,
       contactName,
-      contactPhone: formatContactPhone(c.contactId),
-      clientLabel: formatClientHeading(contactName, c.contactId),
+      contactPhone: isIfood ? '' : formatContactPhone(c.contactId),
+      clientLabel,
+      sessionLabel,
+      origemLabel,
       evidencias: c.evidenciaMessageIds
         .map((id) => evidenceById.get(id))
         .filter(Boolean)

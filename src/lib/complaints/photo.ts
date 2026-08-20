@@ -36,6 +36,14 @@ function isClientPhoto(m: PhotoCandidate): m is PhotoCandidate & { mediaUrl: str
   );
 }
 
+function isAnyPhoto(m: PhotoCandidate): m is PhotoCandidate & { mediaUrl: string } {
+  return (
+    (m.messageType === 'image' || m.messageType === 'sticker') &&
+    typeof m.mediaUrl === 'string' &&
+    m.mediaUrl.length > 0
+  );
+}
+
 function imageTypeFromPath(path: string): string {
   const lower = path.toLowerCase();
   if (lower.endsWith('.png')) return 'image/png';
@@ -158,4 +166,21 @@ export async function selectRelevantClientPhoto(params: {
   }
 
   return null;
+}
+
+/**
+ * Para origem=GRUPO_IFOOD: a foto anexada na evidência já é a prova.
+ * Pega a primeira imagem entre evidenciaMessageIds (qualquer direction).
+ */
+export function selectIfoodGroupEvidencePhoto(params: {
+  messages: PhotoCandidate[];
+  evidenciaMessageIds: string[];
+}): SelectedPhoto | null {
+  const evidence = new Set(params.evidenciaMessageIds);
+  const photos = params.messages
+    .filter((m) => evidence.has(m.id) && isAnyPhoto(m))
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  const first = photos[0];
+  if (!first) return null;
+  return { id: first.id, mediaUrl: first.mediaUrl };
 }
