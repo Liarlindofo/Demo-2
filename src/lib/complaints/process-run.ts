@@ -361,14 +361,18 @@ export async function processComplaintsBatch(runId: string): Promise<{
   }
 }
 
-export async function tickStaleComplaintRuns(userId: string): Promise<{
+/**
+ * Retoma runs PROCESSANDO travados / com batches pendentes.
+ * Sem `userId` (Vercel Cron): todos os tenants. Com `userId` (POST resume / n8n): só aquele tenant.
+ */
+export async function tickStaleComplaintRuns(userId?: string): Promise<{
   ticked: number;
   runIds: string[];
 }> {
   const staleBefore = new Date(Date.now() - STALE_LOCK_MS);
   const runs = await prisma.complaintReviewRun.findMany({
     where: {
-      userId,
+      ...(userId ? { userId } : {}),
       status: 'PROCESSANDO',
       pendingContactIds: { isEmpty: false },
       OR: [{ batchLockAt: null }, { batchLockAt: { lt: staleBefore } }],
@@ -384,7 +388,7 @@ export async function tickStaleComplaintRuns(userId: string): Promise<{
       await enqueueComplaintsTick({ runId: run.id, jobToken: run.jobToken });
       runIds.push(run.id);
     } catch (err) {
-      console.error('[complaints/resume] falha ao retomar run', run.id, err);
+      console.error('[complaints/tick] falha ao retomar run', run.id, err);
     }
   }
   return { ticked: runIds.length, runIds };

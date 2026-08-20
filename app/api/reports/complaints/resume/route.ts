@@ -10,7 +10,8 @@ import { tickStaleComplaintRuns } from '@/lib/complaints/process-run';
  * POST /api/reports/complaints/resume
  *
  * Retoma ComplaintReviewRun PROCESSANDO travados ou com batches pendentes
- * do tenant da API key. Pensado para o n8n na VPS (schedule ~1 min).
+ * do tenant da API key. Alternativa manual/n8n; o mecanismo principal é
+ * GET /api/cron/complaints-tick (Vercel Cron a cada 5 min).
  *
  * Auth: header x-api-key (ServiceApiKey) — mesmo padrão de GET /api/reports/due
  */
