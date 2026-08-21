@@ -97,9 +97,46 @@ function normalizeMessageType(message) {
   return t;
 }
 
+/** Conteúdo que é mídia embutida (base64), não texto legível. */
+function looksLikeEmbeddedMedia(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+  if (raw.startsWith('data:')) return true;
+  if (/^\/9j\//.test(raw)) return true; // jpeg base64
+  if (/^iVBOR/.test(raw)) return true; // png
+  if (/^R0lGOD/.test(raw)) return true; // gif
+  if (/^UklGR/.test(raw)) return true; // webp/wav
+  // body de imagem no WPPConnect costuma ser base64 enorme
+  if (raw.length > 500 && /^[A-Za-z0-9+/=\s]+$/.test(raw.slice(0, 200))) return true;
+  return false;
+}
+
+/**
+ * Texto/legenda da mensagem — NUNCA o binário/base64 da mídia.
+ * Em image/video/document o WPPConnect frequentemente coloca base64 em `body`
+ * e a legenda em `caption` (ou `text`).
+ */
 function textFromMessage(message, type) {
-  const body = (message.body || message.text || message.caption || '').trim();
-  if (body) return body;
+  const mediaTypes = new Set(['image', 'sticker', 'video', 'ptt', 'audio', 'document']);
+  const isMedia = mediaTypes.has(String(type || '').toLowerCase());
+
+  const caption = String(message?.caption || '').trim();
+  const textField = String(message?.text || '').trim();
+  const body = String(message?.body || '').trim();
+
+  if (isMedia) {
+    // Legenda real primeiro; body só se NÃO parecer mídia embutida
+    if (caption) return caption;
+    if (textField && !looksLikeEmbeddedMedia(textField)) return textField;
+    if (body && !looksLikeEmbeddedMedia(body)) return body;
+    return null;
+  }
+
+  // Texto puro: body/text, ignorando base64 acidental
+  for (const candidate of [body, textField, caption]) {
+    if (candidate && !looksLikeEmbeddedMedia(candidate)) return candidate;
+  }
+
   if (type === 'location') {
     const lat = message.lat ?? message.location?.lat;
     const lng = message.lng ?? message.location?.lng ?? message.location?.longitude;
@@ -475,7 +512,14 @@ async function persistSafe(message, client, stackUserId, slot) {
     }
 
     const messageType = normalizeMessageType(message);
-    const textContent = textFromMessage(message, messageType);
+    let textContent = textFromMessage(message, messageType);
+    // Cinto de segurança: nunca persistir base64/binário em textContent
+    if (textContent && looksLikeEmbeddedMedia(textContent)) {
+      logger.warn(
+        `[messageArchive] textContent parecia mídia embutida (len=${textContent.length}) — descartado; use caption.`,
+      );
+      textContent = null;
+    }
     let mediaUrl = null;
     if (MEDIA_TYPES.has(messageType)) {
       try {
