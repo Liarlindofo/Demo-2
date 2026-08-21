@@ -67,6 +67,22 @@ function isGroupMessage(message) {
   return from.includes('@g.us') || to.includes('@g.us') || chatId.includes('@g.us');
 }
 
+/** Só pra debug: serializa JID (string ou objeto WPPConnect). */
+function jidDebug(jid) {
+  if (jid == null) return null;
+  if (typeof jid === 'string') return jid;
+  if (typeof jid === 'object') {
+    return {
+      typeof: 'object',
+      _serialized: jid._serialized ?? null,
+      user: jid.user ?? null,
+      server: jid.server ?? null,
+      stringified: String(jid),
+    };
+  }
+  return { typeof: typeof jid, value: String(jid) };
+}
+
 function extractWppId(message) {
   const id = message?.id;
   if (!id) return null;
@@ -322,6 +338,38 @@ async function persistSafe(message, client, stackUserId, slot) {
 
     const groupMsg = isGroupMessage(message);
     let contactId = '';
+
+    // DEBUG TEMPORÁRIO — investigar por que msgs de grupo iFood não gravam
+    // Dispara em fromMe / isGroupMsg / detecção de grupo, pra ver o formato real do chatId.
+    if (message.fromMe || message.isGroupMsg || groupMsg) {
+      const groupRawCandidate = message.fromMe
+        ? (message.to || message.chatId || message.from)
+        : (message.chatId || message.from);
+      const groupIdNormalizado = groupJidOf(groupRawCandidate);
+      const allowed = await allowedIfoodGroupIds(tenantUserId, slot);
+      const idsNaWhitelist = [...allowed];
+      const bateComWhitelist = Boolean(groupIdNormalizado && allowed.has(groupIdNormalizado));
+      // eslint-disable-next-line no-console
+      console.log('[DEBUG grupo]', {
+        chatIdRecebido: jidDebug(groupRawCandidate),
+        from: jidDebug(message.from),
+        to: jidDebug(message.to),
+        chatId: jidDebug(message.chatId),
+        fromMe: Boolean(message.fromMe),
+        isGroupMsg: message.isGroupMsg,
+        groupMsgDetectado: groupMsg,
+        groupIdNormalizado: groupIdNormalizado || null,
+        bateComWhitelist,
+        idsNaWhitelist,
+        tenantUserId,
+        slot,
+        type: message.type,
+      });
+      logger.info(
+        `[DEBUG grupo] fromMe=${Boolean(message.fromMe)} isGroupMsg=${message.isGroupMsg} groupMsg=${groupMsg} ` +
+          `norm=${groupIdNormalizado || '-'} bate=${bateComWhitelist} whitelist=${idsNaWhitelist.length} slot=${slot}`,
+      );
+    }
 
     if (groupMsg) {
       const groupRaw = message.fromMe
