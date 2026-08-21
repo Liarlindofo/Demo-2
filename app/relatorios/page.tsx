@@ -221,6 +221,7 @@ function periodLabel(isoStart: string): string {
 function statusBadge(status: string) {
   if (status === 'CONCLUIDO') return 'text-green-400 bg-green-500/10 border-green-500/20';
   if (status === 'ERRO') return 'text-red-400 bg-red-500/10 border-red-500/20';
+  if (status === 'EM_ANDAMENTO') return 'text-sky-400 bg-sky-500/10 border-sky-500/20';
   return 'text-amber-400 bg-amber-500/10 border-amber-500/20';
 }
 
@@ -1029,9 +1030,11 @@ function RelatoriosContent() {
                   <tbody>
                     {complaintRuns.map((run) => {
                       const canReview =
-                        run.status === 'CONCLUIDO' && (run.totalReclamacoes ?? 0) > 0;
+                        (run.status === 'CONCLUIDO' || run.status === 'EM_ANDAMENTO') &&
+                        (run.totalReclamacoes ?? 0) > 0;
                       const confirmadas = run.confirmadasCount ?? 0;
-                      const canGenerate = canReview && confirmadas > 0;
+                      const canGenerate =
+                        run.status === 'CONCLUIDO' && confirmadas > 0;
                       const hasAta = Boolean(run.ataStoragePath);
 
                       return (
@@ -1061,6 +1064,11 @@ function RelatoriosContent() {
                               <span className="text-xs text-amber-300/90">
                                 {run.conversasProcessadas ?? 0} de {run.totalConversas ?? '—'}{' '}
                                 conversas processadas
+                              </span>
+                            )}
+                            {run.status === 'EM_ANDAMENTO' && (
+                              <span className="text-xs text-sky-300/90">
+                                Canal iFood acumulando reclamações do mês
                               </span>
                             )}
                           </div>

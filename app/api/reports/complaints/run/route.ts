@@ -93,6 +93,105 @@ export async function POST(req: NextRequest) {
 
   const needsWork = contacts.withIn.length > 0;
   const jobToken = newComplaintsJobToken();
+
+  const existingOpen = await prisma.complaintReviewRun.findFirst({
+    where: {
+      userId,
+      periodStart: period.start,
+      status: { in: ['EM_ANDAMENTO', 'PROCESSANDO'] },
+    },
+    orderBy: { executadoEm: 'desc' },
+  });
+
+  if (existingOpen) {
+    const pendingMerged = [
+      ...new Set([
+        ...existingOpen.pendingContactIds,
+        ...contacts.withIn.filter((id) => !existingOpen.processedContactIds.includes(id)),
+      ]),
+    ].filter((id) => !existingOpen.processedContactIds.includes(id));
+
+    const processedMerged = [
+      ...new Set([
+        ...existingOpen.processedContactIds,
+        ...(needsWork ? contacts.outOnly : contacts.all),
+      ]),
+    ];
+
+    if (!needsWork && pendingMerged.length === 0) {
+      const counted = await prisma.complaint.count({
+        where: { reviewRunId: existingOpen.id, userId },
+      });
+      await prisma.complaintReviewRun.update({
+        where: { id: existingOpen.id },
+        data: {
+          status: 'CONCLUIDO',
+          totalConversas: Math.max(existingOpen.totalConversas ?? 0, contacts.all.length),
+          conversasProcessadas: processedMerged.length,
+          totalReclamacoes: counted,
+          pendingContactIds: [],
+          processedContactIds: processedMerged,
+          jobToken: null,
+          batchLockAt: null,
+        },
+      });
+      const comparison = await buildAndSaveComparison({
+        userId,
+        reviewRunId: existingOpen.id,
+        period,
+      });
+      return NextResponse.json({
+        reviewRunId: existingOpen.id,
+        status: 'CONCLUIDO',
+        periodStart: existingOpen.periodStart,
+        periodEnd: existingOpen.periodEnd,
+        totalConversas: contacts.all.length,
+        conversasProcessadas: processedMerged.length,
+        totalReclamacoes: counted,
+        mensagem: 'Run do mês já existia (iFood contínuo); nada pendente — concluído.',
+        comparison: {
+          previousRunId: comparison.previousRunId,
+          resumoTexto: comparison.resumoTexto,
+        },
+      });
+    }
+
+    const run = await prisma.complaintReviewRun.update({
+      where: { id: existingOpen.id },
+      data: {
+        status: 'PROCESSANDO',
+        totalConversas: Math.max(existingOpen.totalConversas ?? 0, contacts.all.length),
+        pendingContactIds: pendingMerged,
+        processedContactIds: processedMerged,
+        conversasProcessadas: processedMerged.length,
+        jobToken,
+        batchLockAt: null,
+        erro: null,
+      },
+    });
+
+    after(() =>
+      enqueueComplaintsTick({
+        runId: run.id,
+        jobToken,
+        origin: req.nextUrl.origin,
+      }).catch((err) => {
+        console.error('[complaints/run] falha ao disparar tick (reuse):', err);
+      }),
+    );
+
+    return NextResponse.json({
+      reviewRunId: run.id,
+      status: 'PROCESSANDO',
+      periodStart: run.periodStart,
+      periodEnd: run.periodEnd,
+      totalConversas: run.totalConversas,
+      conversasProcessadas: run.conversasProcessadas,
+      totalReclamacoes: run.totalReclamacoes ?? 0,
+      mensagem: `Reaproveitando run EM_ANDAMENTO do mês (${pendingMerged.length} conversas para classificar).`,
+    });
+  }
+
   const run = await prisma.complaintReviewRun.create({
     data: {
       userId,

@@ -274,11 +274,14 @@ model WhatsAppMessage {
   /// id original do WPPConnect — evita duplicar em reconexão/replay
   whatsappMessageId String?
   timestamp         DateTime
+  /// Preenchido quando a msg entrou num cluster iFood já classificado (cron ou run mensal).
+  complaintProcessedAt DateTime?
   createdAt         DateTime @default(now())
 
   @@index([userId, sessionSlot, timestamp])
   @@index([userId, contactId, timestamp])
   @@index([userId, sessionSlot, whatsappMessageId])
+  @@index([userId, contactId, complaintProcessedAt])
   @@map("whatsapp_messages")
 }
 
@@ -1700,7 +1703,7 @@ model ComplaintReviewRun {
   user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   periodStart      DateTime
   periodEnd        DateTime
-  /// "PROCESSANDO" | "CONCLUIDO" | "ERRO"
+  /// "EM_ANDAMENTO" (mês aberto, cron iFood) | "PROCESSANDO" | "CONCLUIDO" | "ERRO"
   status           String
   totalConversas   Int?
   conversasProcessadas Int             @default(0)

@@ -17,6 +17,7 @@ import {
   clusterIfoodMessages,
   extractIfoodGroupComplaint,
 } from '@/lib/complaints/ifood-group';
+import { markMessagesComplaintProcessed } from '@/lib/complaints/process-ifood-cron';
 import { pickClientContactName } from '@/lib/complaints/contact';
 import { buildAndSaveComparison } from '@/lib/complaints/compare';
 import { monthPeriodFromDate } from '@/lib/complaints/period';
@@ -179,16 +180,6 @@ async function classifyIfoodGroupContact(params: {
   });
   if (!group) return 0;
 
-  const alreadyCount = await prisma.complaint.count({
-    where: {
-      reviewRunId: params.runId,
-      userId: params.userId,
-      contactId: params.contactId,
-      origem: 'GRUPO_IFOOD',
-    },
-  });
-  if (alreadyCount > 0) return 0;
-
   const messages = await prisma.whatsAppMessage.findMany({
     where: {
       userId: params.userId,
@@ -196,6 +187,7 @@ async function classifyIfoodGroupContact(params: {
       contactId: params.contactId,
       direction: 'OUT',
       timestamp: { gte: params.periodStart, lte: params.periodEnd },
+      complaintProcessedAt: null,
     },
     select: {
       id: true,
@@ -207,6 +199,19 @@ async function classifyIfoodGroupContact(params: {
     },
     orderBy: { timestamp: 'asc' },
   });
+
+  if (messages.length === 0) return 0;
+
+  const existingEvidence = await prisma.complaint.findMany({
+    where: {
+      reviewRunId: params.runId,
+      userId: params.userId,
+      contactId: params.contactId,
+      origem: 'GRUPO_IFOOD',
+    },
+    select: { evidenciaMessageIds: true },
+  });
+  const usedIds = new Set(existingEvidence.flatMap((c) => c.evidenciaMessageIds));
 
   const conv: ConversationMessage[] = messages.map((m) => ({
     id: m.id,
@@ -221,8 +226,17 @@ async function classifyIfoodGroupContact(params: {
   let added = 0;
 
   for (const cluster of clusters) {
+    const clusterIds = cluster.map((m) => m.id);
+    if (clusterIds.some((id) => usedIds.has(id))) {
+      await markMessagesComplaintProcessed(clusterIds);
+      continue;
+    }
+
     const extracted = await extractIfoodGroupComplaint(cluster);
-    if (extracted.evidenciaMessageIds.length === 0) continue;
+    if (extracted.evidenciaMessageIds.length === 0) {
+      await markMessagesComplaintProcessed(clusterIds);
+      continue;
+    }
 
     await prisma.complaint.create({
       data: {
@@ -239,6 +253,8 @@ async function classifyIfoodGroupContact(params: {
         lojaGrupo: group.lojaNome,
       },
     });
+    for (const id of extracted.evidenciaMessageIds) usedIds.add(id);
+    await markMessagesComplaintProcessed(clusterIds);
     added += 1;
   }
 

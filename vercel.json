@@ -26,6 +26,10 @@
     {
       "path": "/api/cron/complaints-tick",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/complaints-ifood",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

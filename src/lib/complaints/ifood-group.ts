@@ -8,6 +8,9 @@ import type { ConversationMessage } from '@/lib/complaints/classify';
 
 export const IFOOD_CLUSTER_GAP_MS = 90_000;
 
+/** Cluster só é classificado após ficar quieto este tempo (foto + texto separados). */
+export const IFOOD_SETTLE_MS = 4 * 60 * 1000;
+
 export type IfoodGroupExtract = {
   resumo: string;
   numeroPedido: string | null;
