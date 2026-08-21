@@ -140,14 +140,15 @@ export async function extractIfoodGroupComplaint(
 Cada post (foto do produto + legenda) JÁ É uma reclamação — não julgue se "é ou não é".
 
 Extraia:
-- resumo: um parágrafo curto (2–4 frases) do problema relatado na legenda
+- resumo: BEM CURTO — 1 frase (no máximo 2 curtas) só com o essencial (o que aconteceu + problema principal). Ex.: "Pedido 48 veio com frango errado (frango catupiry)."
+- NÃO narre a sequência do atendimento nem invente detalhes fora da legenda.
 - numeroPedido: só o número se aparecer na legenda (ex: "pedido 48"); senão null — NUNCA invente
 - dataOcorrencia: YYYY-MM-DD da mensagem principal
 
 Responda APENAS JSON:
 {"resumo":string,"numeroPedido":string|null,"dataOcorrencia":"YYYY-MM-DD"}`,
       user: `Extraia os dados deste registro:\n\n${transcript}`,
-      maxTokens: 400,
+      maxTokens: 250,
       temperature: 0.1,
     });
 
@@ -159,7 +160,7 @@ Responda APENAS JSON:
 
     const resumo =
       typeof parsed.resumo === 'string' && parsed.resumo.trim()
-        ? parsed.resumo.trim()
+        ? parsed.resumo.trim().slice(0, 320)
         : fallbackResumo(cluster);
 
     let numeroPedido: string | null = null;

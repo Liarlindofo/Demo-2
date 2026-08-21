@@ -119,7 +119,8 @@ NÃO conte como reclamação:
 - conversas puramente operacionais sem queixa.
 
 Se for reclamação:
-- Escreva "resumo" como UM parágrafo corrido (3 a 6 frases) com base na TRANSCRIÇÃO COMPLETA — todas as mensagens IN e OUT, em ordem. Inclua contexto do atendimento quando for relevante (ex.: o atendente pediu foto de confirmação, o cliente confirmou/enviou, e só depois reclamou). NÃO resuma apenas as mensagens isoladas de evidência; não invente fatos fora da transcrição.
+- Escreva "resumo" BEM CURTO: 1 frase (no máximo 2 frases curtas). Só o essencial — o que aconteceu + o problema principal (e o pedido, se citado). Exemplo do tamanho ideal: "Pedido 6951 veio errado; atendente ofereceu frango catupiry como complemento."
+- NÃO narre a conversa inteira (desculpas, agradecimentos, sequência de idas e vindas). NÃO invente fatos fora da transcrição.
 - Indique dataOcorrencia (YYYY-MM-DD) se identificável; senão use a data da mensagem IN principal da queixa.
 - evidenciaMessageIds: SOMENTE IDs de mensagens IN. Se o cliente enviou foto do produto/comida com problema, inclua esse id. NÃO use comprovante de Pix, print de tela ou documento como evidência.
 - numeroPedido: o número do pedido que o CLIENTE citou (ex.: "pedido 48", "pedido 150"). Se não aparecer nas mensagens IN, use null. NUNCA invente.
@@ -233,7 +234,7 @@ export async function classifyConversation(params: {
 
   const resumo =
     typeof parsed.resumo === 'string' && parsed.resumo.trim()
-      ? parsed.resumo.trim().slice(0, 4000)
+      ? parsed.resumo.trim().slice(0, 320)
       : 'Reclamação identificada (sem resumo detalhado da IA).';
 
   const anchor =
@@ -263,20 +264,20 @@ export async function writeAtaNarrative(params: {
 
   try {
     const content = await callComplaintsOpenRouter({
-      system: `Você redige o parágrafo de uma ata de reclamações de restaurante/delivery.
+      system: `Você redige o resumo curto de uma reclamação para ata de restaurante/delivery.
 
 REGRAS:
-- Leia a TRANSCRIÇÃO COMPLETA (mensagens IN e OUT, em ordem). O resumo NÃO pode se basear só em trechos isolados de evidência.
-- Escreva UM parágrafo corrido em português (3 a 6 frases) explicando o porquê da reclamação e o que aconteceu no atendimento.
-- Inclua contexto relevante do atendente/IA quando ajudar a entender (ex.: pedido de foto de confirmação, resposta positiva do cliente, e a reclamação em seguida).
-- A queixa em si é o que o CLIENTE disse ou mostrou (IN). Não invente fatos fora da transcrição.
-- Sem lista, bullets ou citações entre aspas de mensagens isoladas.
+- Leia a TRANSCRIÇÃO COMPLETA (IN e OUT, em ordem). Não se baseie só em trechos isolados.
+- Escreva em português, BEM DIRETO: 1 frase (no máximo 2 curtas). Só o essencial — o que aconteceu + o problema principal.
+- Exemplo do tamanho ideal: "Pedido 6951 veio errado; atendente ofereceu frango catupiry como complemento."
+- NÃO narre a conversa (desculpas, agradecimentos, idas e vindas). Não invente fatos.
+- Sem lista, bullets ou aspas de mensagens isoladas.
 - numeroPedido: só o número que o CLIENTE citou (ex. "pedido 48"). Se não houver, null. Nunca invente.
 
 Responda APENAS JSON:
-{"resumo":"parágrafo...","numeroPedido":"48"|null}`,
+{"resumo":"frase curta...","numeroPedido":"48"|null}`,
       user: `Transcrição completa:\n\n${transcript}`,
-      maxTokens: 900,
+      maxTokens: 300,
       temperature: 0.2,
     });
 
@@ -287,7 +288,7 @@ Responda APENAS JSON:
 
     const resumo =
       typeof parsed.resumo === 'string' && parsed.resumo.trim()
-        ? parsed.resumo.trim().slice(0, 4000)
+        ? parsed.resumo.trim().slice(0, 320)
         : fallbackResumo;
 
     return {
