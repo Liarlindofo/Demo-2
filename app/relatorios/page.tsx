@@ -510,9 +510,12 @@ function RelatoriosContent() {
 
   useEffect(() => {
     if (tab !== 'reclamacoes') return;
-    const processing = complaintRuns.some((r) => r.status === 'PROCESSANDO');
-    if (!processing) return;
-    const id = window.setInterval(() => fetchComplaintRuns({ silent: true }), 2500);
+    const live = complaintRuns.some(
+      (r) => r.status === 'PROCESSANDO' || r.status === 'EM_ANDAMENTO',
+    );
+    if (!live) return;
+    const ms = complaintRuns.some((r) => r.status === 'PROCESSANDO') ? 2500 : 15000;
+    const id = window.setInterval(() => fetchComplaintRuns({ silent: true }), ms);
     return () => window.clearInterval(id);
   }, [tab, complaintRuns, fetchComplaintRuns]);
 
@@ -1030,8 +1033,10 @@ function RelatoriosContent() {
                   <tbody>
                     {complaintRuns.map((run) => {
                       const canReview =
-                        (run.status === 'CONCLUIDO' || run.status === 'EM_ANDAMENTO') &&
-                        (run.totalReclamacoes ?? 0) > 0;
+                        run.status === 'CONCLUIDO' ||
+                        run.status === 'EM_ANDAMENTO' ||
+                        run.status === 'PROCESSANDO';
+                      const hasComplaints = (run.totalReclamacoes ?? 0) > 0;
                       const confirmadas = run.confirmadasCount ?? 0;
                       const canGenerate =
                         run.status === 'CONCLUIDO' && confirmadas > 0;
@@ -1043,9 +1048,11 @@ function RelatoriosContent() {
                           {periodLabel(run.periodStart)}
                         </td>
                         <td className="px-4 py-3.5 text-gray-300">
-                          {run.totalReclamacoes ?? '—'}
+                          {run.totalReclamacoes ?? 0}
                           <span className="text-xs text-gray-500 ml-1">
-                            / {run.totalConversas ?? '—'} conversas
+                            {run.status === 'EM_ANDAMENTO' || run.status === 'PROCESSANDO'
+                              ? 'reclamações até agora'
+                              : `/ ${run.totalConversas ?? '—'} conversas`}
                           </span>
                           {confirmadas > 0 && (
                             <span className="block text-xs text-green-400/80 mt-0.5">
@@ -1068,7 +1075,7 @@ function RelatoriosContent() {
                             )}
                             {run.status === 'EM_ANDAMENTO' && (
                               <span className="text-xs text-sky-300/90">
-                                Canal iFood acumulando reclamações do mês
+                                Acumulando ao longo do mês — revise quando quiser
                               </span>
                             )}
                           </div>
@@ -1078,13 +1085,13 @@ function RelatoriosContent() {
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex flex-wrap items-center justify-end gap-1.5">
-                            {run.status === 'PROCESSANDO' && (
+                            {run.status === 'PROCESSANDO' && !hasComplaints && (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-500 border border-[#2a2a2e] opacity-60">
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                 Aguardando término
                               </span>
                             )}
-                            {canReview && (
+                            {canReview && hasComplaints && (
                               <button
                                 type="button"
                                 onClick={() => openReview(run.id)}
@@ -1098,7 +1105,7 @@ function RelatoriosContent() {
                                 Revisar
                               </button>
                             )}
-                            {canReview && (
+                            {canReview && hasComplaints && (
                               <button
                                 type="button"
                                 disabled={!canGenerate || generatingId === run.id}
@@ -1107,7 +1114,9 @@ function RelatoriosContent() {
                                     ? hasAta
                                       ? 'Regenerar ata com as marcações atuais'
                                       : 'Gerar ata com reclamações marcadas'
-                                    : 'Marque ao menos uma reclamação na revisão'
+                                    : run.status === 'EM_ANDAMENTO'
+                                      ? 'Ata disponível após o fechamento do mês'
+                                      : 'Marque ao menos uma reclamação na revisão'
                                 }
                                 onClick={() => handleGenerateAta(run.id)}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"

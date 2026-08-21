@@ -4,10 +4,12 @@ export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { processSettledIfoodClusters } from '@/lib/complaints/process-ifood-cron';
+import { processCooledClientConversations } from '@/lib/complaints/process-client-cron';
 
 /**
  * GET /api/cron/complaints-ifood
- * Classifica clusters quietos de grupos iFood e anexa ao run EM_ANDAMENTO do mês.
+ * Pipeline contínuo: clusters iFood assentados + conversas cliente esfriadas.
+ * Anexa ao ComplaintReviewRun EM_ANDAMENTO do mês.
  * Vercel Cron: a cada 5 minutos.
  */
 export async function GET(req: NextRequest) {
@@ -18,12 +20,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await processSettledIfoodClusters();
-    return NextResponse.json({ ok: true, ...result });
+    const ifood = await processSettledIfoodClusters();
+    const client = await processCooledClientConversations();
+    return NextResponse.json({ ok: true, ifood, client });
   } catch (err) {
     console.error('[cron/complaints-ifood]', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Falha no cron iFood' },
+      { error: err instanceof Error ? err.message : 'Falha no cron contínuo' },
       { status: 500 },
     );
   }

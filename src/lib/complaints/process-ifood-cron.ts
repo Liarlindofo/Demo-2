@@ -9,11 +9,27 @@ import {
   clusterHasContent,
   clusterIfoodMessages,
   extractIfoodGroupComplaint,
-  IFOOD_SETTLE_MS,
+  ifoodSettleMs,
 } from '@/lib/complaints/ifood-group';
-import { currentMonthPeriod, monthPeriodFromDate, type MonthPeriod } from '@/lib/complaints/period';
+import { monthPeriodFromDate, previousMonthPeriod } from '@/lib/complaints/period';
+import {
+  bumpRunComplaintCount,
+  ensureEmAndamentoRun,
+  markMessagesComplaintProcessed,
+} from '@/lib/complaints/continuous';
+
+// Re-export para callers antigos
+export {
+  ensureEmAndamentoRun,
+  markMessagesComplaintProcessed,
+  bumpRunComplaintCount,
+} from '@/lib/complaints/continuous';
 
 const MAX_CLUSTERS_PER_TICK = 20;
+
+function continuousLookbackStart(): Date {
+  return previousMonthPeriod().start;
+}
 
 export type IfoodCronResult = {
   groupsScanned: number;
@@ -44,64 +60,12 @@ function toConv(messages: {
 export function isClusterSettled(
   cluster: ConversationMessage[],
   now = new Date(),
-  settleMs = IFOOD_SETTLE_MS,
+  settleMs?: number,
 ): boolean {
   const last = cluster[cluster.length - 1];
   if (!last) return false;
-  return now.getTime() - last.timestamp.getTime() >= settleMs;
-}
-
-/** Run aberto do período (EM_ANDAMENTO ou PROCESSANDO); cria EM_ANDAMENTO se não houver. */
-export async function ensureEmAndamentoRun(
-  userId: string,
-  period: MonthPeriod = currentMonthPeriod(),
-): Promise<{ id: string; status: string; created: boolean }> {
-  const open = await prisma.complaintReviewRun.findFirst({
-    where: {
-      userId,
-      periodStart: period.start,
-      status: { in: ['EM_ANDAMENTO', 'PROCESSANDO'] },
-    },
-    orderBy: { executadoEm: 'desc' },
-    select: { id: true, status: true },
-  });
-  if (open) return { id: open.id, status: open.status, created: false };
-
-  const late = await prisma.complaintReviewRun.findFirst({
-    where: {
-      userId,
-      periodStart: period.start,
-      status: 'CONCLUIDO',
-    },
-    orderBy: { executadoEm: 'desc' },
-    select: { id: true, status: true },
-  });
-  if (late) return { id: late.id, status: late.status, created: false };
-
-  const created = await prisma.complaintReviewRun.create({
-    data: {
-      userId,
-      periodStart: period.start,
-      periodEnd: period.end,
-      status: 'EM_ANDAMENTO',
-      totalConversas: 0,
-      conversasProcessadas: 0,
-      totalReclamacoes: 0,
-      pendingContactIds: [],
-      processedContactIds: [],
-    },
-    select: { id: true, status: true },
-  });
-  return { id: created.id, status: created.status, created: true };
-}
-
-export async function markMessagesComplaintProcessed(messageIds: string[]): Promise<number> {
-  if (messageIds.length === 0) return 0;
-  const result = await prisma.whatsAppMessage.updateMany({
-    where: { id: { in: messageIds }, complaintProcessedAt: null },
-    data: { complaintProcessedAt: new Date() },
-  });
-  return result.count;
+  const ms = settleMs ?? ifoodSettleMs();
+  return now.getTime() - last.timestamp.getTime() >= ms;
 }
 
 async function clusterAlreadyInRun(params: {
@@ -122,23 +86,20 @@ async function clusterAlreadyInRun(params: {
   return existing.some((c) => c.evidenciaMessageIds.some((id) => evidenceSet.has(id)));
 }
 
-async function bumpRunComplaintCount(runId: string, added: number): Promise<void> {
-  if (added <= 0) return;
-  const run = await prisma.complaintReviewRun.findUnique({
-    where: { id: runId },
-    select: { totalReclamacoes: true },
-  });
-  if (!run) return;
-  await prisma.complaintReviewRun.update({
-    where: { id: runId },
-    data: { totalReclamacoes: (run.totalReclamacoes ?? 0) + added },
-  });
-}
-
 /**
- * Processa clusters iFood quietos (settle) de todos os tenants com grupos ativos.
+ * Processa clusters iFood quietos.
+ * `settleMs: 0` força classificação (fechamento / resíduo).
  */
-export async function processSettledIfoodClusters(): Promise<IfoodCronResult> {
+export async function processSettledIfoodClusters(opts?: {
+  settleMs?: number;
+  maxClusters?: number;
+  userId?: string;
+  periodStart?: Date;
+  periodEnd?: Date;
+}): Promise<IfoodCronResult> {
+  const settleMs = opts?.settleMs ?? ifoodSettleMs();
+  const maxClusters = opts?.maxClusters ?? MAX_CLUSTERS_PER_TICK;
+
   const result: IfoodCronResult = {
     groupsScanned: 0,
     clustersReady: 0,
@@ -148,7 +109,10 @@ export async function processSettledIfoodClusters(): Promise<IfoodCronResult> {
   };
 
   const groups = await prisma.iFoodComplaintGroup.findMany({
-    where: { ativo: true },
+    where: {
+      ativo: true,
+      ...(opts?.userId ? { userId: opts.userId } : {}),
+    },
     select: {
       userId: true,
       groupWhatsAppId: true,
@@ -158,7 +122,7 @@ export async function processSettledIfoodClusters(): Promise<IfoodCronResult> {
   });
 
   const now = new Date();
-  let clustersBudget = MAX_CLUSTERS_PER_TICK;
+  let clustersBudget = maxClusters;
 
   for (const group of groups) {
     if (clustersBudget <= 0) break;
@@ -171,6 +135,10 @@ export async function processSettledIfoodClusters(): Promise<IfoodCronResult> {
         contactId: group.groupWhatsAppId,
         direction: 'OUT',
         complaintProcessedAt: null,
+        timestamp: {
+          gte: opts?.periodStart ?? continuousLookbackStart(),
+          ...(opts?.periodEnd ? { lte: opts.periodEnd } : {}),
+        },
       },
       select: {
         id: true,
@@ -192,14 +160,13 @@ export async function processSettledIfoodClusters(): Promise<IfoodCronResult> {
     for (const cluster of allClusters) {
       if (clustersBudget <= 0) break;
 
-      if (!isClusterSettled(cluster, now)) {
+      if (!isClusterSettled(cluster, now, settleMs)) {
         result.skippedUnsettled += 1;
         continue;
       }
 
       const clusterIds = cluster.map((m) => m.id);
 
-      // Ruído sem texto/mídia: marca e segue (evita loop eterno no cron).
       if (!clusterHasContent(cluster)) {
         result.messagesMarked += await markMessagesComplaintProcessed(clusterIds);
         continue;

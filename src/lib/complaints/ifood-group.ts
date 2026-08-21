@@ -9,7 +9,16 @@ import type { ConversationMessage } from '@/lib/complaints/classify';
 export const IFOOD_CLUSTER_GAP_MS = 90_000;
 
 /** Cluster só é classificado após ficar quieto este tempo (foto + texto separados). */
-export const IFOOD_SETTLE_MS = 4 * 60 * 1000;
+export const IFOOD_SETTLE_MS_DEFAULT = 4 * 60 * 1000;
+
+export function ifoodSettleMs(): number {
+  const raw = process.env.COMPLAINTS_IFOOD_SETTLE_MS;
+  if (raw && Number.isFinite(Number(raw))) return Math.max(0, Number(raw));
+  return IFOOD_SETTLE_MS_DEFAULT;
+}
+
+/** @deprecated use ifoodSettleMs() — mantido p/ imports existentes */
+export const IFOOD_SETTLE_MS = IFOOD_SETTLE_MS_DEFAULT;
 
 export type IfoodGroupExtract = {
   resumo: string;

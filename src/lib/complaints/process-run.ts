@@ -17,7 +17,7 @@ import {
   clusterIfoodMessages,
   extractIfoodGroupComplaint,
 } from '@/lib/complaints/ifood-group';
-import { markMessagesComplaintProcessed } from '@/lib/complaints/process-ifood-cron';
+import { markMessagesComplaintProcessed } from '@/lib/complaints/continuous';
 import { pickClientContactName } from '@/lib/complaints/contact';
 import { buildAndSaveComparison } from '@/lib/complaints/compare';
 import { monthPeriodFromDate } from '@/lib/complaints/period';
@@ -279,10 +279,10 @@ async function classifyOneContact(params: {
       reviewRunId: params.runId,
       userId: params.userId,
       contactId: params.contactId,
+      origem: 'CLIENTE',
     },
     select: { id: true },
   });
-  if (already) return 0;
 
   const messages = await prisma.whatsAppMessage.findMany({
     where: {
@@ -290,6 +290,7 @@ async function classifyOneContact(params: {
       sessionSlot: { in: params.monitoredSlots },
       contactId: params.contactId,
       timestamp: { gte: params.periodStart, lte: params.periodEnd },
+      complaintProcessedAt: null,
     },
     select: {
       id: true,
@@ -304,6 +305,15 @@ async function classifyOneContact(params: {
     orderBy: { timestamp: 'asc' },
   });
 
+  if (messages.length === 0) return 0;
+
+  const messageIds = messages.map((m) => m.id);
+
+  if (already) {
+    await markMessagesComplaintProcessed(messageIds);
+    return 0;
+  }
+
   const conv: ConversationMessage[] = messages.map((m) => ({
     id: m.id,
     direction: m.direction,
@@ -313,7 +323,10 @@ async function classifyOneContact(params: {
     timestamp: m.timestamp,
   }));
 
-  if (!conv.some((m) => m.direction === 'IN')) return 0;
+  if (!conv.some((m) => m.direction === 'IN')) {
+    await markMessagesComplaintProcessed(messageIds);
+    return 0;
+  }
 
   const result = await classifyConversation({
     messages: conv,
@@ -321,11 +334,15 @@ async function classifyOneContact(params: {
   });
 
   if (!result.eReclamacao || !result.resumo || !result.dataOcorrencia) {
+    await markMessagesComplaintProcessed(messageIds);
     return 0;
   }
 
   const evidenciaMessageIds = filterClientEvidenceIds(conv, result.evidenciaMessageIds);
-  if (evidenciaMessageIds.length === 0) return 0;
+  if (evidenciaMessageIds.length === 0) {
+    await markMessagesComplaintProcessed(messageIds);
+    return 0;
+  }
 
   const sessionSlot = messages[0]?.sessionSlot ?? params.monitoredSlots[0] ?? 1;
 
@@ -344,6 +361,7 @@ async function classifyOneContact(params: {
       lojaGrupo: null,
     },
   });
+  await markMessagesComplaintProcessed(messageIds);
   return 1;
 }
 
