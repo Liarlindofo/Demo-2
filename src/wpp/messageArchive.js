@@ -213,21 +213,96 @@ async function isMonitoringOn(stackUserId, slot) {
 
 /** Whitelist: só grupos cadastrados em IFoodComplaintGroup (tenant + slot + ativo). */
 async function allowedIfoodGroupIds(tenantUserId, slot) {
-  const key = `${tenantUserId}:${slot}`;
+  const slotNum = Math.trunc(Number(slot));
+  const key = `${tenantUserId}:${slotNum}`;
   const cached = ifoodGroupCache.get(key);
-  if (cached && Date.now() - cached.at < CACHE_MS) return cached.allowed;
+  if (cached && Date.now() - cached.at < CACHE_MS) {
+    // eslint-disable-next-line no-console
+    console.log('[DEBUG whitelist] cache hit', {
+      userId: tenantUserId,
+      slot: slotNum,
+      slotRaw: slot,
+      slotRawType: typeof slot,
+      count: cached.allowed.size,
+      ids: [...cached.allowed],
+    });
+    return cached.allowed;
+  }
 
   /** @type {Set<string>} */
   let allowed = new Set();
+  let source = 'none';
   try {
-    const rows = await prisma.iFoodComplaintGroup.findMany({
-      where: { userId: tenantUserId, sessionSlot: slot, ativo: true },
-      select: { groupWhatsAppId: true },
-    });
-    allowed = new Set(rows.map((r) => String(r.groupWhatsAppId).trim()).filter(Boolean));
+    if (!Number.isFinite(slotNum) || slotNum < 1) {
+      throw new Error(`sessionSlot inválido: raw=${slot} (${typeof slot})`);
+    }
+
+    // Preferência: delegate Prisma. Se o client da VPS estiver desatualizado
+    // (sem model IFoodComplaintGroup), cai no SQL cru — a tabela já existe no Neon.
+    if (typeof prisma.iFoodComplaintGroup?.findMany === 'function') {
+      const rows = await prisma.iFoodComplaintGroup.findMany({
+        where: { userId: tenantUserId, sessionSlot: slotNum, ativo: true },
+        select: { groupWhatsAppId: true },
+      });
+      allowed = new Set(rows.map((r) => String(r.groupWhatsAppId).trim()).filter(Boolean));
+      source = 'prisma.iFoodComplaintGroup';
+    } else {
+      source = 'delegate-ausente→raw';
+      throw new Error('prisma.iFoodComplaintGroup.findMany indisponível (client desatualizado?)');
+    }
   } catch (err) {
-    logger.warn(`[messageArchive] Falha ao ler IFoodComplaintGroup [${key}]: ${err?.message}`);
+    // eslint-disable-next-line no-console
+    console.log('[DEBUG whitelist] findMany falhou, tentando SQL raw:', {
+      userId: tenantUserId,
+      slot: slotNum,
+      slotRaw: slot,
+      slotRawType: typeof slot,
+      hasDelegate: typeof prisma.iFoodComplaintGroup?.findMany,
+      error: err?.message || String(err),
+    });
+    logger.warn(
+      `[messageArchive] Falha ao ler IFoodComplaintGroup via Prisma [${key}]: ${err?.message}`,
+    );
+    try {
+      const rawRows = await prisma.$queryRaw`
+        SELECT "groupWhatsAppId"
+        FROM ifood_complaint_groups
+        WHERE "userId" = ${tenantUserId}
+          AND "sessionSlot" = ${slotNum}
+          AND ativo = true
+      `;
+      const list = Array.isArray(rawRows) ? rawRows : [];
+      allowed = new Set(
+        list.map((r) => String(r.groupWhatsAppId || '').trim()).filter(Boolean),
+      );
+      source = 'sql-raw';
+    } catch (rawErr) {
+      // eslint-disable-next-line no-console
+      console.log('[DEBUG whitelist] SQL raw também falhou:', {
+        userId: tenantUserId,
+        slot: slotNum,
+        error: rawErr?.message || String(rawErr),
+      });
+      logger.warn(
+        `[messageArchive] Falha SQL raw IFoodComplaintGroup [${key}]: ${rawErr?.message}`,
+      );
+      allowed = new Set();
+      source = 'falha-total';
+    }
   }
+
+  // eslint-disable-next-line no-console
+  console.log(
+    `[DEBUG whitelist] Carregando grupos para userId=${tenantUserId} slot=${slotNum}:`,
+    allowed.size,
+    'encontrados',
+    [...allowed],
+    { source, slotRaw: slot, slotRawType: typeof slot },
+  );
+  logger.info(
+    `[DEBUG whitelist] userId=${tenantUserId} slot=${slotNum} source=${source} count=${allowed.size}`,
+  );
+
   ifoodGroupCache.set(key, { allowed, at: Date.now() });
   return allowed;
 }
