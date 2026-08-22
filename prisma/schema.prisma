@@ -89,6 +89,7 @@ model User {
   complaintReviewRuns    ComplaintReviewRun[]
   complaints             Complaint[]
   ifoodComplaintGroups   IFoodComplaintGroup[]
+  bonificacaoTrimestres  BonificacaoTrimestre[]
 
   @@map("users")
 }
@@ -1777,6 +1778,25 @@ model Complaint {
   @@index([userId, contactId])
   @@index([userId, origem])
   @@map("complaints")
+}
+
+/// Plano trimestral de bonificação por loja (gerentes e funcionários).
+model BonificacaoTrimestre {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lojaId     String?
+  lojaNome   String
+  ano        Int
+  trimestre  Int      // 1 = Q1 (jan-mar), 2 = Q2 (abr-jun), 3 = Q3 (jul-set), 4 = Q4 (out-dez)
+  /// JSON: { metricas: [{id, nome, maxPontos, pontos: {[mes]: number}}, ...], descontos: [{id, nome, valor}, ...] }
+  dados      Json     @default("{}")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, lojaNome, ano, trimestre])
+  @@index([userId, ano, trimestre])
+  @@map("bonificacao_trimestres")
 }
 
 /// Comparação do run atual com o mês imediatamente anterior (para ata).

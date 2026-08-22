@@ -24,6 +24,7 @@ export function useToolPermissions() {
     [SystemTool.IFOOD]: false,
     [SystemTool.RH]: false,
     [SystemTool.TAREFAS]: false,
+    [SystemTool.BONIFICACAO]: false,
   });
   const [loading, setLoading] = useState(true);
 
@@ -77,6 +78,7 @@ export function useToolPermissions() {
         [SystemTool.IFOOD]: false,
         [SystemTool.RH]: false,
         [SystemTool.TAREFAS]: false,
+        [SystemTool.BONIFICACAO]: false,
       };
 
       permissionChecks.forEach(({ tool, hasPermission }) => {

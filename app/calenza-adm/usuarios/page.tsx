@@ -39,6 +39,7 @@ const TOOL_LABELS: Record<SystemTool, string> = {
   [SystemTool.IFOOD]: "iFood",
   [SystemTool.RH]: "RH",
   [SystemTool.TAREFAS]: "Tarefas",
+  [SystemTool.BONIFICACAO]: "Bonificação",
 };
 
 // Grupos visuais de ferramentas para organizar a UI
@@ -64,7 +65,7 @@ const TOOL_GROUPS: { label: string; tools: SystemTool[] }[] = [
   },
   {
     label: "RH & Tarefas",
-    tools: [SystemTool.RH, SystemTool.TAREFAS],
+    tools: [SystemTool.RH, SystemTool.TAREFAS, SystemTool.BONIFICACAO],
   },
   {
     label: "Outros",
