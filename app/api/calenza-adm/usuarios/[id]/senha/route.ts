@@ -4,36 +4,43 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdminAuth, hasPermission, createAuditLog } from '@/lib/auth/adminAuth';
 import { hashPassword } from '@/lib/auth/password';
+import {
+  stackAuthErrorMessage,
+  updateStackAuthUserFromAdmin,
+} from '@/lib/stack-auth-admin';
 import { Permission } from '@/types/admin';
 
 // PATCH - Alterar senha do usuário
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await requireAdminAuth(request);
     if (session instanceof NextResponse) return session;
 
-    if (!(await hasPermission(session, Permission.RESET_PASSWORDS))) {
+    const canReset =
+      (await hasPermission(session, Permission.RESET_PASSWORDS)) ||
+      (await hasPermission(session, Permission.EDIT_USERS));
+
+    if (!canReset) {
       return NextResponse.json(
         { error: 'Sem permissão para alterar senhas' },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
     const { id } = await params;
     const body = await request.json();
-    const { newPassword } = body;
+    const { newPassword } = body as { newPassword?: string };
 
     if (!newPassword || newPassword.length < 6) {
       return NextResponse.json(
         { error: 'Senha deve ter pelo menos 6 caracteres' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Buscar StackUser
     const stackUser = await prisma.stackUser.findUnique({
       where: { id },
       include: { user: true },
@@ -42,36 +49,41 @@ export async function PATCH(
     if (!stackUser) {
       return NextResponse.json(
         { error: 'Usuário não encontrado' },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
-    // Se não tem User relacionado, criar
-    if (!stackUser.userId) {
+    // Login usa Stack Auth — senha precisa ser alterada lá, não só no Prisma
+    try {
+      await updateStackAuthUserFromAdmin(id, { password: newPassword });
+    } catch (stackErr) {
+      console.error('Erro ao alterar senha no Stack Auth:', stackErr);
       return NextResponse.json(
-        { error: 'Usuário não possui conta no sistema principal' },
-        { status: 400 }
+        { error: stackAuthErrorMessage(stackErr) },
+        { status: 400 },
       );
     }
 
-    // Hash da nova senha
-    const passwordHash = await hashPassword(newPassword);
+    // Mantém cópia local (legado / integrações que ainda leem User.password)
+    if (stackUser.userId) {
+      const passwordHash = await hashPassword(newPassword);
+      await prisma.user.update({
+        where: { id: stackUser.userId },
+        data: { password: passwordHash },
+      });
+    }
 
-    // Atualizar senha no User
-    await prisma.user.update({
-      where: { id: stackUser.userId },
-      data: { password: passwordHash },
-    });
-
-    // Log de auditoria
     try {
       await createAuditLog({
         userId: session.userId,
         action: 'password_reset',
         entityType: 'StackUser',
         entityId: id,
-        details: { resetBy: session.email },
-        ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
+        details: { resetBy: session.email, stackAuthSynced: true },
+        ipAddress:
+          request.headers.get('x-forwarded-for') ||
+          request.headers.get('x-real-ip') ||
+          null,
         userAgent: request.headers.get('user-agent') || null,
       });
     } catch (logError) {
@@ -79,11 +91,12 @@ export async function PATCH(
     }
 
     return NextResponse.json({ success: true, message: 'Senha alterada com sucesso' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro ao alterar senha:', error);
+    const details = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: 'Erro ao alterar senha', details: error?.message },
-      { status: 500 }
+      { error: 'Erro ao alterar senha', details },
+      { status: 500 },
     );
   }
 }
