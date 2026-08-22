@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionDbUser } from '@/lib/rh-api-auth';
+import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,8 +10,8 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET() {
   try {
-    const dbUser = await getSessionDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const tenantUserId = await getReportsTenantUserId();
+    if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const campos = await prisma.saiposFieldCatalog.findMany({
       orderBy: [{ grupo: 'asc' }, { ordem: 'asc' }],

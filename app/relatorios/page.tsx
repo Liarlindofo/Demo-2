@@ -361,7 +361,7 @@ function RelatoriosContent() {
       const [resReports, resCatalog, resSessions] = await Promise.all([
         fetch('/api/admin/reports'),
         fetch('/api/admin/reports/catalog'),
-        fetch('/api/whatsapp-sessions'),
+        fetch('/api/whatsapp-sessions?scope=tenant'),
       ]);
       if (resReports.ok) {
         const data = await resReports.json();
@@ -433,7 +433,7 @@ function RelatoriosContent() {
       setLoadingWppGroups(true);
       setIfoodFormGroupId('');
       try {
-        const res = await fetch(`/api/whatsapp-sessions/slot/${ifoodFormSlot}/groups`);
+        const res = await fetch(`/api/whatsapp-sessions/slot/${ifoodFormSlot}/groups?scope=tenant`);
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
         const raw = Array.isArray(data.groups) ? data.groups : [];
@@ -649,7 +649,7 @@ function RelatoriosContent() {
     setError(null);
     setShowModal(true);
     try {
-      const res = await fetch('/api/whatsapp-sessions');
+      const res = await fetch('/api/whatsapp-sessions?scope=tenant');
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.sessions)) setSessions(data.sessions);

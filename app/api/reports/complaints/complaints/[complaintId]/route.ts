@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionDbUser } from '@/lib/rh-api-auth';
+import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
 
 type PatchBody = {
   confirmadoPorHumano?: boolean;
@@ -17,8 +17,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ complaintId: string }> },
 ) {
-  const dbUser = await getSessionDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const tenantUserId = await getReportsTenantUserId();
+  if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { complaintId } = await params;
 
@@ -38,7 +38,7 @@ export async function PATCH(
   }
 
   const existing = await prisma.complaint.findFirst({
-    where: { id: complaintId, userId: dbUser.id },
+    where: { id: complaintId, userId: tenantUserId },
     select: { id: true, reviewRunId: true },
   });
 

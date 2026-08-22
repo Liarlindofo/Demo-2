@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionDbUser } from '@/lib/rh-api-auth';
+import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
 
 function slugifyLoja(raw: string): string {
   return raw
@@ -27,14 +27,14 @@ function normalizeGroupJid(raw: string): string | null {
 
 /**
  * GET /api/reports/complaints/ifood-groups
- * Lista grupos iFood cadastrados do tenant.
+ * Lista grupos iFood cadastrados do tenant (empresa).
  */
 export async function GET() {
-  const dbUser = await getSessionDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const tenantUserId = await getReportsTenantUserId();
+  if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const groups = await prisma.iFoodComplaintGroup.findMany({
-    where: { userId: dbUser.id },
+    where: { userId: tenantUserId },
     orderBy: [{ lojaNome: 'asc' }, { createdAt: 'asc' }],
   });
 
@@ -46,8 +46,8 @@ export async function GET() {
  * Body: { groupWhatsAppId, lojaNome, lojaSlug?, sessionSlot, ativo? }
  */
 export async function POST(req: NextRequest) {
-  const dbUser = await getSessionDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const tenantUserId = await getReportsTenantUserId();
+  if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   let body: {
     groupWhatsAppId?: string;
@@ -82,12 +82,12 @@ export async function POST(req: NextRequest) {
     const group = await prisma.iFoodComplaintGroup.upsert({
       where: {
         userId_groupWhatsAppId: {
-          userId: dbUser.id,
+          userId: tenantUserId,
           groupWhatsAppId,
         },
       },
       create: {
-        userId: dbUser.id,
+        userId: tenantUserId,
         groupWhatsAppId,
         lojaNome,
         lojaSlug,

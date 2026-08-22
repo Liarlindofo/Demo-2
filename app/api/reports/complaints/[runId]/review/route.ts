@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionDbUser } from '@/lib/rh-api-auth';
+import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
 import {
   formatClientHeading,
   formatContactPhone,
@@ -14,19 +14,19 @@ import { resolveStackUserIdsForTenant } from '@/lib/whatsapp-sessions';
 /**
  * GET /api/reports/complaints/:runId/review
  *
- * Detalhe do run + reclamações para revisão humana (sessão logada).
+ * Detalhe do run + reclamações para revisão humana (tenant da empresa).
  */
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ runId: string }> },
 ) {
-  const dbUser = await getSessionDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const tenantUserId = await getReportsTenantUserId();
+  if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { runId } = await params;
 
   const run = await prisma.complaintReviewRun.findFirst({
-    where: { id: runId, userId: dbUser.id },
+    where: { id: runId, userId: tenantUserId },
     select: {
       id: true,
       periodStart: true,
@@ -63,13 +63,13 @@ export async function GET(
   const allEvidenceIds = [...new Set(run.complaints.flatMap((c) => c.evidenciaMessageIds))];
   const slotsUsed = [...new Set(run.complaints.map((c) => c.sessionSlot).filter(Boolean))];
 
-  const stackIds = await resolveStackUserIdsForTenant(dbUser.id);
+  const stackIds = await resolveStackUserIdsForTenant(tenantUserId);
   const [evidenceMessages, inNameRows, bots] = await Promise.all([
     allEvidenceIds.length > 0
       ? prisma.whatsAppMessage.findMany({
           where: {
             id: { in: allEvidenceIds },
-            userId: dbUser.id,
+            userId: tenantUserId,
           },
           select: {
             id: true,
@@ -83,7 +83,7 @@ export async function GET(
     contactIds.length > 0
       ? prisma.whatsAppMessage.findMany({
           where: {
-            userId: dbUser.id,
+            userId: tenantUserId,
             contactId: { in: contactIds },
             direction: 'IN',
             timestamp: { gte: run.periodStart, lte: run.periodEnd },
@@ -122,7 +122,7 @@ export async function GET(
   if (missingNameIds.length > 0) {
     const extra = await prisma.whatsAppMessage.findMany({
       where: {
-        userId: dbUser.id,
+        userId: tenantUserId,
         contactId: { in: missingNameIds },
         direction: 'IN',
         contactName: { not: null },

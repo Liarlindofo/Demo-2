@@ -2,20 +2,20 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionDbUser } from '@/lib/rh-api-auth';
+import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
 
 /**
  * GET /api/reports/complaints
  *
- * Lista ComplaintReviewRun do tenant logado (sessão Stack Auth).
+ * Lista ComplaintReviewRun do tenant (empresa).
  * Usado pela Central de Relatórios → aba Reclamações.
  */
 export async function GET() {
-  const dbUser = await getSessionDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const tenantUserId = await getReportsTenantUserId();
+  if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const runs = await prisma.complaintReviewRun.findMany({
-    where: { userId: dbUser.id },
+    where: { userId: tenantUserId },
     orderBy: { executadoEm: 'desc' },
     take: 50,
     select: {

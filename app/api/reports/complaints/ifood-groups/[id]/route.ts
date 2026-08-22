@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionDbUser } from '@/lib/rh-api-auth';
+import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
 
 /**
  * DELETE /api/reports/complaints/ifood-groups/:id
@@ -12,12 +12,12 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const dbUser = await getSessionDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const tenantUserId = await getReportsTenantUserId();
+  if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
   const existing = await prisma.iFoodComplaintGroup.findFirst({
-    where: { id, userId: dbUser.id },
+    where: { id, userId: tenantUserId },
     select: { id: true },
   });
   if (!existing) return NextResponse.json({ error: 'Grupo não encontrado.' }, { status: 404 });
@@ -30,12 +30,12 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const dbUser = await getSessionDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const tenantUserId = await getReportsTenantUserId();
+  if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
   const existing = await prisma.iFoodComplaintGroup.findFirst({
-    where: { id, userId: dbUser.id },
+    where: { id, userId: tenantUserId },
     select: { id: true },
   });
   if (!existing) return NextResponse.json({ error: 'Grupo não encontrado.' }, { status: 404 });

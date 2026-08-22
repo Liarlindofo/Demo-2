@@ -10,8 +10,8 @@ import { NextResponse } from 'next/server';
  * for team members this is the admin's id (so they see the correct shared data),
  * and for admins it is their own id.
  *
- * NÃO use em recursos isolados por conta (ex.: ReportDefinition). Nesse caso
- * use getSessionDbUser() — senão um membro logado grava/lista dados do dono.
+ * NÃO use em recursos isolados por conta pessoal (ex.: /connections sem scope=tenant).
+ * Para Central de Relatórios (agendados, ata, reclamações), use getReportsTenantUserId().
  *
  * Usage:
  *   const rh = await rhGetUser();

@@ -4,7 +4,7 @@ export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionDbUser } from '@/lib/rh-api-auth';
+import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
 import { createAtaSignedUrl } from '@/lib/complaints/ata-storage';
 import { buildAndSaveAta } from '@/lib/complaints/build-ata';
 
@@ -13,20 +13,19 @@ const SIGNED_TTL_SECONDS = 3600;
 /**
  * GET /api/reports/complaints/:runId/document
  *
- * Signed URL temporária da ata (.docx). Auth por sessão logada.
- * Só retorna URL se a ata já foi gerada (POST). Não gera automaticamente.
+ * Signed URL temporária da ata (.docx). Tenant da empresa.
  */
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ runId: string }> },
 ) {
-  const dbUser = await getSessionDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const tenantUserId = await getReportsTenantUserId();
+  if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { runId } = await params;
 
   const run = await prisma.complaintReviewRun.findFirst({
-    where: { id: runId, userId: dbUser.id },
+    where: { id: runId, userId: tenantUserId },
     select: {
       id: true,
       ataStoragePath: true,
@@ -70,13 +69,13 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ runId: string }> },
 ) {
-  const dbUser = await getSessionDbUser();
-  if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const tenantUserId = await getReportsTenantUserId();
+  if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { runId } = await params;
 
   const run = await prisma.complaintReviewRun.findFirst({
-    where: { id: runId, userId: dbUser.id },
+    where: { id: runId, userId: tenantUserId },
     select: { id: true, status: true },
   });
 
@@ -92,7 +91,7 @@ export async function POST(
   }
 
   const confirmadas = await prisma.complaint.count({
-    where: { reviewRunId: runId, userId: dbUser.id, confirmadoPorHumano: true },
+    where: { reviewRunId: runId, userId: tenantUserId, confirmadoPorHumano: true },
   });
 
   if (confirmadas === 0) {
@@ -106,7 +105,7 @@ export async function POST(
   }
 
   const generated = await buildAndSaveAta({
-    userId: dbUser.id,
+    userId: tenantUserId,
     reviewRunId: runId,
   });
 

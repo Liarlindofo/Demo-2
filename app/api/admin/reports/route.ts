@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSessionDbUser } from '@/lib/rh-api-auth';
+import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
 import { ReportEscopoLoja, ReportFonte } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
@@ -13,15 +13,15 @@ function validarHorario(h: unknown): h is string {
 
 /**
  * GET /api/admin/reports
- * Lista ReportDefinition da conta logada (User.id da sessão Stack Auth).
+ * Lista ReportDefinition do tenant (empresa — dono + equipe RH).
  */
 export async function GET() {
   try {
-    const dbUser = await getSessionDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const tenantUserId = await getReportsTenantUserId();
+    if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const reports = await prisma.reportDefinition.findMany({
-      where: { userId: dbUser.id },
+      where: { userId: tenantUserId },
       include: {
         campos: { orderBy: { ordem: 'asc' }, select: { campoKey: true, ordem: true } },
         execucoes: {
@@ -51,8 +51,8 @@ export async function GET() {
  */
 export async function POST(req: Request) {
   try {
-    const dbUser = await getSessionDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const tenantUserId = await getReportsTenantUserId();
+    if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const body = await req.json();
     const {
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
 
     const report = await prisma.reportDefinition.create({
       data: {
-        userId: dbUser.id,
+        userId: tenantUserId,
         nome: nome.trim(),
         fonte: ReportFonte.SAIPOS_DASHBOARD,
         horario,

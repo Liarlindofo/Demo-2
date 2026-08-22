@@ -4,9 +4,9 @@ import { syncStackAuthUser } from '@/lib/stack-auth-sync';
 /**
  * User.id da sessão Stack Auth atual (conta realmente logada).
  *
- * Não remapeia para RhTeamMember.tenantUserId. Use isto para dados
- * isolados por conta (relatórios, Saipos, WhatsApp). Para dados RH
- * compartilhados no tenant, use rhGetUser().
+ * Não remapeia para RhTeamMember.tenantUserId. Use para recursos isolados
+ * por conta pessoal (ex.: /connections). Para relatórios compartilhados no
+ * tenant, use getReportsTenantUserId() de @/lib/reports-tenant-auth.
  */
 export async function getSessionDbUser() {
   const stackUser = await stackServerApp.getUser({ or: 'return-null' });
