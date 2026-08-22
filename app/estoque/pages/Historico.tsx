@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronLeft, CheckCircle2, Clock, Trash2, ChevronRight } from 'lucide-react';
+import { ChevronLeft, CheckCircle2, Clock, Trash2, ChevronRight, Store, CalendarDays } from 'lucide-react';
 import type { StockSession } from '../types';
 import { formatQtd } from '../utils';
 
@@ -11,6 +11,45 @@ interface HistoricoProps {
   onRetomar: (sessionId: string) => void;
   onExcluir: (sessionId: string) => void;
   onVerResultado: (session: StockSession) => void;
+}
+
+function formatarDataCurta(iso: string) {
+  return new Date(iso).toLocaleDateString('pt-BR', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatarDataLonga(iso: string) {
+  return new Date(iso).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function formatarHora(iso: string) {
+  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function EtiquetaLoja({ nome }: { nome: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-300 bg-amber-500/10 border border-amber-500/25 px-2 py-0.5 rounded-lg">
+      <Store className="w-3 h-3" />
+      {nome}
+    </span>
+  );
+}
+
+function EtiquetaData({ iso }: { iso: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-300 bg-[#2a2a2e] border border-[#3a3a3e] px-2 py-0.5 rounded-lg">
+      <CalendarDays className="w-3 h-3 text-gray-500" />
+      {formatarDataCurta(iso)}
+    </span>
+  );
 }
 
 export function Historico({ sessions, onVoltar, onRetomar, onExcluir, onVerResultado }: HistoricoProps) {
@@ -30,14 +69,16 @@ export function Historico({ sessions, onVoltar, onRetomar, onExcluir, onVerResul
           <button onClick={() => setDetalheId(null)} className="p-2 -ml-2 text-gray-400 hover:text-white">
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <h2 className="font-bold text-white">
-              {new Date(detalhe.dataCriacao).toLocaleDateString('pt-BR', {
-                day: '2-digit', month: 'long', year: 'numeric',
-              })}
+              {formatarDataLonga(detalhe.dataCriacao)}
             </h2>
-            <p className="text-xs text-gray-500">
-              {new Date(detalhe.dataCriacao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+              <EtiquetaData iso={detalhe.dataCriacao} />
+              {detalhe.lojaNome ? <EtiquetaLoja nome={detalhe.lojaNome} /> : null}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {formatarHora(detalhe.dataCriacao)}
               {' · '}
               {detalhe.sessoes.length} sessões
             </p>
@@ -130,15 +171,16 @@ export function Historico({ sessions, onVoltar, onRetomar, onExcluir, onVerResul
                       setDetalheId(s.id);
                     }
                   }} className="flex-1 text-left min-w-0">
-                  <p className="font-semibold text-white text-sm">
-                    {new Date(s.dataCriacao).toLocaleDateString('pt-BR', {
-                      weekday: 'short', day: '2-digit', month: 'short', year: 'numeric',
-                    })}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                    <EtiquetaData iso={s.dataCriacao} />
+                    {s.lojaNome ? <EtiquetaLoja nome={s.lojaNome} /> : null}
+                  </div>
+                  <p className="text-xs text-gray-500">
                     {s.status === 'em_andamento' ? (
                       <span className="text-amber-400">Em andamento · </span>
                     ) : null}
+                    {formatarHora(s.dataCriacao)}
+                    {' · '}
                     {concluidas}/{s.sessoes.length} sessões
                     {alertas > 0 && <span className="ml-2 text-amber-400">⚠ {alertas}</span>}
                   </p>

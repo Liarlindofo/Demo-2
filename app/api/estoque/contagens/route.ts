@@ -1,22 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getEffectiveDbUser, getEffectiveUserIds } from '@/lib/effective-user';
+import { getEstoqueTenantContext } from '@/lib/estoque-tenant';
 import type { StockSession } from '../../../estoque/types';
 
 export const dynamic = 'force-dynamic';
 
-// ── GET: listar todas as contagens do usuário ─────────────────────────────────
+// ── GET: listar todas as contagens do tenant ─────────────────────────────────
 export async function GET() {
   try {
-    const dbUser = await getEffectiveDbUser();
-    if (!dbUser) {
+    const ctx = await getEstoqueTenantContext();
+    if (!ctx) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    // Inclui histórico de todos os membros do grupo (dados criados antes da migração)
-    const allUserIds = await getEffectiveUserIds(dbUser.id);
+    const { userIds } = ctx;
     const contagens = await prisma.estoqueContagem.findMany({
-      where: { userId: { in: allUserIds } },
+      where: { userId: { in: userIds } },
       orderBy: { dataCriacao: 'desc' },
     });
 
@@ -39,10 +38,12 @@ export async function GET() {
 // ── POST: criar nova contagem ─────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
-    const dbUser = await getEffectiveDbUser();
-    if (!dbUser) {
+    const ctx = await getEstoqueTenantContext();
+    if (!ctx) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
+
+    const { tenantUserId } = ctx;
 
     const body = await request.json();
     const { sessoes, criadoPor = 'Gerente', lojaNome } = body;
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     const contagem = await prisma.estoqueContagem.create({
       data: {
-        userId: dbUser.id,
+        userId: tenantUserId,
         criadoPor,
         lojaNome: lojaNome || null,
         sessoes,

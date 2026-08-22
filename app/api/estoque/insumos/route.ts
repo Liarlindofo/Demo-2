@@ -1,26 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getEffectiveDbUser } from '@/lib/effective-user';
+import {
+  dedupeInsumosBySlug,
+  getEstoqueTenantContext,
+} from '@/lib/estoque-tenant';
 import { INSUMOS_PADRAO } from '@/lib/estoque-insumos-padrao';
 
 export const dynamic = 'force-dynamic';
 
-// ── GET: lista insumos do usuário; faz seed automático se ainda não tem nenhum ──
+// ── GET: lista insumos do tenant; faz seed automático se ainda não tem nenhum ──
 export async function GET() {
   try {
-    const dbUser = await getEffectiveDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const ctx = await getEstoqueTenantContext();
+    if (!ctx) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+
+    const { tenantUserId, userIds } = ctx;
 
     let insumos = await prisma.estoqueInsumo.findMany({
-      where: { userId: dbUser.id },
+      where: { userId: { in: userIds } },
       orderBy: [{ categoriaId: 'asc' }, { createdAt: 'asc' }],
     });
 
-    // Seed automático na primeira vez que o usuário acessa
+    insumos = dedupeInsumosBySlug(insumos, tenantUserId);
+
+    // Seed automático na primeira vez que o tenant acessa (nenhum membro tem dados)
     if (insumos.length === 0) {
       await prisma.estoqueInsumo.createMany({
         data: INSUMOS_PADRAO.map(p => ({
-          userId: dbUser.id,
+          userId: tenantUserId,
           insumoId: p.insumoId,
           nome: p.nome,
           unidade: p.unidade,
@@ -32,7 +39,7 @@ export async function GET() {
       });
 
       insumos = await prisma.estoqueInsumo.findMany({
-        where: { userId: dbUser.id },
+        where: { userId: tenantUserId },
         orderBy: [{ categoriaId: 'asc' }, { createdAt: 'asc' }],
       });
     }
@@ -47,8 +54,10 @@ export async function GET() {
 // ── POST: cria novo insumo ────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
-    const dbUser = await getEffectiveDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const ctx = await getEstoqueTenantContext();
+    if (!ctx) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+
+    const { tenantUserId } = ctx;
 
     const body = await req.json();
     const { nome, unidade, categoriaId, categoriaNome, categoriaIcone } = body;
@@ -68,7 +77,7 @@ export async function POST(req: NextRequest) {
 
     const insumo = await prisma.estoqueInsumo.create({
       data: {
-        userId: dbUser.id,
+        userId: tenantUserId,
         insumoId,
         nome: nome.trim().toUpperCase(),
         unidade: unidade.trim(),

@@ -11,31 +11,13 @@
  * 3. Caso contrário → retorna o próprio User
  */
 
-import { stackServerApp } from '@/stack';
-import { syncStackAuthUser } from '@/lib/stack-auth-sync';
+import { getRhContext } from '@/lib/rh-auth';
 import { prisma } from '@/lib/prisma';
 
 export async function getEffectiveDbUser() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-
-  const ownUser = await syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-
-  // Se for membro de uma equipe, retorna o userId do dono (tenant)
-  const membership = await prisma.rhTeamMember.findFirst({
-    where: { stackUserId: stackUser.id, isActive: true },
-    include: { tenantUser: true },
-  });
-
-  if (membership?.tenantUser) return membership.tenantUser;
-
-  return ownUser;
+  const ctx = await getRhContext();
+  if (!ctx) return null;
+  return prisma.user.findUnique({ where: { id: ctx.userId } });
 }
 
 /**

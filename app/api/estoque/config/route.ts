@@ -2,44 +2,34 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getEffectiveDbUser } from '@/lib/effective-user';
+import {
+  getEstoqueTenantContext,
+  mergeProdutoConfigs,
+  mergeProdutoOrdem,
+} from '@/lib/estoque-tenant';
 
 // GET /api/estoque/config
 // Retorna { configs: EstoqueConfigMap, order: string[] }
 export async function GET() {
   try {
-    const dbUser = await getEffectiveDbUser();
-    if (!dbUser) {
+    const ctx = await getEstoqueTenantContext();
+    if (!ctx) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
 
-    const [configs, ordemRow] = await Promise.all([
+    const { tenantUserId, userIds } = ctx;
+
+    const [configs, ordemRows] = await Promise.all([
       prisma.estoqueProdutoConfig.findMany({
-        where: { userId: dbUser.id },
+        where: { userId: { in: userIds } },
       }),
-      prisma.estoqueProdutoOrdem.findUnique({
-        where: { userId: dbUser.id },
+      prisma.estoqueProdutoOrdem.findMany({
+        where: { userId: { in: userIds } },
       }),
     ]);
 
-    // Mapear para o formato EstoqueConfigMap
-    const configMap: Record<string, {
-      ativo: boolean;
-      estoqueMinimo?: number;
-      modoContagem?: 'kg' | 'unidade';
-      kgPorUnidade?: number;
-    }> = {};
-
-    for (const c of configs) {
-      configMap[c.produtoId] = {
-        ativo: c.ativo,
-        estoqueMinimo: c.estoqueMinimo ?? undefined,
-        modoContagem: (c.modoContagem as 'kg' | 'unidade') ?? 'kg',
-        kgPorUnidade: c.kgPorUnidade ?? undefined,
-      };
-    }
-
-    const order = Array.isArray(ordemRow?.ordem) ? (ordemRow.ordem as string[]) : [];
+    const configMap = mergeProdutoConfigs(configs, tenantUserId);
+    const order = mergeProdutoOrdem(ordemRows, tenantUserId);
 
     return NextResponse.json({ configs: configMap, order });
   } catch (error) {
@@ -53,20 +43,21 @@ export async function GET() {
 //    ou { type: 'ordem', order: string[] }
 export async function PATCH(request: NextRequest) {
   try {
-    const dbUser = await getEffectiveDbUser();
-    if (!dbUser) {
+    const ctx = await getEstoqueTenantContext();
+    if (!ctx) {
       return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
     }
 
+    const { tenantUserId } = ctx;
     const body = await request.json();
 
     if (body.type === 'ordem') {
       const order: string[] = Array.isArray(body.order) ? body.order : [];
 
       await prisma.estoqueProdutoOrdem.upsert({
-        where: { userId: dbUser.id },
+        where: { userId: tenantUserId },
         update: { ordem: order },
-        create: { userId: dbUser.id, ordem: order },
+        create: { userId: tenantUserId, ordem: order },
       });
 
       return NextResponse.json({ ok: true });
@@ -80,7 +71,7 @@ export async function PATCH(request: NextRequest) {
       }
 
       await prisma.estoqueProdutoConfig.upsert({
-        where: { userId_produtoId: { userId: dbUser.id, produtoId } },
+        where: { userId_produtoId: { userId: tenantUserId, produtoId } },
         update: {
           ...(ativo !== undefined ? { ativo: Boolean(ativo) } : {}),
           ...(estoqueMinimo !== undefined ? { estoqueMinimo: estoqueMinimo === null ? null : Number(estoqueMinimo) } : {}),
@@ -88,7 +79,7 @@ export async function PATCH(request: NextRequest) {
           ...(kgPorUnidade !== undefined ? { kgPorUnidade: kgPorUnidade === null ? null : Number(kgPorUnidade) } : {}),
         },
         create: {
-          userId: dbUser.id,
+          userId: tenantUserId,
           produtoId,
           ativo: ativo !== undefined ? Boolean(ativo) : true,
           estoqueMinimo: estoqueMinimo !== undefined && estoqueMinimo !== null ? Number(estoqueMinimo) : null,

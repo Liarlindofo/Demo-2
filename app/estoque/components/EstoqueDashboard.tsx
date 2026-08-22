@@ -128,10 +128,10 @@ export function EstoqueDashboard() {
     return (
       <ContagemResultado
         storeId="loja"
-        storeName="Loja"
+        storeName={sessaoFinalizada.lojaNome || 'Loja'}
         contagens={contagens}
         sessoes={sessaoFinalizada.sessoes.length}
-        finalizadaEm={new Date()}
+        finalizadaEm={new Date(sessaoFinalizada.dataCriacao)}
         onVoltar={() => { setSessaoFinalizada(null); setScreen('home'); }}
       />
     );
@@ -148,7 +148,7 @@ export function EstoqueDashboard() {
     return (
       <ContagemResultado
         storeId="loja"
-        storeName="Loja"
+        storeName={sessaoHistorico.lojaNome || 'Loja'}
         contagens={contagens}
         sessoes={sessaoHistorico.sessoes.length}
         finalizadaEm={new Date(sessaoHistorico.dataCriacao)}

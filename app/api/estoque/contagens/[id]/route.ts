@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getEffectiveDbUser, getEffectiveUserIds } from '@/lib/effective-user';
+import { getEstoqueTenantContext } from '@/lib/estoque-tenant';
 import type { StockSession } from '../../../../estoque/types';
 
 export const dynamic = 'force-dynamic';
@@ -11,15 +11,15 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const dbUser = await getEffectiveDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const ctx = await getEstoqueTenantContext();
+    if (!ctx) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
+    const { userIds } = ctx;
     const { id } = await params;
     const body = await request.json();
 
-    const allUserIds = await getEffectiveUserIds(dbUser.id);
     const existing = await prisma.estoqueContagem.findUnique({ where: { id } });
-    if (!existing || !allUserIds.includes(existing.userId)) {
+    if (!existing || !userIds.includes(existing.userId)) {
       return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
     }
 
@@ -37,6 +37,7 @@ export async function PATCH(
       status: updated.status as 'em_andamento' | 'concluida',
       sessoes: updated.sessoes as unknown as StockSession['sessoes'],
       criadoPor: updated.criadoPor,
+      lojaNome: updated.lojaNome,
     };
 
     return NextResponse.json(session);
@@ -52,14 +53,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const dbUser = await getEffectiveDbUser();
-    if (!dbUser) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const ctx = await getEstoqueTenantContext();
+    if (!ctx) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
+    const { userIds } = ctx;
     const { id } = await params;
 
-    const allUserIds = await getEffectiveUserIds(dbUser.id);
     const existing = await prisma.estoqueContagem.findUnique({ where: { id } });
-    if (!existing || !allUserIds.includes(existing.userId)) {
+    if (!existing || !userIds.includes(existing.userId)) {
       return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
     }
 
