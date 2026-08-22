@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
+import { getReportsTenantUserIds } from '@/lib/reports-tenant-auth';
 import { createWhatsAppEvidenceSignedUrl } from '@/lib/whatsapp-evidence-storage';
 
 const SIGNED_TTL_SECONDS = 3600;
@@ -27,8 +27,8 @@ export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const tenantUserId = await getReportsTenantUserId();
-  if (!tenantUserId) {
+  const userIds = await getReportsTenantUserIds();
+  if (!userIds) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   }
 
@@ -36,7 +36,7 @@ export async function GET(
   if (!id) return NextResponse.json({ error: 'id inválido' }, { status: 400 });
 
   const row = await prisma.whatsAppMessage.findFirst({
-    where: { id, userId: tenantUserId },
+    where: { id, userId: { in: userIds } },
     select: { mediaUrl: true, textContent: true, messageType: true },
   });
   if (!row) return NextResponse.json({ error: 'Mensagem não encontrada' }, { status: 404 });

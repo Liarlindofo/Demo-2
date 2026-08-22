@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
+import { getReportsTenantUserIds } from '@/lib/reports-tenant-auth';
 import {
   formatClientHeading,
   formatContactPhone,
@@ -22,8 +22,8 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ runId: string }> },
 ) {
-  const tenantUserId = await getReportsTenantUserId();
-  if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const userIds = await getReportsTenantUserIds();
+  if (!userIds) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { runId } = await params;
   const contactId = req.nextUrl.searchParams.get('contactId')?.trim() || '';
@@ -32,7 +32,7 @@ export async function GET(
   }
 
   const run = await prisma.complaintReviewRun.findFirst({
-    where: { id: runId, userId: tenantUserId },
+    where: { id: runId, userId: { in: userIds } },
     select: { id: true, periodStart: true, periodEnd: true },
   });
 
@@ -41,7 +41,7 @@ export async function GET(
   }
 
   const belongs = await prisma.complaint.findFirst({
-    where: { reviewRunId: runId, userId: tenantUserId, contactId },
+    where: { reviewRunId: runId, userId: { in: userIds }, contactId },
     select: { id: true },
   });
   if (!belongs) {
@@ -50,7 +50,7 @@ export async function GET(
 
   const messages = await prisma.whatsAppMessage.findMany({
     where: {
-      userId: tenantUserId,
+      userId: { in: userIds },
       contactId,
       timestamp: { gte: run.periodStart, lte: run.periodEnd },
     },

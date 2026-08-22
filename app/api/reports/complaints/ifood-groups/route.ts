@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
+import { getReportsTenantUserId, getReportsTenantUserIds } from '@/lib/reports-tenant-auth';
 
 function slugifyLoja(raw: string): string {
   return raw
@@ -30,11 +30,11 @@ function normalizeGroupJid(raw: string): string | null {
  * Lista grupos iFood cadastrados do tenant (empresa).
  */
 export async function GET() {
-  const tenantUserId = await getReportsTenantUserId();
-  if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const userIds = await getReportsTenantUserIds();
+  if (!userIds) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const groups = await prisma.iFoodComplaintGroup.findMany({
-    where: { userId: tenantUserId },
+    where: { userId: { in: userIds } },
     orderBy: [{ lojaNome: 'asc' }, { createdAt: 'asc' }],
   });
 

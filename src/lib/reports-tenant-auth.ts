@@ -1,4 +1,6 @@
 import { getRhContext, type RhContext } from '@/lib/rh-auth';
+import { getEffectiveUserIds } from '@/lib/effective-user';
+import { getSessionDbUser } from '@/lib/rh-api-auth';
 import { NextResponse } from 'next/server';
 
 /**
@@ -26,4 +28,24 @@ export async function requireReportsTenantAuth(): Promise<
 export async function getReportsTenantUserId(): Promise<string | null> {
   const ctx = await getRhContext();
   return ctx?.userId ?? null;
+}
+
+/**
+ * IDs para leitura de dados compartilhados: tenant + histórico de membros
+ * (dados criados antes da migração de compartilhamento).
+ */
+export async function getReportsTenantUserIds(): Promise<string[] | null> {
+  const tenantUserId = await getReportsTenantUserId();
+  if (!tenantUserId) return null;
+
+  const ids = await getEffectiveUserIds(tenantUserId);
+
+  // Garante que dados da sessão atual sempre aparecem (perfil principal),
+  // mesmo se o contexto de tenant estiver apontando para outro id.
+  const sessionUser = await getSessionDbUser();
+  if (sessionUser && !ids.includes(sessionUser.id)) {
+    ids.push(sessionUser.id);
+  }
+
+  return ids;
 }

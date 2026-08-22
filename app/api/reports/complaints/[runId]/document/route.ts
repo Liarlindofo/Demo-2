@@ -4,7 +4,7 @@ export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
+import { getReportsTenantUserId, getReportsTenantUserIds } from '@/lib/reports-tenant-auth';
 import { createAtaSignedUrl } from '@/lib/complaints/ata-storage';
 import { buildAndSaveAta } from '@/lib/complaints/build-ata';
 
@@ -19,13 +19,13 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ runId: string }> },
 ) {
-  const tenantUserId = await getReportsTenantUserId();
-  if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const userIds = await getReportsTenantUserIds();
+  if (!userIds) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { runId } = await params;
 
   const run = await prisma.complaintReviewRun.findFirst({
-    where: { id: runId, userId: tenantUserId },
+    where: { id: runId, userId: { in: userIds } },
     select: {
       id: true,
       ataStoragePath: true,
@@ -71,11 +71,13 @@ export async function POST(
 ) {
   const tenantUserId = await getReportsTenantUserId();
   if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const userIds = await getReportsTenantUserIds();
+  if (!userIds) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { runId } = await params;
 
   const run = await prisma.complaintReviewRun.findFirst({
-    where: { id: runId, userId: tenantUserId },
+    where: { id: runId, userId: { in: userIds } },
     select: { id: true, status: true },
   });
 
@@ -91,7 +93,7 @@ export async function POST(
   }
 
   const confirmadas = await prisma.complaint.count({
-    where: { reviewRunId: runId, userId: tenantUserId, confirmadoPorHumano: true },
+    where: { reviewRunId: runId, userId: { in: userIds }, confirmadoPorHumano: true },
   });
 
   if (confirmadas === 0) {

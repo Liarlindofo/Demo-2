@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
+import { getReportsTenantUserId, getReportsTenantUserIds } from '@/lib/reports-tenant-auth';
 import { ReportEscopoLoja, ReportFonte } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
@@ -17,11 +17,11 @@ function validarHorario(h: unknown): h is string {
  */
 export async function GET() {
   try {
-    const tenantUserId = await getReportsTenantUserId();
-    if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const userIds = await getReportsTenantUserIds();
+    if (!userIds) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const reports = await prisma.reportDefinition.findMany({
-      where: { userId: tenantUserId },
+      where: { userId: { in: userIds } },
       include: {
         campos: { orderBy: { ordem: 'asc' }, select: { campoKey: true, ordem: true } },
         execucoes: {

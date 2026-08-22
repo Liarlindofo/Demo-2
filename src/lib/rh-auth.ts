@@ -36,21 +36,50 @@ export interface RhContext {
  * Resolve o contexto RH do usuário autenticado.
  *
  * Ordem de verificação:
- * 1. Se já é membro ativo via stackUserId → contexto de membro (usa dados do tenant)
- * 2. Se email corresponde a convite pendente → vincula e ativa
- * 3. Fallback: usuário é o dono (Admin) → acesso total
+ * 1. Sincroniza User da sessão
+ * 2. Se é dono de equipe RH (tem membros) → contexto admin (próprios dados)
+ * 3. Se é membro ativo de outro tenant → contexto de membro
+ * 4. Convite pendente por e-mail (outro tenant) → vincula e ativa
+ * 5. Fallback: usuário é o dono (Admin) → acesso total
  */
 export async function getRhContext(): Promise<RhContext | null> {
   const stackUser = await stackServerApp.getUser({ or: 'return-null' });
   if (!stackUser) return null;
 
-  // 1. Verificar se já é membro ativo (por stackUserId)
+  const dbUser = await syncStackAuthUser({
+    id: stackUser.id,
+    primaryEmail: stackUser.primaryEmail || undefined,
+    displayName: stackUser.displayName || undefined,
+    profileImageUrl: stackUser.profileImageUrl || undefined,
+    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
+  });
+
+  if (!dbUser) return null;
+
+  // Dono de equipe RH: prioriza os próprios dados (evita sumir relatórios/grupos
+  // quando o admin também está cadastrado como membro ou tem convite cruzado).
+  const ownsTeam =
+    (await prisma.rhTeamMember.count({
+      where: { tenantUserId: dbUser.id, isActive: true },
+    })) > 0;
+
+  if (ownsTeam) {
+    return {
+      userId: dbUser.id,
+      stackUserId: stackUser.id,
+      isAdmin: true,
+      memberId: null,
+      hasPermission: () => true,
+    };
+  }
+
+  // Membro ativo de outro tenant (não o próprio dono)
   const membership = await prisma.rhTeamMember.findFirst({
     where: { stackUserId: stackUser.id, isActive: true },
     include: { permissions: true },
   });
 
-  if (membership) {
+  if (membership && membership.tenantUserId !== dbUser.id) {
     const permsSet = new Set(membership.permissions.map((p) => p.permission));
     return {
       userId: membership.tenantUserId,
@@ -61,13 +90,14 @@ export async function getRhContext(): Promise<RhContext | null> {
     };
   }
 
-  // 2. Verificar convite pendente por e-mail (vincula automaticamente no primeiro login)
+  // Convite pendente por e-mail — só vincula a outro tenant
   if (stackUser.primaryEmail) {
     const pendingMembership = await prisma.rhTeamMember.findFirst({
       where: {
-        email: stackUser.primaryEmail.toLowerCase(),  // case-insensitive
+        email: stackUser.primaryEmail.toLowerCase(),
         stackUserId: null,
         isActive: true,
+        NOT: { tenantUserId: dbUser.id },
       },
       include: { permissions: true },
     });
@@ -88,17 +118,6 @@ export async function getRhContext(): Promise<RhContext | null> {
       };
     }
   }
-
-  // 3. Usuário é o dono (Admin) — cria/atualiza User via sync
-  const dbUser = await syncStackAuthUser({
-    id: stackUser.id,
-    primaryEmail: stackUser.primaryEmail || undefined,
-    displayName: stackUser.displayName || undefined,
-    profileImageUrl: stackUser.profileImageUrl || undefined,
-    primaryEmailVerified: stackUser.primaryEmailVerified ? new Date() : null,
-  });
-
-  if (!dbUser) return null;
 
   return {
     userId: dbUser.id,

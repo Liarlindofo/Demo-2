@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
+import { getReportsTenantUserIds } from '@/lib/reports-tenant-auth';
 
 /**
  * GET /api/reports/complaints
@@ -11,11 +11,11 @@ import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
  * Usado pela Central de Relatórios → aba Reclamações.
  */
 export async function GET() {
-  const tenantUserId = await getReportsTenantUserId();
-  if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const userIds = await getReportsTenantUserIds();
+  if (!userIds) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const runs = await prisma.complaintReviewRun.findMany({
-    where: { userId: tenantUserId },
+    where: { userId: { in: userIds } },
     orderBy: { executadoEm: 'desc' },
     take: 50,
     select: {

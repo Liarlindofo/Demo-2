@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getReportsTenantUserId } from '@/lib/reports-tenant-auth';
+import { getReportsTenantUserIds } from '@/lib/reports-tenant-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,12 +13,12 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const tenantUserId = await getReportsTenantUserId();
-    if (!tenantUserId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const userIds = await getReportsTenantUserIds();
+    if (!userIds) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
     const { id } = await params;
     const existing = await prisma.reportDefinition.findFirst({
-      where: { id, userId: tenantUserId },
+      where: { id, userId: { in: userIds } },
     });
     if (!existing) {
       return NextResponse.json({ error: 'Relatório não encontrado.' }, { status: 404 });
