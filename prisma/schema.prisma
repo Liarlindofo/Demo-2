@@ -90,6 +90,7 @@ model User {
   complaints             Complaint[]
   ifoodComplaintGroups   IFoodComplaintGroup[]
   bonificacaoTrimestres  BonificacaoTrimestre[]
+  tiposAvaliacao         TipoAvaliacao[]
 
   @@map("users")
 }
@@ -1780,22 +1781,44 @@ model Complaint {
   @@map("complaints")
 }
 
+/// Template reutilizável de avaliação trimestral (métricas, descontos, faixas).
+model TipoAvaliacao {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nome         String
+  modoCalculo  String   @default("PADRAO") // PADRAO | MEDIA
+  metricas     Json
+  descontos    Json
+  faixas       Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  bonificacaoTrimestres BonificacaoTrimestre[]
+
+  @@unique([userId, nome])
+  @@index([userId])
+  @@map("tipos_avaliacao")
+}
+
 /// Plano trimestral de bonificação por loja (gerentes e funcionários).
 model BonificacaoTrimestre {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lojaId     String?
-  lojaNome   String
-  ano        Int
-  trimestre  Int      // 1 = Q1 (jan-mar), 2 = Q2 (abr-jun), 3 = Q3 (jul-set), 4 = Q4 (out-dez)
-  /// JSON: { metricas: [{id, nome, maxPontos, pontos: {[mes]: number}}, ...], descontos: [{id, nome, valor}, ...] }
-  dados      Json     @default("{}")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id              String          @id @default(cuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lojaId          String?
+  lojaNome        String
+  tipoAvaliacaoId String?
+  tipoAvaliacao   TipoAvaliacao?  @relation(fields: [tipoAvaliacaoId], references: [id], onDelete: SetNull)
+  ano             Int
+  trimestre       Int             // T1 Mar-Mai, T2 Jun-Ago, T3 Set-Nov, T4 Dez-Fev
+  /// JSON snapshot: { modoCalculo, metricas, descontos, faixas }
+  dados           Json            @default("{}")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   @@unique([userId, lojaNome, ano, trimestre])
   @@index([userId, ano, trimestre])
+  @@index([tipoAvaliacaoId])
   @@map("bonificacao_trimestres")
 }
 

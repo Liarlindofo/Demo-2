@@ -5,6 +5,14 @@ import { useRouter } from 'next/navigation';
 import ToolProtection from '@/components/auth/ToolProtection';
 import { SystemTool } from '@/types/admin';
 import {
+  type FaixaTemplate,
+  getFaixaFromDados,
+  resolveModoCalculo,
+  resolveFaixasFromDados,
+  normalizeFaixas,
+  DEFAULT_FAIXAS,
+} from '@/lib/bonificacao-defaults';
+import {
   ArrowLeft,
   Trophy,
   Plus,
@@ -13,6 +21,7 @@ import {
   Pencil,
   Check,
   X,
+  Settings,
 } from 'lucide-react';
 
 // ── tipos ───────────────────────────────────────────────────────────────────
@@ -28,17 +37,21 @@ interface Desconto {
   id: string;
   nome: string;
   valor: number;
+  pontos?: number;
 }
 
 interface Dados {
+  modoCalculo?: 'PADRAO' | 'MEDIA';
   metricas: Metrica[];
   descontos: Desconto[];
+  faixas?: FaixaTemplate[];
 }
 
 interface Trimestre {
   id: string;
   lojaNome: string;
   lojaId: string | null;
+  tipoAvaliacaoId: string | null;
   ano: number;
   trimestre: number;
   dados: Dados;
@@ -47,17 +60,18 @@ interface Trimestre {
 
 interface Loja { id: string; nome: string; }
 
+interface TipoAvaliacao {
+  id: string;
+  nome: string;
+  modoCalculo: 'PADRAO' | 'MEDIA';
+  metricas: unknown;
+  descontos: unknown;
+  faixas: FaixaTemplate[];
+}
+
 // ── constantes ──────────────────────────────────────────────────────────────
 
-const DESCONTO_VALOR = 20; // pts fixos por desconto aplicado
-
-const FAIXAS = [
-  { faixa: 1, pontos: 200, gerente: 450,   funcionario: 100 },
-  { faixa: 2, pontos: 400, gerente: 750,   funcionario: 200 },
-  { faixa: 3, pontos: 600, gerente: 1050,  funcionario: 300 },
-  { faixa: 4, pontos: 750, gerente: 1350,  funcionario: 400 },
-  { faixa: 5, pontos: 870, gerente: 1600,  funcionario: 500 },
-];
+const DESCONTO_VALOR = 20; // fallback para planos antigos sem pontos no desconto
 
 const TRIMESTRES_LABEL: Record<number, string> = {
   1: 'T1 (Mar–Mai)',
@@ -76,14 +90,6 @@ const MESES_POR_TRIMESTRE: Record<number, { mes: number; label: string }[]> = {
 
 function mesKey(mes: number, ano: number) {
   return `${mes}-${ano}`;
-}
-
-function getFaixa(totalLiquido: number) {
-  let current = null;
-  for (const f of FAIXAS) {
-    if (totalLiquido >= f.pontos) current = f;
-  }
-  return current;
 }
 
 function brl(v: number) {
@@ -107,6 +113,8 @@ function BonificacaoContent() {
 
   const [trimestre, setTrimestre] = useState<Trimestre | null>(null);
   const [trimestres, setTrimestres] = useState<Trimestre[]>([]);
+  const [tipos, setTipos] = useState<TipoAvaliacao[]>([]);
+  const [tipoSelecionadoId, setTipoSelecionadoId] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -118,7 +126,7 @@ function BonificacaoContent() {
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── carregar lojas ────────────────────────────────────────────────────────
+  // ── carregar lojas e tipos ────────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/rh/lojas')
       .then(r => r.ok ? r.json() : [])
@@ -127,7 +135,23 @@ function BonificacaoContent() {
         if (data.length > 0 && !lojaAtiva) setLojaAtiva(data[0].id);
       })
       .catch(() => {});
+
+    fetch('/api/tipos-avaliacao')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: TipoAvaliacao[]) => {
+        setTipos(data.map(t => ({ ...t, faixas: normalizeFaixas(t.faixas) })));
+      })
+      .catch(() => {});
   }, [lojaAtiva]);
+
+  // Tipo padrão ao trocar de loja
+  useEffect(() => {
+    if (tipos.length === 0) return;
+    const lojaNome = lojas.find(l => l.id === lojaAtiva)?.nome ?? '';
+    const preferMedia = lojaNome.toLowerCase().includes('central');
+    const preferred = tipos.find(t => preferMedia ? t.modoCalculo === 'MEDIA' : t.modoCalculo === 'PADRAO') ?? tipos[0];
+    setTipoSelecionadoId(preferred.id);
+  }, [lojaAtiva, lojas, tipos]);
 
   // ── carregar trimestre ─────────────────────────────────────────────────────
   const loadTrimestre = useCallback(async () => {
@@ -152,17 +176,24 @@ function BonificacaoContent() {
   // ── criar trimestre ────────────────────────────────────────────────────────
   async function criarTrimestre() {
     const loja = lojas.find(l => l.id === lojaAtiva);
-    if (!loja) return;
+    if (!loja || !tipoSelecionadoId) return;
     setCriando(true);
     try {
       const res = await fetch('/api/bonificacao', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lojaId: loja.id, lojaNome: loja.nome, ano: anoAtivo, trimestre: trimestreAtivo }),
+        body: JSON.stringify({
+          lojaId: loja.id,
+          lojaNome: loja.nome,
+          ano: anoAtivo,
+          trimestre: trimestreAtivo,
+          tipoAvaliacaoId: tipoSelecionadoId,
+        }),
       });
       if (res.ok) {
         const novo = await res.json();
         setTrimestre(novo);
+        await loadTrimestre();
       }
     } finally {
       setCriando(false);
@@ -219,9 +250,10 @@ function BonificacaoContent() {
       ...prev,
       dados: {
         ...prev.dados,
-        descontos: prev.dados.descontos.map(d =>
-          d.id === descontoId ? { ...d, valor: d.valor > 0 ? 0 : DESCONTO_VALOR } : d,
-        ),
+        descontos: prev.dados.descontos.map(d => {
+          const pts = d.pontos ?? DESCONTO_VALOR;
+          return d.id === descontoId ? { ...d, valor: d.valor > 0 ? 0 : pts } : d;
+        }),
       },
     }));
   }
@@ -277,13 +309,23 @@ function BonificacaoContent() {
     return trimestre.dados.metricas.reduce((sum, m) => sum + m.maxPontos, 0) * 3;
   }
 
-  const faixa = trimestre ? getFaixa(totalLiquido()) : null;
+  const tipoAtivo = tipos.find(t => t.id === (trimestre?.tipoAvaliacaoId ?? tipoSelecionadoId));
+  const isMediaMode = trimestre
+    ? resolveModoCalculo(trimestre.dados) === 'MEDIA'
+    : tipoAtivo?.modoCalculo === 'MEDIA';
 
-  // ── central/escritório detectado pelo nome da loja ──────────────────────
-  const lojaAtivaNome = lojas.find(l => l.id === lojaAtiva)?.nome ?? '';
-  const isCentral = lojaAtivaNome.toLowerCase().includes('central');
+  const faixasAtivas = trimestre
+    ? resolveFaixasFromDados(trimestre.dados)
+    : normalizeFaixas(tipoAtivo?.faixas ?? DEFAULT_FAIXAS);
 
-  // ── média das lojas regulares (exclui central) ───────────────────────────
+  const faixa = trimestre ? getFaixaFromDados(totalLiquido(), faixasAtivas) : null;
+  const maxPontosFaixa = faixasAtivas.length > 0
+    ? [...faixasAtivas].sort((a, b) => b.pontosMin - a.pontosMin)[0].pontosMin
+    : 870;
+
+  function trimestresRegulares() {
+    return trimestres.filter(t => resolveModoCalculo(t.dados) !== 'MEDIA');
+  }
   function calcularLiquidoTrimestre(t: Trimestre): number {
     const bruto = t.dados.metricas.reduce((sum, m) =>
       sum + meses.reduce((s, { mes }) => {
@@ -294,14 +336,10 @@ function BonificacaoContent() {
     return bruto - descontos;
   }
 
-  function trimestresRegulares() {
-    return trimestres.filter(t => !t.lojaNome.toLowerCase().includes('central'));
-  }
-
   function dadosPorLoja() {
     return trimestresRegulares().map(t => {
       const liq = calcularLiquidoTrimestre(t);
-      const f = getFaixa(liq);
+      const f = getFaixaFromDados(liq, resolveFaixasFromDados(t.dados));
       return { nome: t.lojaNome, liquido: liq, faixa: f };
     });
   }
@@ -310,8 +348,8 @@ function BonificacaoContent() {
     const por = dadosPorLoja();
     if (por.length === 0) return null;
     const soma = por.reduce((acc, d) => ({
-      gerente: acc.gerente + (d.faixa?.gerente ?? 0),
-      funcionario: acc.funcionario + (d.faixa?.funcionario ?? 0),
+      gerente: acc.gerente + (d.faixa?.valorGerente ?? 0),
+      funcionario: acc.funcionario + (d.faixa?.valorFuncionario ?? 0),
     }), { gerente: 0, funcionario: 0 });
     return { gerente: soma.gerente / por.length, funcionario: soma.funcionario / por.length, n: por.length };
   }
@@ -335,6 +373,13 @@ function BonificacaoContent() {
             <Trophy className="w-6 h-6 text-amber-400" />
             <h1 className="text-2xl font-bold text-white">Plano de Bonificação</h1>
           </div>
+          <button
+            onClick={() => router.push('/bonificacao/tipos')}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-[#1c1c1e] border border-[#2a2a2e]"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            Tipos de avaliação
+          </button>
           {saving ? (
             <span className="flex items-center gap-1.5 text-xs text-gray-500 ml-2">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -403,7 +448,7 @@ function BonificacaoContent() {
           <div className="flex items-center justify-center py-24">
             <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
           </div>
-        ) : isCentral ? (
+        ) : isMediaMode ? (
           /* ── View especial: Central & Escritório (média das lojas) ──────── */
           (() => {
             const por = dadosPorLoja();
@@ -436,8 +481,8 @@ function BonificacaoContent() {
                             <td className="px-4 py-3 text-gray-200">{d.nome}</td>
                             <td className="px-4 py-3 text-center font-semibold text-amber-400">{d.liquido}</td>
                             <td className="px-4 py-3 text-center text-gray-300">{d.faixa ? `Faixa ${d.faixa.faixa}` : '—'}</td>
-                            <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.gerente) : '—'}</td>
-                            <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.funcionario) : '—'}</td>
+                            <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.valorGerente) : '—'}</td>
+                            <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.valorFuncionario) : '—'}</td>
                           </tr>
                         ))}
                         {media && (
@@ -469,12 +514,12 @@ function BonificacaoContent() {
                       </tr>
                     </thead>
                     <tbody>
-                      {FAIXAS.map(f => (
+                      {faixasAtivas.map(f => (
                         <tr key={f.faixa} className="border-b border-[#2a2a2e] last:border-0">
-                          <td className="px-4 py-2.5 font-semibold text-gray-300">{f.faixa}{f.faixa === 5 ? ' (100%)' : ''}</td>
-                          <td className="px-4 py-2.5 text-center text-gray-300">{f.pontos}</td>
-                          <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.gerente)}</td>
-                          <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.funcionario)}</td>
+                          <td className="px-4 py-2.5 font-semibold text-gray-300">{f.faixa}{f.faixa === faixasAtivas.length ? ' (100%)' : ''}</td>
+                          <td className="px-4 py-2.5 text-center text-gray-300">{f.pontosMin}</td>
+                          <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.valorGerente)}</td>
+                          <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.valorFuncionario)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -495,14 +540,46 @@ function BonificacaoContent() {
               </p>
             </div>
             {lojaAtiva ? (
-              <button
-                onClick={criarTrimestre}
-                disabled={criando}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 disabled:opacity-50 transition-colors"
-              >
-                {criando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                Criar plano trimestral
-              </button>
+              <div className="flex flex-col items-center gap-4 w-full max-w-sm">
+                {tipos.length === 0 ? (
+                  <p className="text-sm text-gray-500">
+                    Nenhum tipo de avaliação cadastrado.{' '}
+                    <button onClick={() => router.push('/bonificacao/tipos')} className="text-amber-400 hover:underline">
+                      Criar tipos
+                    </button>
+                  </p>
+                ) : (
+                  <>
+                    <div className="w-full">
+                      <label className="text-xs text-gray-500 uppercase tracking-wider mb-1.5 block">Tipo de avaliação</label>
+                      <select
+                        value={tipoSelecionadoId}
+                        onChange={e => setTipoSelecionadoId(e.target.value)}
+                        className="w-full appearance-none bg-[#111113] border border-[#2a2a2e] text-sm text-white rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-amber-500/40"
+                      >
+                        {tipos.map(t => (
+                          <option key={t.id} value={t.id}>
+                            {t.nome} ({t.modoCalculo === 'MEDIA' ? 'média' : 'padrão'})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {tipoAtivo?.modoCalculo !== 'MEDIA' && (
+                      <button
+                        onClick={criarTrimestre}
+                        disabled={criando || !tipoSelecionadoId}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 disabled:opacity-50 transition-colors"
+                      >
+                        {criando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                        Criar plano trimestral
+                      </button>
+                    )}
+                    {tipoAtivo?.modoCalculo === 'MEDIA' && (
+                      <p className="text-sm text-gray-500">Modo média: os valores são calculados automaticamente das outras lojas.</p>
+                    )}
+                  </>
+                )}
+              </div>
             ) : (
               <p className="text-sm text-gray-600">Selecione uma loja acima para começar.</p>
             )}
@@ -640,7 +717,7 @@ function BonificacaoContent() {
                             : 'bg-[#1a1a1e] text-gray-500 border border-[#2a2a2e] hover:border-gray-500 hover:text-gray-300'
                         }`}
                       >
-                        {d.valor > 0 ? `−${DESCONTO_VALOR} pts` : 'Sem desconto'}
+                        {d.valor > 0 ? `−${d.pontos ?? DESCONTO_VALOR} pts` : 'Sem desconto'}
                       </button>
                     </div>
                   ))}
@@ -686,16 +763,16 @@ function BonificacaoContent() {
                           Faixa {faixa.faixa} atingida
                           {faixa.faixa === 5 && ' 🏆'}
                         </p>
-                        <span className="text-xs text-gray-500">{totalLiquido()}/{FAIXAS[FAIXAS.length - 1].pontos} pts</span>
+                        <span className="text-xs text-gray-500">{totalLiquido()}/{maxPontosFaixa} pts</span>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="bg-[#0a0a0a] rounded-xl p-3 text-center">
                           <p className="text-xs text-gray-500 mb-1">Gerentes</p>
-                          <p className="text-lg font-bold text-green-400">{brl(faixa.gerente)}</p>
+                          <p className="text-lg font-bold text-green-400">{brl(faixa.valorGerente)}</p>
                         </div>
                         <div className="bg-[#0a0a0a] rounded-xl p-3 text-center">
                           <p className="text-xs text-gray-500 mb-1">Funcionários</p>
-                          <p className="text-lg font-bold text-green-400">{brl(faixa.funcionario)}</p>
+                          <p className="text-lg font-bold text-green-400">{brl(faixa.valorFuncionario)}</p>
                         </div>
                       </div>
                     </>
@@ -724,7 +801,7 @@ function BonificacaoContent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {FAIXAS.map(f => {
+                    {faixasAtivas.map(f => {
                       const atingida = faixa?.faixa === f.faixa;
                       return (
                         <tr
@@ -732,12 +809,12 @@ function BonificacaoContent() {
                           className={`border-b border-[#2a2a2e] last:border-0 transition-colors ${atingida ? 'bg-amber-500/10' : ''}`}
                         >
                           <td className={`px-4 py-2.5 font-semibold ${atingida ? 'text-amber-400' : 'text-gray-300'}`}>
-                            {f.faixa}{f.faixa === 5 ? ' (100%)' : ''}
+                            {f.faixa}{f.faixa === faixasAtivas.length ? ' (100%)' : ''}
                             {atingida && <span className="ml-2 text-xs">← atual</span>}
                           </td>
-                          <td className="px-4 py-2.5 text-center text-gray-300">{f.pontos}</td>
-                          <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.gerente)}</td>
-                          <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.funcionario)}</td>
+                          <td className="px-4 py-2.5 text-center text-gray-300">{f.pontosMin}</td>
+                          <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.valorGerente)}</td>
+                          <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.valorFuncionario)}</td>
                         </tr>
                       );
                     })}

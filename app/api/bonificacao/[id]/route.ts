@@ -2,26 +2,14 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getRhContext } from '@/lib/rh-auth';
-import { SystemTool } from '@/types/admin';
-import { checkToolPermission } from '@/lib/auth/toolPermissions';
-import { stackServerApp } from '@/stack';
-
-async function getAuth() {
-  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
-  if (!stackUser) return null;
-  const ok = await checkToolPermission(stackUser.id, SystemTool.BONIFICACAO);
-  if (!ok) return null;
-  const ctx = await getRhContext();
-  return ctx;
-}
+import { getBonificacaoAuth } from '@/lib/bonificacao-auth';
 
 /** GET /api/bonificacao/:id */
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const ctx = await getAuth();
+  const ctx = await getBonificacaoAuth();
   if (!ctx) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
@@ -40,7 +28,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const ctx = await getAuth();
+  const ctx = await getBonificacaoAuth();
   if (!ctx) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
@@ -66,7 +54,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const ctx = await getAuth();
+  const ctx = await getBonificacaoAuth();
   if (!ctx) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
