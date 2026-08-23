@@ -181,7 +181,7 @@ function BonificacaoContent() {
     const loja = lojas.find(l => l.id === lojaAtiva);
     if (!loja || !tipoSelecionadoId) return;
     if (substituir && !confirm(
-      'Isso vai substituir métricas, descontos e faixas deste plano pelo template do tipo selecionado.\n\nOs pontos marcados (Feito/Não feito) serão zerados. Continuar?',
+      'Isso vai atualizar métricas, descontos e faixas deste plano pelo template do tipo selecionado.\n\nItens removidos do tipo saem do plano. Pontos (Feito/Não feito) das métricas que permanecem são mantidos. Continuar?',
     )) return;
     setCriando(true);
     try {
@@ -623,7 +623,7 @@ function BonificacaoContent() {
                   {tipoMudou ? 'Trocar para este tipo' : 'Atualizar do tipo'}
                 </button>
                 <p className="w-full text-xs text-gray-600">
-                  Editar um tipo em &quot;Tipos de avaliação&quot; não altera planos já criados. Use o botão acima para aplicar o template ao plano desta loja.
+                  Ao salvar alterações no tipo, você pode sincronizar os planos automaticamente. Ou use o botão acima para atualizar só esta loja.
                 </p>
               </div>
             )}

@@ -75,22 +75,41 @@ export function defaultTipoPayload(modoCalculo: ModoCalculo = 'PADRAO') {
   };
 }
 
-export function snapshotFromTipo(tipo: {
-  modoCalculo: string;
-  metricas: unknown;
-  descontos: unknown;
-  faixas: unknown;
-}): DadosBonificacaoSnapshot {
-  const metricas = (tipo.metricas as MetricaTemplate[]).map(m => ({
-    ...m,
-    pontos: {},
-  }));
-  const descontos = (tipo.descontos as DescontoTemplate[]).map(d => ({
-    id: d.id,
-    nome: d.nome,
-    valor: 0,
-    pontos: d.valor,
-  }));
+export function snapshotFromTipo(
+  tipo: {
+    modoCalculo: string;
+    metricas: unknown;
+    descontos: unknown;
+    faixas: unknown;
+  },
+  existing?: DadosBonificacaoSnapshot | null,
+): DadosBonificacaoSnapshot {
+  const existingMetricas = existing?.metricas ?? [];
+  const existingDescontos = existing?.descontos ?? [];
+
+  const metricasRaw = Array.isArray(tipo.metricas) ? (tipo.metricas as MetricaTemplate[]) : [];
+  const descontosRaw = Array.isArray(tipo.descontos) ? (tipo.descontos as DescontoTemplate[]) : [];
+
+  const metricas = metricasRaw.map(m => {
+    const prev = existingMetricas.find(e => e.id === m.id);
+    return {
+      id: m.id,
+      nome: m.nome,
+      maxPontos: m.maxPontos,
+      pontos: prev?.pontos ?? {},
+    };
+  });
+
+  const descontos = descontosRaw.map(d => {
+    const prev = existingDescontos.find(e => e.id === d.id);
+    return {
+      id: d.id,
+      nome: d.nome,
+      valor: prev?.valor ?? 0,
+      pontos: d.valor,
+    };
+  });
+
   const faixas = normalizeFaixas(tipo.faixas);
 
   return {

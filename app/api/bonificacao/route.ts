@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getBonificacaoAuth } from '@/lib/bonificacao-auth';
-import { snapshotFromTipo } from '@/lib/bonificacao-defaults';
+import { snapshotFromTipo, type DadosBonificacaoSnapshot } from '@/lib/bonificacao-defaults';
 
 /**
  * GET /api/bonificacao?ano=2026&trimestre=3
@@ -60,6 +60,21 @@ export async function POST(req: NextRequest) {
 
   const dadosSnapshot = snapshotFromTipo(tipo);
 
+  const existing = await prisma.bonificacaoTrimestre.findUnique({
+    where: {
+      userId_lojaNome_ano_trimestre: {
+        userId: ctx.userId,
+        lojaNome: lojaNome.trim(),
+        ano,
+        trimestre,
+      },
+    },
+  });
+
+  const dadosFinais = substituir && existing
+    ? snapshotFromTipo(tipo, existing.dados as unknown as DadosBonificacaoSnapshot)
+    : dadosSnapshot;
+
   const item = await prisma.bonificacaoTrimestre.upsert({
     where: {
       userId_lojaNome_ano_trimestre: {
@@ -76,12 +91,12 @@ export async function POST(req: NextRequest) {
       tipoAvaliacaoId,
       ano,
       trimestre,
-      dados: dadosSnapshot as object,
+      dados: dadosFinais as object,
     },
     update: substituir ? {
       tipoAvaliacaoId,
       lojaId: lojaId ?? null,
-      dados: dadosSnapshot as object,
+      dados: dadosFinais as object,
     } : {},
   });
 

@@ -122,6 +122,16 @@ function TiposContent() {
         setErro(data.error ?? 'Erro ao salvar');
         return;
       }
+      const tipoId = criando ? (data as { id?: string }).id : editando.id;
+      const vinculados = (data as { planosVinculados?: number }).planosVinculados ?? 0;
+      if (!criando && vinculados > 0 && tipoId) {
+        const ok = confirm(
+          `Este tipo é usado por ${vinculados} plano(s) trimestral(is).\n\nAtualizar os planos agora?\n• Métricas/descontos removidos saem do plano\n• Pontos (Feito/Não feito) das que permanecem são mantidos`,
+        );
+        if (ok) {
+          await fetch(`/api/tipos-avaliacao/${tipoId}/sincronizar-planos`, { method: 'POST' });
+        }
+      }
       setEditando(null);
       setCriando(false);
       await load();
