@@ -279,7 +279,11 @@ function BonificacaoContent() {
 
   const faixa = trimestre ? getFaixa(totalLiquido()) : null;
 
-  // ── média das lojas → Central e Escritório ───────────────────────────────
+  // ── central/escritório detectado pelo nome da loja ──────────────────────
+  const lojaAtivaNome = lojas.find(l => l.id === lojaAtiva)?.nome ?? '';
+  const isCentral = lojaAtivaNome.toLowerCase().includes('central');
+
+  // ── média das lojas regulares (exclui central) ───────────────────────────
   function calcularLiquidoTrimestre(t: Trimestre): number {
     const bruto = t.dados.metricas.reduce((sum, m) =>
       sum + meses.reduce((s, { mes }) => {
@@ -290,21 +294,26 @@ function BonificacaoContent() {
     return bruto - descontos;
   }
 
-  function mediaBonus(): { gerente: number; funcionario: number; lojas: number } | null {
-    const comDados = trimestres.filter(t => t.dados?.metricas?.length > 0);
-    if (comDados.length === 0) return null;
-    const totais = comDados.reduce(
-      (acc, t) => {
-        const f = getFaixa(calcularLiquidoTrimestre(t));
-        return { gerente: acc.gerente + (f?.gerente ?? 0), funcionario: acc.funcionario + (f?.funcionario ?? 0) };
-      },
-      { gerente: 0, funcionario: 0 },
-    );
-    return {
-      gerente: totais.gerente / comDados.length,
-      funcionario: totais.funcionario / comDados.length,
-      lojas: comDados.length,
-    };
+  function trimestresRegulares() {
+    return trimestres.filter(t => !t.lojaNome.toLowerCase().includes('central'));
+  }
+
+  function dadosPorLoja() {
+    return trimestresRegulares().map(t => {
+      const liq = calcularLiquidoTrimestre(t);
+      const f = getFaixa(liq);
+      return { nome: t.lojaNome, liquido: liq, faixa: f };
+    });
+  }
+
+  function mediaBonus(): { gerente: number; funcionario: number; n: number } | null {
+    const por = dadosPorLoja();
+    if (por.length === 0) return null;
+    const soma = por.reduce((acc, d) => ({
+      gerente: acc.gerente + (d.faixa?.gerente ?? 0),
+      funcionario: acc.funcionario + (d.faixa?.funcionario ?? 0),
+    }), { gerente: 0, funcionario: 0 });
+    return { gerente: soma.gerente / por.length, funcionario: soma.funcionario / por.length, n: por.length };
   }
 
   const anos = Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - 1 + i);
@@ -394,6 +403,86 @@ function BonificacaoContent() {
           <div className="flex items-center justify-center py-24">
             <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
           </div>
+        ) : isCentral ? (
+          /* ── View especial: Central & Escritório (média das lojas) ──────── */
+          (() => {
+            const por = dadosPorLoja();
+            const media = mediaBonus();
+            return (
+              <div className="space-y-6">
+                <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[#2a2a2e] bg-[#0d0d0f] flex items-center justify-between">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Resultado das lojas — {TRIMESTRES_LABEL[trimestreAtivo]} {anoAtivo}</h3>
+                    <span className="text-xs text-gray-600">{por.length} {por.length === 1 ? 'loja' : 'lojas'}</span>
+                  </div>
+                  {por.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-12">
+                      Nenhuma loja possui dados para este trimestre ainda.
+                    </p>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-[#2a2a2e] bg-[#0d0d0f]">
+                          <th className="px-4 py-2.5 text-left text-xs text-gray-500 font-semibold uppercase tracking-wider">Loja</th>
+                          <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Pts líquidos</th>
+                          <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Faixa</th>
+                          <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Gerentes</th>
+                          <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Funcionários</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {por.map((d, i) => (
+                          <tr key={d.nome} className={`border-b border-[#2a2a2e] ${i % 2 !== 0 ? 'bg-[#0d0d0f]' : ''}`}>
+                            <td className="px-4 py-3 text-gray-200">{d.nome}</td>
+                            <td className="px-4 py-3 text-center font-semibold text-amber-400">{d.liquido}</td>
+                            <td className="px-4 py-3 text-center text-gray-300">{d.faixa ? `Faixa ${d.faixa.faixa}` : '—'}</td>
+                            <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.gerente) : '—'}</td>
+                            <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.funcionario) : '—'}</td>
+                          </tr>
+                        ))}
+                        {media && (
+                          <tr className="bg-[#1a1a1e] border-t-2 border-[#3a3a3e]">
+                            <td className="px-4 py-3 font-bold text-white">Média · Central &amp; Escritório</td>
+                            <td className="px-4 py-3 text-center text-gray-500">—</td>
+                            <td className="px-4 py-3 text-center text-gray-500">—</td>
+                            <td className="px-4 py-3 text-center font-bold text-green-400 text-base">{brl(media.gerente)}</td>
+                            <td className="px-4 py-3 text-center font-bold text-green-400 text-base">{brl(media.funcionario)}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                {/* Tabela de faixas de referência */}
+                <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[#2a2a2e] bg-[#0d0d0f]">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tabela de faixas</h3>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[#2a2a2e]">
+                        <th className="px-4 py-2.5 text-left text-xs text-gray-500 font-semibold uppercase tracking-wider">Faixa</th>
+                        <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Pontos</th>
+                        <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Gerentes</th>
+                        <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Funcionários</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {FAIXAS.map(f => (
+                        <tr key={f.faixa} className="border-b border-[#2a2a2e] last:border-0">
+                          <td className="px-4 py-2.5 font-semibold text-gray-300">{f.faixa}{f.faixa === 5 ? ' (100%)' : ''}</td>
+                          <td className="px-4 py-2.5 text-center text-gray-300">{f.pontos}</td>
+                          <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.gerente)}</td>
+                          <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.funcionario)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()
         ) : !trimestre ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
             <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center">
@@ -657,44 +746,6 @@ function BonificacaoContent() {
               </div>
             </div>
 
-            {/* Central e Escritório — média das lojas */}
-            {(() => {
-              const media = mediaBonus();
-              if (!media) return null;
-              return (
-                <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-[#2a2a2e] bg-[#0d0d0f] flex items-center justify-between">
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Central &amp; Escritório</h3>
-                    <span className="text-xs text-gray-600">média de {media.lojas} {media.lojas === 1 ? 'loja' : 'lojas'}</span>
-                  </div>
-                  <div className="grid grid-cols-2 divide-x divide-[#2a2a2e]">
-                    {[
-                      { label: 'Central', icon: '🏢' },
-                      { label: 'Escritório', icon: '🖊️' },
-                    ].map(({ label, icon }) => (
-                      <div key={label} className="p-5">
-                        <p className="text-xs text-gray-500 mb-3 font-semibold uppercase tracking-wider">{icon} {label}</p>
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-400">Gerentes</span>
-                            <span className="text-base font-bold text-green-400">{brl(media.gerente)}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-400">Funcionários</span>
-                            <span className="text-base font-bold text-green-400">{brl(media.funcionario)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="px-4 py-2.5 bg-[#0d0d0f] border-t border-[#2a2a2e]">
-                    <p className="text-xs text-gray-600 text-center">
-                      Calculado com base nas faixas atingidas pelas {media.lojas} {media.lojas === 1 ? 'loja cadastrada' : 'lojas cadastradas'} neste trimestre
-                    </p>
-                  </div>
-                </div>
-              );
-            })()}
 
           </div>
         )}
