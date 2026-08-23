@@ -44,9 +44,10 @@ export async function POST(req: NextRequest) {
     ano?: number;
     trimestre?: number;
     tipoAvaliacaoId?: string;
+    substituir?: boolean;
   };
 
-  const { lojaId, lojaNome, ano, trimestre, tipoAvaliacaoId } = body;
+  const { lojaId, lojaNome, ano, trimestre, tipoAvaliacaoId, substituir } = body;
   if (!lojaNome?.trim()) return NextResponse.json({ error: 'lojaNome obrigatório' }, { status: 400 });
   if (!ano || !trimestre) return NextResponse.json({ error: 'ano e trimestre obrigatórios' }, { status: 400 });
   if (trimestre < 1 || trimestre > 4) return NextResponse.json({ error: 'trimestre inválido (1-4)' }, { status: 400 });
@@ -77,7 +78,11 @@ export async function POST(req: NextRequest) {
       trimestre,
       dados: dadosSnapshot as object,
     },
-    update: {},
+    update: substituir ? {
+      tipoAvaliacaoId,
+      lojaId: lojaId ?? null,
+      dados: dadosSnapshot as object,
+    } : {},
   });
 
   return NextResponse.json(item, { status: 201 });

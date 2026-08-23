@@ -144,14 +144,14 @@ function BonificacaoContent() {
       .catch(() => {});
   }, [lojaAtiva]);
 
-  // Tipo padrão ao trocar de loja
+  // Tipo padrão ao trocar de loja (só se ainda não houver plano carregado)
   useEffect(() => {
-    if (tipos.length === 0) return;
+    if (tipos.length === 0 || trimestre?.tipoAvaliacaoId) return;
     const lojaNome = lojas.find(l => l.id === lojaAtiva)?.nome ?? '';
     const preferMedia = lojaNome.toLowerCase().includes('central');
     const preferred = tipos.find(t => preferMedia ? t.modoCalculo === 'MEDIA' : t.modoCalculo === 'PADRAO') ?? tipos[0];
     setTipoSelecionadoId(preferred.id);
-  }, [lojaAtiva, lojas, tipos]);
+  }, [lojaAtiva, lojas, tipos, trimestre?.tipoAvaliacaoId]);
 
   // ── carregar trimestre ─────────────────────────────────────────────────────
   const loadTrimestre = useCallback(async () => {
@@ -164,6 +164,9 @@ function BonificacaoContent() {
       const loja = lojas.find(l => l.id === lojaAtiva);
       const found = data.find(t => t.lojaId === lojaAtiva || t.lojaNome === loja?.nome);
       setTrimestre(found ?? null);
+      if (found?.tipoAvaliacaoId) {
+        setTipoSelecionadoId(found.tipoAvaliacaoId);
+      }
     } finally {
       setLoading(false);
     }
@@ -174,9 +177,12 @@ function BonificacaoContent() {
   }, [loadTrimestre]);
 
   // ── criar trimestre ────────────────────────────────────────────────────────
-  async function criarTrimestre() {
+  async function criarTrimestre(substituir = false) {
     const loja = lojas.find(l => l.id === lojaAtiva);
     if (!loja || !tipoSelecionadoId) return;
+    if (substituir && !confirm(
+      'Isso vai substituir métricas, descontos e faixas deste plano pelo template do tipo selecionado.\n\nOs pontos marcados (Feito/Não feito) serão zerados. Continuar?',
+    )) return;
     setCriando(true);
     try {
       const res = await fetch('/api/bonificacao', {
@@ -188,6 +194,7 @@ function BonificacaoContent() {
           ano: anoAtivo,
           trimestre: trimestreAtivo,
           tipoAvaliacaoId: tipoSelecionadoId,
+          substituir,
         }),
       });
       if (res.ok) {
@@ -353,6 +360,9 @@ function BonificacaoContent() {
     }), { gerente: 0, funcionario: 0 });
     return { gerente: soma.gerente / por.length, funcionario: soma.funcionario / por.length, n: por.length };
   }
+
+  const tipoPlanoNome = tipos.find(t => t.id === trimestre?.tipoAvaliacaoId)?.nome;
+  const tipoMudou = trimestre && tipoSelecionadoId && trimestre.tipoAvaliacaoId !== tipoSelecionadoId;
 
   const anos = Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - 1 + i);
 
@@ -566,7 +576,7 @@ function BonificacaoContent() {
                     </div>
                     {tipoAtivo?.modoCalculo !== 'MEDIA' && (
                       <button
-                        onClick={criarTrimestre}
+                        onClick={() => criarTrimestre(false)}
                         disabled={criando || !tipoSelecionadoId}
                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 disabled:opacity-50 transition-colors"
                       >
@@ -586,6 +596,37 @@ function BonificacaoContent() {
           </div>
         ) : (
           <div className="space-y-6">
+
+            {/* Barra do tipo de avaliação */}
+            {tipos.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3 p-4 bg-[#111113] border border-[#2a2a2e] rounded-2xl">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">
+                    Tipo de avaliação {tipoPlanoNome ? `(plano: ${tipoPlanoNome})` : ''}
+                  </label>
+                  <select
+                    value={tipoSelecionadoId}
+                    onChange={e => setTipoSelecionadoId(e.target.value)}
+                    className="w-full appearance-none bg-[#0a0a0a] border border-[#2a2a2e] text-sm text-white rounded-xl px-3.5 py-2 focus:outline-none focus:border-amber-500/40"
+                  >
+                    {tipos.filter(t => t.modoCalculo !== 'MEDIA').map(t => (
+                      <option key={t.id} value={t.id}>{t.nome}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={() => criarTrimestre(true)}
+                  disabled={criando || !tipoSelecionadoId}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 text-sm font-semibold hover:bg-amber-500/25 disabled:opacity-50 transition-colors mt-4 sm:mt-0"
+                >
+                  {criando ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {tipoMudou ? 'Trocar para este tipo' : 'Atualizar do tipo'}
+                </button>
+                <p className="w-full text-xs text-gray-600">
+                  Editar um tipo em &quot;Tipos de avaliação&quot; não altera planos já criados. Use o botão acima para aplicar o template ao plano desta loja.
+                </p>
+              </div>
+            )}
 
             {/* Tabela de métricas */}
             <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl overflow-hidden">

@@ -39,6 +39,23 @@ function newId() {
   return `item_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function asMetricas(val: unknown): MetricaTemplate[] {
+  return Array.isArray(val) ? val as MetricaTemplate[] : [];
+}
+
+function asDescontos(val: unknown): DescontoTemplate[] {
+  return Array.isArray(val) ? val as DescontoTemplate[] : [];
+}
+
+function cloneTipo(t: TipoAvaliacao): TipoAvaliacao {
+  return {
+    ...t,
+    metricas: asMetricas(t.metricas),
+    descontos: asDescontos(t.descontos),
+    faixas: normalizeFaixas(t.faixas),
+  };
+}
+
 function TiposContent() {
   const router = useRouter();
   const [tipos, setTipos] = useState<TipoAvaliacao[]>([]);
@@ -53,12 +70,7 @@ function TiposContent() {
     try {
       const res = await fetch('/api/tipos-avaliacao');
       const data = await res.json().catch(() => []);
-      setTipos((data as TipoAvaliacao[]).map(t => ({
-        ...t,
-        metricas: t.metricas ?? [],
-        descontos: t.descontos ?? [],
-        faixas: normalizeFaixas(t.faixas),
-      })));
+      setTipos((data as TipoAvaliacao[]).map(t => cloneTipo(t)));
     } finally {
       setLoading(false);
     }
@@ -178,7 +190,7 @@ function TiposContent() {
                   <Copy className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => { setEditando(t); setCriando(false); setErro(''); }}
+                  onClick={() => { setEditando(cloneTipo(t)); setCriando(false); setErro(''); }}
                   className="p-2 text-gray-500 hover:text-amber-400"
                 >
                   <Pencil className="w-4 h-4" />
@@ -196,7 +208,7 @@ function TiposContent() {
 
         {editando && (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center overflow-y-auto p-4">
-            <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl w-full max-w-2xl my-8">
+            <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl w-full max-w-3xl my-8">
               <div className="px-5 py-4 border-b border-[#2a2a2e] flex items-center justify-between">
                 <h2 className="font-bold">{criando ? 'Novo tipo' : 'Editar tipo'}</h2>
                 <button onClick={() => { setEditando(null); setCriando(false); }} className="text-gray-500 hover:text-white">
@@ -244,11 +256,17 @@ function TiposContent() {
                     </button>
                   </div>
                   <div className="space-y-2">
+                    <div className="grid grid-cols-[minmax(0,1fr)_80px_36px] gap-2 px-1">
+                      <span className="text-[10px] text-gray-600 uppercase">Nome da métrica</span>
+                      <span className="text-[10px] text-gray-600 uppercase text-center">Pts</span>
+                      <span />
+                    </div>
                     {editando.metricas.map((m, i) => (
-                      <div key={m.id} className="flex gap-2">
+                      <div key={m.id} className="grid grid-cols-[minmax(0,1fr)_80px_36px] gap-2 items-center">
                         <input
-                          className={inputCls + ' flex-1'}
-                          value={m.nome}
+                          className={inputCls}
+                          placeholder="Nome da métrica"
+                          value={m.nome ?? ''}
                           onChange={e => updateEditado(p => ({
                             ...p,
                             metricas: p.metricas.map((x, j) => j === i ? { ...x, nome: e.target.value } : x),
@@ -256,7 +274,7 @@ function TiposContent() {
                         />
                         <input
                           type="number"
-                          className={inputCls + ' w-20'}
+                          className={inputCls + ' text-center'}
                           value={m.maxPontos}
                           onChange={e => updateEditado(p => ({
                             ...p,
@@ -265,7 +283,7 @@ function TiposContent() {
                         />
                         <button
                           onClick={() => updateEditado(p => ({ ...p, metricas: p.metricas.filter((_, j) => j !== i) }))}
-                          className="p-2 text-gray-600 hover:text-red-400"
+                          className="p-2 text-gray-600 hover:text-red-400 justify-self-center"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -289,11 +307,17 @@ function TiposContent() {
                     </button>
                   </div>
                   <div className="space-y-2">
+                    <div className="grid grid-cols-[minmax(0,1fr)_80px_36px] gap-2 px-1">
+                      <span className="text-[10px] text-gray-600 uppercase">Nome do desconto</span>
+                      <span className="text-[10px] text-gray-600 uppercase text-center">Pts</span>
+                      <span />
+                    </div>
                     {editando.descontos.map((d, i) => (
-                      <div key={d.id} className="flex gap-2">
+                      <div key={d.id} className="grid grid-cols-[minmax(0,1fr)_80px_36px] gap-2 items-center">
                         <input
-                          className={inputCls + ' flex-1'}
-                          value={d.nome}
+                          className={inputCls}
+                          placeholder="Nome do desconto"
+                          value={d.nome ?? ''}
                           onChange={e => updateEditado(p => ({
                             ...p,
                             descontos: p.descontos.map((x, j) => j === i ? { ...x, nome: e.target.value } : x),
@@ -301,7 +325,7 @@ function TiposContent() {
                         />
                         <input
                           type="number"
-                          className={inputCls + ' w-20'}
+                          className={inputCls + ' text-center'}
                           value={d.valor}
                           onChange={e => updateEditado(p => ({
                             ...p,
@@ -310,7 +334,7 @@ function TiposContent() {
                         />
                         <button
                           onClick={() => updateEditado(p => ({ ...p, descontos: p.descontos.filter((_, j) => j !== i) }))}
-                          className="p-2 text-gray-600 hover:text-red-400"
+                          className="p-2 text-gray-600 hover:text-red-400 justify-self-center"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -339,8 +363,14 @@ function TiposContent() {
                     </button>
                   </div>
                   <div className="space-y-2">
+                    <div className="grid grid-cols-[1fr_1fr_1fr_36px] gap-2 px-1">
+                      <span className="text-[10px] text-gray-600 uppercase">Pts mínimos</span>
+                      <span className="text-[10px] text-gray-600 uppercase">Gerente (R$)</span>
+                      <span className="text-[10px] text-gray-600 uppercase">Funcionário (R$)</span>
+                      <span />
+                    </div>
                     {editando.faixas.map((f, i) => (
-                      <div key={i} className="grid grid-cols-4 gap-2 items-center">
+                      <div key={i} className="grid grid-cols-[1fr_1fr_1fr_36px] gap-2 items-center">
                         <input
                           type="number"
                           placeholder="Pts mín."
