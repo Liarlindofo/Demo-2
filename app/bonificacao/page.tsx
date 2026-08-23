@@ -59,17 +59,18 @@ const FAIXAS = [
 ];
 
 const TRIMESTRES_LABEL: Record<number, string> = {
-  1: 'Q1 (Jan–Mar)',
-  2: 'Q2 (Abr–Jun)',
-  3: 'Q3 (Jul–Set)',
-  4: 'Q4 (Out–Dez)',
+  1: 'T1 (Mar–Mai)',
+  2: 'T2 (Jun–Ago)',
+  3: 'T3 (Set–Nov)',
+  4: 'T4 (Dez–Fev)',
 };
 
+// Trimestres "quebrados": iniciam em março e cruzam ano no T4 (Dez do ano base, Jan/Fev do ano seguinte)
 const MESES_POR_TRIMESTRE: Record<number, { mes: number; label: string }[]> = {
-  1: [{ mes: 1, label: 'Jan' }, { mes: 2, label: 'Fev' }, { mes: 3, label: 'Mar' }],
-  2: [{ mes: 4, label: 'Abr' }, { mes: 5, label: 'Mai' }, { mes: 6, label: 'Jun' }],
-  3: [{ mes: 7, label: 'Jul' }, { mes: 8, label: 'Ago' }, { mes: 9, label: 'Set' }],
-  4: [{ mes: 10, label: 'Out' }, { mes: 11, label: 'Nov' }, { mes: 12, label: 'Dez' }],
+  1: [{ mes: 3, label: 'Mar' }, { mes: 4, label: 'Abr' }, { mes: 5, label: 'Mai' }],
+  2: [{ mes: 6, label: 'Jun' }, { mes: 7, label: 'Jul' }, { mes: 8, label: 'Ago' }],
+  3: [{ mes: 9, label: 'Set' }, { mes: 10, label: 'Out' }, { mes: 11, label: 'Nov' }],
+  4: [{ mes: 12, label: 'Dez' }, { mes: 1, label: 'Jan' }, { mes: 2, label: 'Fev' }],
 };
 
 function mesKey(mes: number, ano: number) {
@@ -99,9 +100,16 @@ function BonificacaoContent() {
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [lojaAtiva, setLojaAtiva] = useState<string>('');
   const [anoAtivo, setAnoAtivo] = useState(new Date().getFullYear());
-  const [trimestreAtivo, setTrimestreAtivo] = useState(() => Math.ceil((new Date().getMonth() + 1) / 3));
+  const [trimestreAtivo, setTrimestreAtivo] = useState(() => {
+    const mes = new Date().getMonth() + 1;
+    if (mes >= 3 && mes <= 5) return 1;
+    if (mes >= 6 && mes <= 8) return 2;
+    if (mes >= 9 && mes <= 11) return 3;
+    return 4; // Dez, Jan, Fev
+  });
 
   const [trimestre, setTrimestre] = useState<Trimestre | null>(null);
+  const [trimestres, setTrimestres] = useState<Trimestre[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -131,6 +139,7 @@ function BonificacaoContent() {
     try {
       const res = await fetch(`/api/bonificacao?ano=${anoAtivo}&trimestre=${trimestreAtivo}`);
       const data: Trimestre[] = await res.json().catch(() => []);
+      setTrimestres(data);
       const loja = lojas.find(l => l.id === lojaAtiva);
       const found = data.find(t => t.lojaId === lojaAtiva || t.lojaNome === loja?.nome);
       setTrimestre(found ?? null);
@@ -197,7 +206,7 @@ function BonificacaoContent() {
         ...prev.dados,
         metricas: prev.dados.metricas.map(m =>
           m.id === metricaId
-            ? { ...m, pontos: { ...m.pontos, [mesKey(mes, anoAtivo)]: val } }
+            ? { ...m, pontos: { ...m.pontos, [mesKey(mes, anoDoMes(mes))]: val } }
             : m,
         ),
       },
@@ -254,8 +263,13 @@ function BonificacaoContent() {
   // ── cálculos ──────────────────────────────────────────────────────────────
   const meses = MESES_POR_TRIMESTRE[trimestreAtivo];
 
+  // T4 cruza o ano: Dez pertence ao anoAtivo, Jan/Fev ao ano seguinte
+  function anoDoMes(mes: number): number {
+    return (trimestreAtivo === 4 && (mes === 1 || mes === 2)) ? anoAtivo + 1 : anoAtivo;
+  }
+
   function pontosMetricaMes(metrica: Metrica, mes: number) {
-    const v = metrica.pontos[mesKey(mes, anoAtivo)];
+    const v = metrica.pontos[mesKey(mes, anoDoMes(mes))];
     return typeof v === 'number' ? v : null;
   }
 
@@ -283,6 +297,34 @@ function BonificacaoContent() {
   }
 
   const faixa = trimestre ? getFaixa(totalLiquido()) : null;
+
+  // ── média das lojas → Central e Escritório ───────────────────────────────
+  function calcularLiquidoTrimestre(t: Trimestre): number {
+    const bruto = t.dados.metricas.reduce((sum, m) =>
+      sum + meses.reduce((s, { mes }) => {
+        const v = m.pontos[mesKey(mes, anoDoMes(mes))];
+        return s + (typeof v === 'number' ? v : 0);
+      }, 0), 0);
+    const descontos = t.dados.descontos.reduce((sum, d) => sum + (d.valor ?? 0), 0);
+    return bruto - descontos;
+  }
+
+  function mediaBonus(): { gerente: number; funcionario: number; lojas: number } | null {
+    const comDados = trimestres.filter(t => t.dados?.metricas?.length > 0);
+    if (comDados.length === 0) return null;
+    const totais = comDados.reduce(
+      (acc, t) => {
+        const f = getFaixa(calcularLiquidoTrimestre(t));
+        return { gerente: acc.gerente + (f?.gerente ?? 0), funcionario: acc.funcionario + (f?.funcionario ?? 0) };
+      },
+      { gerente: 0, funcionario: 0 },
+    );
+    return {
+      gerente: totais.gerente / comDados.length,
+      funcionario: totais.funcionario / comDados.length,
+      lojas: comDados.length,
+    };
+  }
 
   const anos = Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - 1 + i);
 
@@ -636,6 +678,45 @@ function BonificacaoContent() {
                 </table>
               </div>
             </div>
+
+            {/* Central e Escritório — média das lojas */}
+            {(() => {
+              const media = mediaBonus();
+              if (!media) return null;
+              return (
+                <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[#2a2a2e] bg-[#0d0d0f] flex items-center justify-between">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Central &amp; Escritório</h3>
+                    <span className="text-xs text-gray-600">média de {media.lojas} {media.lojas === 1 ? 'loja' : 'lojas'}</span>
+                  </div>
+                  <div className="grid grid-cols-2 divide-x divide-[#2a2a2e]">
+                    {[
+                      { label: 'Central', icon: '🏢' },
+                      { label: 'Escritório', icon: '🖊️' },
+                    ].map(({ label, icon }) => (
+                      <div key={label} className="p-5">
+                        <p className="text-xs text-gray-500 mb-3 font-semibold uppercase tracking-wider">{icon} {label}</p>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-400">Gerentes</span>
+                            <span className="text-base font-bold text-green-400">{brl(media.gerente)}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-400">Funcionários</span>
+                            <span className="text-base font-bold text-green-400">{brl(media.funcionario)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="px-4 py-2.5 bg-[#0d0d0f] border-t border-[#2a2a2e]">
+                    <p className="text-xs text-gray-600 text-center">
+                      Calculado com base nas faixas atingidas pelas {media.lojas} {media.lojas === 1 ? 'loja cadastrada' : 'lojas cadastradas'} neste trimestre
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
 
           </div>
         )}
