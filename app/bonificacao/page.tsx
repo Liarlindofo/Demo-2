@@ -88,8 +88,9 @@ function brl(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+// Remove setas nativas do input number (spinners)
 const inputCls =
-  'w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-lg px-2.5 py-1.5 text-sm text-white text-right placeholder-gray-600 focus:outline-none focus:border-amber-500/50 transition-colors';
+  'w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-lg px-2.5 py-1.5 text-sm text-white text-right placeholder-gray-600 focus:outline-none focus:border-amber-500/50 transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
 
 // ── componente principal ─────────────────────────────────────────────────────
 
@@ -103,6 +104,7 @@ function BonificacaoContent() {
   const [trimestre, setTrimestre] = useState<Trimestre | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [criando, setCriando] = useState(false);
 
   // estado de edição inline de nome de métrica
@@ -170,6 +172,7 @@ function BonificacaoContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dados: t.dados }),
       });
+      setSavedAt(new Date());
     } finally {
       setSaving(false);
     }
@@ -300,7 +303,17 @@ function BonificacaoContent() {
             <Trophy className="w-6 h-6 text-amber-400" />
             <h1 className="text-2xl font-bold text-white">Plano de Bonificação</h1>
           </div>
-          {saving && <Loader2 className="w-4 h-4 text-gray-500 animate-spin ml-2" />}
+          {saving ? (
+            <span className="flex items-center gap-1.5 text-xs text-gray-500 ml-2">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Salvando…
+            </span>
+          ) : savedAt ? (
+            <span className="flex items-center gap-1.5 text-xs text-gray-600 ml-2">
+              <Check className="w-3.5 h-3.5 text-green-500" />
+              Salvo às {savedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          ) : null}
         </div>
 
         {/* Seletores */}
