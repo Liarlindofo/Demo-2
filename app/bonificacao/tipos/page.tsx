@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ToolProtection from '@/components/auth/ToolProtection';
 import { SystemTool } from '@/types/admin';
 import {
@@ -26,11 +26,15 @@ import {
 interface TipoAvaliacao {
   id: string;
   nome: string;
+  lojaId: string | null;
+  lojaNome: string | null;
   modoCalculo: ModoCalculo;
   metricas: MetricaTemplate[];
   descontos: DescontoTemplate[];
   faixas: FaixaTemplate[];
 }
+
+interface Loja { id: string; nome: string; }
 
 const inputCls =
   'w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-lg px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500/50';
@@ -58,6 +62,9 @@ function cloneTipo(t: TipoAvaliacao): TipoAvaliacao {
 
 function TiposContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [lojas, setLojas] = useState<Loja[]>([]);
+  const [lojaAtiva, setLojaAtiva] = useState('');
   const [tipos, setTipos] = useState<TipoAvaliacao[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -65,10 +72,11 @@ function TiposContent() {
   const [criando, setCriando] = useState(false);
   const [erro, setErro] = useState('');
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (lojaId: string) => {
+    if (!lojaId) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/tipos-avaliacao');
+      const res = await fetch(`/api/tipos-avaliacao?lojaId=${lojaId}`);
       const data = await res.json().catch(() => []);
       setTipos((data as TipoAvaliacao[]).map(t => cloneTipo(t)));
     } finally {
@@ -76,12 +84,29 @@ function TiposContent() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    fetch('/api/rh/lojas')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: Loja[]) => {
+        setLojas(data);
+        const fromUrl = searchParams.get('lojaId');
+        const initial = fromUrl && data.some((l: Loja) => l.id === fromUrl) ? fromUrl : data[0]?.id ?? '';
+        setLojaAtiva(initial);
+      })
+      .catch(() => {});
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (lojaAtiva) load(lojaAtiva);
+  }, [lojaAtiva, load]);
 
   function iniciarCriacao(copiarDe?: TipoAvaliacao) {
+    const loja = lojas.find(l => l.id === lojaAtiva);
     const base = copiarDe
       ? {
           nome: `${copiarDe.nome} (cópia)`,
+          lojaId: lojaAtiva,
+          lojaNome: loja?.nome ?? null,
           modoCalculo: copiarDe.modoCalculo,
           metricas: copiarDe.metricas.map(m => ({ ...m, id: newId() })),
           descontos: copiarDe.descontos.map(d => ({ ...d, id: newId() })),
@@ -89,6 +114,8 @@ function TiposContent() {
         }
       : {
           nome: '',
+          lojaId: lojaAtiva,
+          lojaNome: loja?.nome ?? null,
           modoCalculo: 'PADRAO' as ModoCalculo,
           ...defaultTipoPayload('PADRAO'),
         };
@@ -104,6 +131,8 @@ function TiposContent() {
     try {
       const payload = {
         nome: editando.nome.trim(),
+        lojaId: lojaAtiva,
+        lojaNome: lojas.find(l => l.id === lojaAtiva)?.nome,
         modoCalculo: editando.modoCalculo,
         metricas: editando.metricas,
         descontos: editando.descontos,
@@ -122,19 +151,9 @@ function TiposContent() {
         setErro(data.error ?? 'Erro ao salvar');
         return;
       }
-      const tipoId = criando ? (data as { id?: string }).id : editando.id;
-      const vinculados = (data as { planosVinculados?: number }).planosVinculados ?? 0;
-      if (!criando && vinculados > 0 && tipoId) {
-        const ok = confirm(
-          `Este tipo é usado por ${vinculados} plano(s) trimestral(is).\n\nAtualizar os planos agora?\n• Métricas/descontos removidos saem do plano\n• Pontos (Feito/Não feito) das que permanecem são mantidos`,
-        );
-        if (ok) {
-          await fetch(`/api/tipos-avaliacao/${tipoId}/sincronizar-planos`, { method: 'POST' });
-        }
-      }
       setEditando(null);
       setCriando(false);
-      await load();
+      await load(lojaAtiva);
     } finally {
       setSaving(false);
     }
@@ -148,19 +167,21 @@ function TiposContent() {
       alert(data.error ?? 'Não foi possível excluir');
       return;
     }
-    await load();
+    await load(lojaAtiva);
   }
 
   function updateEditado(updater: (prev: TipoAvaliacao) => TipoAvaliacao) {
     setEditando(prev => (prev ? updater(prev) : prev));
   }
 
+  const lojaNome = lojas.find(l => l.id === lojaAtiva)?.nome ?? '';
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-3 mb-8">
+        <div className="flex items-center gap-3 mb-4">
           <button
-            onClick={() => router.push('/bonificacao')}
+            onClick={() => router.push(`/bonificacao`)}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:text-white hover:bg-[#1c1c1e]"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -168,10 +189,25 @@ function TiposContent() {
           <h1 className="text-2xl font-bold">Tipos de Avaliação</h1>
           <button
             onClick={() => iniciarCriacao()}
-            className="ml-auto flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400"
+            disabled={!lojaAtiva}
+            className="ml-auto flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 disabled:opacity-50"
           >
             <Plus className="w-4 h-4" /> Novo tipo
           </button>
+        </div>
+
+        <div className="mb-6">
+          <label className="text-xs text-gray-500 uppercase tracking-wider mb-1.5 block">Loja</label>
+          <select
+            value={lojaAtiva}
+            onChange={e => setLojaAtiva(e.target.value)}
+            className="w-full max-w-md appearance-none bg-[#111113] border border-[#2a2a2e] text-sm text-white rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-amber-500/40"
+          >
+            {lojas.map(l => (
+              <option key={l.id} value={l.id}>{l.nome}</option>
+            ))}
+          </select>
+          {lojaNome && <p className="text-xs text-gray-600 mt-1">Tipos de {lojaNome}</p>}
         </div>
 
         {loading ? (
@@ -450,7 +486,13 @@ function TiposContent() {
 export default function TiposAvaliacaoPage() {
   return (
     <ToolProtection tool={SystemTool.BONIFICACAO} toolName="Bonificação">
-      <TiposContent />
+      <Suspense fallback={
+        <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+          <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
+        </div>
+      }>
+        <TiposContent />
+      </Suspense>
     </ToolProtection>
   );
 }

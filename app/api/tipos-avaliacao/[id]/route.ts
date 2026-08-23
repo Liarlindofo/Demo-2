@@ -50,10 +50,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       where: { id },
       data,
     });
-    const planosVinculados = await prisma.bonificacaoTrimestre.count({
-      where: { tipoAvaliacaoId: id, userId: ctx.userId },
-    });
-    return NextResponse.json({ ...updated, planosVinculados });
+    return NextResponse.json(updated);
   } catch (err: unknown) {
     const code = (err as { code?: string })?.code;
     if (code === 'P2002') {

@@ -1781,11 +1781,13 @@ model Complaint {
   @@map("complaints")
 }
 
-/// Template reutilizável de avaliação trimestral (métricas, descontos, faixas).
+/// Template de avaliação por loja (métricas, descontos, faixas).
 model TipoAvaliacao {
   id           String   @id @default(cuid())
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lojaId       String?
+  lojaNome     String?
   nome         String
   modoCalculo  String   @default("PADRAO") // PADRAO | MEDIA
   metricas     Json
@@ -1795,20 +1797,20 @@ model TipoAvaliacao {
   updatedAt    DateTime @updatedAt
   bonificacaoTrimestres BonificacaoTrimestre[]
 
-  @@unique([userId, nome])
-  @@index([userId])
+  @@unique([userId, lojaId, nome])
+  @@index([userId, lojaId])
   @@map("tipos_avaliacao")
 }
 
-/// Plano trimestral de bonificação por loja (gerentes e funcionários).
+/// Plano trimestral: um registro por loja + trimestre + tipo de avaliação.
 model BonificacaoTrimestre {
   id              String          @id @default(cuid())
   userId          String
   user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   lojaId          String?
   lojaNome        String
-  tipoAvaliacaoId String?
-  tipoAvaliacao   TipoAvaliacao?  @relation(fields: [tipoAvaliacaoId], references: [id], onDelete: SetNull)
+  tipoAvaliacaoId String
+  tipoAvaliacao   TipoAvaliacao   @relation(fields: [tipoAvaliacaoId], references: [id], onDelete: Restrict)
   ano             Int
   trimestre       Int             // T1 Mar-Mai, T2 Jun-Ago, T3 Set-Nov, T4 Dez-Fev
   /// JSON snapshot: { modoCalculo, metricas, descontos, faixas }
@@ -1816,9 +1818,10 @@ model BonificacaoTrimestre {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  @@unique([userId, lojaNome, ano, trimestre])
+  @@unique([userId, lojaNome, ano, trimestre, tipoAvaliacaoId])
   @@index([userId, ano, trimestre])
   @@index([tipoAvaliacaoId])
+  @@index([lojaId])
   @@map("bonificacao_trimestres")
 }
 

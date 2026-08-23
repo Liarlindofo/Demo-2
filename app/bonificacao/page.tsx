@@ -15,7 +15,6 @@ import {
 import {
   ArrowLeft,
   Trophy,
-  Plus,
   Loader2,
   ChevronDown,
   Pencil,
@@ -51,11 +50,12 @@ interface Trimestre {
   id: string;
   lojaNome: string;
   lojaId: string | null;
-  tipoAvaliacaoId: string | null;
+  tipoAvaliacaoId: string;
   ano: number;
   trimestre: number;
   dados: Dados;
   updatedAt: string;
+  tipoAvaliacao?: { nome: string; modoCalculo: string; lojaId: string | null };
 }
 
 interface Loja { id: string; nome: string; }
@@ -63,6 +63,8 @@ interface Loja { id: string; nome: string; }
 interface TipoAvaliacao {
   id: string;
   nome: string;
+  lojaId: string | null;
+  lojaNome: string | null;
   modoCalculo: 'PADRAO' | 'MEDIA';
   metricas: unknown;
   descontos: unknown;
@@ -126,7 +128,18 @@ function BonificacaoContent() {
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── carregar lojas e tipos ────────────────────────────────────────────────
+  const loadTipos = useCallback(async (lojaId: string) => {
+    const res = await fetch(`/api/tipos-avaliacao?lojaId=${lojaId}`);
+    const data: TipoAvaliacao[] = res.ok ? await res.json() : [];
+    setTipos(data.map(t => ({ ...t, faixas: normalizeFaixas(t.faixas) })));
+    if (data.length > 0) {
+      setTipoSelecionadoId(prev => data.some(t => t.id === prev) ? prev : data[0].id);
+    } else {
+      setTipoSelecionadoId('');
+    }
+  }, []);
+
+  // ── carregar lojas ────────────────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/rh/lojas')
       .then(r => r.ok ? r.json() : [])
@@ -135,25 +148,12 @@ function BonificacaoContent() {
         if (data.length > 0 && !lojaAtiva) setLojaAtiva(data[0].id);
       })
       .catch(() => {});
-
-    fetch('/api/tipos-avaliacao')
-      .then(r => r.ok ? r.json() : [])
-      .then((data: TipoAvaliacao[]) => {
-        setTipos(data.map(t => ({ ...t, faixas: normalizeFaixas(t.faixas) })));
-      })
-      .catch(() => {});
   }, [lojaAtiva]);
 
-  // Tipo padrão ao trocar de loja (só se ainda não houver plano carregado)
   useEffect(() => {
-    if (tipos.length === 0 || trimestre?.tipoAvaliacaoId) return;
-    const lojaNome = lojas.find(l => l.id === lojaAtiva)?.nome ?? '';
-    const preferMedia = lojaNome.toLowerCase().includes('central');
-    const preferred = tipos.find(t => preferMedia ? t.modoCalculo === 'MEDIA' : t.modoCalculo === 'PADRAO') ?? tipos[0];
-    setTipoSelecionadoId(preferred.id);
-  }, [lojaAtiva, lojas, tipos, trimestre?.tipoAvaliacaoId]);
+    if (lojaAtiva) loadTipos(lojaAtiva);
+  }, [lojaAtiva, loadTipos]);
 
-  // ── carregar trimestre ─────────────────────────────────────────────────────
   const loadTrimestre = useCallback(async () => {
     if (!lojaAtiva) return;
     setLoading(true);
@@ -161,28 +161,39 @@ function BonificacaoContent() {
       const res = await fetch(`/api/bonificacao?ano=${anoAtivo}&trimestre=${trimestreAtivo}`);
       const data: Trimestre[] = await res.json().catch(() => []);
       setTrimestres(data);
-      const loja = lojas.find(l => l.id === lojaAtiva);
-      const found = data.find(t => t.lojaId === lojaAtiva || t.lojaNome === loja?.nome);
-      setTrimestre(found ?? null);
-      if (found?.tipoAvaliacaoId) {
-        setTipoSelecionadoId(found.tipoAvaliacaoId);
-      }
     } finally {
       setLoading(false);
     }
-  }, [lojaAtiva, anoAtivo, trimestreAtivo, lojas]);
+  }, [anoAtivo, trimestreAtivo, lojaAtiva]);
 
   useEffect(() => {
     if (lojaAtiva) loadTrimestre();
   }, [loadTrimestre]);
 
-  // ── criar trimestre ────────────────────────────────────────────────────────
-  async function criarTrimestre(substituir = false) {
+  function planoDaLojaTipo(lista: Trimestre[], lojaId: string, tipoId: string) {
+    const loja = lojas.find(l => l.id === lojaId);
+    return lista.find(t =>
+      t.tipoAvaliacaoId === tipoId &&
+      (t.lojaId === lojaId || t.lojaNome === loja?.nome),
+    ) ?? null;
+  }
+
+  async function garantirPlano(tipoId: string) {
     const loja = lojas.find(l => l.id === lojaAtiva);
-    if (!loja || !tipoSelecionadoId) return;
-    if (substituir && !confirm(
-      'Isso vai atualizar métricas, descontos e faixas deste plano pelo template do tipo selecionado.\n\nItens removidos do tipo saem do plano. Pontos (Feito/Não feito) das métricas que permanecem são mantidos. Continuar?',
-    )) return;
+    const tipo = tipos.find(t => t.id === tipoId);
+    if (!loja || !tipo) return;
+
+    if (tipo.modoCalculo === 'MEDIA') {
+      setTrimestre(null);
+      return;
+    }
+
+    const existente = planoDaLojaTipo(trimestres, lojaAtiva, tipoId);
+    if (existente) {
+      setTrimestre(existente);
+      return;
+    }
+
     setCriando(true);
     try {
       const res = await fetch('/api/bonificacao', {
@@ -193,19 +204,39 @@ function BonificacaoContent() {
           lojaNome: loja.nome,
           ano: anoAtivo,
           trimestre: trimestreAtivo,
-          tipoAvaliacaoId: tipoSelecionadoId,
-          substituir,
+          tipoAvaliacaoId: tipoId,
         }),
       });
       if (res.ok) {
-        const novo = await res.json();
+        const novo: Trimestre = await res.json();
+        setTrimestres(prev => [...prev.filter(p => p.id !== novo.id), novo]);
         setTrimestre(novo);
-        await loadTrimestre();
       }
     } finally {
       setCriando(false);
     }
   }
+
+  async function selecionarTipo(tipoId: string) {
+    setTipoSelecionadoId(tipoId);
+    await garantirPlano(tipoId);
+  }
+
+  useEffect(() => {
+    if (!loading && tipoSelecionadoId && lojaAtiva && tipos.length > 0) {
+      const tipo = tipos.find(t => t.id === tipoSelecionadoId);
+      if (tipo?.modoCalculo === 'MEDIA') {
+        setTrimestre(null);
+        return;
+      }
+      const existente = planoDaLojaTipo(trimestres, lojaAtiva, tipoSelecionadoId);
+      setTrimestre(existente);
+      if (!existente && !criando) {
+        garantirPlano(tipoSelecionadoId);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trimestres, loading, lojaAtiva, tipoSelecionadoId, tipos]);
 
   // ── salvar (debounced) ────────────────────────────────────────────────────
   const saveDados = useCallback(async (t: Trimestre) => {
@@ -316,10 +347,8 @@ function BonificacaoContent() {
     return trimestre.dados.metricas.reduce((sum, m) => sum + m.maxPontos, 0) * 3;
   }
 
-  const tipoAtivo = tipos.find(t => t.id === (trimestre?.tipoAvaliacaoId ?? tipoSelecionadoId));
-  const isMediaMode = trimestre
-    ? resolveModoCalculo(trimestre.dados) === 'MEDIA'
-    : tipoAtivo?.modoCalculo === 'MEDIA';
+  const tipoAtivo = tipos.find(t => t.id === tipoSelecionadoId);
+  const isMediaMode = tipoAtivo?.modoCalculo === 'MEDIA';
 
   const faixasAtivas = trimestre
     ? resolveFaixasFromDados(trimestre.dados)
@@ -331,7 +360,32 @@ function BonificacaoContent() {
     : 870;
 
   function trimestresRegulares() {
-    return trimestres.filter(t => resolveModoCalculo(t.dados) !== 'MEDIA');
+    return trimestres.filter(t =>
+      resolveModoCalculo(t.dados) !== 'MEDIA' &&
+      !(t.tipoAvaliacao?.modoCalculo === 'MEDIA') &&
+      !t.lojaNome.toLowerCase().includes('central'),
+    );
+  }
+
+  function agruparPorTipo() {
+    const map = new Map<string, { tipoNome: string; lojas: { nome: string; liquido: number; faixa: FaixaTemplate | null }[] }>();
+    for (const t of trimestresRegulares()) {
+      const tipoNome = t.tipoAvaliacao?.nome ?? 'Sem tipo';
+      const liq = calcularLiquidoTrimestre(t);
+      const f = getFaixaFromDados(liq, resolveFaixasFromDados(t.dados));
+      if (!map.has(tipoNome)) map.set(tipoNome, { tipoNome, lojas: [] });
+      map.get(tipoNome)!.lojas.push({ nome: t.lojaNome, liquido: liq, faixa: f });
+    }
+    return [...map.values()];
+  }
+
+  function mediaDoGrupo(lojas: { faixa: FaixaTemplate | null }[]) {
+    if (lojas.length === 0) return null;
+    const soma = lojas.reduce((acc, d) => ({
+      gerente: acc.gerente + (d.faixa?.valorGerente ?? 0),
+      funcionario: acc.funcionario + (d.faixa?.valorFuncionario ?? 0),
+    }), { gerente: 0, funcionario: 0 });
+    return { gerente: soma.gerente / lojas.length, funcionario: soma.funcionario / lojas.length };
   }
   function calcularLiquidoTrimestre(t: Trimestre): number {
     const bruto = t.dados.metricas.reduce((sum, m) =>
@@ -347,7 +401,7 @@ function BonificacaoContent() {
     return trimestresRegulares().map(t => {
       const liq = calcularLiquidoTrimestre(t);
       const f = getFaixaFromDados(liq, resolveFaixasFromDados(t.dados));
-      return { nome: t.lojaNome, liquido: liq, faixa: f };
+      return { nome: t.lojaNome, tipo: t.tipoAvaliacao?.nome ?? '', liquido: liq, faixa: f };
     });
   }
 
@@ -360,9 +414,6 @@ function BonificacaoContent() {
     }), { gerente: 0, funcionario: 0 });
     return { gerente: soma.gerente / por.length, funcionario: soma.funcionario / por.length, n: por.length };
   }
-
-  const tipoPlanoNome = tipos.find(t => t.id === trimestre?.tipoAvaliacaoId)?.nome;
-  const tipoMudou = trimestre && tipoSelecionadoId && trimestre.tipoAvaliacaoId !== tipoSelecionadoId;
 
   const anos = Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - 1 + i);
 
@@ -384,7 +435,7 @@ function BonificacaoContent() {
             <h1 className="text-2xl font-bold text-white">Plano de Bonificação</h1>
           </div>
           <button
-            onClick={() => router.push('/bonificacao/tipos')}
+            onClick={() => router.push(`/bonificacao/tipos?lojaId=${lojaAtiva}`)}
             className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-[#1c1c1e] border border-[#2a2a2e]"
           >
             <Settings className="w-3.5 h-3.5" />
@@ -422,7 +473,22 @@ function BonificacaoContent() {
             ))}
           </div>
 
-          <div className="flex gap-2 ml-auto items-center">
+          <div className="flex gap-2 ml-auto items-center flex-wrap">
+            {/* Tipo de avaliação */}
+            {tipos.length > 0 && (
+              <div className="relative min-w-[160px]">
+                <select
+                  value={tipoSelecionadoId}
+                  onChange={e => selecionarTipo(e.target.value)}
+                  className="appearance-none w-full bg-[#111113] border border-[#2a2a2e] text-sm text-white rounded-xl px-3.5 py-2 pr-7 focus:outline-none focus:border-amber-500/40"
+                >
+                  {tipos.map(t => (
+                    <option key={t.id} value={t.id}>{t.nome}</option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+            )}
             {/* Trimestre */}
             <div className="relative">
               <select
@@ -459,174 +525,68 @@ function BonificacaoContent() {
             <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
           </div>
         ) : isMediaMode ? (
-          /* ── View especial: Central & Escritório (média das lojas) ──────── */
           (() => {
-            const por = dadosPorLoja();
-            const media = mediaBonus();
+            const grupos = agruparPorTipo();
             return (
               <div className="space-y-6">
-                <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-[#2a2a2e] bg-[#0d0d0f] flex items-center justify-between">
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Resultado das lojas — {TRIMESTRES_LABEL[trimestreAtivo]} {anoAtivo}</h3>
-                    <span className="text-xs text-gray-600">{por.length} {por.length === 1 ? 'loja' : 'lojas'}</span>
-                  </div>
-                  {por.length === 0 ? (
-                    <p className="text-sm text-gray-500 text-center py-12">
-                      Nenhuma loja possui dados para este trimestre ainda.
-                    </p>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-[#2a2a2e] bg-[#0d0d0f]">
-                          <th className="px-4 py-2.5 text-left text-xs text-gray-500 font-semibold uppercase tracking-wider">Loja</th>
-                          <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Pts líquidos</th>
-                          <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Faixa</th>
-                          <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Gerentes</th>
-                          <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Funcionários</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {por.map((d, i) => (
-                          <tr key={d.nome} className={`border-b border-[#2a2a2e] ${i % 2 !== 0 ? 'bg-[#0d0d0f]' : ''}`}>
-                            <td className="px-4 py-3 text-gray-200">{d.nome}</td>
-                            <td className="px-4 py-3 text-center font-semibold text-amber-400">{d.liquido}</td>
-                            <td className="px-4 py-3 text-center text-gray-300">{d.faixa ? `Faixa ${d.faixa.faixa}` : '—'}</td>
-                            <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.valorGerente) : '—'}</td>
-                            <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.valorFuncionario) : '—'}</td>
+                {grupos.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-12">
+                    Nenhuma loja possui planos para este trimestre ainda.
+                  </p>
+                ) : grupos.map(grupo => {
+                  const media = mediaDoGrupo(grupo.lojas);
+                  return (
+                    <div key={grupo.tipoNome} className="bg-[#111113] border border-[#2a2a2e] rounded-2xl overflow-hidden">
+                      <div className="px-4 py-3 border-b border-[#2a2a2e] bg-[#0d0d0f]">
+                        <h3 className="text-sm font-semibold text-white">{grupo.tipoNome}</h3>
+                        <p className="text-xs text-gray-500 mt-0.5">{TRIMESTRES_LABEL[trimestreAtivo]} {anoAtivo}</p>
+                      </div>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-[#2a2a2e] bg-[#0d0d0f]">
+                            <th className="px-4 py-2.5 text-left text-xs text-gray-500 font-semibold uppercase">Loja</th>
+                            <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase">Pts líquidos</th>
+                            <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase">Faixa</th>
+                            <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase">Gerentes</th>
+                            <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase">Funcionários</th>
                           </tr>
-                        ))}
-                        {media && (
-                          <tr className="bg-[#1a1a1e] border-t-2 border-[#3a3a3e]">
-                            <td className="px-4 py-3 font-bold text-white">Média · Central &amp; Escritório</td>
-                            <td className="px-4 py-3 text-center text-gray-500">—</td>
-                            <td className="px-4 py-3 text-center text-gray-500">—</td>
-                            <td className="px-4 py-3 text-center font-bold text-green-400 text-base">{brl(media.gerente)}</td>
-                            <td className="px-4 py-3 text-center font-bold text-green-400 text-base">{brl(media.funcionario)}</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-
-                {/* Tabela de faixas de referência */}
-                <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-[#2a2a2e] bg-[#0d0d0f]">
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tabela de faixas</h3>
-                  </div>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-[#2a2a2e]">
-                        <th className="px-4 py-2.5 text-left text-xs text-gray-500 font-semibold uppercase tracking-wider">Faixa</th>
-                        <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Pontos</th>
-                        <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Gerentes</th>
-                        <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Funcionários</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {faixasAtivas.map(f => (
-                        <tr key={f.faixa} className="border-b border-[#2a2a2e] last:border-0">
-                          <td className="px-4 py-2.5 font-semibold text-gray-300">{f.faixa}{f.faixa === faixasAtivas.length ? ' (100%)' : ''}</td>
-                          <td className="px-4 py-2.5 text-center text-gray-300">{f.pontosMin}</td>
-                          <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.valorGerente)}</td>
-                          <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.valorFuncionario)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                        </thead>
+                        <tbody>
+                          {grupo.lojas.map((d, i) => (
+                            <tr key={d.nome} className={`border-b border-[#2a2a2e] ${i % 2 !== 0 ? 'bg-[#0d0d0f]' : ''}`}>
+                              <td className="px-4 py-3 text-gray-200">{d.nome}</td>
+                              <td className="px-4 py-3 text-center font-semibold text-amber-400">{d.liquido}</td>
+                              <td className="px-4 py-3 text-center text-gray-300">{d.faixa ? `Faixa ${d.faixa.faixa}` : '—'}</td>
+                              <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.valorGerente) : '—'}</td>
+                              <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.valorFuncionario) : '—'}</td>
+                            </tr>
+                          ))}
+                          {media && (
+                            <tr className="bg-[#1a1a1e] border-t-2 border-[#3a3a3e]">
+                              <td className="px-4 py-3 font-bold text-white">Média · {grupo.tipoNome}</td>
+                              <td className="px-4 py-3 text-center text-gray-500">—</td>
+                              <td className="px-4 py-3 text-center text-gray-500">—</td>
+                              <td className="px-4 py-3 text-center font-bold text-green-400">{brl(media.gerente)}</td>
+                              <td className="px-4 py-3 text-center font-bold text-green-400">{brl(media.funcionario)}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
               </div>
             );
           })()
         ) : !trimestre ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center">
-              <Trophy className="w-8 h-8 text-amber-400/50" />
-            </div>
-            <div>
-              <p className="text-white font-medium">Nenhum plano para este período</p>
-              <p className="text-sm text-gray-500 mt-1">
-                {lojas.find(l => l.id === lojaAtiva)?.nome ?? 'Loja'} · {TRIMESTRES_LABEL[trimestreAtivo]} {anoAtivo}
-              </p>
-            </div>
-            {lojaAtiva ? (
-              <div className="flex flex-col items-center gap-4 w-full max-w-sm">
-                {tipos.length === 0 ? (
-                  <p className="text-sm text-gray-500">
-                    Nenhum tipo de avaliação cadastrado.{' '}
-                    <button onClick={() => router.push('/bonificacao/tipos')} className="text-amber-400 hover:underline">
-                      Criar tipos
-                    </button>
-                  </p>
-                ) : (
-                  <>
-                    <div className="w-full">
-                      <label className="text-xs text-gray-500 uppercase tracking-wider mb-1.5 block">Tipo de avaliação</label>
-                      <select
-                        value={tipoSelecionadoId}
-                        onChange={e => setTipoSelecionadoId(e.target.value)}
-                        className="w-full appearance-none bg-[#111113] border border-[#2a2a2e] text-sm text-white rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-amber-500/40"
-                      >
-                        {tipos.map(t => (
-                          <option key={t.id} value={t.id}>
-                            {t.nome} ({t.modoCalculo === 'MEDIA' ? 'média' : 'padrão'})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {tipoAtivo?.modoCalculo !== 'MEDIA' && (
-                      <button
-                        onClick={() => criarTrimestre(false)}
-                        disabled={criando || !tipoSelecionadoId}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 disabled:opacity-50 transition-colors"
-                      >
-                        {criando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                        Criar plano trimestral
-                      </button>
-                    )}
-                    {tipoAtivo?.modoCalculo === 'MEDIA' && (
-                      <p className="text-sm text-gray-500">Modo média: os valores são calculados automaticamente das outras lojas.</p>
-                    )}
-                  </>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-600">Selecione uma loja acima para começar.</p>
-            )}
+          <div className="flex flex-col items-center justify-center py-24 gap-3">
+            <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
+            <p className="text-sm text-gray-500">
+              {criando ? 'Criando plano…' : 'Carregando plano…'}
+            </p>
           </div>
         ) : (
           <div className="space-y-6">
-
-            {/* Barra do tipo de avaliação */}
-            {tipos.length > 0 && (
-              <div className="flex flex-wrap items-center gap-3 p-4 bg-[#111113] border border-[#2a2a2e] rounded-2xl">
-                <div className="flex-1 min-w-[200px]">
-                  <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">
-                    Tipo de avaliação {tipoPlanoNome ? `(plano: ${tipoPlanoNome})` : ''}
-                  </label>
-                  <select
-                    value={tipoSelecionadoId}
-                    onChange={e => setTipoSelecionadoId(e.target.value)}
-                    className="w-full appearance-none bg-[#0a0a0a] border border-[#2a2a2e] text-sm text-white rounded-xl px-3.5 py-2 focus:outline-none focus:border-amber-500/40"
-                  >
-                    {tipos.filter(t => t.modoCalculo !== 'MEDIA').map(t => (
-                      <option key={t.id} value={t.id}>{t.nome}</option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  onClick={() => criarTrimestre(true)}
-                  disabled={criando || !tipoSelecionadoId}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 text-sm font-semibold hover:bg-amber-500/25 disabled:opacity-50 transition-colors mt-4 sm:mt-0"
-                >
-                  {criando ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  {tipoMudou ? 'Trocar para este tipo' : 'Atualizar do tipo'}
-                </button>
-                <p className="w-full text-xs text-gray-600">
-                  Ao salvar alterações no tipo, você pode sincronizar os planos automaticamente. Ou use o botão acima para atualizar só esta loja.
-                </p>
-              </div>
-            )}
 
             {/* Tabela de métricas */}
             <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl overflow-hidden">
