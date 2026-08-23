@@ -30,9 +30,9 @@ async function main() {
           userId,
           nome: 'Gerente',
           modoCalculo: 'PADRAO',
-          metricas: padrao.metricas,
-          descontos: padrao.descontos,
-          faixas: padrao.faixas,
+          metricas: padrao.metricas as object,
+          descontos: padrao.descontos as object,
+          faixas: padrao.faixas as object,
         },
       });
       console.log(`[${userId}] Criado tipo "Gerente"`);
@@ -48,9 +48,9 @@ async function main() {
           userId,
           nome: 'Central/Escritório',
           modoCalculo: 'MEDIA',
-          metricas: media.metricas,
-          descontos: media.descontos,
-          faixas: media.faixas,
+          metricas: media.metricas as object,
+          descontos: media.descontos as object,
+          faixas: media.faixas as object,
         },
       });
       console.log(`[${userId}] Criado tipo "Central/Escritório"`);
