@@ -11,7 +11,6 @@ import {
   Loader2,
   ChevronDown,
   Pencil,
-  Trash2,
   Check,
   X,
 } from 'lucide-react';
@@ -49,6 +48,8 @@ interface Trimestre {
 interface Loja { id: string; nome: string; }
 
 // ── constantes ──────────────────────────────────────────────────────────────
+
+const DESCONTO_VALOR = 20; // pts fixos por desconto aplicado
 
 const FAIXAS = [
   { faixa: 1, pontos: 200, gerente: 450,   funcionario: 100 },
@@ -88,10 +89,6 @@ function getFaixa(totalLiquido: number) {
 function brl(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
-
-// Remove setas nativas do input number (spinners)
-const inputCls =
-  'w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-lg px-2.5 py-1.5 text-sm text-white text-right placeholder-gray-600 focus:outline-none focus:border-amber-500/50 transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
 
 // ── componente principal ─────────────────────────────────────────────────────
 
@@ -197,35 +194,33 @@ function BonificacaoContent() {
     });
   }
 
-  // ── editar pontuação mensal ────────────────────────────────────────────────
-  function setPontos(metricaId: string, mes: number, raw: string) {
-    const val = raw === '' ? null : Math.min(Number(raw), getMaxPontos(metricaId));
+  // ── toggle de pontuação mensal (FEITO = maxPontos | NÃO FEITO = 0) ────────
+  function togglePontos(metricaId: string, mes: number) {
+    const max = trimestre?.dados.metricas.find(m => m.id === metricaId)?.maxPontos ?? 40;
+    const key = mesKey(mes, anoDoMes(mes));
+    const current = trimestre?.dados.metricas.find(m => m.id === metricaId)?.pontos[key];
+    const feito = typeof current === 'number' && current === max;
     updateTrimestre(prev => ({
       ...prev,
       dados: {
         ...prev.dados,
         metricas: prev.dados.metricas.map(m =>
           m.id === metricaId
-            ? { ...m, pontos: { ...m.pontos, [mesKey(mes, anoDoMes(mes))]: val } }
+            ? { ...m, pontos: { ...m.pontos, [key]: feito ? 0 : max } }
             : m,
         ),
       },
     }));
   }
 
-  function getMaxPontos(metricaId: string) {
-    return trimestre?.dados.metricas.find(m => m.id === metricaId)?.maxPontos ?? 40;
-  }
-
-  // ── editar desconto ──────────────────────────────────────────────────────
-  function setDesconto(descontoId: string, raw: string) {
-    const val = raw === '' ? 0 : Math.max(0, Number(raw));
+  // ── toggle de desconto (−DESCONTO_VALOR pts ou 0) ─────────────────────────
+  function toggleDesconto(descontoId: string) {
     updateTrimestre(prev => ({
       ...prev,
       dados: {
         ...prev.dados,
         descontos: prev.dados.descontos.map(d =>
-          d.id === descontoId ? { ...d, valor: val } : d,
+          d.id === descontoId ? { ...d, valor: d.valor > 0 ? 0 : DESCONTO_VALOR } : d,
         ),
       },
     }));
@@ -244,20 +239,6 @@ function BonificacaoContent() {
       },
     }));
     setEditandoMetrica(null);
-  }
-
-  // ── editar maxPontos ──────────────────────────────────────────────────────
-  function setMaxPontos(metricaId: string, raw: string) {
-    const val = Math.max(1, Math.min(999, Number(raw) || 1));
-    updateTrimestre(prev => ({
-      ...prev,
-      dados: {
-        ...prev.dados,
-        metricas: prev.dados.metricas.map(m =>
-          m.id === metricaId ? { ...m, maxPontos: val } : m,
-        ),
-      },
-    }));
   }
 
   // ── cálculos ──────────────────────────────────────────────────────────────
@@ -494,30 +475,25 @@ function BonificacaoContent() {
                             )}
                           </td>
                           {/* Max */}
-                          <td className="px-3 py-2.5">
-                            <input
-                              type="number"
-                              min={1}
-                              max={999}
-                              value={m.maxPontos}
-                              onChange={e => setMaxPontos(m.id, e.target.value)}
-                              className={inputCls + ' w-16 mx-auto'}
-                            />
+                          <td className="px-3 py-2.5 text-center">
+                            <span className="text-sm font-semibold text-gray-400">{m.maxPontos}</span>
                           </td>
-                          {/* Meses */}
+                          {/* Meses — toggle FEITO / NÃO FEITO */}
                           {meses.map(({ mes }) => {
                             const v = pontosMetricaMes(m, mes);
+                            const feito = v === m.maxPontos;
                             return (
-                              <td key={mes} className="px-3 py-2.5">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  max={m.maxPontos}
-                                  placeholder="—"
-                                  value={v === null ? '' : v}
-                                  onChange={e => setPontos(m.id, mes, e.target.value)}
-                                  className={inputCls + ' w-20 mx-auto'}
-                                />
+                              <td key={mes} className="px-2 py-2.5 text-center">
+                                <button
+                                  onClick={() => togglePontos(m.id, mes)}
+                                  className={`w-full px-2 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                    feito
+                                      ? 'bg-green-500/20 text-green-400 border border-green-500/40 hover:bg-green-500/30'
+                                      : 'bg-[#1a1a1e] text-gray-500 border border-[#2a2a2e] hover:border-gray-500 hover:text-gray-300'
+                                  }`}
+                                >
+                                  {feito ? '✓ Feito' : '✗'}
+                                </button>
                               </td>
                             );
                           })}
@@ -567,19 +543,21 @@ function BonificacaoContent() {
                   {trimestre.dados.descontos.map(d => (
                     <div key={d.id} className="flex items-center justify-between px-4 py-2.5 gap-4">
                       <span className="text-sm text-gray-400 flex-1">{d.nome}</span>
-                      <input
-                        type="number"
-                        min={0}
-                        placeholder="0"
-                        value={d.valor || ''}
-                        onChange={e => setDesconto(d.id, e.target.value)}
-                        className={inputCls + ' w-24'}
-                      />
+                      <button
+                        onClick={() => toggleDesconto(d.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+                          d.valor > 0
+                            ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+                            : 'bg-[#1a1a1e] text-gray-500 border border-[#2a2a2e] hover:border-gray-500 hover:text-gray-300'
+                        }`}
+                      >
+                        {d.valor > 0 ? `−${DESCONTO_VALOR} pts` : 'Sem desconto'}
+                      </button>
                     </div>
                   ))}
                   <div className="flex items-center justify-between px-4 py-3 bg-red-500/5">
                     <span className="text-sm font-semibold text-red-400">Total descontos</span>
-                    <span className="text-sm font-bold text-red-400">{totalDescontos()}</span>
+                    <span className="text-sm font-bold text-red-400">{totalDescontos()} pts</span>
                   </div>
                 </div>
               </div>

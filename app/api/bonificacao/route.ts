@@ -98,7 +98,7 @@ function defaultDados() {
       { id: 'turnover',        nome: 'Turnover',                   maxPontos: 30, pontos: {} },
     ],
     descontos: [
-      { id: 'lancamento_bnus', nome: 'Lançamento de bônus',       valor: 0 },
+      { id: 'lancamento_bnus', nome: 'Lançamentos de boys',        valor: 0 },
       { id: 'escala',          nome: 'Escala',                     valor: 0 },
       { id: 'transferencias',  nome: 'Transferências',             valor: 0 },
       { id: 'contagem',        nome: 'Contagem',                   valor: 0 },
