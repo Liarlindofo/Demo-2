@@ -60,7 +60,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 }
 
-/** DELETE /api/tipos-avaliacao/:id */
+/** DELETE /api/tipos-avaliacao/:id — remove o tipo e os planos trimestrais vinculados */
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const ctx = await getBonificacaoAuth();
   if (!ctx) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
@@ -74,13 +74,13 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   const vinculados = await prisma.bonificacaoTrimestre.count({
     where: { tipoAvaliacaoId: id, userId: ctx.userId },
   });
-  if (vinculados > 0) {
-    return NextResponse.json({
-      error: `Este tipo está vinculado a ${vinculados} plano(s) trimestral(is). Planos já criados mantêm o snapshot, mas o vínculo precisa ser removido antes de excluir o tipo.`,
-      vinculados,
-    }, { status: 409 });
-  }
 
-  await prisma.tipoAvaliacao.delete({ where: { id } });
-  return NextResponse.json({ ok: true });
+  await prisma.$transaction([
+    prisma.bonificacaoTrimestre.deleteMany({
+      where: { tipoAvaliacaoId: id, userId: ctx.userId },
+    }),
+    prisma.tipoAvaliacao.delete({ where: { id } }),
+  ]);
+
+  return NextResponse.json({ ok: true, planosRemovidos: vinculados });
 }

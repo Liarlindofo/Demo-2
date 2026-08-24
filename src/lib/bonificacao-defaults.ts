@@ -4,6 +4,8 @@ export interface MetricaTemplate {
   id: string;
   nome: string;
   maxPontos: number;
+  /** Se false, esta métrica é excluída do cálculo de média entre lojas */
+  entraNaMedia?: boolean;
 }
 
 export interface DescontoTemplate {
@@ -31,10 +33,19 @@ export interface DescontoPlano {
   pontos?: number;
 }
 
+export interface DescontoReais {
+  valor: number;
+  observacao: string;
+}
+
 export interface DadosBonificacaoSnapshot {
   modoCalculo: ModoCalculo;
   metricas: MetricaPlano[];
   descontos: DescontoPlano[];
+  /** Desconto direto em R$ aplicado ao bônus final (não afeta pontos) */
+  descontoReais?: DescontoReais;
+  /** Trimestre finalizado/fechado — dados bloqueados para edição */
+  fechado?: boolean;
   faixas: FaixaTemplate[];
 }
 
@@ -47,15 +58,15 @@ export const DEFAULT_FAIXAS: FaixaTemplate[] = [
 ];
 
 export const DEFAULT_METRICAS: MetricaTemplate[] = [
-  { id: 'meta', nome: 'Meta', maxPontos: 40 },
-  { id: 'cmv', nome: 'CMV (30%, 5%)', maxPontos: 40 },
-  { id: 'ifood', nome: 'iFood (+4.8)', maxPontos: 30 },
-  { id: 'cancelamentos', nome: 'Cancelamentos (<0,5%)', maxPontos: 30 },
-  { id: 'chargeback', nome: 'Chargeback (<0,1%)', maxPontos: 30 },
-  { id: 'motoristas', nome: 'Motoristas (1p a 1%)', maxPontos: 30 },
-  { id: 'mao_de_obra', nome: 'Mão de Obra (<5%)', maxPontos: 30 },
-  { id: 'google_nota', nome: 'Google Nota 1 (Max 4)', maxPontos: 30 },
-  { id: 'turnover', nome: 'Turnover', maxPontos: 30 },
+  { id: 'meta', nome: 'Meta', maxPontos: 40, entraNaMedia: true },
+  { id: 'cmv', nome: 'CMV (30%, 5%)', maxPontos: 40, entraNaMedia: true },
+  { id: 'ifood', nome: 'iFood (+4.8)', maxPontos: 30, entraNaMedia: true },
+  { id: 'cancelamentos', nome: 'Cancelamentos (<0,5%)', maxPontos: 30, entraNaMedia: true },
+  { id: 'chargeback', nome: 'Chargeback (<0,1%)', maxPontos: 30, entraNaMedia: true },
+  { id: 'motoristas', nome: 'Motoristas (1p a 1%)', maxPontos: 30, entraNaMedia: true },
+  { id: 'mao_de_obra', nome: 'Mão de Obra (<5%)', maxPontos: 30, entraNaMedia: true },
+  { id: 'google_nota', nome: 'Google Nota 1 (Max 4)', maxPontos: 30, entraNaMedia: true },
+  { id: 'turnover', nome: 'Turnover', maxPontos: 30, entraNaMedia: true },
 ];
 
 export const DEFAULT_DESCONTOS: DescontoTemplate[] = [
@@ -96,6 +107,7 @@ export function snapshotFromTipo(
       id: m.id,
       nome: m.nome,
       maxPontos: m.maxPontos,
+      entraNaMedia: m.entraNaMedia ?? true,
       pontos: prev?.pontos ?? {},
     };
   });
@@ -116,6 +128,8 @@ export function snapshotFromTipo(
     modoCalculo: (tipo.modoCalculo === 'MEDIA' ? 'MEDIA' : 'PADRAO') as ModoCalculo,
     metricas,
     descontos,
+    descontoReais: existing?.descontoReais ?? { valor: 0, observacao: '' },
+    fechado: existing?.fechado ?? false,
     faixas,
   };
 }

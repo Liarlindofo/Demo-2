@@ -160,7 +160,9 @@ function TiposContent() {
   }
 
   async function excluir(id: string, nome: string) {
-    if (!confirm(`Excluir o tipo "${nome}"?\n\nPlanos trimestrais já criados não são afetados (usam snapshot).`)) return;
+    if (!confirm(
+      `Excluir o tipo "${nome}"?\n\nTodos os planos trimestrais vinculados a este tipo também serão excluídos.`,
+    )) return;
     const res = await fetch(`/api/tipos-avaliacao/${id}`, { method: 'DELETE' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -225,7 +227,9 @@ function TiposContent() {
                   <p className="font-semibold text-white">{t.nome}</p>
                   <p className="text-xs text-gray-500 mt-0.5">
                     {t.modoCalculo === 'MEDIA' ? 'Modo média' : 'Modo padrão'}
-                    {' · '}{t.metricas.length} métricas · {t.descontos.length} descontos · {t.faixas.length} faixas
+                    {' · '}{t.metricas.length} métricas
+                    {' · '}{t.metricas.filter(m => (m.entraNaMedia ?? true)).length} na média
+                    {' · '}{t.descontos.length} descontos · {t.faixas.length} faixas
                   </p>
                 </div>
                 <button
@@ -294,7 +298,7 @@ function TiposContent() {
                     <button
                       onClick={() => updateEditado(p => ({
                         ...p,
-                        metricas: [...p.metricas, { id: newId(), nome: 'Nova métrica', maxPontos: 30 }],
+                        metricas: [...p.metricas, { id: newId(), nome: 'Nova métrica', maxPontos: 30, entraNaMedia: true }],
                       }))}
                       className="text-xs text-amber-400 hover:text-amber-300"
                     >
@@ -302,13 +306,14 @@ function TiposContent() {
                     </button>
                   </div>
                   <div className="space-y-2">
-                    <div className="grid grid-cols-[minmax(0,1fr)_80px_36px] gap-2 px-1">
+                    <div className="grid grid-cols-[minmax(0,1fr)_70px_80px_36px] gap-2 px-1">
                       <span className="text-[10px] text-gray-600 uppercase">Nome da métrica</span>
                       <span className="text-[10px] text-gray-600 uppercase text-center">Pts</span>
+                      <span className="text-[10px] text-gray-600 uppercase text-center">Entra na média</span>
                       <span />
                     </div>
                     {editando.metricas.map((m, i) => (
-                      <div key={m.id} className="grid grid-cols-[minmax(0,1fr)_80px_36px] gap-2 items-center">
+                      <div key={m.id} className="grid grid-cols-[minmax(0,1fr)_70px_80px_36px] gap-2 items-center">
                         <input
                           className={inputCls}
                           placeholder="Nome da métrica"
@@ -327,6 +332,22 @@ function TiposContent() {
                             metricas: p.metricas.map((x, j) => j === i ? { ...x, maxPontos: Number(e.target.value) || 0 } : x),
                           }))}
                         />
+                        <div className="flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() => updateEditado(p => ({
+                              ...p,
+                              metricas: p.metricas.map((x, j) => j === i ? { ...x, entraNaMedia: !(x.entraNaMedia ?? true) } : x),
+                            }))}
+                            className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all border ${
+                              (m.entraNaMedia ?? true)
+                                ? 'bg-green-500/20 text-green-400 border-green-500/40 hover:bg-green-500/30'
+                                : 'bg-[#1a1a1e] text-gray-500 border-[#2a2a2e] hover:border-gray-500 hover:text-gray-300'
+                            }`}
+                          >
+                            {(m.entraNaMedia ?? true) ? 'Sim' : 'Não'}
+                          </button>
+                        </div>
                         <button
                           onClick={() => updateEditado(p => ({ ...p, metricas: p.metricas.filter((_, j) => j !== i) }))}
                           className="p-2 text-gray-600 hover:text-red-400 justify-self-center"

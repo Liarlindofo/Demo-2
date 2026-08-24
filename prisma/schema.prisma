@@ -1810,7 +1810,7 @@ model BonificacaoTrimestre {
   lojaId          String?
   lojaNome        String
   tipoAvaliacaoId String
-  tipoAvaliacao   TipoAvaliacao   @relation(fields: [tipoAvaliacaoId], references: [id], onDelete: Restrict)
+  tipoAvaliacao   TipoAvaliacao   @relation(fields: [tipoAvaliacaoId], references: [id], onDelete: Cascade)
   ano             Int
   trimestre       Int             // T1 Mar-Mai, T2 Jun-Ago, T3 Set-Nov, T4 Dez-Fev
   /// JSON snapshot: { modoCalculo, metricas, descontos, faixas }
