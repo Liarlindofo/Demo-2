@@ -474,7 +474,7 @@ function ProdutoRow({
               inputMode="decimal"
               min="0"
               step="0.1"
-              value={minimo ?? '' || ''}
+              value={minimo ?? ''}
               onChange={e => handleMinimo(e.target.value)}
               placeholder="—"
               className="w-16 text-right text-sm font-medium bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1 text-white focus:outline-none focus:border-amber-500/60 placeholder-gray-700"
@@ -520,7 +520,7 @@ function ProdutoRow({
                 inputMode="decimal"
                 min="0.001"
                 step="0.1"
-                value={kgPorUnidade ?? '' || ''}
+                value={kgPorUnidade ?? ''}
                 onChange={e => handleKgPorUnidade(e.target.value)}
                 placeholder="0,0"
                 className="w-16 text-right text-sm font-medium bg-[#2a2a2e] border border-[#374151] rounded-lg px-2 py-1 text-white focus:outline-none focus:border-amber-500/60 placeholder-gray-700"

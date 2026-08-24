@@ -624,7 +624,7 @@ export default function CustosPage() {
                           step="0.01"
                           min="0.5"
                           max="2.0"
-                          value={editandoFap[loja.lojaId] ?? '1.0' || ''}
+                          value={editandoFap[loja.lojaId] ?? '1.0'}
                           onChange={(e) => setEditandoFap((f) => ({ ...f, [loja.lojaId]: e.target.value }))}
                           className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
                         />
@@ -644,7 +644,7 @@ export default function CustosPage() {
                         step="0.5"
                         min="0"
                         max="6"
-                        value={editandoRat[cargo.id] ?? '2.0' || ''}
+                        value={editandoRat[cargo.id] ?? '2.0'}
                         onChange={(e) => setEditandoRat((r) => ({ ...r, [cargo.id]: e.target.value }))}
                         className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
                       />
