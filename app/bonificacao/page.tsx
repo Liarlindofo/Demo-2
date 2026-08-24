@@ -457,7 +457,7 @@ function BonificacaoContent() {
     const map = new Map<string, { tipoNome: string; lojas: { nome: string; liquido: number; faixa: FaixaTemplate | null }[] }>();
     for (const t of trimestresRegulares()) {
       const tipoNome = t.tipoAvaliacao?.nome ?? 'Sem tipo';
-      const liq = calcularLiquidoTrimestre(t, true);
+      const liq = calcularLiquidoTrimestre(t);
       const f = getFaixaFromDados(liq, resolveFaixasFromDados(t.dados));
       if (!map.has(tipoNome)) map.set(tipoNome, { tipoNome, lojas: [] });
       map.get(tipoNome)!.lojas.push({ nome: t.lojaNome, liquido: liq, faixa: f });
