@@ -13,6 +13,7 @@ import {
   Check,
   X,
   Copy,
+  Share2,
 } from 'lucide-react';
 import {
   type ModoCalculo,
@@ -74,6 +75,12 @@ function TiposContent() {
   const [editando, setEditando] = useState<TipoAvaliacao | null>(null);
   const [criando, setCriando] = useState(false);
   const [erro, setErro] = useState('');
+
+  // modal de cópia para outras lojas
+  const [copiandoPara, setCopiandoPara] = useState<TipoAvaliacao | null>(null);
+  const [lojasSelecionadas, setLojasSelecionadas] = useState<Set<string>>(new Set());
+  const [copiando, setCopiando] = useState(false);
+  const [resultadoCopia, setResultadoCopia] = useState<{ loja: string; ok: boolean; msg: string }[]>([]);
 
   const load = useCallback(async (lojaId: string) => {
     if (!lojaId) return;
@@ -178,6 +185,54 @@ function TiposContent() {
     await load(lojaAtiva);
   }
 
+  async function copiarParaLojas() {
+    if (!copiandoPara || lojasSelecionadas.size === 0) return;
+    setCopiando(true);
+    setResultadoCopia([]);
+    const resultados: { loja: string; ok: boolean; msg: string }[] = [];
+
+    for (const lojaId of lojasSelecionadas) {
+      const loja = lojas.find(l => l.id === lojaId);
+      if (!loja) continue;
+      try {
+        const res = await fetch('/api/tipos-avaliacao', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nome: copiandoPara.nome,
+            lojaId: loja.id,
+            lojaNome: loja.nome,
+            modoCalculo: copiandoPara.modoCalculo,
+            entraNaMedia: copiandoPara.entraNaMedia ?? true,
+            metricas: copiandoPara.metricas,
+            descontos: copiandoPara.descontos,
+            faixas: copiandoPara.faixas,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          resultados.push({ loja: loja.nome, ok: true, msg: 'Copiado com sucesso' });
+        } else if (res.status === 409) {
+          resultados.push({ loja: loja.nome, ok: false, msg: 'Já existe um tipo com este nome' });
+        } else {
+          resultados.push({ loja: loja.nome, ok: false, msg: data.error ?? 'Erro ao copiar' });
+        }
+      } catch {
+        resultados.push({ loja: loja.nome, ok: false, msg: 'Erro de conexão' });
+      }
+    }
+
+    setResultadoCopia(resultados);
+    setCopiando(false);
+    if (resultados.every(r => r.ok)) {
+      setTimeout(() => {
+        setCopiandoPara(null);
+        setLojasSelecionadas(new Set());
+        setResultadoCopia([]);
+      }, 1500);
+    }
+  }
+
   function updateEditado(updater: (prev: TipoAvaliacao) => TipoAvaliacao) {
     setEditando(prev => (prev ? updater(prev) : prev));
   }
@@ -246,9 +301,20 @@ function TiposContent() {
                 <button
                   onClick={() => iniciarCriacao(t)}
                   className="p-2 text-gray-500 hover:text-gray-300"
-                  title="Duplicar"
+                  title="Duplicar nesta loja"
                 >
                   <Copy className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    setCopiandoPara(cloneTipo(t));
+                    setLojasSelecionadas(new Set());
+                    setResultadoCopia([]);
+                  }}
+                  className="p-2 text-gray-500 hover:text-blue-400"
+                  title="Copiar para outra loja"
+                >
+                  <Share2 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => { setEditando(cloneTipo(t)); setCriando(false); setErro(''); }}
@@ -519,6 +585,92 @@ function TiposContent() {
         )}
       </div>
     </div>
+
+    {/* Modal — Copiar para outras lojas */}
+    {copiandoPara && (
+      <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+        <div className="bg-[#111113] border border-[#2a2a2e] rounded-2xl w-full max-w-md">
+          <div className="px-5 py-4 border-b border-[#2a2a2e] flex items-center justify-between">
+            <div>
+              <h2 className="font-bold text-white">Copiar para outras lojas</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Tipo: <span className="text-gray-300">{copiandoPara.nome}</span></p>
+            </div>
+            <button
+              onClick={() => { setCopiandoPara(null); setLojasSelecionadas(new Set()); setResultadoCopia([]); }}
+              className="text-gray-500 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-5 space-y-2">
+            {resultadoCopia.length > 0 ? (
+              <div className="space-y-2">
+                {resultadoCopia.map(r => (
+                  <div key={r.loja} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${r.ok ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                    {r.ok ? <Check className="w-4 h-4 shrink-0" /> : <X className="w-4 h-4 shrink-0" />}
+                    <span className="font-medium">{r.loja}</span>
+                    <span className="text-xs opacity-70 ml-auto">{r.msg}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-gray-400 mb-3">Selecione as lojas de destino:</p>
+                {lojas
+                  .filter(l => l.id !== lojaAtiva)
+                  .map(l => {
+                    const selecionada = lojasSelecionadas.has(l.id);
+                    return (
+                      <button
+                        key={l.id}
+                        onClick={() => setLojasSelecionadas(prev => {
+                          const next = new Set(prev);
+                          if (next.has(l.id)) next.delete(l.id);
+                          else next.add(l.id);
+                          return next;
+                        })}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all border ${
+                          selecionada
+                            ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                            : 'bg-[#1a1a1e] border-[#2a2a2e] text-gray-400 hover:border-gray-500 hover:text-white'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${selecionada ? 'bg-amber-500 border-amber-500' : 'border-gray-600'}`}>
+                          {selecionada && <Check className="w-3 h-3 text-black" />}
+                        </div>
+                        {l.nome}
+                      </button>
+                    );
+                  })}
+                {lojas.filter(l => l.id !== lojaAtiva).length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-4">Nenhuma outra loja cadastrada.</p>
+                )}
+              </>
+            )}
+          </div>
+
+          {resultadoCopia.length === 0 && (
+            <div className="px-5 py-4 border-t border-[#2a2a2e] flex justify-end gap-2">
+              <button
+                onClick={() => { setCopiandoPara(null); setLojasSelecionadas(new Set()); }}
+                className="px-4 py-2 rounded-xl text-sm text-gray-400 hover:text-white"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={copiarParaLojas}
+                disabled={lojasSelecionadas.size === 0 || copiando}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 text-black text-sm font-semibold hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {copiando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                Copiar para {lojasSelecionadas.size > 0 ? `${lojasSelecionadas.size} loja${lojasSelecionadas.size > 1 ? 's' : ''}` : 'lojas selecionadas'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
   );
 }
 
