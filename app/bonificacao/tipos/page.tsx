@@ -240,6 +240,7 @@ function TiposContent() {
   const lojaNome = lojas.find(l => l.id === lojaAtiva)?.nome ?? '';
 
   return (
+    <>
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="flex items-center gap-3 mb-4">
@@ -671,6 +672,7 @@ function TiposContent() {
         </div>
       </div>
     )}
+    </>
   );
 }
 
