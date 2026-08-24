@@ -158,7 +158,7 @@ export default function BonificacoesTab({ funcionarioId }: Props) {
               </div>
               <div>
                 <label className={labelCls}>Ano</label>
-                <input type="number" min={2020} max={2100} value={formAno} onChange={(e) => setFormAno(Number(e.target.value))} className={inputCls} />
+                <input type="number" min={2020} max={2100} value={formAno || ''} onChange={(e) => setFormAno(Number(e.target.value))} className={inputCls} />
               </div>
             </div>
             <div>

@@ -417,7 +417,7 @@ export default function QuadroIdealPage() {
                                     <select value={epTurno} onChange={e => setEpTurno(e.target.value)} className={inputCls}>
                                       {TURNOS.map(t => <option key={t} value={t}>{TURNO_LABELS[t]}</option>)}
                                     </select>
-                                    <input type="number" min={1} value={epQtd} onChange={e => setEpQtd(Number(e.target.value))} className={inputCls} />
+                                    <input type="number" min={1} value={epQtd || ''} onChange={e => setEpQtd(Number(e.target.value))} className={inputCls} />
                                     <input value={epObs} onChange={e => setEpObs(e.target.value)} placeholder="Observações" className={inputCls} />
                                     <div className="flex gap-1">
                                       <button onClick={() => salvarEdicaoPosicao(p.id)} className="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center hover:bg-amber-500/20"><Check className="w-3.5 h-3.5" /></button>
@@ -460,7 +460,7 @@ export default function QuadroIdealPage() {
                               </div>
                               <div>
                                 <label className="text-[10px] text-gray-500 uppercase mb-1 block">Qtd</label>
-                                <input type="number" min={1} value={npQtd} onChange={e => setNpQtd(Number(e.target.value))} className={inputCls} />
+                                <input type="number" min={1} value={npQtd || ''} onChange={e => setNpQtd(Number(e.target.value))} className={inputCls} />
                               </div>
                               <div>
                                 <label className="text-[10px] text-gray-500 uppercase mb-1 block">Observações</label>
@@ -549,19 +549,19 @@ export default function QuadroIdealPage() {
                                 <div className="grid grid-cols-3 gap-2">
                                   <div>
                                     <label className="text-xs text-gray-500 mb-1 block">Qtd. ideal</label>
-                                    <input type="number" min="1" value={taxaForm.quantidadeIdeal}
+                                    <input type="number" min="1" value={taxaForm.quantidadeIdeal || ''}
                                       onChange={(e) => setTaxaForm(f => ({ ...f, quantidadeIdeal: e.target.value }))}
                                       className={inputCls} />
                                   </div>
                                   <div>
                                     <label className="text-xs text-gray-500 mb-1 block">Dias/mês</label>
-                                    <input type="number" min="1" value={taxaForm.diasPorMes}
+                                    <input type="number" min="1" value={taxaForm.diasPorMes || ''}
                                       onChange={(e) => setTaxaForm(f => ({ ...f, diasPorMes: e.target.value }))}
                                       className={inputCls} />
                                   </div>
                                   <div>
                                     <label className="text-xs text-gray-500 mb-1 block">Diária (R$)</label>
-                                    <input type="number" min="0" step="0.01" value={taxaForm.valorDiaria}
+                                    <input type="number" min="0" step="0.01" value={taxaForm.valorDiaria || ''}
                                       onChange={(e) => setTaxaForm(f => ({ ...f, valorDiaria: e.target.value }))}
                                       className={inputCls} />
                                   </div>
@@ -613,19 +613,19 @@ export default function QuadroIdealPage() {
                             <div className="grid grid-cols-3 gap-2">
                               <div>
                                 <label className="text-xs text-gray-500 mb-1 block">Qtd. ideal</label>
-                                <input type="number" min="1" value={taxaForm.quantidadeIdeal}
+                                <input type="number" min="1" value={taxaForm.quantidadeIdeal || ''}
                                   onChange={(e) => setTaxaForm(f => ({ ...f, quantidadeIdeal: e.target.value }))}
                                   className={inputCls} />
                               </div>
                               <div>
                                 <label className="text-xs text-gray-500 mb-1 block">Dias/mês</label>
-                                <input type="number" min="1" value={taxaForm.diasPorMes}
+                                <input type="number" min="1" value={taxaForm.diasPorMes || ''}
                                   onChange={(e) => setTaxaForm(f => ({ ...f, diasPorMes: e.target.value }))}
                                   className={inputCls} />
                               </div>
                               <div>
                                 <label className="text-xs text-gray-500 mb-1 block">Diária (R$)</label>
-                                <input type="number" min="0" step="0.01" value={taxaForm.valorDiaria}
+                                <input type="number" min="0" step="0.01" value={taxaForm.valorDiaria || ''}
                                   onChange={(e) => setTaxaForm(f => ({ ...f, valorDiaria: e.target.value }))}
                                   className={inputCls} />
                               </div>

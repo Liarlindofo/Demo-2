@@ -284,7 +284,7 @@ export function StockItemRow({ item, categoriaId, onQuantidade, onObservacao }: 
           inputMode="decimal"
           min="0"
           step={puroUnidade || hasFardoToggle ? '1' : '0.1'}
-          value={addValue}
+          value={addValue || ''}
           onChange={e => setAddValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={

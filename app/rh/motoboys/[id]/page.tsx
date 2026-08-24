@@ -370,7 +370,7 @@ export default function MotoboiDetailPage() {
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1.5 block">Qtd. entregas</label>
-            <input type="number" min="0" value={editPeriodForm.deliveryCount}
+            <input type="number" min="0" value={editPeriodForm.deliveryCount || ''}
               onChange={e => setEditPeriodForm(f => ({ ...f, deliveryCount: e.target.value }))}
               className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/50 transition-colors" />
           </div>

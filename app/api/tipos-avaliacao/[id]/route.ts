@@ -33,6 +33,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const body = await req.json().catch(() => ({})) as {
     nome?: string;
     modoCalculo?: string;
+    entraNaMedia?: boolean;
     metricas?: unknown;
     descontos?: unknown;
     faixas?: unknown;
@@ -41,6 +42,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const data: Record<string, unknown> = {};
   if (body.nome?.trim()) data.nome = body.nome.trim();
   if (body.modoCalculo === 'MEDIA' || body.modoCalculo === 'PADRAO') data.modoCalculo = body.modoCalculo;
+  if (typeof body.entraNaMedia === 'boolean') data.entraNaMedia = body.entraNaMedia;
   if (body.metricas !== undefined) data.metricas = body.metricas;
   if (body.descontos !== undefined) data.descontos = body.descontos;
   if (body.faixas !== undefined) data.faixas = body.faixas;

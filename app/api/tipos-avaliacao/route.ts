@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
     lojaId?: string;
     lojaNome?: string;
     modoCalculo?: string;
+    entraNaMedia?: boolean;
     metricas?: unknown;
     descontos?: unknown;
     faixas?: unknown;
@@ -90,6 +91,7 @@ export async function POST(req: NextRequest) {
         lojaNome: loja.nome,
         nome,
         modoCalculo,
+        entraNaMedia: body.entraNaMedia ?? true,
         metricas: (body.metricas ?? defaults.metricas) as object,
         descontos: (body.descontos ?? defaults.descontos) as object,
         faixas: (body.faixas ?? defaults.faixas) as object,

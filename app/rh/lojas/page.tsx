@@ -472,7 +472,7 @@ export default function LojasPage() {
                   <input
                     type="number"
                     step="any"
-                    value={form.latitude}
+                    value={form.latitude || ''}
                     onChange={(e) => setForm((f) => ({ ...f, latitude: e.target.value }))}
                     placeholder="-23.5505"
                     className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/40 transition-colors"
@@ -483,7 +483,7 @@ export default function LojasPage() {
                   <input
                     type="number"
                     step="any"
-                    value={form.longitude}
+                    value={form.longitude || ''}
                     onChange={(e) => setForm((f) => ({ ...f, longitude: e.target.value }))}
                     placeholder="-46.6333"
                     className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/40 transition-colors"
@@ -497,7 +497,7 @@ export default function LojasPage() {
                   type="number"
                   min="50"
                   max="5000"
-                  value={form.raioVerificacaoM}
+                  value={form.raioVerificacaoM || ''}
                   onChange={(e) => setForm((f) => ({ ...f, raioVerificacaoM: e.target.value }))}
                   placeholder="300"
                   className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-500/40 transition-colors"

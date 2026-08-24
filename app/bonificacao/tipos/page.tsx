@@ -22,6 +22,7 @@ import {
   defaultTipoPayload,
   normalizeFaixas,
 } from '@/lib/bonificacao-defaults';
+import { NumericInput } from '@/components/ui/numeric-input';
 
 interface TipoAvaliacao {
   id: string;
@@ -29,6 +30,7 @@ interface TipoAvaliacao {
   lojaId: string | null;
   lojaNome: string | null;
   modoCalculo: ModoCalculo;
+  entraNaMedia: boolean;
   metricas: MetricaTemplate[];
   descontos: DescontoTemplate[];
   faixas: FaixaTemplate[];
@@ -54,6 +56,7 @@ function asDescontos(val: unknown): DescontoTemplate[] {
 function cloneTipo(t: TipoAvaliacao): TipoAvaliacao {
   return {
     ...t,
+    entraNaMedia: t.entraNaMedia ?? true,
     metricas: asMetricas(t.metricas),
     descontos: asDescontos(t.descontos),
     faixas: normalizeFaixas(t.faixas),
@@ -108,6 +111,7 @@ function TiposContent() {
           lojaId: lojaAtiva,
           lojaNome: loja?.nome ?? null,
           modoCalculo: copiarDe.modoCalculo,
+          entraNaMedia: copiarDe.entraNaMedia ?? true,
           metricas: copiarDe.metricas.map(m => ({ ...m, id: newId() })),
           descontos: copiarDe.descontos.map(d => ({ ...d, id: newId() })),
           faixas: copiarDe.faixas.map((f, i) => ({ ...f, faixa: i + 1 })),
@@ -117,6 +121,7 @@ function TiposContent() {
           lojaId: lojaAtiva,
           lojaNome: loja?.nome ?? null,
           modoCalculo: 'PADRAO' as ModoCalculo,
+          entraNaMedia: true,
           ...defaultTipoPayload('PADRAO'),
         };
     setEditando({ id: '', ...base });
@@ -134,6 +139,7 @@ function TiposContent() {
         lojaId: lojaAtiva,
         lojaNome: lojas.find(l => l.id === lojaAtiva)?.nome,
         modoCalculo: editando.modoCalculo,
+        entraNaMedia: editando.entraNaMedia ?? true,
         metricas: editando.metricas,
         descontos: editando.descontos,
         faixas: editando.faixas,
@@ -224,12 +230,17 @@ function TiposContent() {
             {tipos.map(t => (
               <div key={t.id} className="bg-[#111113] border border-[#2a2a2e] rounded-2xl p-4 flex items-center gap-4">
                 <div className="flex-1">
-                  <p className="font-semibold text-white">{t.nome}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-white">{t.nome}</p>
+                    {(t.entraNaMedia ?? true) ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">Entra na média</span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-700/50 text-gray-500 border border-[#2a2a2e]">Fora da média</span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500 mt-0.5">
                     {t.modoCalculo === 'MEDIA' ? 'Modo média' : 'Modo padrão'}
-                    {' · '}{t.metricas.length} métricas
-                    {' · '}{t.metricas.filter(m => (m.entraNaMedia ?? true)).length} na média
-                    {' · '}{t.descontos.length} descontos · {t.faixas.length} faixas
+                    {' · '}{t.metricas.length} métricas · {t.descontos.length} descontos · {t.faixas.length} faixas
                   </p>
                 </div>
                 <button
@@ -291,6 +302,28 @@ function TiposContent() {
                   </select>
                 </div>
 
+                <div className="flex items-center justify-between p-3 bg-[#0d0d0f] rounded-xl border border-[#2a2a2e]">
+                  <div>
+                    <p className="text-sm text-white font-medium">Entra na média das lojas</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Se desativado, este tipo não será incluído no cálculo da média da Central
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateEditado(p => ({ ...p, entraNaMedia: !(p.entraNaMedia ?? true) }))}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                      (editando.entraNaMedia ?? true) ? 'bg-green-500' : 'bg-gray-600'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
+                        (editando.entraNaMedia ?? true) ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
                 {/* Métricas */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -298,7 +331,7 @@ function TiposContent() {
                     <button
                       onClick={() => updateEditado(p => ({
                         ...p,
-                        metricas: [...p.metricas, { id: newId(), nome: 'Nova métrica', maxPontos: 30, entraNaMedia: true }],
+                        metricas: [...p.metricas, { id: newId(), nome: 'Nova métrica', maxPontos: 30 }],
                       }))}
                       className="text-xs text-amber-400 hover:text-amber-300"
                     >
@@ -306,14 +339,13 @@ function TiposContent() {
                     </button>
                   </div>
                   <div className="space-y-2">
-                    <div className="grid grid-cols-[minmax(0,1fr)_70px_80px_36px] gap-2 px-1">
+                    <div className="grid grid-cols-[minmax(0,1fr)_80px_36px] gap-2 px-1">
                       <span className="text-[10px] text-gray-600 uppercase">Nome da métrica</span>
                       <span className="text-[10px] text-gray-600 uppercase text-center">Pts</span>
-                      <span className="text-[10px] text-gray-600 uppercase text-center">Entra na média</span>
                       <span />
                     </div>
                     {editando.metricas.map((m, i) => (
-                      <div key={m.id} className="grid grid-cols-[minmax(0,1fr)_70px_80px_36px] gap-2 items-center">
+                      <div key={m.id} className="grid grid-cols-[minmax(0,1fr)_80px_36px] gap-2 items-center">
                         <input
                           className={inputCls}
                           placeholder="Nome da métrica"
@@ -323,31 +355,15 @@ function TiposContent() {
                             metricas: p.metricas.map((x, j) => j === i ? { ...x, nome: e.target.value } : x),
                           }))}
                         />
-                        <input
-                          type="number"
+                        <NumericInput
                           className={inputCls + ' text-center'}
                           value={m.maxPontos}
-                          onChange={e => updateEditado(p => ({
+                          min={0}
+                          onChange={v => updateEditado(p => ({
                             ...p,
-                            metricas: p.metricas.map((x, j) => j === i ? { ...x, maxPontos: Number(e.target.value) || 0 } : x),
+                            metricas: p.metricas.map((x, j) => j === i ? { ...x, maxPontos: v } : x),
                           }))}
                         />
-                        <div className="flex justify-center">
-                          <button
-                            type="button"
-                            onClick={() => updateEditado(p => ({
-                              ...p,
-                              metricas: p.metricas.map((x, j) => j === i ? { ...x, entraNaMedia: !(x.entraNaMedia ?? true) } : x),
-                            }))}
-                            className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all border ${
-                              (m.entraNaMedia ?? true)
-                                ? 'bg-green-500/20 text-green-400 border-green-500/40 hover:bg-green-500/30'
-                                : 'bg-[#1a1a1e] text-gray-500 border-[#2a2a2e] hover:border-gray-500 hover:text-gray-300'
-                            }`}
-                          >
-                            {(m.entraNaMedia ?? true) ? 'Sim' : 'Não'}
-                          </button>
-                        </div>
                         <button
                           onClick={() => updateEditado(p => ({ ...p, metricas: p.metricas.filter((_, j) => j !== i) }))}
                           className="p-2 text-gray-600 hover:text-red-400 justify-self-center"
@@ -390,13 +406,13 @@ function TiposContent() {
                             descontos: p.descontos.map((x, j) => j === i ? { ...x, nome: e.target.value } : x),
                           }))}
                         />
-                        <input
-                          type="number"
+                        <NumericInput
                           className={inputCls + ' text-center'}
                           value={d.valor}
-                          onChange={e => updateEditado(p => ({
+                          min={0}
+                          onChange={v => updateEditado(p => ({
                             ...p,
-                            descontos: p.descontos.map((x, j) => j === i ? { ...x, valor: Number(e.target.value) || 0 } : x),
+                            descontos: p.descontos.map((x, j) => j === i ? { ...x, valor: v } : x),
                           }))}
                         />
                         <button
@@ -438,34 +454,36 @@ function TiposContent() {
                     </div>
                     {editando.faixas.map((f, i) => (
                       <div key={i} className="grid grid-cols-[1fr_1fr_1fr_36px] gap-2 items-center">
-                        <input
-                          type="number"
+                        <NumericInput
                           placeholder="Pts mín."
                           className={inputCls}
                           value={f.pontosMin}
-                          onChange={e => updateEditado(p => ({
+                          min={0}
+                          onChange={v => updateEditado(p => ({
                             ...p,
-                            faixas: p.faixas.map((x, j) => j === i ? { ...x, pontosMin: Number(e.target.value) || 0 } : x),
+                            faixas: p.faixas.map((x, j) => j === i ? { ...x, pontosMin: v } : x),
                           }))}
                         />
-                        <input
-                          type="number"
+                        <NumericInput
                           placeholder="Gerente R$"
                           className={inputCls}
                           value={f.valorGerente}
-                          onChange={e => updateEditado(p => ({
+                          min={0}
+                          decimals={2}
+                          onChange={v => updateEditado(p => ({
                             ...p,
-                            faixas: p.faixas.map((x, j) => j === i ? { ...x, valorGerente: Number(e.target.value) || 0 } : x),
+                            faixas: p.faixas.map((x, j) => j === i ? { ...x, valorGerente: v } : x),
                           }))}
                         />
-                        <input
-                          type="number"
+                        <NumericInput
                           placeholder="Func. R$"
                           className={inputCls}
                           value={f.valorFuncionario}
-                          onChange={e => updateEditado(p => ({
+                          min={0}
+                          decimals={2}
+                          onChange={v => updateEditado(p => ({
                             ...p,
-                            faixas: p.faixas.map((x, j) => j === i ? { ...x, valorFuncionario: Number(e.target.value) || 0 } : x),
+                            faixas: p.faixas.map((x, j) => j === i ? { ...x, valorFuncionario: v } : x),
                           }))}
                         />
                         <button

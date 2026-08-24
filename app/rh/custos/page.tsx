@@ -428,7 +428,7 @@ export default function CustosPage() {
                             <label className="text-xs text-gray-500 mb-0.5 block">Qtd.</label>
                             <input
                               type="number" min="1"
-                              value={taxaForm.quantidadeIdeal}
+                              value={taxaForm.quantidadeIdeal || ''}
                               onChange={(e) => setTaxaForm((f) => ({ ...f, quantidadeIdeal: e.target.value }))}
                               className="w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500"
                             />
@@ -437,7 +437,7 @@ export default function CustosPage() {
                             <label className="text-xs text-gray-500 mb-0.5 block">Dias/mês</label>
                             <input
                               type="number" min="1"
-                              value={taxaForm.diasPorMes}
+                              value={taxaForm.diasPorMes || ''}
                               onChange={(e) => setTaxaForm((f) => ({ ...f, diasPorMes: e.target.value }))}
                               className="w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500"
                             />
@@ -446,7 +446,7 @@ export default function CustosPage() {
                             <label className="text-xs text-gray-500 mb-0.5 block">Diária (R$)</label>
                             <input
                               type="number" min="0" step="0.01"
-                              value={taxaForm.valorDiaria}
+                              value={taxaForm.valorDiaria || ''}
                               onChange={(e) => setTaxaForm((f) => ({ ...f, valorDiaria: e.target.value }))}
                               className="w-full bg-[#1c1c1e] border border-[#2a2a2e] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500"
                             />
@@ -624,7 +624,7 @@ export default function CustosPage() {
                           step="0.01"
                           min="0.5"
                           max="2.0"
-                          value={editandoFap[loja.lojaId] ?? '1.0'}
+                          value={editandoFap[loja.lojaId] ?? '1.0' || ''}
                           onChange={(e) => setEditandoFap((f) => ({ ...f, [loja.lojaId]: e.target.value }))}
                           className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
                         />
@@ -644,7 +644,7 @@ export default function CustosPage() {
                         step="0.5"
                         min="0"
                         max="6"
-                        value={editandoRat[cargo.id] ?? '2.0'}
+                        value={editandoRat[cargo.id] ?? '2.0' || ''}
                         onChange={(e) => setEditandoRat((r) => ({ ...r, [cargo.id]: e.target.value }))}
                         className="w-full bg-[#0a0a0a] border border-[#2a2a2e] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
                       />

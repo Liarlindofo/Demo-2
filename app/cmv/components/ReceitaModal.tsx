@@ -193,7 +193,7 @@ export const ReceitaModal = ({
               <label className="text-xs text-gray-400 block mb-1.5">Rendimento *</label>
               <input
                 type="number"
-                value={rendimento}
+                value={rendimento || ''}
                 onChange={e => setRendimento(e.target.value)}
                 placeholder="1000"
                 className="w-full bg-[#2a2a2e] border border-[#374151] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors"

@@ -293,7 +293,7 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
             </label>
             <input
               type="number"
-              value={newPreco}
+              value={newPreco || ''}
               onChange={e => setNewPreco(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAdd()}
               placeholder="0,00"
@@ -470,7 +470,7 @@ export const IngredientsTab = ({ storeId }: IngredientsTabProps) => {
                   <div className="flex items-center gap-1.5">
                     <input
                       type="number"
-                      value={editPreco}
+                      value={editPreco || ''}
                       onChange={e => setEditPreco(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
                       placeholder="0,00"

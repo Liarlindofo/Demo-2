@@ -266,7 +266,7 @@ export default function NovoFuncionarioPage() {
                   step="0.5"
                   min="0"
                   max="3"
-                  value={novoCargoRat}
+                  value={novoCargoRat || ''}
                   onChange={(e) => setNovoCargoRat(e.target.value)}
                   className={inputCls}
                 />

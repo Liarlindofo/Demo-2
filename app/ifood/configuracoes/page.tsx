@@ -1086,7 +1086,7 @@ export default function IfoodConfiguracoesPage() {
                       type="number"
                       min={1}
                       max={1440}
-                      value={pauseCustom}
+                      value={pauseCustom || ''}
                       onChange={(e) => setPauseCustom(e.target.value)}
                       placeholder="minutos"
                       className="w-24 bg-[#0f0f10] border border-[#374151] text-white text-sm rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-orange-500/50"

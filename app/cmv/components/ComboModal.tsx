@@ -265,7 +265,7 @@ export const ComboModal = ({ combo, data, onClose, onSave, onDelete }: ComboModa
               </div>
               <input
                 type="number"
-                value={precoVenda}
+                value={precoVenda || ''}
                 onChange={e => setPrecoVenda(e.target.value)}
                 placeholder="0,00"
                 min="0"

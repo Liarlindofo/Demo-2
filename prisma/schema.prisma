@@ -1790,6 +1790,8 @@ model TipoAvaliacao {
   lojaNome     String?
   nome         String
   modoCalculo  String   @default("PADRAO") // PADRAO | MEDIA
+  /// Se false, este tipo não entra no cálculo de média da Central
+  entraNaMedia Boolean  @default(true)
   metricas     Json
   descontos    Json
   faixas       Json

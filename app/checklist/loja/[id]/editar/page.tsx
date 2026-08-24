@@ -174,7 +174,7 @@ export default function EditStorePage() {
                 </label>
                 <input
                   type="number"
-                  value={formData.displayOrder}
+                  value={formData.displayOrder || ''}
                   onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) || 0 })}
                   className="w-full px-4 py-3 bg-[#0f0f10] border border-[#374151] rounded-xl text-white focus:ring-2 focus:ring-[#001F05] focus:border-transparent"
                   placeholder="0"

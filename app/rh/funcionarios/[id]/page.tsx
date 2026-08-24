@@ -797,11 +797,11 @@ export default function FuncionarioDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={labelCls}>Data de início das férias</label>
-                  <input type="date" value={dataGozoFerias} onChange={e => setDataGozoFerias(e.target.value)} className={inputCls} />
+                  <input type="date" value={dataGozoFerias || ''} onChange={e => setDataGozoFerias(e.target.value)} className={inputCls} />
                 </div>
                 <div>
                   <label className={labelCls}>Quantos dias de férias?</label>
-                  <input type="number" min={0} max={30} value={diasFeriasGozados}
+                  <input type="number" min={0} max={30} value={diasFeriasGozados || ''}
                     onChange={e => setDiasFeriasGozados(Number(e.target.value))} className={inputCls} />
                 </div>
               </div>

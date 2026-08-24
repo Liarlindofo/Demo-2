@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       ...(tipoAvaliacaoId ? { tipoAvaliacaoId } : {}),
     },
     include: {
-      tipoAvaliacao: { select: { nome: true, modoCalculo: true, lojaId: true } },
+      tipoAvaliacao: { select: { nome: true, modoCalculo: true, lojaId: true, entraNaMedia: true } },
     },
     orderBy: [{ ano: 'desc' }, { trimestre: 'desc' }, { lojaNome: 'asc' }],
   });

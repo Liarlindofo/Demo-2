@@ -25,6 +25,7 @@ import {
   Lock,
   DollarSign,
 } from 'lucide-react';
+import { NumericInput } from '@/components/ui/numeric-input';
 
 // ── tipos ───────────────────────────────────────────────────────────────────
 
@@ -33,7 +34,6 @@ interface Metrica {
   nome: string;
   maxPontos: number;
   pontos: Record<string, number | null>;
-  entraNaMedia?: boolean;
 }
 
 interface Desconto {
@@ -61,7 +61,7 @@ interface Trimestre {
   trimestre: number;
   dados: Dados;
   updatedAt: string;
-  tipoAvaliacao?: { nome: string; modoCalculo: string; lojaId: string | null };
+  tipoAvaliacao?: { nome: string; modoCalculo: string; lojaId: string | null; entraNaMedia: boolean };
 }
 
 interface Loja { id: string; nome: string; }
@@ -72,6 +72,7 @@ interface TipoAvaliacao {
   lojaId: string | null;
   lojaNome: string | null;
   modoCalculo: 'PADRAO' | 'MEDIA';
+  entraNaMedia: boolean;
   metricas: unknown;
   descontos: unknown;
   faixas: FaixaTemplate[];
@@ -424,10 +425,7 @@ function BonificacaoContent() {
 
   // ── cálculos do modo MEDIA ────────────────────────────────────────────────
 
-  function calcularLiquidoTrimestre(t: Trimestre, paraMedia = false): number {
-    const metricas = paraMedia
-      ? t.dados.metricas.filter(m => m.entraNaMedia !== false)
-      : t.dados.metricas;
+  function calcularLiquidoTrimestre(t: Trimestre): number {
     const ano = t.ano;
     const tri = t.trimestre;
     const mesesT = MESES_POR_TRIMESTRE[tri];
@@ -436,7 +434,7 @@ function BonificacaoContent() {
       return (tri === 4 && (mes === 1 || mes === 2)) ? ano + 1 : ano;
     }
 
-    const bruto = metricas.reduce((sum, m) =>
+    const bruto = t.dados.metricas.reduce((sum, m) =>
       sum + mesesT.reduce((s, { mes }) => {
         const v = m.pontos[mesKey(mes, anoDoMesT(mes))];
         return s + (typeof v === 'number' ? v : 0);
@@ -449,7 +447,9 @@ function BonificacaoContent() {
     return trimestres.filter(t =>
       resolveModoCalculo(t.dados) !== 'MEDIA' &&
       !(t.tipoAvaliacao?.modoCalculo === 'MEDIA') &&
-      !t.lojaNome.toLowerCase().includes('central'),
+      !t.lojaNome.toLowerCase().includes('central') &&
+      // Tipos com entraNaMedia=false são excluídos da média da Central
+      (t.tipoAvaliacao?.entraNaMedia !== false),
     );
   }
 
@@ -808,38 +808,32 @@ function BonificacaoContent() {
                         const total = totalMetrica(m);
                         const maxTriTrimestre = m.maxPontos * 3;
                         const pct = maxTriTrimestre > 0 ? (total / maxTriTrimestre) * 100 : 0;
-                        const foraMedia = m.entraNaMedia === false;
                         return (
                           <tr key={m.id} className={`border-b border-[#2a2a2e] last:border-0 ${idx % 2 === 0 ? '' : 'bg-[#0d0d0f]'}`}>
                             {/* Nome */}
                             <td className="px-4 py-2.5">
-                              <div className="flex items-center gap-2">
-                                {editandoMetrica === m.id ? (
-                                  <div className="flex items-center gap-1 flex-1">
-                                    <input
-                                      autoFocus
-                                      className="flex-1 bg-[#0a0a0a] border border-amber-500/40 rounded-lg px-2 py-1 text-sm text-white focus:outline-none"
-                                      value={editNome}
-                                      onChange={e => setEditNome(e.target.value)}
-                                      onKeyDown={e => { if (e.key === 'Enter') confirmarNomeMetrica(); if (e.key === 'Escape') setEditandoMetrica(null); }}
-                                    />
-                                    <button onClick={confirmarNomeMetrica} className="text-green-400 hover:text-green-300"><Check className="w-4 h-4" /></button>
-                                    <button onClick={() => setEditandoMetrica(null)} className="text-gray-500 hover:text-gray-300"><X className="w-4 h-4" /></button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    className="flex items-center gap-1.5 group text-left flex-1"
-                                    onClick={() => { if (!isFechado) { setEditandoMetrica(m.id); setEditNome(m.nome); } }}
-                                    disabled={isFechado}
-                                  >
-                                    <span className="text-gray-200 group-hover:text-white transition-colors">{m.nome}</span>
-                                    {!isFechado && <Pencil className="w-3 h-3 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />}
-                                  </button>
-                                )}
-                                {foraMedia && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-700/50 text-gray-500 shrink-0">fora da média</span>
-                                )}
-                              </div>
+                              {editandoMetrica === m.id ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    autoFocus
+                                    className="flex-1 bg-[#0a0a0a] border border-amber-500/40 rounded-lg px-2 py-1 text-sm text-white focus:outline-none"
+                                    value={editNome}
+                                    onChange={e => setEditNome(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') confirmarNomeMetrica(); if (e.key === 'Escape') setEditandoMetrica(null); }}
+                                  />
+                                  <button onClick={confirmarNomeMetrica} className="text-green-400 hover:text-green-300"><Check className="w-4 h-4" /></button>
+                                  <button onClick={() => setEditandoMetrica(null)} className="text-gray-500 hover:text-gray-300"><X className="w-4 h-4" /></button>
+                                </div>
+                              ) : (
+                                <button
+                                  className="flex items-center gap-1.5 group text-left w-full"
+                                  onClick={() => { if (!isFechado) { setEditandoMetrica(m.id); setEditNome(m.nome); } }}
+                                  disabled={isFechado}
+                                >
+                                  <span className="text-gray-200 group-hover:text-white transition-colors">{m.nome}</span>
+                                  {!isFechado && <Pencil className="w-3 h-3 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />}
+                                </button>
+                              )}
                             </td>
                             {/* Max */}
                             <td className="px-3 py-2.5 text-center">
@@ -937,19 +931,18 @@ function BonificacaoContent() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-500 shrink-0">R$</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          disabled={isFechado}
-                          value={trimestre.dados.descontoReais?.valor ?? 0}
-                          onChange={e => updateDescontoReais(
-                            Number(e.target.value),
-                            trimestre.dados.descontoReais?.observacao ?? '',
-                          )}
-                          className={inputCls}
-                          placeholder="0,00"
-                        />
+                      <NumericInput
+                        min={0}
+                        decimals={2}
+                        disabled={isFechado}
+                        value={trimestre.dados.descontoReais?.valor ?? 0}
+                        onChange={v => updateDescontoReais(
+                          v,
+                          trimestre.dados.descontoReais?.observacao ?? '',
+                        )}
+                        className={inputCls}
+                        placeholder="0,00"
+                      />
                       </div>
                       <input
                         type="text"

@@ -940,7 +940,7 @@ export default function TarefasTemplatesPage() {
                     <label className={labelCls}>Valor mínimo</label>
                     <input
                       type="number"
-                      value={form.ia_min}
+                      value={form.ia_min || ''}
                       onChange={(e) => setField('ia_min', e.target.value)}
                       placeholder="300"
                       className={inputCls}
@@ -950,7 +950,7 @@ export default function TarefasTemplatesPage() {
                     <label className={labelCls}>Valor máximo</label>
                     <input
                       type="number"
-                      value={form.ia_max}
+                      value={form.ia_max || ''}
                       onChange={(e) => setField('ia_max', e.target.value)}
                       placeholder="350"
                       className={inputCls}

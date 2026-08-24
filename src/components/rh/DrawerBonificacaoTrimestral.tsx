@@ -125,7 +125,7 @@ export default function DrawerBonificacaoTrimestral({
               type="number"
               min={2000}
               max={2100}
-              value={ano}
+              value={ano || ''}
               onChange={(e) => setAno(Number(e.target.value))}
               className={inputCls}
             />
