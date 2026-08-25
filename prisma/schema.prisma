@@ -66,6 +66,7 @@ model User {
   rhCargos               RhCargo[]
   rhFuncionarios         RhFuncionario[]
   rhIaConversas          RhIaConversa[]
+  chatConversas          ChatConversa[]
   rhHistoricoFuncionarios RhHistoricoFuncionario[]
   rhQuadrosIdeais        RhQuadroIdeal[]
   rhDocumentos           RhDocumentoFuncionario[]
@@ -1142,6 +1143,32 @@ model RhIaMensagem {
 
   @@index([conversaId])
   @@map("rh_ia_mensagens")
+}
+
+model ChatConversa {
+  id        String         @id @default(cuid())
+  userId    String
+  titulo    String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mensagens ChatMensagem[]
+
+  @@index([userId])
+  @@map("chat_conversas")
+}
+
+model ChatMensagem {
+  id         String       @id @default(cuid())
+  conversaId String
+  role       String
+  content    String       @db.Text
+  isError    Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+  conversa   ChatConversa @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+
+  @@index([conversaId])
+  @@map("chat_mensagens")
 }
 
 model RhDocumentoFuncionario {
