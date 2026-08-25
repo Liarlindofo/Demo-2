@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getRiderSession } from '@/lib/rider-auth';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -125,17 +125,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
   });
 
-  // Verificar se ambos os docs foram enviados
+  // Verificar se ambos os docs foram enviados (re-leitura após o upsert para garantir consistência)
   const allDocs = await prisma.riderDocument.findMany({ where: { periodId } });
   const hasNf = allDocs.some((d) => d.documentType === 'nf');
   const hasBoleto = allDocs.some((d) => d.documentType === 'boleto');
   const bothPresent = hasNf && hasBoleto;
+
+  // Re-lê o status atual da quinzena (pode ter mudado desde o início da requisição)
+  const currentPeriod = await prisma.riderPaymentPeriod.findUnique({ where: { id: periodId } });
+  const currentStatus = currentPeriod?.status ?? period.status;
+
   // Notifica na 1ª vez (pending → received) e também se o motoboy reenviar NF/boleto em análise
   const shouldNotify =
     bothPresent &&
-    (period.status === 'pending_documents' || period.status === 'documents_received');
+    (currentStatus === 'pending_documents' || currentStatus === 'documents_received');
 
-  if (bothPresent && period.status === 'pending_documents') {
+  if (bothPresent && currentStatus === 'pending_documents') {
     await prisma.riderPaymentPeriod.update({
       where: { id: periodId },
       data: { status: 'documents_received' },
@@ -143,10 +148,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   if (shouldNotify) {
-    // Enviar e-mail de notificação ao responsável de pagamentos (fire and forget)
-    notificarResponsavelPagamento(session.userId, period).catch((err) =>
-      console.error('[upload rider doc] Falha ao notificar responsável:', err),
-    );
+    // Captura valores necessários antes do after() para evitar closure em variáveis mutáveis
+    const userIdParaEmail = session.userId;
+    const periodParaEmail = { ...period };
+    // after() garante que o e-mail seja enviado APÓS a resposta HTTP,
+    // sem ser cortado pelo encerramento da função serverless na Vercel
+    after(async () => {
+      try {
+        await notificarResponsavelPagamento(userIdParaEmail, periodParaEmail);
+      } catch (err) {
+        console.error('[upload rider doc] Falha ao notificar responsável:', err);
+      }
+    });
   }
 
   return NextResponse.json({ ok: true, storagePath });
