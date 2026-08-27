@@ -147,7 +147,8 @@ export const WhatsAppBotModel = {
         create: {
           userId,
           slot,
-          ...data
+          provider: 'baileys',
+          ...data,
         }
       });
     } catch (error) {

@@ -245,9 +245,8 @@ model WhatsAppBot {
   iaPrompt        String?    @db.Text
   /// Se true, grava IN/OUT desta sessão em WhatsAppMessage (revisão de reclamações).
   monitorarReclamacoes Boolean @default(false)
-  /// Motor de conexão: 'wpp' (WPPConnect, default) | 'baileys'.
-  /// Migração manual por slot — não muda comportamento até UPDATE explícito.
-  provider        String     @default("wpp")
+  /// Motor de conexão: 'baileys' (default para novas sessões) | 'wpp' (legado).
+  provider        String     @default("baileys")
   qrCode          String?    @db.Text
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt

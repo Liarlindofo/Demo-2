@@ -72,6 +72,7 @@ export async function POST() {
       iaPrompt: null,
       monitorarReclamacoes: false,
       isConnected: false,
+      provider: 'baileys',
     },
   });
 

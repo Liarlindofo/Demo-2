@@ -30,8 +30,9 @@ export function baileysSessionProcessName(userId, slot) {
 }
 
 export function resolveProvider(bot) {
-  const p = String(bot?.provider || 'wpp').trim().toLowerCase();
-  return p === 'baileys' ? 'baileys' : 'wpp';
+  // Novas sessões → baileys. Só fica em WPP se provider estiver explicitamente 'wpp'.
+  const p = String(bot?.provider || 'baileys').trim().toLowerCase();
+  return p === 'wpp' ? 'wpp' : 'baileys';
 }
 
 /**
@@ -90,8 +91,8 @@ export async function startWhatsappWorker(userId) {
 
 /**
  * Sobe worker PM2 para qualquer slot, usando iaAtiva + provider persistidos no banco.
- * provider='wpp' (default): workers/whatsapp-worker.js — comportamento idêntico ao anterior.
- * provider='baileys': workers/whatsapp-baileys-worker.js
+ * provider='baileys' (default para novas): workers/whatsapp-baileys-worker.js
+ * provider='wpp' (legado): workers/whatsapp-worker.js
  */
 export async function startSessionWorker(userId, slot = 1) {
   if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
