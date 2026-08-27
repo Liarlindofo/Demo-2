@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import ToolProtection from '@/components/auth/ToolProtection';
-import { SystemTool } from '@/types/admin';
+import BonificacaoProtection from '@/components/auth/BonificacaoProtection';
 import {
   type FaixaTemplate,
   getFaixaFromDados,
@@ -491,7 +490,7 @@ function BonificacaoContent() {
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <button
-            onClick={() => router.push('/dashboard')}
+            onClick={() => router.push('/rh')}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:text-white hover:bg-[#1c1c1e] transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -1177,8 +1176,8 @@ function BonificacaoContent() {
 
 export default function BonificacaoPage() {
   return (
-    <ToolProtection tool={SystemTool.BONIFICACAO} toolName="Bonificação">
+    <BonificacaoProtection>
       <BonificacaoContent />
-    </ToolProtection>
+    </BonificacaoProtection>
   );
 }

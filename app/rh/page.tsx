@@ -21,6 +21,7 @@ import {
   Bike,
   Shield,
   Cake,
+  Trophy,
 } from 'lucide-react';
 
 interface Funcionario {
@@ -133,6 +134,14 @@ const navItems = [
     description: 'Folha de pagamento e encargos',
     color: 'text-green-400',
     bg: 'bg-green-500/10',
+  },
+  {
+    href: '/bonificacao',
+    icon: Trophy,
+    label: 'Plano de Bonificação',
+    description: 'Metas, faixas e avaliação por loja',
+    color: 'text-yellow-400',
+    bg: 'bg-yellow-500/10',
   },
   {
     href: '/rh/escala',

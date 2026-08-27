@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import ToolProtection from '@/components/auth/ToolProtection';
-import { SystemTool } from '@/types/admin';
+import BonificacaoProtection from '@/components/auth/BonificacaoProtection';
 import {
   ArrowLeft,
   Plus,
@@ -774,7 +773,7 @@ function TiposContent() {
 
 export default function TiposAvaliacaoPage() {
   return (
-    <ToolProtection tool={SystemTool.BONIFICACAO} toolName="Bonificação">
+    <BonificacaoProtection>
       <Suspense fallback={
         <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
           <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
@@ -782,6 +781,6 @@ export default function TiposAvaliacaoPage() {
       }>
         <TiposContent />
       </Suspense>
-    </ToolProtection>
+    </BonificacaoProtection>
   );
 }
