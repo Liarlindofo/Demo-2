@@ -17,6 +17,115 @@ function isGroupJid(jid) {
   return String(jid || '').includes('@g.us');
 }
 
+function isLidJid(jid) {
+  return String(jid || '').endsWith('@lid');
+}
+
+function isPhoneWhatsappJid(jid) {
+  const s = String(jid || '');
+  return s.endsWith('@s.whatsapp.net') || s.endsWith('@c.us');
+}
+
+function pickPhoneJid(...candidates) {
+  for (const jid of candidates) {
+    if (isPhoneWhatsappJid(jid)) return jid;
+  }
+  return null;
+}
+
+/**
+ * Extrai JIDs alternativos expostos pelo Baileys (remoteJidAlt / participantAlt).
+ * @param {import('@whiskeysockets/baileys').WAMessage} baileysMsg
+ * @param {object} key
+ */
+function extractAltJids(baileysMsg, key) {
+  return {
+    remoteJidAlt:
+      key.remoteJidAlt ??
+      baileysMsg?.remoteJidAlt ??
+      baileysMsg?.key?.remoteJidAlt ??
+      null,
+    participantAlt:
+      key.participantAlt ??
+      baileysMsg?.participantAlt ??
+      baileysMsg?.key?.participantAlt ??
+      null,
+  };
+}
+
+/**
+ * Resolve @lid → @s.whatsapp.net quando o Baileys fornece jid alternativo.
+ * @returns {{ contactJid: string, chatJid: string, author: string|null, hadLid: boolean, resolvedFromAlt: boolean, warn?: string }}
+ */
+function resolveLidJids({
+  remoteJid,
+  remoteJidAlt,
+  participant,
+  participantAlt,
+  group,
+}) {
+  const hadLid = isLidJid(remoteJid) || (group && isLidJid(participant));
+  let resolvedFromAlt = false;
+  let warn;
+
+  if (group) {
+    const chatJid = remoteJid;
+    let author = participant || null;
+
+    if (isLidJid(participant)) {
+      const alt = pickPhoneJid(participantAlt);
+      if (alt) {
+        author = alt;
+        resolvedFromAlt = true;
+      } else {
+        warn = `[BAILEYS normalize] Participante @lid sem participantAlt resolvido: ${participant}`;
+      }
+    }
+
+    return {
+      contactJid: author || chatJid,
+      chatJid,
+      author,
+      hadLid,
+      resolvedFromAlt,
+      warn,
+    };
+  }
+
+  // 1:1 — remoteJid @lid deve ser substituído pelo telefone real quando disponível
+  if (isLidJid(remoteJid)) {
+    const alt = pickPhoneJid(remoteJidAlt);
+    if (alt) {
+      return {
+        contactJid: alt,
+        chatJid: alt,
+        author: null,
+        hadLid: true,
+        resolvedFromAlt: true,
+        warn,
+      };
+    }
+    warn = `[BAILEYS normalize] Contato @lid sem remoteJidAlt resolvido: ${remoteJid}`;
+    return {
+      contactJid: remoteJid,
+      chatJid: remoteJid,
+      author: null,
+      hadLid: true,
+      resolvedFromAlt: false,
+      warn,
+    };
+  }
+
+  return {
+    contactJid: remoteJid,
+    chatJid: remoteJid,
+    author: null,
+    hadLid,
+    resolvedFromAlt,
+    warn,
+  };
+}
+
 function isStatusJid(jid) {
   const s = String(jid || '');
   return s.includes('status@broadcast') || s.includes('@broadcast');
@@ -93,43 +202,58 @@ export function normalizeBaileysMessage(baileysMsg, opts = {}) {
   const remoteJid = key.remoteJid || '';
   const fromMe = Boolean(key.fromMe);
   const participant = key.participant || baileysMsg?.participant || null;
+  const { remoteJidAlt, participantAlt } = extractAltJids(baileysMsg, key);
   const group = isGroupJid(remoteJid);
   const { body, caption, type } = extractText(baileysMsg);
   const pushName = pushNameFrom(baileysMsg);
 
+  const lid = resolveLidJids({
+    remoteJid,
+    remoteJidAlt,
+    participant,
+    participantAlt,
+    group,
+  });
+
+  if (lid.warn) {
+    // eslint-disable-next-line no-console
+    console.warn(lid.warn);
+  }
+
+  const { contactJid, chatJid, author, hadLid, resolvedFromAlt } = lid;
+
   // WPPConnect: inbound 1:1 → from = contato; outbound → from = nosso número / chat
-  // Em grupo: from = grupo, author = participante
-  let from = remoteJid;
+  // Em grupo: from = grupo, author = participante (com LID resolvido quando possível)
+  let from = group ? chatJid : contactJid;
   let to = opts.ourJid || '';
   if (fromMe && !group) {
-    // Eco outbound: WPP costuma ter from = nosso e to/chatId = destino
-    from = opts.ourJid || remoteJid;
-    to = remoteJid;
+    from = opts.ourJid || contactJid;
+    to = chatJid;
   } else if (!fromMe && !group) {
-    from = remoteJid;
+    from = contactJid;
     to = opts.ourJid || '';
   }
 
-  const author = group ? participant : null;
   const ts =
     typeof baileysMsg.messageTimestamp === 'number'
       ? baileysMsg.messageTimestamp
       : Number(baileysMsg.messageTimestamp) || Math.floor(Date.now() / 1000);
 
+  const idRemote = group ? remoteJid : chatJid;
   const idSerialized = key.id
-    ? `${fromMe ? 'true' : 'false'}_${remoteJid}_${key.id}`
+    ? `${fromMe ? 'true' : 'false'}_${idRemote}_${key.id}`
     : null;
 
   const senderPn = group
-    ? participant
+    ? (author || participant)
     : fromMe
       ? opts.ourJid || null
-      : remoteJid;
+      : contactJid;
 
   return {
     from,
     to,
-    chatId: remoteJid,
+    chatId: chatJid,
     fromMe,
     type,
     body: body || '',
@@ -140,7 +264,7 @@ export function normalizeBaileysMessage(baileysMsg, opts = {}) {
     isStory: false,
     author,
     sender: {
-      id: senderPn || remoteJid,
+      id: senderPn || contactJid,
       pushname: pushName,
       name: pushName,
       formattedName: pushName,
@@ -148,16 +272,22 @@ export function normalizeBaileysMessage(baileysMsg, opts = {}) {
     senderPn: senderPn || null,
     notifyName: pushName,
     timestamp: ts,
+    hadLid,
+    resolvedFromAlt,
     id: {
       id: key.id || null,
       _serialized: idSerialized,
       fromMe,
-      remote: remoteJid,
+      remote: idRemote,
     },
     // metadados extras (não quebram messageArchive)
     _baileys: {
       remoteJid,
+      remoteJidAlt,
       participant,
+      participantAlt,
+      hadLid,
+      resolvedFromAlt,
       server: jidServer(remoteJid),
     },
   };

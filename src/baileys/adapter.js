@@ -65,6 +65,8 @@ function logShapeCompare(normalized, rawBaileys) {
   const payload = {
     at: new Date().toISOString(),
     note: 'Baileys normalizado vs shape esperado por messageArchive / onAnyMessage',
+    hadLid: Boolean(normalized.hadLid ?? normalized._baileys?.hadLid),
+    resolvedFromAlt: Boolean(normalized.resolvedFromAlt ?? normalized._baileys?.resolvedFromAlt),
     normalizedWppShape: {
       from: normalized.from,
       body: normalized.body,
@@ -83,6 +85,10 @@ function logShapeCompare(normalized, rawBaileys) {
     },
     messageArchiveExpectedFields: expected,
     baileysRawKey: rawBaileys?.key || null,
+    baileysRawAlt: {
+      remoteJidAlt: rawBaileys?.key?.remoteJidAlt ?? rawBaileys?.remoteJidAlt ?? null,
+      participantAlt: rawBaileys?.key?.participantAlt ?? rawBaileys?.participantAlt ?? null,
+    },
   };
 
   // eslint-disable-next-line no-console
