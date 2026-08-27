@@ -22,6 +22,10 @@ import {
   type FaixaTemplate,
   defaultTipoPayload,
   normalizeFaixas,
+  sumMetricasMaxPontos,
+  maxPontosTrimestre,
+  isTipoCoordenador,
+  suggestFaixas,
 } from '@/lib/bonificacao-defaults';
 import { NumericInput } from '@/components/ui/numeric-input';
 
@@ -121,16 +125,23 @@ function TiposContent() {
           entraNaMedia: copiarDe.entraNaMedia ?? true,
           metricas: copiarDe.metricas.map(m => ({ ...m, id: newId() })),
           descontos: copiarDe.descontos.map(d => ({ ...d, id: newId() })),
-          faixas: copiarDe.faixas.map((f, i) => ({ ...f, faixa: i + 1 })),
+          faixas: suggestFaixas(
+            copiarDe.metricas,
+            isTipoCoordenador(`${copiarDe.nome} (cópia)`),
+            copiarDe.faixas,
+          ),
         }
-      : {
-          nome: '',
-          lojaId: lojaAtiva,
-          lojaNome: loja?.nome ?? null,
-          modoCalculo: 'PADRAO' as ModoCalculo,
-          entraNaMedia: true,
-          ...defaultTipoPayload('PADRAO'),
-        };
+      : (() => {
+          const payload = defaultTipoPayload('PADRAO');
+          return {
+            nome: '',
+            lojaId: lojaAtiva,
+            lojaNome: loja?.nome ?? null,
+            modoCalculo: 'PADRAO' as ModoCalculo,
+            entraNaMedia: true,
+            ...payload,
+          };
+        })();
     setEditando({ id: '', ...base });
     setCriando(true);
     setErro('');
@@ -237,7 +248,34 @@ function TiposContent() {
     setEditando(prev => (prev ? updater(prev) : prev));
   }
 
+  function aplicarSugestaoFaixas(tipo: TipoAvaliacao): TipoAvaliacao {
+    return {
+      ...tipo,
+      faixas: suggestFaixas(
+        tipo.metricas,
+        isTipoCoordenador(tipo.nome),
+        tipo.faixas,
+      ),
+    };
+  }
+
   const lojaNome = lojas.find(l => l.id === lojaAtiva)?.nome ?? '';
+  const totalPontosMetricas = editando ? sumMetricasMaxPontos(editando.metricas) : 0;
+  const totalPontosTrimestre = editando ? maxPontosTrimestre(editando.metricas) : 0;
+  const isCoordenador = editando ? isTipoCoordenador(editando.nome) : false;
+
+  useEffect(() => {
+    if (!criando || !editando || totalPontosTrimestre <= 0) return;
+    const suggested = suggestFaixas(
+      editando.metricas,
+      isTipoCoordenador(editando.nome),
+      editando.faixas,
+    );
+    const samePontos = editando.faixas.length === suggested.length
+      && editando.faixas.every((f, i) => f.pontosMin === suggested[i].pontosMin);
+    if (samePontos) return;
+    setEditando(prev => (prev ? { ...prev, faixas: suggested } : prev));
+  }, [criando, editando, totalPontosTrimestre]);
 
   return (
     <>
@@ -439,6 +477,19 @@ function TiposContent() {
                         </button>
                       </div>
                     ))}
+                    {editando.metricas.length > 0 && (
+                      <div className="mt-3 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs text-amber-300/90 font-medium">Total máximo de pontos</p>
+                          <p className="text-sm text-white mt-0.5">
+                            <span className="font-semibold text-amber-400">{totalPontosMetricas} pts</span>
+                            <span className="text-gray-500"> por mês · </span>
+                            <span className="font-semibold text-amber-400">{totalPontosTrimestre} pts</span>
+                            <span className="text-gray-500"> no trimestre (100%)</span>
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -495,32 +546,56 @@ function TiposContent() {
 
                 {/* Faixas */}
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs text-gray-500 uppercase tracking-wider">Faixas de bonificação</label>
-                    <button
-                      onClick={() => updateEditado(p => ({
-                        ...p,
-                        faixas: [...p.faixas, {
-                          faixa: p.faixas.length + 1,
-                          pontosMin: 0,
-                          valorGerente: 0,
-                          valorFuncionario: 0,
-                        }],
-                      }))}
-                      className="text-xs text-amber-400 hover:text-amber-300"
-                    >
-                      + Adicionar
-                    </button>
+                  <div className="flex items-center justify-between mb-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase tracking-wider">Faixas de bonificação</label>
+                      {totalPontosTrimestre > 0 && (
+                        <p className="text-[11px] text-gray-600 mt-0.5">
+                          Faixa 5 = {totalPontosTrimestre} pts (100% do trimestre)
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => updateEditado(p => aplicarSugestaoFaixas(p))}
+                        disabled={totalPontosTrimestre <= 0}
+                        className="text-xs text-gray-400 hover:text-amber-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Sugerir 5 faixas
+                      </button>
+                      <button
+                        onClick={() => updateEditado(p => ({
+                          ...p,
+                          faixas: [...p.faixas, {
+                            faixa: p.faixas.length + 1,
+                            pontosMin: 0,
+                            valorGerente: 0,
+                            valorFuncionario: 0,
+                            ...(isCoordenador ? { valorCoordenador: 0 } : {}),
+                          }],
+                        }))}
+                        className="text-xs text-amber-400 hover:text-amber-300"
+                      >
+                        + Adicionar
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <div className="grid grid-cols-[1fr_1fr_1fr_36px] gap-2 px-1">
+                    <div className={`grid ${isCoordenador ? 'grid-cols-[1fr_1fr_36px]' : 'grid-cols-[1fr_1fr_1fr_36px]'} gap-2 px-1`}>
                       <span className="text-[10px] text-gray-600 uppercase">Pts mínimos</span>
-                      <span className="text-[10px] text-gray-600 uppercase">Gerente (R$)</span>
-                      <span className="text-[10px] text-gray-600 uppercase">Funcionário (R$)</span>
+                      {isCoordenador ? (
+                        <span className="text-[10px] text-gray-600 uppercase">Coordenador (R$)</span>
+                      ) : (
+                        <>
+                          <span className="text-[10px] text-gray-600 uppercase">Gerente (R$)</span>
+                          <span className="text-[10px] text-gray-600 uppercase">Funcionário (R$)</span>
+                        </>
+                      )}
                       <span />
                     </div>
                     {editando.faixas.map((f, i) => (
-                      <div key={i} className="grid grid-cols-[1fr_1fr_1fr_36px] gap-2 items-center">
+                      <div key={i} className={`grid ${isCoordenador ? 'grid-cols-[1fr_1fr_36px]' : 'grid-cols-[1fr_1fr_1fr_36px]'} gap-2 items-center`}>
                         <NumericInput
                           placeholder="Pts mín."
                           className={inputCls}
@@ -531,28 +606,49 @@ function TiposContent() {
                             faixas: p.faixas.map((x, j) => j === i ? { ...x, pontosMin: v } : x),
                           }))}
                         />
-                        <NumericInput
-                          placeholder="Gerente R$"
-                          className={inputCls}
-                          value={f.valorGerente}
-                          min={0}
-                          decimals={2}
-                          onChange={v => updateEditado(p => ({
-                            ...p,
-                            faixas: p.faixas.map((x, j) => j === i ? { ...x, valorGerente: v } : x),
-                          }))}
-                        />
-                        <NumericInput
-                          placeholder="Func. R$"
-                          className={inputCls}
-                          value={f.valorFuncionario}
-                          min={0}
-                          decimals={2}
-                          onChange={v => updateEditado(p => ({
-                            ...p,
-                            faixas: p.faixas.map((x, j) => j === i ? { ...x, valorFuncionario: v } : x),
-                          }))}
-                        />
+                        {isCoordenador ? (
+                          <NumericInput
+                            placeholder="Coord. R$"
+                            className={inputCls}
+                            value={f.valorCoordenador ?? f.valorGerente ?? 0}
+                            min={0}
+                            decimals={2}
+                            onChange={v => updateEditado(p => ({
+                              ...p,
+                              faixas: p.faixas.map((x, j) => j === i ? {
+                                ...x,
+                                valorCoordenador: v,
+                                valorGerente: 0,
+                                valorFuncionario: 0,
+                              } : x),
+                            }))}
+                          />
+                        ) : (
+                          <>
+                            <NumericInput
+                              placeholder="Gerente R$"
+                              className={inputCls}
+                              value={f.valorGerente}
+                              min={0}
+                              decimals={2}
+                              onChange={v => updateEditado(p => ({
+                                ...p,
+                                faixas: p.faixas.map((x, j) => j === i ? { ...x, valorGerente: v } : x),
+                              }))}
+                            />
+                            <NumericInput
+                              placeholder="Func. R$"
+                              className={inputCls}
+                              value={f.valorFuncionario}
+                              min={0}
+                              decimals={2}
+                              onChange={v => updateEditado(p => ({
+                                ...p,
+                                faixas: p.faixas.map((x, j) => j === i ? { ...x, valorFuncionario: v } : x),
+                              }))}
+                            />
+                          </>
+                        )}
                         <button
                           onClick={() => updateEditado(p => ({ ...p, faixas: p.faixas.filter((_, j) => j !== i) }))}
                           className="p-2 text-gray-600 hover:text-red-400 justify-self-end"

@@ -11,6 +11,8 @@ import {
   resolveFaixasFromDados,
   normalizeFaixas,
   DEFAULT_FAIXAS,
+  isTipoCoordenador,
+  valorBonificacaoCoordenador,
 } from '@/lib/bonificacao-defaults';
 import {
   ArrowLeft,
@@ -412,6 +414,7 @@ function BonificacaoContent() {
 
   const tipoAtivo = tipos.find(t => t.id === tipoSelecionadoId);
   const isMediaMode = tipoAtivo?.modoCalculo === 'MEDIA';
+  const isCoordenadorMode = isTipoCoordenador(tipoAtivo?.nome ?? trimestre?.tipoAvaliacao?.nome ?? '');
   const isFechado = trimestre?.dados.fechado === true;
 
   const faixasAtivas = trimestre
@@ -465,8 +468,12 @@ function BonificacaoContent() {
     return [...map.values()];
   }
 
-  function mediaDoGrupo(lojas: { faixa: FaixaTemplate | null }[]) {
+  function mediaDoGrupo(lojas: { faixa: FaixaTemplate | null }[], coordenador = false) {
     if (lojas.length === 0) return null;
+    if (coordenador) {
+      const soma = lojas.reduce((acc, d) => acc + valorBonificacaoCoordenador(d.faixa ?? { faixa: 0, pontosMin: 0, valorGerente: 0, valorFuncionario: 0 }), 0);
+      return { coordenador: soma / lojas.length };
+    }
     const soma = lojas.reduce((acc, d) => ({
       gerente: acc.gerente + (d.faixa?.valorGerente ?? 0),
       funcionario: acc.funcionario + (d.faixa?.valorFuncionario ?? 0),
@@ -727,7 +734,8 @@ function BonificacaoContent() {
                       Nenhuma loja possui planos para este trimestre ainda.
                     </p>
                   ) : grupos.map(grupo => {
-                    const media = mediaDoGrupo(grupo.lojas);
+                    const coordenadorGrupo = isTipoCoordenador(grupo.tipoNome);
+                    const media = mediaDoGrupo(grupo.lojas, coordenadorGrupo);
                     return (
                       <div key={grupo.tipoNome} className="bg-[#111113] border border-[#2a2a2e] rounded-2xl overflow-hidden">
                         <div className="px-4 py-3 border-b border-[#2a2a2e] bg-[#0d0d0f]">
@@ -740,8 +748,14 @@ function BonificacaoContent() {
                               <th className="px-4 py-2.5 text-left text-xs text-gray-500 font-semibold uppercase">Loja</th>
                               <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase">Pts comparáveis</th>
                               <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase">Faixa</th>
-                              <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase">Gerentes</th>
-                              <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase">Funcionários</th>
+                              {coordenadorGrupo ? (
+                                <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase">Coordenador</th>
+                              ) : (
+                                <>
+                                  <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase">Gerentes</th>
+                                  <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase">Funcionários</th>
+                                </>
+                              )}
                             </tr>
                           </thead>
                           <tbody>
@@ -750,8 +764,16 @@ function BonificacaoContent() {
                                 <td className="px-4 py-3 text-gray-200">{d.nome}</td>
                                 <td className="px-4 py-3 text-center font-semibold text-amber-400">{d.liquido}</td>
                                 <td className="px-4 py-3 text-center text-gray-300">{d.faixa ? `Faixa ${d.faixa.faixa}` : '—'}</td>
-                                <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.valorGerente) : '—'}</td>
-                                <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.valorFuncionario) : '—'}</td>
+                                {coordenadorGrupo ? (
+                                  <td className="px-4 py-3 text-center text-green-400 font-medium">
+                                    {d.faixa ? brl(valorBonificacaoCoordenador(d.faixa)) : '—'}
+                                  </td>
+                                ) : (
+                                  <>
+                                    <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.valorGerente) : '—'}</td>
+                                    <td className="px-4 py-3 text-center text-green-400 font-medium">{d.faixa ? brl(d.faixa.valorFuncionario) : '—'}</td>
+                                  </>
+                                )}
                               </tr>
                             ))}
                             {media && (
@@ -759,8 +781,14 @@ function BonificacaoContent() {
                                 <td className="px-4 py-3 font-bold text-white">Média · {grupo.tipoNome}</td>
                                 <td className="px-4 py-3 text-center text-gray-500">—</td>
                                 <td className="px-4 py-3 text-center text-gray-500">—</td>
-                                <td className="px-4 py-3 text-center font-bold text-green-400">{brl(media.gerente)}</td>
-                                <td className="px-4 py-3 text-center font-bold text-green-400">{brl(media.funcionario)}</td>
+                                {coordenadorGrupo ? (
+                                  <td className="px-4 py-3 text-center font-bold text-green-400">{brl(media.coordenador ?? 0)}</td>
+                                ) : (
+                                  <>
+                                    <td className="px-4 py-3 text-center font-bold text-green-400">{brl(media.gerente ?? 0)}</td>
+                                    <td className="px-4 py-3 text-center font-bold text-green-400">{brl(media.funcionario ?? 0)}</td>
+                                  </>
+                                )}
                               </tr>
                             )}
                           </tbody>
@@ -1001,25 +1029,41 @@ function BonificacaoContent() {
                           </p>
                           <span className="text-xs text-gray-500">{totalLiquido()}/{maxPontosFaixa} pts</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-[#0a0a0a] rounded-xl p-3 text-center">
-                            <p className="text-xs text-gray-500 mb-1">Gerentes</p>
-                            <p className={`text-lg font-bold text-green-400 ${descontoReaisValor() > 0 ? 'line-through opacity-50' : ''}`}>
-                              {brl(faixa.valorGerente)}
-                            </p>
-                            {descontoReaisValor() > 0 && (
-                              <p className="text-base font-bold text-green-400">{brl(Math.max(0, faixa.valorGerente - descontoReaisValor()))}</p>
-                            )}
-                          </div>
-                          <div className="bg-[#0a0a0a] rounded-xl p-3 text-center">
-                            <p className="text-xs text-gray-500 mb-1">Funcionários</p>
-                            <p className={`text-lg font-bold text-green-400 ${descontoReaisValor() > 0 ? 'line-through opacity-50' : ''}`}>
-                              {brl(faixa.valorFuncionario)}
-                            </p>
-                            {descontoReaisValor() > 0 && (
-                              <p className="text-base font-bold text-green-400">{brl(Math.max(0, faixa.valorFuncionario - descontoReaisValor()))}</p>
-                            )}
-                          </div>
+                        <div className={`grid ${isCoordenadorMode ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
+                          {isCoordenadorMode ? (
+                            <div className="bg-[#0a0a0a] rounded-xl p-3 text-center">
+                              <p className="text-xs text-gray-500 mb-1">Coordenador</p>
+                              <p className={`text-lg font-bold text-green-400 ${descontoReaisValor() > 0 ? 'line-through opacity-50' : ''}`}>
+                                {brl(valorBonificacaoCoordenador(faixa))}
+                              </p>
+                              {descontoReaisValor() > 0 && (
+                                <p className="text-base font-bold text-green-400">
+                                  {brl(Math.max(0, valorBonificacaoCoordenador(faixa) - descontoReaisValor()))}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <>
+                              <div className="bg-[#0a0a0a] rounded-xl p-3 text-center">
+                                <p className="text-xs text-gray-500 mb-1">Gerentes</p>
+                                <p className={`text-lg font-bold text-green-400 ${descontoReaisValor() > 0 ? 'line-through opacity-50' : ''}`}>
+                                  {brl(faixa.valorGerente)}
+                                </p>
+                                {descontoReaisValor() > 0 && (
+                                  <p className="text-base font-bold text-green-400">{brl(Math.max(0, faixa.valorGerente - descontoReaisValor()))}</p>
+                                )}
+                              </div>
+                              <div className="bg-[#0a0a0a] rounded-xl p-3 text-center">
+                                <p className="text-xs text-gray-500 mb-1">Funcionários</p>
+                                <p className={`text-lg font-bold text-green-400 ${descontoReaisValor() > 0 ? 'line-through opacity-50' : ''}`}>
+                                  {brl(faixa.valorFuncionario)}
+                                </p>
+                                {descontoReaisValor() > 0 && (
+                                  <p className="text-base font-bold text-green-400">{brl(Math.max(0, faixa.valorFuncionario - descontoReaisValor()))}</p>
+                                )}
+                              </div>
+                            </>
+                          )}
                         </div>
                         {descontoReaisValor() > 0 && (
                           <p className="text-xs text-orange-400 mt-3 text-center">
@@ -1048,8 +1092,14 @@ function BonificacaoContent() {
                       <tr className="border-b border-[#2a2a2e]">
                         <th className="px-4 py-2.5 text-left text-xs text-gray-500 font-semibold uppercase tracking-wider">Faixa</th>
                         <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Pontos</th>
-                        <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Gerentes</th>
-                        <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Funcionários</th>
+                        {isCoordenadorMode ? (
+                          <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Coordenador</th>
+                        ) : (
+                          <>
+                            <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Gerentes</th>
+                            <th className="px-4 py-2.5 text-center text-xs text-gray-500 font-semibold uppercase tracking-wider">Funcionários</th>
+                          </>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
@@ -1065,8 +1115,14 @@ function BonificacaoContent() {
                               {atingida && <span className="ml-2 text-xs">← atual</span>}
                             </td>
                             <td className="px-4 py-2.5 text-center text-gray-300">{f.pontosMin}</td>
-                            <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.valorGerente)}</td>
-                            <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.valorFuncionario)}</td>
+                            {isCoordenadorMode ? (
+                              <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(valorBonificacaoCoordenador(f))}</td>
+                            ) : (
+                              <>
+                                <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.valorGerente)}</td>
+                                <td className="px-4 py-2.5 text-center text-green-400 font-medium">{brl(f.valorFuncionario)}</td>
+                              </>
+                            )}
                           </tr>
                         );
                       })}

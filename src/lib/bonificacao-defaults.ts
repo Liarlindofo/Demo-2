@@ -18,7 +18,12 @@ export interface FaixaTemplate {
   pontosMin: number;
   valorGerente: number;
   valorFuncionario: number;
+  /** Usado quando o tipo é de coordenador (uma coluna só) */
+  valorCoordenador?: number;
 }
+
+/** Proporções das faixas 1–5 com base no template Gerente (870 pts = 100%) */
+export const FAIXA_PONTOS_RATIOS = [200 / 870, 400 / 870, 600 / 870, 750 / 870, 1] as const;
 
 export interface MetricaPlano extends MetricaTemplate {
   pontos: Record<string, number | null>;
@@ -76,12 +81,72 @@ export const DEFAULT_DESCONTOS: DescontoTemplate[] = [
   { id: 'caixa_atrasado', nome: 'Caixa atrasado', valor: 20 },
 ];
 
+export function sumMetricasMaxPontos(metricas: MetricaTemplate[]): number {
+  return metricas.reduce((sum, m) => sum + (Number(m.maxPontos) || 0), 0);
+}
+
+/** Máximo atingível no trimestre (3 meses por métrica) */
+export function maxPontosTrimestre(metricas: MetricaTemplate[]): number {
+  return sumMetricasMaxPontos(metricas) * 3;
+}
+
+export function isTipoCoordenador(nome: string): boolean {
+  return nome.trim().toLowerCase().includes('coordenador');
+}
+
+export function suggestFaixasPontos(totalTrimestre: number): number[] {
+  if (totalTrimestre <= 0) return [0, 0, 0, 0, 0];
+  return FAIXA_PONTOS_RATIOS.map((ratio, index) =>
+    index === FAIXA_PONTOS_RATIOS.length - 1
+      ? totalTrimestre
+      : Math.round(totalTrimestre * ratio),
+  );
+}
+
+export function suggestFaixas(
+  metricas: MetricaTemplate[],
+  isCoordenador: boolean,
+  existingFaixas?: FaixaTemplate[],
+): FaixaTemplate[] {
+  const pontosSugeridos = suggestFaixasPontos(maxPontosTrimestre(metricas));
+
+  return pontosSugeridos.map((pontosMin, index) => {
+    const existing = existingFaixas?.[index];
+    const fallback = DEFAULT_FAIXAS[index];
+
+    if (isCoordenador) {
+      return {
+        faixa: index + 1,
+        pontosMin,
+        valorGerente: 0,
+        valorFuncionario: 0,
+        valorCoordenador:
+          existing?.valorCoordenador ??
+          existing?.valorGerente ??
+          fallback?.valorGerente ??
+          0,
+      };
+    }
+
+    return {
+      faixa: index + 1,
+      pontosMin,
+      valorGerente: existing?.valorGerente ?? fallback?.valorGerente ?? 0,
+      valorFuncionario: existing?.valorFuncionario ?? fallback?.valorFuncionario ?? 0,
+    };
+  });
+}
+
+export function valorBonificacaoCoordenador(faixa: FaixaTemplate): number {
+  return faixa.valorCoordenador ?? faixa.valorGerente ?? 0;
+}
+
 export function defaultTipoPayload(modoCalculo: ModoCalculo = 'PADRAO') {
   return {
     modoCalculo,
     metricas: DEFAULT_METRICAS,
     descontos: DEFAULT_DESCONTOS,
-    faixas: DEFAULT_FAIXAS,
+    faixas: suggestFaixas(DEFAULT_METRICAS, false),
   };
 }
 
@@ -142,6 +207,9 @@ export function normalizeFaixas(faixas: unknown): FaixaTemplate[] {
       pontosMin: Number(row.pontosMin ?? row.pontos ?? 0),
       valorGerente: Number(row.valorGerente ?? row.gerente ?? 0),
       valorFuncionario: Number(row.valorFuncionario ?? row.funcionario ?? 0),
+      valorCoordenador: row.valorCoordenador != null
+        ? Number(row.valorCoordenador)
+        : undefined,
     };
   });
 }
