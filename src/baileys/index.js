@@ -14,6 +14,7 @@ export {
   listGroups,
   checkNumberStatus,
   normalizeBrPhoneDigits,
+  pickExistingOnWhatsAppResult,
   simulateIncoming,
   BAILEYS_TEST_USER_ID,
   BAILEYS_TEST_SLOT,

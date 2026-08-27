@@ -184,6 +184,7 @@ function startHttpServer(boundUserId, boundSlot) {
             canReceiveMessage: result.canReceiveMessage,
             jid: result.id?._serialized || null,
             queried: result.queried || null,
+            debug: result.debug || null,
             raw: result,
           });
         } catch (err) {

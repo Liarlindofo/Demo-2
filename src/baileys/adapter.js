@@ -9,6 +9,8 @@ import makeWASocket, {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
+  USyncQuery,
+  USyncUser,
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
@@ -381,8 +383,50 @@ export function normalizeBrPhoneDigits(input) {
 }
 
 /**
+ * Interpreta retorno de sock.onWhatsApp (já filtrado pelo Baileys).
+ * Na versão instalada (@whiskeysockets/baileys):
+ *   onWhatsApp → results.list.filter(a => !!a.contact).map(({contact,id}) => ({ jid: id, exists: contact }))
+ * onde contact = (attrs.type === 'in')  → boolean true/false.
+ * Ou seja: array vazio / undefined = não existe; só conta exists === true (boolean).
+ */
+export function pickExistingOnWhatsAppResult(results) {
+  if (!Array.isArray(results) || results.length === 0) return null;
+  for (const r of results) {
+    if (!r || typeof r.jid !== 'string' || !r.jid.includes('@')) continue;
+    // Estrito: só boolean true. String/"in"/objetos NÃO contam.
+    if (r.exists === true) return r;
+  }
+  return null;
+}
+
+/**
+ * USync cru (sem o filter de onWhatsApp) — lista com contact: true|false.
+ * Útil para log e para decidir exists com precisão.
+ */
+async function usyncContactLookup(sock, digits) {
+  if (typeof sock.executeUSyncQuery !== 'function') return null;
+  const query = new USyncQuery()
+    .withContactProtocol()
+    .withUser(new USyncUser().withPhone(`+${digits}`));
+  return sock.executeUSyncQuery(query);
+}
+
+function pickExistingFromUSync(usyncResult, digits) {
+  const list = usyncResult?.list;
+  if (!Array.isArray(list) || list.length === 0) return null;
+  for (const row of list) {
+    // contact === true ⇔ type="in" no protocolo USyncContactProtocol
+    if (row?.contact === true && typeof row.id === 'string' && row.id.includes('@')) {
+      return { jid: row.id, exists: true, usyncRow: row };
+    }
+  }
+  // Alguns retornos usam id sem contact true — NÃO aceitar
+  return null;
+}
+
+/**
  * Equivalente a WPPConnect `client.checkNumberStatus(jid)`.
- * Usa Baileys `sock.onWhatsApp(...)`.
+ * Usa Baileys onWhatsApp + USync contact (type === 'in').
  *
  * Shape de retorno compatível com scheduler.js:
  *   { numberExists, canReceiveMessage, id: { _serialized, user, server } }
@@ -413,38 +457,87 @@ export async function checkNumberStatus(userId, idOrPhone, slot = TEST_SLOT) {
     };
   }
 
-  // onWhatsApp aceita dígitos ou JID; internamente vira +55...
-  const results = await session.sock.onWhatsApp(digits);
-  const hit = Array.isArray(results)
-    ? results.find((r) => r && (r.exists === true || r.exists))
-    : null;
+  // ── 1) Retorno BRUTO de onWhatsApp (antes de qualquer filtro nosso) ─────
+  const resultsRaw = await session.sock.onWhatsApp(digits);
+  // eslint-disable-next-line no-console
+  console.log(
+    `[BAILEYS checkNumberStatus] RAW onWhatsApp(digits=${digits}) → ` +
+      `type=${typeof resultsRaw} isArray=${Array.isArray(resultsRaw)} ` +
+      `value=${JSON.stringify(resultsRaw)}`,
+  );
+
+  // Também tenta a forma com JID (alguns builds se comportam diferente)
+  const jidQuery = `${digits}@s.whatsapp.net`;
+  let resultsJidRaw;
+  try {
+    resultsJidRaw = await session.sock.onWhatsApp(jidQuery);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[BAILEYS checkNumberStatus] RAW onWhatsApp(jid=${jidQuery}) → ` +
+        `value=${JSON.stringify(resultsJidRaw)}`,
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[BAILEYS checkNumberStatus] onWhatsApp(jid) erro: ${err?.message}`);
+  }
+
+  // ── 2) USync cru (contact true/false sem filter) ────────────────────────
+  let usyncRaw = null;
+  try {
+    usyncRaw = await usyncContactLookup(session.sock, digits);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[BAILEYS checkNumberStatus] RAW executeUSyncQuery(contact,+${digits}) → ` +
+        `value=${JSON.stringify(usyncRaw)}`,
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[BAILEYS checkNumberStatus] USync erro: ${err?.message}`);
+  }
+
+  // ── 3) Decisão: exige exists/contact === true (boolean) ────────────────
+  const fromUSync = pickExistingFromUSync(usyncRaw, digits);
+  const fromOnWa =
+    pickExistingOnWhatsAppResult(resultsRaw) ||
+    pickExistingOnWhatsAppResult(resultsJidRaw);
+
+  // Preferir USync (mais explícito). onWhatsApp só como confirmação se USync indisponível.
+  const hit = fromUSync || (usyncRaw == null ? fromOnWa : null);
+
+  // Segurança extra: se onWhatsApp "achou" mas USync diz contact !== true → NÃO existe
+  if (fromOnWa && usyncRaw && !fromUSync) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[BAILEYS checkNumberStatus] onWhatsApp retornou hit mas USync contact!==true — tratando como NÃO existe. ` +
+        `onWa=${JSON.stringify(fromOnWa)} usyncList=${JSON.stringify(usyncRaw?.list)}`,
+    );
+  }
 
   if (!hit?.jid) {
     // eslint-disable-next-line no-console
     console.warn(
-      `[BAILEYS checkNumberStatus] Número não encontrado no WA: digits=${digits} input=${idOrPhone} results=${JSON.stringify(results)}`,
+      `[BAILEYS checkNumberStatus] NÃO existe: digits=${digits} input=${idOrPhone}`,
     );
     return {
       numberExists: false,
       canReceiveMessage: false,
-      id: {
-        _serialized: `${digits}@c.us`,
-        user: digits,
-        server: 'c.us',
-      },
+      id: null,
       queried: digits,
+      debug: {
+        onWhatsAppRaw: resultsRaw ?? null,
+        onWhatsAppJidRaw: resultsJidRaw ?? null,
+        usyncList: usyncRaw?.list ?? null,
+      },
     };
   }
 
-  // Canonical JID do Baileys (geralmente @s.whatsapp.net). Scheduler/sendText aceitam ambos.
-  let serialized = String(hit.jid);
-  // Compat WPP: se vier @s.whatsapp.net, também expor variante @c.us em user/server
+  const serialized = String(hit.jid);
   const userPart = serialized.split('@')[0].split(':')[0];
   const serverPart = serialized.includes('@') ? serialized.split('@')[1] : 's.whatsapp.net';
 
   // eslint-disable-next-line no-console
   console.log(
-    `[BAILEYS checkNumberStatus] OK digits=${digits} → jid=${serialized}`,
+    `[BAILEYS checkNumberStatus] EXISTE digits=${digits} → jid=${serialized}`,
   );
 
   return {
@@ -456,6 +549,11 @@ export async function checkNumberStatus(userId, idOrPhone, slot = TEST_SLOT) {
       server: serverPart,
     },
     queried: digits,
+    debug: {
+      onWhatsAppRaw: resultsRaw ?? null,
+      onWhatsAppJidRaw: resultsJidRaw ?? null,
+      usyncList: usyncRaw?.list ?? null,
+    },
   };
 }
 
