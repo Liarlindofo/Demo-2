@@ -71,6 +71,35 @@ export default function ReportPage() {
     window.print();
   };
 
+  const sanitizePdfPart = (value: string) =>
+    (value || "")
+      .toString()
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .replace(/\s+/g, " ")
+      .slice(0, 80);
+
+  const formatDateForPdfFilename = (dateIso: string) => {
+    const d = new Date(dateIso);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${dd}-${mm}-${yyyy}`;
+  };
+
+  const resolveTopicNameForPdf = (ev: EvaluationDetail) => {
+    if (filterCategoryName?.trim()) return filterCategoryName.trim();
+    if (ev.topicScores.length === 1) return ev.topicScores[0].topicName;
+    return "Geral";
+  };
+
+  const buildPdfFilename = (ev: EvaluationDetail) => {
+    const dateStr = formatDateForPdfFilename(ev.evaluationDate);
+    const store = sanitizePdfPart(ev.storeName || "Loja");
+    const topic = sanitizePdfPart(resolveTopicNameForPdf(ev));
+    return `${dateStr} - ${store} - ${topic}.pdf`;
+  };
+
   const handleSavePdf = async () => {
     if (!evaluation || !reportRef.current) return;
 
@@ -80,13 +109,7 @@ export default function ReportPage() {
       const mod = await import("html2pdf.js");
       const html2pdf = (mod as any).default ?? mod;
 
-      const safeStore = (evaluation.storeName || "relatorio")
-        .toString()
-        .trim()
-        .replace(/[\\/:*?"<>|]+/g, "-")
-        .replace(/\s+/g, " ");
-      const dateStr = new Date(evaluation.evaluationDate).toISOString().slice(0, 10);
-      const filename = `Relatorio - ${safeStore} - ${dateStr}.pdf`;
+      const filename = buildPdfFilename(evaluation);
 
       await html2pdf()
         .set({
