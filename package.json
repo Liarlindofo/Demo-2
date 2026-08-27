@@ -66,6 +66,7 @@
     "node-cron": "^4.6.0",
     "postcss": "^8.4.49",
     "prisma": "^6.17.1",
+    "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "react": "^19.2.1",
     "react-day-picker": "^9.11.1",

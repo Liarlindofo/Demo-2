@@ -1014,6 +1014,13 @@ export async function restoreAllSessions() {
     logger.info(`Encontrados ${allBots.length} bots para restaurar`);
 
     for (const bot of allBots) {
+      // Slots migrados para Baileys sobem via startSessionWorker / worker baileys — não via WPP aqui
+      if (String(bot.provider || 'wpp').toLowerCase() === 'baileys') {
+        logger.info(
+          `[restoreAllSessions] Pulando [${bot.userId}:${bot.slot}] provider=baileys (use PM2 / startSessionWorker)`,
+        );
+        continue;
+      }
       // Lê config DURÁVEL — sem iaAtiva explícito no banco, NÃO sobe (não assume atendimento)
       WhatsAppBotModel.getDurableConfig(bot.userId, bot.slot)
         .then(async (durable) => {

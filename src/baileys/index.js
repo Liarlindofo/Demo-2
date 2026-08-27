@@ -1,6 +1,5 @@
 /**
- * Módulo Baileys (teste paralelo ao WPPConnect).
- * Não importa src/wpp/**.
+ * Módulo Baileys (paralelo ao WPPConnect).
  */
 export {
   startClient,
@@ -10,6 +9,9 @@ export {
   onMessage,
   getQr,
   getSessionStatus,
+  getBaileysSession,
+  baileysAuthDir,
+  listGroups,
   simulateIncoming,
   BAILEYS_TEST_USER_ID,
   BAILEYS_TEST_SLOT,
@@ -19,3 +21,6 @@ export {
   normalizeBaileysMessage,
   messageArchiveExpectedFields,
 } from './normalizeMessage.js';
+
+export { createBaileysWppClient } from './wppClientShim.js';
+export { setupBaileysMessagePipeline } from './messagePipeline.js';

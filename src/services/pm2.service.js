@@ -9,7 +9,7 @@ function sanitizeUserId(userId) {
   return String(userId).trim().replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
-/** Nome PM2 legado do slot 1 (atendimento). */
+/** Nome PM2 legado do slot 1 (atendimento) — WPPConnect. */
 function processName(userId) {
   return `whatsapp-${sanitizeUserId(userId)}`;
 }
@@ -18,15 +18,26 @@ function sendOnlyProcessName(userId, slot = 2) {
   return `whatsapp-send-${sanitizeUserId(userId)}-s${slot}`;
 }
 
-/** Nome PM2 da sessão: slot 1 mantém o nome antigo; demais usam whatsapp-send-*-sN */
+/** Nome PM2 da sessão WPP: slot 1 mantém o nome antigo; demais usam whatsapp-send-*-sN */
 export function sessionProcessName(userId, slot) {
   if (Number(slot) === 1) return processName(userId);
   return sendOnlyProcessName(userId, slot);
 }
 
+/** Nome PM2 da sessão Baileys real (nunca colide com WPP nem com whatsapp-baileys-teste). */
+export function baileysSessionProcessName(userId, slot) {
+  return `whatsapp-baileys-${sanitizeUserId(userId)}-slot${Number(slot) || 1}`;
+}
+
+export function resolveProvider(bot) {
+  const p = String(bot?.provider || 'wpp').trim().toLowerCase();
+  return p === 'baileys' ? 'baileys' : 'wpp';
+}
+
 /**
  * Porta do mini-HTTP de envio no worker.
  * Slot 2 permanece em 3012 (compat); slot 1 → 3011; slot 3 → 3013.
+ * Igual para WPP e Baileys (API /send não muda).
  */
 export function sendWorkerPort(slot) {
   const base = Number(process.env.SEND_ONLY_HTTP_PORT || 3012);
@@ -55,12 +66,32 @@ export async function pingWorkerHealth(slot, timeoutMs = 2000) {
   }
 }
 
+async function pm2DeleteQuiet(name) {
+  try {
+    await execAsync(`pm2 delete "${name}"`);
+  } catch {
+    /* processo inexistente */
+  }
+}
+
+async function pm2StopDelete(name) {
+  try {
+    await execAsync(`pm2 stop "${name}"`).catch(() => {});
+    await execAsync(`pm2 delete "${name}"`);
+    logger.success(`[pm2] Worker ${name} parado/removido`);
+  } catch {
+    logger.warn(`[pm2] Worker ${name} não encontrado ou já parado`);
+  }
+}
+
 export async function startWhatsappWorker(userId) {
   return startSessionWorker(userId, 1);
 }
 
 /**
- * Sobe worker PM2 para qualquer slot, usando iaAtiva persistido no banco.
+ * Sobe worker PM2 para qualquer slot, usando iaAtiva + provider persistidos no banco.
+ * provider='wpp' (default): workers/whatsapp-worker.js — comportamento idêntico ao anterior.
+ * provider='baileys': workers/whatsapp-baileys-worker.js
  */
 export async function startSessionWorker(userId, slot = 1) {
   if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
@@ -74,6 +105,8 @@ export async function startSessionWorker(userId, slot = 1) {
   }
 
   const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, resolvedSlot);
+  const provider = resolveProvider(bot);
+
   let iaAtiva;
   if (typeof bot?.iaAtiva === 'boolean') {
     iaAtiva = bot.iaAtiva;
@@ -86,11 +119,23 @@ export async function startSessionWorker(userId, slot = 1) {
     }).catch(() => {});
   }
   const mode = iaAtiva ? 'atendimento' : 'somente-envio';
-  const name = sessionProcessName(normalizedUserId, resolvedSlot);
+
+  const wppName = sessionProcessName(normalizedUserId, resolvedSlot);
+  const baileysName = baileysSessionProcessName(normalizedUserId, resolvedSlot);
+  const name = provider === 'baileys' ? baileysName : wppName;
+  const otherName = provider === 'baileys' ? wppName : baileysName;
 
   logger.info(
-    `[startSessionWorker] userId="${normalizedUserId}" slot=${resolvedSlot} iaAtiva=${iaAtiva} mode=${mode} (${name})`,
+    `[startSessionWorker] userId="${normalizedUserId}" slot=${resolvedSlot} provider=${provider} iaAtiva=${iaAtiva} mode=${mode} (${name})`,
   );
+
+  // Libera porta HTTP: o outro motor não pode ficar vivo no mesmo slot
+  await pm2DeleteQuiet(otherName);
+  if (resolvedSlot === 1 && provider === 'baileys') {
+    // slot 1 WPP legado às vezes só com processName
+    const legacy = processName(normalizedUserId);
+    if (legacy !== otherName) await pm2DeleteQuiet(legacy);
+  }
 
   try {
     const { stdout } = await execAsync(`pm2 describe ${name}`);
@@ -98,10 +143,17 @@ export async function startSessionWorker(userId, slot = 1) {
       const health = await pingWorkerHealth(resolvedSlot);
       if (health.ok && health.data?.hasClient) {
         logger.warn(`[startSessionWorker] Worker ${name} já está online e com client.`);
-        return { success: true, message: "Worker já está ativo", processName: name, slot: resolvedSlot, mode, iaAtiva };
+        return {
+          success: true,
+          message: "Worker já está ativo",
+          processName: name,
+          slot: resolvedSlot,
+          mode,
+          iaAtiva,
+          provider,
+        };
       }
       if (health.ok) {
-        // HTTP no ar = processo vivo e bootando. NÃO restart (isso mata o create e pede QR).
         logger.warn(`[startSessionWorker] Worker ${name} online, mini-HTTP ok, client ainda conectando.`);
         return {
           success: true,
@@ -110,6 +162,7 @@ export async function startSessionWorker(userId, slot = 1) {
           slot: resolvedSlot,
           mode,
           iaAtiva,
+          provider,
           booting: true,
         };
       }
@@ -124,20 +177,26 @@ export async function startSessionWorker(userId, slot = 1) {
         slot: resolvedSlot,
         mode,
         iaAtiva,
+        provider,
         restarted: true,
       };
     }
     await execAsync(`pm2 delete ${name}`).catch(() => {});
   } catch {}
 
+  const script =
+    provider === 'baileys'
+      ? 'workers/whatsapp-baileys-worker.js'
+      : 'workers/whatsapp-worker.js';
+
   const command =
-    `pm2 start workers/whatsapp-worker.js --name "${name}" --interpreter=node -- ` +
+    `pm2 start ${script} --name "${name}" --interpreter=node -- ` +
     `--userId="${normalizedUserId}" --slot=${resolvedSlot} --mode=${mode}`;
 
   logger.info(`[startSessionWorker] Executando: ${command}`);
   await execAsync(command);
 
-  return { success: true, processName: name, slot: resolvedSlot, mode, iaAtiva };
+  return { success: true, processName: name, slot: resolvedSlot, mode, iaAtiva, provider };
 }
 
 function sleep(ms) {
@@ -146,8 +205,6 @@ function sleep(ms) {
 
 /**
  * Garante worker + client em memória, reusando a pasta de sessão (sem force/QR).
- * - Mini-HTTP morto: start/restart PM2
- * - HTTP vivo sem client: espera o WPPConnect restaurar o token
  */
 export async function ensureSessionWorker(userId, slot, { waitMs = 45000 } = {}) {
   const normalizedUserId = String(userId || '').trim();
@@ -183,23 +240,21 @@ export async function stopSessionWorker(userId, slot = 1) {
 
   const normalizedUserId = String(userId).trim();
   const resolvedSlot = Number(slot) || 1;
-  const name = sessionProcessName(normalizedUserId, resolvedSlot);
 
-  try {
-    await execAsync(`pm2 stop "${name}"`).catch(() => {});
-    await execAsync(`pm2 delete "${name}"`);
-    logger.success(`[stopSessionWorker] Worker ${name} parado/removido`);
-  } catch {
-    logger.warn(`[stopSessionWorker] Worker ${name} não encontrado ou já parado`);
-  }
+  const bot = await WhatsAppBotModel.findByUserAndSlot(normalizedUserId, resolvedSlot).catch(() => null);
+  const provider = resolveProvider(bot);
+
+  const wppName = sessionProcessName(normalizedUserId, resolvedSlot);
+  const baileysName = baileysSessionProcessName(normalizedUserId, resolvedSlot);
+
+  // Para o motor atual e o outro (evita órfão após troca de provider)
+  await pm2StopDelete(provider === 'baileys' ? baileysName : wppName);
+  await pm2StopDelete(provider === 'baileys' ? wppName : baileysName);
 
   if (resolvedSlot === 1) {
     const legacy = processName(normalizedUserId);
-    if (legacy !== name) {
-      try {
-        await execAsync(`pm2 stop "${legacy}"`).catch(() => {});
-        await execAsync(`pm2 delete "${legacy}"`);
-      } catch {}
+    if (legacy !== wppName) {
+      await pm2StopDelete(legacy);
     }
   }
 }

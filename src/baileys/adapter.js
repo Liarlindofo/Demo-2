@@ -23,10 +23,10 @@ import {
 const TEST_USER_ID = 'baileys-teste';
 const TEST_SLOT = 1;
 
-/** @type {Map<string, { sock: any, ourJid: string|null, qr: string|null, connected: boolean, authDir: string }>} */
+/** @type {Map<string, { sock: any, ourJid: string|null, qr: string|null, qrDataUrl: string|null, connected: boolean, authDir: string, userId: string, slot: number }>} */
 const sessions = new Map();
 
-/** @type {Set<(msg: any) => void>} */
+/** @type {Set<(msg: any, raw?: any) => void>} */
 const messageHandlers = new Set();
 
 function sessionKey(userId, slot) {
@@ -40,8 +40,68 @@ function defaultAuthDir() {
   );
 }
 
+/** Pasta de auth para slots reais: /var/www/whatsapp-sessions-baileys/{userId}-slot{slot} */
+export function baileysAuthDir(userId, slot) {
+  const root =
+    process.env.BAILEYS_SESSIONS_ROOT || '/var/www/whatsapp-sessions-baileys';
+  const safeUser = String(userId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+  return path.join(root, `${safeUser}-slot${Number(slot) || 1}`);
+}
+
+export function getBaileysSession(userId, slot = TEST_SLOT) {
+  return sessions.get(sessionKey(userId, slot)) || null;
+}
+
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
+}
+
+async function qrStringToDataUrl(qr) {
+  try {
+    const QRCode = (await import('qrcode')).default;
+    return await QRCode.toDataURL(qr, { margin: 2, width: 320 });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[BAILEYS] Falha ao gerar data URL do QR:', err?.message);
+    return null;
+  }
+}
+
+async function persistQr(userId, slot, qrDataUrl, persistDb) {
+  if (!persistDb || !qrDataUrl) return;
+  try {
+    const { WhatsAppBotModel } = await import('../db/models.js');
+    await WhatsAppBotModel.saveQrCode(userId, slot, qrDataUrl);
+    await WhatsAppBotModel.saveBotStatus(userId, slot, 'QRCODE').catch(() => {});
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[BAILEYS] persistQr falhou [${userId}:${slot}]:`, err?.message);
+  }
+}
+
+async function persistConnected(userId, slot, ourJid, persistDb) {
+  if (!persistDb) return;
+  try {
+    const { WhatsAppBotModel } = await import('../db/models.js');
+    const number = ourJid ? String(ourJid).split('@')[0].split(':')[0] : null;
+    await WhatsAppBotModel.setConnected(userId, slot, number, { provider: 'baileys' });
+    await WhatsAppBotModel.saveBotStatus(userId, slot, 'CONNECTED').catch(() => {});
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[BAILEYS] persistConnected falhou [${userId}:${slot}]:`, err?.message);
+  }
+}
+
+async function persistDisconnected(userId, slot, persistDb) {
+  if (!persistDb) return;
+  try {
+    const { WhatsAppBotModel } = await import('../db/models.js');
+    await WhatsAppBotModel.setDisconnected(userId, slot).catch(() => {});
+    await WhatsAppBotModel.saveBotStatus(userId, slot, 'DISCONNECTED').catch(() => {});
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[BAILEYS] persistDisconnected falhou [${userId}:${slot}]:`, err?.message);
+  }
 }
 
 function toJid(to) {
@@ -112,7 +172,7 @@ function logShapeCompare(normalized, rawBaileys) {
 /**
  * @param {string} [userId='baileys-teste']
  * @param {number} [slot=1]
- * @param {{ authDir?: string, printQr?: boolean }} [options]
+ * @param {{ authDir?: string, printQr?: boolean, persistDb?: boolean }} [options]
  */
 export async function startClient(
   userId = TEST_USER_ID,
@@ -123,6 +183,7 @@ export async function startClient(
   const slotNum = Number.isFinite(Number(slot)) && Number(slot) >= 1 ? Number(slot) : TEST_SLOT;
   const key = sessionKey(uid, slotNum);
   const authDir = options.authDir || defaultAuthDir();
+  const persistDb = options.persistDb === true;
   ensureDir(authDir);
 
   if (sessions.has(key) && sessions.get(key).connected) {
@@ -163,8 +224,11 @@ export async function startClient(
     sock,
     ourJid: null,
     qr: null,
+    qrDataUrl: null,
     connected: false,
     authDir,
+    userId: uid,
+    slot: slotNum,
   };
   sessions.set(key, session);
 
@@ -175,8 +239,9 @@ export async function startClient(
 
     if (qr) {
       session.qr = qr;
+      session.connected = false;
       // eslint-disable-next-line no-console
-      console.log('\n[BAILEYS] QR code gerado — escaneie (também em GET /qr)\n');
+      console.log('\n[BAILEYS] QR code gerado — escaneie (também em GET /qr e na UI de conexões)\n');
       if (options.printQr !== false) {
         try {
           qrcode.generate(qr, { small: true });
@@ -185,14 +250,20 @@ export async function startClient(
           console.log('[BAILEYS] QR (raw):', qr.slice(0, 80) + '...');
         }
       }
+      qrStringToDataUrl(qr).then((dataUrl) => {
+        session.qrDataUrl = dataUrl;
+        return persistQr(uid, slotNum, dataUrl, persistDb);
+      }).catch(() => {});
     }
 
     if (connection === 'open') {
       session.connected = true;
       session.qr = null;
+      session.qrDataUrl = null;
       session.ourJid = sock.user?.id || null;
       // eslint-disable-next-line no-console
       console.log(`[BAILEYS] Conectado. ourJid=${session.ourJid}`);
+      persistConnected(uid, slotNum, session.ourJid, persistDb).catch(() => {});
     }
 
     if (connection === 'close') {
@@ -206,6 +277,7 @@ export async function startClient(
       console.log(
         `[BAILEYS] Conexão fechada. status=${statusCode} reconnect=${shouldReconnect}`,
       );
+      persistDisconnected(uid, slotNum, persistDb).catch(() => {});
       sessions.delete(key);
       if (shouldReconnect) {
         setTimeout(() => {
@@ -226,6 +298,8 @@ export async function startClient(
         const normalized = normalizeBaileysMessage(raw, {
           ourJid: session.ourJid,
         });
+        // Anexa raw para download de mídia nos handlers
+        normalized._baileysRaw = raw;
         logShapeCompare(normalized, raw);
         for (const handler of messageHandlers) {
           try {
@@ -340,6 +414,7 @@ export function getQr(userId = TEST_USER_ID, slot = TEST_SLOT) {
   const session = sessions.get(sessionKey(userId, slot));
   return {
     qr: session?.qr || null,
+    qrDataUrl: session?.qrDataUrl || null,
     connected: Boolean(session?.connected),
     ourJid: session?.ourJid || null,
     hasSession: Boolean(session),
@@ -353,10 +428,32 @@ export function getSessionStatus(userId = TEST_USER_ID, slot = TEST_SLOT) {
     slot,
     connected: Boolean(session?.connected),
     ourJid: session?.ourJid || null,
-    hasQr: Boolean(session?.qr),
+    hasQr: Boolean(session?.qr || session?.qrDataUrl),
+    hasClient: Boolean(session?.connected && session?.sock),
     authDir: session?.authDir || defaultAuthDir(),
     provider: 'baileys',
   };
+}
+
+/**
+ * Lista grupos participantes (compat mini-HTTP /groups do worker WPP).
+ */
+export async function listGroups(userId = TEST_USER_ID, slot = TEST_SLOT) {
+  const session = sessions.get(sessionKey(userId, slot));
+  if (!session?.sock || !session.connected) {
+    return { success: false, error: 'Sessão Baileys não conectada', groups: [] };
+  }
+  try {
+    const map = await session.sock.groupFetchAllParticipating();
+    const groups = Object.values(map || {}).map((g) => ({
+      id: g.id,
+      name: g.subject || g.id,
+      participantsCount: Array.isArray(g.participants) ? g.participants.length : undefined,
+    }));
+    return { success: true, groups, provider: 'baileys' };
+  } catch (err) {
+    return { success: false, error: err?.message || String(err), groups: [] };
+  }
 }
 
 /**
