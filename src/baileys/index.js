@@ -12,6 +12,8 @@ export {
   getBaileysSession,
   baileysAuthDir,
   listGroups,
+  checkNumberStatus,
+  normalizeBrPhoneDigits,
   simulateIncoming,
   BAILEYS_TEST_USER_ID,
   BAILEYS_TEST_SLOT,

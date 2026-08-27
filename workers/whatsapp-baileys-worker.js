@@ -52,6 +52,7 @@ import {
   getBaileysSession,
   baileysAuthDir,
   listGroups,
+  checkNumberStatus,
 } from '../src/baileys/adapter.js';
 import { createBaileysWppClient } from '../src/baileys/wppClientShim.js';
 import { setupBaileysMessagePipeline } from '../src/baileys/messagePipeline.js';
@@ -167,6 +168,29 @@ function startHttpServer(boundUserId, boundSlot) {
         return sendJson(result.success ? 200 : 503, result);
       }
 
+      // Diagnóstico: GET /check-number?phone=41996420791
+      if (req.method === 'GET' && url === '/check-number') {
+        const qs = new URL(req.url || '', 'http://127.0.0.1').searchParams;
+        const phone = qs.get('phone') || qs.get('to') || '';
+        if (!phone) {
+          return sendJson(400, { success: false, error: 'Query ?phone= obrigatória' });
+        }
+        try {
+          const result = await checkNumberStatus(boundUserId, phone, boundSlot);
+          return sendJson(200, {
+            success: true,
+            phone,
+            numberExists: result.numberExists,
+            canReceiveMessage: result.canReceiveMessage,
+            jid: result.id?._serialized || null,
+            queried: result.queried || null,
+            raw: result,
+          });
+        } catch (err) {
+          return sendJson(503, { success: false, error: err?.message || String(err) });
+        }
+      }
+
       if (req.method === 'POST' && url === '/send') {
         let raw = '';
         for await (const chunk of req) raw += chunk;
@@ -198,7 +222,7 @@ function startHttpServer(boundUserId, boundSlot) {
 
   server.listen(PORT, '127.0.0.1', () => {
     logger.info(
-      `[baileys-real] 🌐 Mini-HTTP em http://127.0.0.1:${PORT} (GET /health /qr /groups, POST /send)`,
+      `[baileys-real] 🌐 Mini-HTTP em http://127.0.0.1:${PORT} (GET /health /qr /groups /check-number, POST /send)`,
     );
   });
 

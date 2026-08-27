@@ -368,6 +368,98 @@ export async function sendMessage(userId, to, message, slot = TEST_SLOT) {
 }
 
 /**
+ * Normaliza telefone BR para dígitos com DDI 55 (mesma lógica do scheduler/paraWpp).
+ * Aceita "41996420791", "5541996420791", "5541996420791@c.us", etc.
+ * @returns {string|null} só dígitos (12–13) ou null
+ */
+export function normalizeBrPhoneDigits(input) {
+  const raw = String(input || '').replace(/\D/g, '');
+  if (!raw) return null;
+  if (raw.length === 10 || raw.length === 11) return `55${raw}`;
+  if ((raw.length === 12 || raw.length === 13) && raw.startsWith('55')) return raw;
+  return null;
+}
+
+/**
+ * Equivalente a WPPConnect `client.checkNumberStatus(jid)`.
+ * Usa Baileys `sock.onWhatsApp(...)`.
+ *
+ * Shape de retorno compatível com scheduler.js:
+ *   { numberExists, canReceiveMessage, id: { _serialized, user, server } }
+ *
+ * @param {string} userId
+ * @param {string} idOrPhone — ex: "41996420791", "5541996420791@c.us"
+ * @param {number} [slot=1]
+ */
+export async function checkNumberStatus(userId, idOrPhone, slot = TEST_SLOT) {
+  const uid = String(userId || TEST_USER_ID).trim() || TEST_USER_ID;
+  const slotNum = Number(slot) || TEST_SLOT;
+  const session = sessions.get(sessionKey(uid, slotNum));
+
+  if (!session?.sock || !session.connected) {
+    throw new Error(`Sessão Baileys não conectada [${uid}:${slotNum}]`);
+  }
+  if (typeof session.sock.onWhatsApp !== 'function') {
+    throw new Error('Baileys sock.onWhatsApp indisponível nesta versão');
+  }
+
+  const digits = normalizeBrPhoneDigits(idOrPhone);
+  if (!digits) {
+    return {
+      numberExists: false,
+      canReceiveMessage: false,
+      id: null,
+      queried: String(idOrPhone || ''),
+    };
+  }
+
+  // onWhatsApp aceita dígitos ou JID; internamente vira +55...
+  const results = await session.sock.onWhatsApp(digits);
+  const hit = Array.isArray(results)
+    ? results.find((r) => r && (r.exists === true || r.exists))
+    : null;
+
+  if (!hit?.jid) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[BAILEYS checkNumberStatus] Número não encontrado no WA: digits=${digits} input=${idOrPhone} results=${JSON.stringify(results)}`,
+    );
+    return {
+      numberExists: false,
+      canReceiveMessage: false,
+      id: {
+        _serialized: `${digits}@c.us`,
+        user: digits,
+        server: 'c.us',
+      },
+      queried: digits,
+    };
+  }
+
+  // Canonical JID do Baileys (geralmente @s.whatsapp.net). Scheduler/sendText aceitam ambos.
+  let serialized = String(hit.jid);
+  // Compat WPP: se vier @s.whatsapp.net, também expor variante @c.us em user/server
+  const userPart = serialized.split('@')[0].split(':')[0];
+  const serverPart = serialized.includes('@') ? serialized.split('@')[1] : 's.whatsapp.net';
+
+  // eslint-disable-next-line no-console
+  console.log(
+    `[BAILEYS checkNumberStatus] OK digits=${digits} → jid=${serialized}`,
+  );
+
+  return {
+    numberExists: true,
+    canReceiveMessage: true,
+    id: {
+      _serialized: serialized,
+      user: userPart,
+      server: serverPart,
+    },
+    queried: digits,
+  };
+}
+
+/**
  * Equivalente a client.startTyping(jid) do WPPConnect.
  * @param {string} jid
  * @param {{ userId?: string, slot?: number }} [opts]

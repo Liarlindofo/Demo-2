@@ -8,7 +8,7 @@ import {
   downloadContentFromMessage,
   toBuffer,
 } from '@whiskeysockets/baileys';
-import { sendMessage, startTyping, stopTyping, getBaileysSession } from './adapter.js';
+import { sendMessage, startTyping, stopTyping, getBaileysSession, checkNumberStatus } from './adapter.js';
 
 function toJid(to) {
   let dest = String(to || '').trim();
@@ -68,6 +68,14 @@ export function createBaileysWppClient(userId, slot, session = null) {
 
     async stopTyping(to) {
       await stopTyping(to, { userId, slot });
+    },
+
+    /**
+     * Compat WPPConnect checkNumberStatus — usado pelo scheduler de tarefas.
+     * Retorno: { numberExists, canReceiveMessage, id: { _serialized } }
+     */
+    async checkNumberStatus(idOrPhone) {
+      return checkNumberStatus(userId, idOrPhone, slot);
     },
 
     /**
