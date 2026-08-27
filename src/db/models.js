@@ -288,6 +288,21 @@ export const WhatsAppBotModel = {
   },
 
   /**
+   * Remove a linha do bot (apaga a sessão permanentemente).
+   */
+  async delete(userId, slot) {
+    try {
+      return await prisma.whatsAppBot.delete({
+        where: { userId_slot: { userId, slot } },
+      });
+    } catch (error) {
+      if (error?.code === 'P2025') return null;
+      logger.error(`Erro em WhatsAppBotModel.delete [${userId}:${slot}]:`, error);
+      throw error;
+    }
+  },
+
+  /**
    * Busca todos os bots de um usuário
    */
   async findAllByUser(userId) {

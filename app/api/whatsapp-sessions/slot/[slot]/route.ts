@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stackServerApp } from '@/stack';
 import { prisma } from '@/lib/prisma';
 import { mapBotToDto } from '@/lib/whatsapp-sessions';
+import { callWhatsAppVpsSession } from '@/lib/whatsapp-vps';
 
 function parseSlot(raw: string): number | null {
   const n = parseInt(raw, 10);
@@ -68,4 +69,49 @@ export async function PATCH(
   });
 
   return NextResponse.json({ session: mapBotToDto(bot) });
+}
+
+/**
+ * DELETE /api/whatsapp-sessions/slot/:slot
+ * Para a sessão na VPS, apaga tokens e remove o card do banco.
+ */
+export async function DELETE(
+  _req: NextRequest,
+  ctx: { params: Promise<{ slot: string }> },
+) {
+  const stackUser = await stackServerApp.getUser({ or: 'return-null' });
+  if (!stackUser) {
+    return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 });
+  }
+
+  const { slot: raw } = await ctx.params;
+  const slot = parseSlot(raw);
+  if (!slot) {
+    return NextResponse.json({ success: false, error: 'Slot inválido' }, { status: 400 });
+  }
+
+  const existing = await prisma.whatsAppBot.findUnique({
+    where: { userId_slot: { userId: stackUser.id, slot } },
+  });
+  if (!existing) {
+    return NextResponse.json({ success: false, error: 'Sessão não encontrada.' }, { status: 404 });
+  }
+
+  const vps = await callWhatsAppVpsSession(stackUser.id, slot, 'delete');
+
+  // Garante remoção no banco mesmo se a VPS estiver fora / já tiver apagado.
+  await prisma.whatsAppBot
+    .delete({ where: { userId_slot: { userId: stackUser.id, slot } } })
+    .catch(() => null);
+
+  return NextResponse.json(
+    {
+      success: true,
+      slot,
+      message: 'Sessão apagada',
+      vpsOk: vps.ok || vps.data.success === true,
+      vpsMessage: vps.data.message,
+    },
+    { status: 200 },
+  );
 }

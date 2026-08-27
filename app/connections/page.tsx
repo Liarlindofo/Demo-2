@@ -24,6 +24,7 @@ import {
   Plus,
   Bot,
   Pencil,
+  Trash2,
 } from "lucide-react";
 
 interface SessionRow {
@@ -92,8 +93,10 @@ function SessionCard({
   isStarting,
   actionLoading,
   savingConfig,
+  deleting,
   onStart,
   onStop,
+  onDelete,
   onRefresh,
   onShowQr,
   onSaveConfig,
@@ -102,8 +105,10 @@ function SessionCard({
   isStarting: boolean;
   actionLoading: boolean;
   savingConfig: boolean;
+  deleting: boolean;
   onStart: () => void;
   onStop: () => void;
+  onDelete: () => void;
   onRefresh: () => void;
   onShowQr: (qrCode: string) => void;
   onSaveConfig: (patch: {
@@ -322,6 +327,20 @@ function SessionCard({
           <RefreshCw className="h-4 w-4 mr-2" />
           Atualizar Status
         </Button>
+
+        <Button
+          onClick={onDelete}
+          disabled={actionLoading || deleting}
+          variant="outline"
+          className="w-full border-red-900/60 text-red-400 hover:bg-red-950/40 hover:text-red-300"
+        >
+          {deleting ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <Trash2 className="h-4 w-4 mr-2" />
+          )}
+          Apagar sessão
+        </Button>
       </div>
     </Card>
   );
@@ -335,6 +354,7 @@ function ConnectionsPageContent() {
   const [actionLoading, setActionLoading] = useState<Record<number, boolean>>({});
   const [isStarting, setIsStarting] = useState<Record<number, boolean>>({});
   const [savingConfig, setSavingConfig] = useState<Record<number, boolean>>({});
+  const [deleting, setDeleting] = useState<Record<number, boolean>>({});
   const [awaitingQr, setAwaitingQr] = useState<Record<number, boolean>>({});
   const [creating, setCreating] = useState(false);
 
@@ -456,6 +476,28 @@ function ConnectionsPageContent() {
     }
   };
 
+  const handleDelete = async (slot: number, label: string) => {
+    const ok = window.confirm(
+      `Apagar permanentemente "${label}"?\n\nIsso remove a sessão da lista e os dados de autenticação. Para usar de novo, será preciso criar e escanear o QR.`,
+    );
+    if (!ok) return;
+
+    setDeleting((prev) => ({ ...prev, [slot]: true }));
+    try {
+      const res = await fetch(`/api/whatsapp-sessions/slot/${slot}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.message || "Falha ao apagar sessão");
+
+      setAwaitingQr((prev) => ({ ...prev, [slot]: false }));
+      if (qrModal.slot === slot) setQrModal({ open: false });
+      await loadConnections();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Erro ao apagar sessão");
+    } finally {
+      setDeleting((prev) => ({ ...prev, [slot]: false }));
+    }
+  };
+
   const handleSaveConfig = async (
     slot: number,
     patch: {
@@ -564,8 +606,10 @@ function ConnectionsPageContent() {
                 isStarting={Boolean(isStarting[session.slot])}
                 actionLoading={Boolean(actionLoading[session.slot])}
                 savingConfig={Boolean(savingConfig[session.slot])}
+                deleting={Boolean(deleting[session.slot])}
                 onStart={() => handleStart(session.slot, session.label)}
                 onStop={() => handleStop(session.slot)}
+                onDelete={() => handleDelete(session.slot, session.label)}
                 onRefresh={loadConnections}
                 onShowQr={(qrCode) =>
                   setQrModal({ open: true, qrCode, slot: session.slot, label: session.label })

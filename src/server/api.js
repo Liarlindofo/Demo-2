@@ -997,6 +997,64 @@ export async function stopSessionConnection(req, res) {
   }
 }
 
+/** Remove pastas de auth WPP + Baileys (e nomes legados) para um slot. */
+function wipeSessionAuthDirs(userId, slot) {
+  const sanitized = String(userId).trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+  const wppRoot =
+    (config.wppConnect && config.wppConnect.sessionsDir) || '/var/www/whatsapp-sessions';
+  const baileysRoot =
+    process.env.BAILEYS_SESSIONS_ROOT || '/var/www/whatsapp-sessions-baileys';
+
+  const candidates = [
+    path.join(wppRoot, `${userId}-slot${slot}`),
+    path.join(wppRoot, `${sanitized}-slot${slot}`),
+    path.join(wppRoot, `whatsapp_${sanitized}_slot${slot}`),
+    path.join(baileysRoot, `${sanitized}-slot${slot}`),
+    path.join(baileysRoot, `${userId}-slot${slot}`),
+  ];
+
+  if (Number(slot) === 1) {
+    candidates.push(path.join(wppRoot, `whatsapp_${sanitized}`));
+  }
+
+  for (const dir of candidates) {
+    try {
+      if (fs.existsSync(dir)) {
+        logger.warn(`[wipeSessionAuthDirs] 🗑️ Removendo ${dir}`);
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    } catch (err) {
+      logger.warn(`[wipeSessionAuthDirs] Falha em ${dir}: ${err?.message || err}`);
+    }
+  }
+}
+
+/**
+ * POST /api/sessions/:userId/delete?slot=N
+ * Para worker, apaga tokens no disco e remove a linha do banco.
+ */
+export async function deleteSessionConnection(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ success: false, message: 'userId inválido' });
+    }
+
+    const normalizedUserId = userId.trim();
+    const slot = resolveAnySlot(req, 1);
+
+    await stopSessionWorker(normalizedUserId, slot).catch(() => {});
+    await stopClient(normalizedUserId, slot).catch(() => {});
+    wipeSessionAuthDirs(normalizedUserId, slot);
+    await WhatsAppBotModel.delete(normalizedUserId, slot).catch(() => {});
+
+    return res.json({ success: true, message: 'Sessão apagada', slot });
+  } catch (error) {
+    logger.error('[deleteSessionConnection]', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+}
+
 /**
  * GET /api/sessions/:userId/list
  */

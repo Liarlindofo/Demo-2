@@ -43,6 +43,7 @@ router.post('/sessions/:userId/start', asyncHandler(api.startSessionConnection))
 router.get('/sessions/:userId/status', asyncHandler(api.getSessionStatus));
 router.get('/sessions/:userId/qr', asyncHandler(api.getSessionQRCode));
 router.post('/sessions/:userId/stop', asyncHandler(api.stopSessionConnection));
+router.post('/sessions/:userId/delete', asyncHandler(api.deleteSessionConnection));
 router.get('/sessions/:userId/list', asyncHandler(api.listUserSessions));
 router.get('/sessions/:userId/groups', asyncHandler(api.getSendOnlyGroups));
 router.post('/sessions/:userId/send', asyncHandler(api.sendSendOnlyMessage));
