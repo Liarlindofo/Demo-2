@@ -15,7 +15,7 @@ type Step = "produto" | "responsavel" | "peso" | "armazenamento" | "dias" | "pre
 
 const OPCOES_DIAS: Record<string, number[]> = {
   "CONGELADO": [30, 60, 90],
-  "RESFRIADO": [3, 4, 5, 7, 15, 20],
+  "RESFRIADO": [1, 3, 4, 5, 7, 15, 20],
   "TEMPERATURA AMBIENTE": [7, 15, 20, 30],
 };
 
