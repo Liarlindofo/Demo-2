@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -108,14 +109,14 @@ export async function POST(req: NextRequest) {
         where: { numeroFolhaOrigem_data: { numeroFolhaOrigem: matricula, data } },
         update: {
           nomeSugerido: item.nome ?? null,
-          payloadBruto: item as unknown as Record<string, unknown>,
+          payloadBruto: item as unknown as Prisma.InputJsonValue,
           resolvida: false,
         },
         create: {
           numeroFolhaOrigem: matricula,
           nomeSugerido: item.nome ?? null,
           data,
-          payloadBruto: item as unknown as Record<string, unknown>,
+          payloadBruto: item as unknown as Prisma.InputJsonValue,
           resolvida: false,
         },
       });
