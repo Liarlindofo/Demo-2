@@ -972,14 +972,53 @@ model RhFuncionario {
   bonificacoesTrimestrais RhBonificacaoTrimestral[]
   bonificacoesAssiduidade RhBonificacaoAssiduidade[]
   plrPagamentos           RhPLRPagamento[]
+  numeroFolha             String?                  @unique
   tarefasAtribuidas       TarefaAtribuida[]
   tarefaSeries            TarefaSerie[]
+  pontoRegistros          PontoRegistro[]
 
   @@index([userId, cpf])
   @@index([userId])
   @@index([lojaId])
   @@index([cargoId])
   @@map("rh_funcionarios")
+}
+
+model PontoRegistro {
+  id               String        @id @default(cuid())
+  funcionarioId    String
+  funcionario      RhFuncionario @relation(fields: [funcionarioId], references: [id])
+  data             DateTime
+  entrada1         String?
+  saida1           String?
+  entrada2         String?
+  saida2           String?
+  entrada3         String?
+  saida3           String?
+  compensado       Boolean       @default(false)
+  neutro           Boolean       @default(false)
+  folga            Boolean       @default(false)
+  observacoes      String?
+  batidaIdSecullum Int           @unique
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([funcionarioId, data])
+  @@map("ponto_registros")
+}
+
+model PontoPendencia {
+  id                String   @id @default(cuid())
+  numeroFolhaOrigem String
+  nomeSugerido      String?
+  data              DateTime
+  payloadBruto      Json
+  resolvida         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  @@unique([numeroFolhaOrigem, data])
+  @@index([numeroFolhaOrigem])
+  @@map("ponto_pendencias")
 }
 
 model RhBonificacaoTrimestral {

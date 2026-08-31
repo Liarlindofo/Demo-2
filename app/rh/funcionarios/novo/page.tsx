@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLoja } from '@/contexts/LojaContext';
 import { ArrowLeft, Plus, X, User, Briefcase, DollarSign, Clock, AlertTriangle } from 'lucide-react';
@@ -54,6 +54,18 @@ export default function NovoFuncionarioPage() {
   const [novoCargoRat, setNovoCargoRat] = useState('2');
   const [savingCargo, setSavingCargo] = useState(false);
 
+  const [folhaStatus, setFolhaStatus] = useState<'idle' | 'checking' | 'ok' | 'duplicate'>('idle');
+
+  const checkNumeroFolha = useCallback(async (val: string) => {
+    if (!val.trim()) { setFolhaStatus('idle'); return; }
+    setFolhaStatus('checking');
+    try {
+      const res = await fetch(`/api/rh/funcionarios/verificar-numero-folha?numeroFolha=${encodeURIComponent(val.trim())}`);
+      const data = await res.json();
+      setFolhaStatus(data.disponivel ? 'ok' : 'duplicate');
+    } catch { setFolhaStatus('idle'); }
+  }, []);
+
   const [dadosPessoais, setDadosPessoais] = useState<DadosPessoaisValues>({
     nome: '',
     cpf: '',
@@ -61,6 +73,7 @@ export default function NovoFuncionarioPage() {
     telefone: '',
     dataNascimento: '',
     dataAdmissao: new Date().toISOString().split('T')[0],
+    numeroFolha: '',
   });
   const [composicao, setComposicao] = useState<ComposicaoSalarialValues>({
     salarioBase: '',
@@ -90,6 +103,11 @@ export default function NovoFuncionarioPage() {
   useEffect(() => {
     if (lojaSelecionada && !lojaId) setLojaId(lojaSelecionada.id);
   }, [lojaSelecionada, lojaId]);
+
+  useEffect(() => {
+    const t = setTimeout(() => checkNumeroFolha(dadosPessoais.numeroFolha), 500);
+    return () => clearTimeout(t);
+  }, [dadosPessoais.numeroFolha, checkNumeroFolha]);
 
   const toggleDiaFolga = (dia: string) => {
     setDiasFolga((prev) =>
@@ -320,6 +338,7 @@ export default function NovoFuncionarioPage() {
               values={dadosPessoais}
               onChange={(p) => setDadosPessoais((prev) => ({ ...prev, ...p }))}
               errors={errors}
+              folhaStatus={folhaStatus}
             />
           </div>
 

@@ -159,6 +159,8 @@ export default function FuncionarioDetailPage() {
   const [diasFolga, setDiasFolga] = useState<string[]>([]);
   const [domingoFolga, setDomingoFolga] = useState<string>('1');
   const [observacoes, setObservacoes] = useState('');
+  const [numeroFolha, setNumeroFolha] = useState('');
+  const [folhaStatus, setFolhaStatus] = useState<'idle' | 'checking' | 'ok' | 'duplicate'>('idle');
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -181,6 +183,8 @@ export default function FuncionarioDetailPage() {
     setDiasFolga(Array.isArray(f.diasFolga) ? f.diasFolga : []);
     setDomingoFolga(f.domingoFolga ?? '1');
     setObservacoes(f.observacoes ?? '');
+    setNumeroFolha((f as Funcionario & { numeroFolha?: string | null }).numeroFolha ?? '');
+    setFolhaStatus('idle');
     setDataGozoFerias(f.dataGozoFerias ? f.dataGozoFerias.split('T')[0] : '');
     setDiasFeriasGozados(f.diasFeriasGozados ?? 0);
     setStatusFerias(f.statusFerias ?? 'a_gozar');
@@ -285,6 +289,7 @@ export default function FuncionarioDetailPage() {
           diasFolga,
           domingoFolga,
           observacoes: observacoes || null,
+          numeroFolha: numeroFolha?.trim() || null,
         }),
       });
       if (res.ok) {
@@ -517,6 +522,30 @@ export default function FuncionarioDetailPage() {
                         <option value="">Selecione a loja</option>
                         {lojas.map((l: Loja) => <option key={l.id} value={l.id}>{l.nome}</option>)}
                       </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>N° da folha (matrícula Secullum)</label>
+                      <input
+                        value={numeroFolha}
+                        onChange={e => {
+                          const v = e.target.value.trim();
+                          setNumeroFolha(v);
+                          if (!v) { setFolhaStatus('idle'); return; }
+                          setFolhaStatus('checking');
+                          const t = setTimeout(async () => {
+                            try {
+                              const r = await fetch(`/api/rh/funcionarios/verificar-numero-folha?numeroFolha=${encodeURIComponent(v)}&excludeId=${params.id}`);
+                              const d = await r.json();
+                              setFolhaStatus(d.disponivel ? 'ok' : 'duplicate');
+                            } catch { setFolhaStatus('idle'); }
+                          }, 500);
+                          return () => clearTimeout(t);
+                        }}
+                        placeholder="Ex: 316"
+                        className={`${inputCls} ${folhaStatus === 'duplicate' ? 'border-red-500/50' : folhaStatus === 'ok' ? 'border-green-500/30' : ''}`}
+                      />
+                      {folhaStatus === 'duplicate' && <p className="text-xs text-red-400 mt-1">N° da folha já cadastrado em outro funcionário</p>}
+                      {folhaStatus === 'checking' && <p className="text-xs text-gray-500 mt-1">Verificando...</p>}
                     </div>
                     <div className="sm:col-span-2">
                       <label className={labelCls}>Observações</label>

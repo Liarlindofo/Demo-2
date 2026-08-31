@@ -103,7 +103,9 @@ export async function POST(req: Request) {
       diasFolga,
       domingoFolga,
       observacoes,
+      numeroFolha: numeroFolhaRaw,
     } = body;
+    const numeroFolha = numeroFolhaRaw?.trim() || null;
 
     const composicao = parseComposicaoBody(body);
     const cpf = cpfRaw ? limparCPF(String(cpfRaw)) : null;
@@ -123,6 +125,14 @@ export async function POST(req: Request) {
       });
       if (cpfExistente)
         return NextResponse.json({ error: 'CPF já cadastrado' }, { status: 409 });
+    }
+
+    if (numeroFolha) {
+      const folhaExistente = await prisma.rhFuncionario.findFirst({
+        where: { userId: dbUser.id, numeroFolha },
+      });
+      if (folhaExistente)
+        return NextResponse.json({ error: 'N° da folha já cadastrado em outro funcionário' }, { status: 409 });
     }
 
     // Cargo e Loja opcionais — valida apenas se informados
@@ -163,6 +173,7 @@ export async function POST(req: Request) {
         diasFolga: diasFolga ?? [],
         domingoFolga: domingoFolga ?? null,
         observacoes: observacoes || null,
+        numeroFolha: numeroFolha ?? null,
         dataInicioExperiencia: admissao,
         dataFimExperiencia1,
         dataFimExperiencia2,

@@ -27,6 +27,7 @@ export interface DadosPessoaisValues {
   telefone: string;
   dataNascimento: string;
   dataAdmissao: string;
+  numeroFolha: string;
 }
 
 interface DadosPessoaisProps {
@@ -34,6 +35,7 @@ interface DadosPessoaisProps {
   onChange: (patch: Partial<DadosPessoaisValues>) => void;
   errors: Record<string, string>;
   excludeFuncionarioId?: string;
+  folhaStatus?: 'idle' | 'checking' | 'ok' | 'duplicate';
 }
 
 export function DadosPessoaisFields({
@@ -41,6 +43,7 @@ export function DadosPessoaisFields({
   onChange,
   errors,
   excludeFuncionarioId,
+  folhaStatus,
 }: DadosPessoaisProps) {
   const [cpfStatus, setCpfStatus] = useState<'idle' | 'checking' | 'ok' | 'invalid' | 'duplicate'>('idle');
   const [idade, setIdade] = useState<number | null>(null);
@@ -167,6 +170,30 @@ export function DadosPessoaisFields({
           <p className="text-xs text-red-400 mt-1">{errors.dataAdmissao}</p>
         )}
       </div>
+      <div>
+        <label className={labelCls}>N° da folha (matrícula Secullum)</label>
+        <input
+          value={values.numeroFolha}
+          onChange={(e) => onChange({ numeroFolha: e.target.value.trim() })}
+          placeholder="Ex: 316"
+          className={`${inputCls} ${
+            errors.numeroFolha || folhaStatus === 'duplicate'
+              ? 'border-red-500/50'
+              : folhaStatus === 'ok'
+              ? 'border-green-500/30'
+              : ''
+          }`}
+        />
+        {folhaStatus === 'checking' && (
+          <p className="text-xs text-gray-500 mt-1">Verificando N° da folha...</p>
+        )}
+        {folhaStatus === 'duplicate' && !errors.numeroFolha && (
+          <p className="text-xs text-red-400 mt-1">N° da folha já cadastrado em outro funcionário</p>
+        )}
+        {errors.numeroFolha && (
+          <p className="text-xs text-red-400 mt-1">{errors.numeroFolha}</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -215,5 +242,6 @@ export function buildDadosPessoaisPayload(values: DadosPessoaisValues) {
     telefone: values.telefone || null,
     dataNascimento: values.dataNascimento,
     dataAdmissao: values.dataAdmissao,
+    numeroFolha: values.numeroFolha?.trim() || null,
   };
 }

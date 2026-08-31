@@ -163,7 +163,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       statusFerias,
       diasFeriasGozados,
       motivo,
+      numeroFolha: numeroFolhaRaw,
     } = body;
+    const numeroFolhaNorm =
+      numeroFolhaRaw !== undefined ? (numeroFolhaRaw?.trim() || null) : undefined;
 
     // Normaliza strings vazias de campos opcionais (form manda "" em vez de null)
     const cpfLimpo =
@@ -198,6 +201,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         return NextResponse.json({ error: 'Data de nascimento inválida' }, { status: 400 });
       const errNasc = validarDataNascimento(nasc);
       if (errNasc) return NextResponse.json({ error: errNasc }, { status: 400 });
+    }
+
+    if (numeroFolhaNorm !== undefined && numeroFolhaNorm) {
+      const folhaDup = await prisma.rhFuncionario.findFirst({
+        where: { userId: rh!.userId, numeroFolha: numeroFolhaNorm, id: { not: id } },
+        select: { id: true },
+      });
+      if (folhaDup)
+        return NextResponse.json({ error: 'N° da folha já cadastrado em outro funcionário' }, { status: 409 });
     }
 
     if (salarioBase !== undefined && Number(salarioBase) <= 0)
@@ -343,6 +355,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...(domingoFolga !== undefined && { domingoFolga: domingoFolga || null }),
           ...(observacoes !== undefined && { observacoes: observacoes || null }),
           ...(ativo !== undefined && { ativo }),
+          ...(numeroFolhaNorm !== undefined && { numeroFolha: numeroFolhaNorm }),
           ...feriasData,
           ...experienciaData,
         },
