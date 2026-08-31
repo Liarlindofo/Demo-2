@@ -27,6 +27,7 @@ const TOOL_LABELS: Record<SystemTool, string> = {
   [SystemTool.TAREFAS]: "Tarefas",
   [SystemTool.BONIFICACAO]: "Bonificação",
   [SystemTool.CHAT]: "Chat",
+  [SystemTool.PONTOS]: "Pontos",
 };
 
 export default function ToolProtection({ tool, toolName, children }: ToolProtectionProps) {
