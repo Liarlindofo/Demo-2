@@ -39,6 +39,7 @@ export enum SystemTool {
   TAREFAS = 'tarefas',
   BONIFICACAO = 'bonificacao',
   CHAT = 'chat',
+  PONTOS = 'pontos',
 }
 
 export interface StackUser {

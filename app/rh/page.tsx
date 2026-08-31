@@ -160,6 +160,14 @@ const navItems = [
     bg: 'bg-red-500/10',
   },
   {
+    href: '/pontos',
+    icon: Clock,
+    label: 'Pontos',
+    description: 'Cartão ponto diário via Secullum RH',
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10',
+  },
+  {
     href: '/rh/quadro-ideal',
     icon: ClipboardList,
     label: 'Quadro Ideal',
