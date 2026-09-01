@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { normalizeSupabaseUrl } from '@/lib/whatsapp-evidence-storage';
+import { saoPauloYmd } from '@/lib/complaints/period';
 
 /** Bucket privado das atas Word de reclamações. */
 export const ATAS_RECLAMACOES_BUCKET = 'atas-reclamacoes';
@@ -18,6 +19,14 @@ function getSupabase(): SupabaseClient | null {
 
 export function ataStoragePath(tenantId: string, reviewRunId: string): string {
   return `${tenantId}/${reviewRunId}/ata.docx`;
+}
+
+/** Nome do arquivo ao baixar: dd-MM-yyyy - ata reuniao.docx (data do período, SP) */
+export function ataDownloadFilename(periodStart: Date | string): string {
+  const { day, month, year } = saoPauloYmd(new Date(periodStart));
+  const dd = String(day).padStart(2, '0');
+  const mm = String(month).padStart(2, '0');
+  return `${dd}-${mm}-${year} - ata reuniao.docx`;
 }
 
 export async function uploadAtaDocx(

@@ -577,7 +577,25 @@ function RelatoriosContent() {
         alert(data.error || 'Não foi possível baixar a ata.');
         return;
       }
-      window.open(data.url, '_blank', 'noopener,noreferrer');
+      const filename =
+        typeof data.filename === 'string' && data.filename.trim()
+          ? data.filename.trim()
+          : 'ata reuniao.docx';
+      const blobRes = await fetch(data.url);
+      if (!blobRes.ok) {
+        alert('Não foi possível baixar o arquivo da ata.');
+        return;
+      }
+      const blob = await blobRes.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = filename;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
     } catch {
       alert('Falha de rede ao baixar a ata.');
     } finally {

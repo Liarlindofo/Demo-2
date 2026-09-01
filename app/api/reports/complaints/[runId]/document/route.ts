@@ -5,7 +5,7 @@ export const maxDuration = 300;
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getReportsTenantUserId, getReportsTenantUserIds } from '@/lib/reports-tenant-auth';
-import { createAtaSignedUrl } from '@/lib/complaints/ata-storage';
+import { createAtaSignedUrl, ataDownloadFilename } from '@/lib/complaints/ata-storage';
 import { buildAndSaveAta } from '@/lib/complaints/build-ata';
 
 const SIGNED_TTL_SECONDS = 3600;
@@ -29,6 +29,7 @@ export async function GET(
     select: {
       id: true,
       ataStoragePath: true,
+      periodStart: true,
     },
   });
 
@@ -57,7 +58,11 @@ export async function GET(
     );
   }
 
-  return NextResponse.json({ url, expiresIn: SIGNED_TTL_SECONDS });
+  return NextResponse.json({
+    url,
+    expiresIn: SIGNED_TTL_SECONDS,
+    filename: ataDownloadFilename(run.periodStart),
+  });
 }
 
 /**
