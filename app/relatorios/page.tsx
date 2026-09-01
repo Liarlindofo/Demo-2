@@ -261,6 +261,7 @@ function ConversationMedia({
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -282,18 +283,66 @@ function ConversationMedia({
     };
   }, [messageId]);
 
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightboxOpen]);
+
   if (failed) {
     return <p className="text-xs text-gray-500 mt-1">Foto indisponível</p>;
   }
   if (!url) {
     return <Loader2 className="w-4 h-4 text-gray-500 animate-spin mt-2" />;
   }
+
+  const label =
+    messageType === 'sticker' ? 'Figurinha' : 'Foto da conversa';
+
   return (
-    <img
-      src={url}
-      alt="Foto da conversa"
-      className="mt-2 max-h-72 w-auto max-w-full rounded-lg border border-[#2a2a2e]"
-    />
+    <>
+      <button
+        type="button"
+        onClick={() => setLightboxOpen(true)}
+        className="mt-2 block rounded-lg border border-[#2a2a2e] overflow-hidden hover:border-amber-500/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50"
+        title="Clique para ampliar"
+      >
+        <img
+          src={url}
+          alt={label}
+          className="max-h-24 w-auto max-w-[200px] object-cover cursor-zoom-in"
+        />
+      </button>
+      <p className="text-[10px] text-gray-500 mt-1">Clique na imagem para ampliar</p>
+
+      {lightboxOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4"
+          onClick={() => setLightboxOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={label}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(false)}
+            className="absolute top-4 right-4 w-9 h-9 rounded-lg flex items-center justify-center text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+            aria-label="Fechar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={url}
+            alt={label}
+            className="max-h-[90vh] max-w-[min(95vw,1200px)] w-auto object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1038,8 +1087,7 @@ function RelatoriosContent() {
                         run.status === 'PROCESSANDO';
                       const hasComplaints = (run.totalReclamacoes ?? 0) > 0;
                       const confirmadas = run.confirmadasCount ?? 0;
-                      const canGenerate =
-                        run.status === 'CONCLUIDO' && confirmadas > 0;
+                      const canGenerate = canReview && hasComplaints && confirmadas > 0;
                       const hasAta = Boolean(run.ataStoragePath);
 
                       return (
@@ -1114,9 +1162,7 @@ function RelatoriosContent() {
                                     ? hasAta
                                       ? 'Regenerar ata com as marcações atuais'
                                       : 'Gerar ata com reclamações marcadas'
-                                    : run.status === 'EM_ANDAMENTO'
-                                      ? 'Ata disponível após o fechamento do mês'
-                                      : 'Marque ao menos uma reclamação na revisão'
+                                    : 'Marque ao menos uma reclamação na revisão'
                                 }
                                 onClick={() => handleGenerateAta(run.id)}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"

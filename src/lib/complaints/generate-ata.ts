@@ -236,7 +236,7 @@ function comparisonSection(
 }
 
 /**
- * Monta o .docx da ata para um ComplaintReviewRun já CONCLUIDO.
+ * Monta o .docx da ata para um ComplaintReviewRun (mês em andamento ou concluído).
  */
 export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buffer> {
   const run = await prisma.complaintReviewRun.findUnique({

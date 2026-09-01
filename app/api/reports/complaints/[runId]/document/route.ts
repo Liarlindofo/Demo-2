@@ -78,18 +78,11 @@ export async function POST(
 
   const run = await prisma.complaintReviewRun.findFirst({
     where: { id: runId, userId: { in: userIds } },
-    select: { id: true, status: true },
+    select: { id: true },
   });
 
   if (!run) {
     return NextResponse.json({ error: 'Review run não encontrado.' }, { status: 404 });
-  }
-
-  if (run.status !== 'CONCLUIDO') {
-    return NextResponse.json(
-      { error: 'Só é possível gerar ata de runs concluídos.' },
-      { status: 400 },
-    );
   }
 
   const confirmadas = await prisma.complaint.count({
