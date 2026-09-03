@@ -1551,8 +1551,18 @@ model TarefaTemplate {
   exigeArquivo          Boolean  @default(false)
   /// Metadados para validação por visão: { objeto_esperado, extrair, faixa_ok: { min, max }, unidade }
   validacaoIA           Json?
-  /// Dias em que a tarefa deve ser feita (0=Dom … 6=Sáb). Usado como padrão na atribuição.
+  /// "semanal" | "mensal" — padrão usado na atribuição e na propagação do grupo.
+  recorrenciaTipo       String   @default("semanal")
+  /// Dias em que a tarefa deve ser feita (0=Dom … 6=Sáb). Usado quando recorrenciaTipo=semanal.
   diasSemana            Int[]    @default([])
+  /// "dia_do_mes" | "nth_weekday" — quando recorrenciaTipo=mensal.
+  mensalModo            String?
+  /// Dia fixo do mês (1–31) quando mensalModo=dia_do_mes.
+  diaDoMes              Int?
+  /// 1|2|3|4|-1 (última) quando mensalModo=nth_weekday.
+  nth                   Int?
+  /// 0=Dom … 6=Sáb quando mensalModo=nth_weekday.
+  weekday               Int?
   /// Horário limite padrão (HH:mm, BRT) ao atribuir este template.
   horarioPadrao         String   @default("08:00")
   lojaId                String?  // null = global

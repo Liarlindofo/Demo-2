@@ -20,7 +20,14 @@ import {
   CalendarDays,
   Clock,
 } from 'lucide-react';
-import { DIAS_SEMANA_PT, formatDiasSemana } from '@/lib/tarefas-dias';
+import { DIAS_SEMANA_PT } from '@/lib/tarefas-dias';
+import {
+  formatTemplateRecorrencia,
+  NTH_LABELS_PT,
+  type TemplateMensalModo,
+  type TemplateNth,
+  type TemplateRecorrenciaTipo,
+} from '@/lib/tarefas-template-recorrencia';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -46,7 +53,12 @@ interface TarefaTemplate {
   loja?: { id: string; nome: string } | null;
   cargo?: { id: string; nome: string } | null;
   grupoItens?: Array<{ grupo: { id: string; nome: string; ativo: boolean } }>;
+  recorrenciaTipo?: string;
   diasSemana?: number[];
+  mensalModo?: string | null;
+  diaDoMes?: number | null;
+  nth?: number | null;
+  weekday?: number | null;
   horarioPadrao?: string;
 }
 
@@ -81,7 +93,12 @@ interface TemplateForm {
   ia_max: string;
   ia_unidade: string;
   grupoId: string;
+  recorrenciaTipo: TemplateRecorrenciaTipo;
   diasSemana: number[];
+  mensalModo: TemplateMensalModo;
+  diaDoMes: number;
+  nth: TemplateNth;
+  weekday: number;
   horarioPadrao: string;
 }
 
@@ -100,7 +117,12 @@ const EMPTY_FORM: TemplateForm = {
   ia_max: '',
   ia_unidade: '',
   grupoId: '',
+  recorrenciaTipo: 'semanal',
   diasSemana: [],
+  mensalModo: 'dia_do_mes',
+  diaDoMes: 1,
+  nth: 1,
+  weekday: 1,
   horarioPadrao: '08:00',
 };
 
@@ -260,7 +282,16 @@ export default function TarefasTemplatesPage() {
       ia_max: ia?.faixa_ok?.max != null ? String(ia.faixa_ok.max) : '',
       ia_unidade: ia?.unidade ?? '',
       grupoId: t.grupoItens?.[0]?.grupo.id ?? '',
+      recorrenciaTipo: t.recorrenciaTipo === 'mensal' ? 'mensal' : 'semanal',
       diasSemana: t.diasSemana ?? [],
+      mensalModo: t.mensalModo === 'nth_weekday' ? 'nth_weekday' : 'dia_do_mes',
+      diaDoMes: t.diaDoMes && t.diaDoMes >= 1 && t.diaDoMes <= 31 ? t.diaDoMes : 1,
+      nth:
+        t.nth === 2 || t.nth === 3 || t.nth === 4 || t.nth === -1 ? t.nth : 1,
+      weekday:
+        typeof t.weekday === 'number' && t.weekday >= 0 && t.weekday <= 6
+          ? t.weekday
+          : 1,
       horarioPadrao: t.horarioPadrao ?? '08:00',
     });
     setError(null);
@@ -290,8 +321,17 @@ export default function TarefasTemplatesPage() {
   function validate(): string | null {
     if (!form.titulo.trim()) return 'O título é obrigatório.';
     if (!form.descricao.trim()) return 'A descrição é obrigatória.';
-    if (form.diasSemana.length === 0) {
+    if (form.recorrenciaTipo === 'semanal' && form.diasSemana.length === 0) {
       return 'Selecione pelo menos um dia da semana em que a tarefa deve ser feita.';
+    }
+    if (form.recorrenciaTipo === 'mensal') {
+      if (form.mensalModo === 'dia_do_mes') {
+        if (form.diaDoMes < 1 || form.diaDoMes > 31) {
+          return 'Informe um dia do mês válido (1–31).';
+        }
+      } else if (form.weekday < 0 || form.weekday > 6) {
+        return 'Selecione o dia da semana para a recorrência mensal.';
+      }
     }
     if (!form.horarioPadrao || !/^\d{2}:\d{2}$/.test(form.horarioPadrao)) {
       return 'Informe o horário da tarefa.';
@@ -352,7 +392,21 @@ export default function TarefasTemplatesPage() {
         validacaoIA,
         lojaId: form.lojaId || null,
         cargoId: form.cargoId || null,
-        diasSemana: form.diasSemana,
+        recorrenciaTipo: form.recorrenciaTipo,
+        diasSemana: form.recorrenciaTipo === 'semanal' ? form.diasSemana : [],
+        mensalModo: form.recorrenciaTipo === 'mensal' ? form.mensalModo : null,
+        diaDoMes:
+          form.recorrenciaTipo === 'mensal' && form.mensalModo === 'dia_do_mes'
+            ? form.diaDoMes
+            : null,
+        nth:
+          form.recorrenciaTipo === 'mensal' && form.mensalModo === 'nth_weekday'
+            ? form.nth
+            : null,
+        weekday:
+          form.recorrenciaTipo === 'mensal' && form.mensalModo === 'nth_weekday'
+            ? form.weekday
+            : null,
         horarioPadrao: form.horarioPadrao,
         ...(form.grupoId && { grupoId: form.grupoId }),
       };
@@ -606,10 +660,11 @@ export default function TarefasTemplatesPage() {
                     {/* Descrição */}
                     <p className="text-sm text-gray-400 mt-1 line-clamp-2">{t.descricao}</p>
 
-                    {(t.diasSemana?.length ?? 0) > 0 && (
+                    {(t.recorrenciaTipo === 'mensal' ||
+                      (t.diasSemana?.length ?? 0) > 0) && (
                       <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1.5 flex-wrap">
                         <CalendarDays className="w-3 h-3" />
-                        {formatDiasSemana(t.diasSemana!)}
+                        {formatTemplateRecorrencia(t)}
                         {t.horarioPadrao && (
                           <span className="inline-flex items-center gap-1 text-blue-300/70">
                             <Clock className="w-3 h-3" />
@@ -761,31 +816,165 @@ export default function TarefasTemplatesPage() {
                 </p>
               </div>
 
-              <div>
-                <label className={labelCls}>
-                  Dias da semana <span className="text-red-400">*</span>
-                </label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {DIAS_SEMANA_PT.map((dia, dow) => (
-                    <button
-                      key={dow}
-                      type="button"
-                      onClick={() => toggleDiaSemana(dow)}
-                      className={`w-10 h-10 rounded-xl text-xs font-medium border transition-colors ${
-                        form.diasSemana.includes(dow)
-                          ? 'bg-blue-500/10 border-blue-500/40 text-blue-300'
-                          : 'bg-[#0a0a0a] border-[#2a2a2e] text-gray-400 hover:text-white'
-                      }`}
-                    >
-                      {dia}
-                    </button>
-                  ))}
+              <div className="space-y-3">
+                <div>
+                  <label className={labelCls}>
+                    Quando a tarefa deve ser feita{' '}
+                    <span className="text-red-400">*</span>
+                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    {(
+                      [
+                        { v: 'semanal' as const, label: 'Dias da semana' },
+                        { v: 'mensal' as const, label: 'Mensal' },
+                      ] as const
+                    ).map(({ v, label }) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setField('recorrenciaTipo', v)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                          form.recorrenciaTipo === v
+                            ? 'bg-blue-500/10 border-blue-500/40 text-blue-300'
+                            : 'bg-[#0a0a0a] border-[#2a2a2e] text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <p className="text-xs text-gray-600 mt-1.5">
-                  Esses dias serão o padrão ao atribuir este template a um funcionário — não precisa
-                  configurar um a um. No dia de folga do funcionário (ficha de RH) a tarefa não é
-                  enviada.
-                </p>
+
+                {form.recorrenciaTipo === 'semanal' && (
+                  <div>
+                    <label className={labelCls}>
+                      Dias da semana <span className="text-red-400">*</span>
+                    </label>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {DIAS_SEMANA_PT.map((dia, dow) => (
+                        <button
+                          key={dow}
+                          type="button"
+                          onClick={() => toggleDiaSemana(dow)}
+                          className={`w-10 h-10 rounded-xl text-xs font-medium border transition-colors ${
+                            form.diasSemana.includes(dow)
+                              ? 'bg-blue-500/10 border-blue-500/40 text-blue-300'
+                              : 'bg-[#0a0a0a] border-[#2a2a2e] text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          {dia}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1.5">
+                      Esses dias serão o padrão ao atribuir este template. No dia de
+                      folga do funcionário (ficha de RH) a tarefa não é enviada.
+                    </p>
+                  </div>
+                )}
+
+                {form.recorrenciaTipo === 'mensal' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className={labelCls}>Como repetir</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {(
+                          [
+                            { v: 'dia_do_mes' as const, label: 'Dia do mês' },
+                            { v: 'nth_weekday' as const, label: 'Dia da semana' },
+                          ] as const
+                        ).map(({ v, label }) => (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setField('mensalModo', v)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                              form.mensalModo === v
+                                ? 'bg-blue-500/10 border-blue-500/40 text-blue-300'
+                                : 'bg-[#0a0a0a] border-[#2a2a2e] text-gray-400 hover:text-white'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {form.mensalModo === 'dia_do_mes' ? (
+                      <div>
+                        <label className={labelCls}>
+                          Dia do mês <span className="text-red-400">*</span>
+                        </label>
+                        <select
+                          value={form.diaDoMes}
+                          onChange={(e) =>
+                            setField('diaDoMes', Number(e.target.value))
+                          }
+                          className={inputCls}
+                        >
+                          {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                            <option key={d} value={d}>
+                              Todo dia {d}
+                            </option>
+                          ))}
+                        </select>
+                        {form.diaDoMes >= 29 && (
+                          <p className="text-xs text-gray-500 mt-1.5">
+                            Em meses sem esse dia, usa o último dia do mês.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div>
+                          <label className={labelCls}>
+                            Qual ocorrência <span className="text-red-400">*</span>
+                          </label>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {NTH_LABELS_PT.map(({ v, label }) => (
+                              <button
+                                key={v}
+                                type="button"
+                                onClick={() => setField('nth', v)}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                                  form.nth === v
+                                    ? 'bg-blue-500/10 border-blue-500/40 text-blue-300'
+                                    : 'bg-[#0a0a0a] border-[#2a2a2e] text-gray-400 hover:text-white'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className={labelCls}>
+                            Dia da semana <span className="text-red-400">*</span>
+                          </label>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {DIAS_SEMANA_PT.map((dia, dow) => (
+                              <button
+                                key={dow}
+                                type="button"
+                                onClick={() => setField('weekday', dow)}
+                                className={`w-10 h-10 rounded-xl text-xs font-medium border transition-colors ${
+                                  form.weekday === dow
+                                    ? 'bg-blue-500/10 border-blue-500/40 text-blue-300'
+                                    : 'bg-[#0a0a0a] border-[#2a2a2e] text-gray-400 hover:text-white'
+                                }`}
+                              >
+                                {dia}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-xs text-gray-600 mt-1.5">
+                            Ex.: 1ª + Seg = primeira segunda-feira de cada mês.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>

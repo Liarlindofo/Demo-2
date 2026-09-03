@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rhGetUser } from '@/lib/rh-auth';
-import { parseDiasSemana, parseHorarioHHmm } from '@/lib/tarefas-dias';
+import { parseHorarioHHmm } from '@/lib/tarefas-dias';
+import { parseTemplateRecorrencia } from '@/lib/tarefas-template-recorrencia';
 import { propagarTemplateNoGrupo } from '@/lib/tarefas-propagar-grupo';
 import {
   excluirTemplateEAtribuicoes,
@@ -49,8 +50,13 @@ export async function PATCH(
       cargoId,
       ativo,
       grupoId,
-      diasSemana: diasSemanaRaw,
       horarioPadrao: horarioRaw,
+      recorrenciaTipo,
+      diasSemana: diasSemanaRaw,
+      mensalModo,
+      diaDoMes,
+      nth,
+      weekday,
     } = body;
 
     // Se está editando conteúdo (não apenas toggling ativo), validar campos obrigatórios
@@ -74,16 +80,27 @@ export async function PATCH(
       }
     }
 
-    let diasSemana: number[] | undefined;
-    if (diasSemanaRaw !== undefined) {
-      const parsed = parseDiasSemana(diasSemanaRaw);
-      if (!parsed || parsed.length === 0) {
-        return NextResponse.json(
-          { error: 'Selecione pelo menos um dia da semana em que a tarefa deve ser feita.' },
-          { status: 400 },
-        );
+    const recorrenciaTouched =
+      recorrenciaTipo !== undefined ||
+      diasSemanaRaw !== undefined ||
+      mensalModo !== undefined ||
+      diaDoMes !== undefined ||
+      nth !== undefined ||
+      weekday !== undefined;
+
+    let recorrenciaData: ReturnType<typeof parseTemplateRecorrencia> | null = null;
+    if (recorrenciaTouched) {
+      recorrenciaData = parseTemplateRecorrencia({
+        recorrenciaTipo: recorrenciaTipo ?? template.recorrenciaTipo,
+        diasSemana: diasSemanaRaw ?? template.diasSemana,
+        mensalModo: mensalModo !== undefined ? mensalModo : template.mensalModo,
+        diaDoMes: diaDoMes !== undefined ? diaDoMes : template.diaDoMes,
+        nth: nth !== undefined ? nth : template.nth,
+        weekday: weekday !== undefined ? weekday : template.weekday,
+      });
+      if (recorrenciaData.ok === false) {
+        return NextResponse.json({ error: recorrenciaData.error }, { status: 400 });
       }
-      diasSemana = parsed;
     }
 
     let horarioPadrao: string | undefined;
@@ -111,7 +128,14 @@ export async function PATCH(
         ...(lojaId !== undefined && { lojaId: lojaId || null }),
         ...(cargoId !== undefined && { cargoId: cargoId || null }),
         ...(ativo !== undefined && { ativo }),
-        ...(diasSemana !== undefined && { diasSemana }),
+        ...(recorrenciaData?.ok && {
+          recorrenciaTipo: recorrenciaData.data.recorrenciaTipo,
+          diasSemana: recorrenciaData.data.diasSemana,
+          mensalModo: recorrenciaData.data.mensalModo,
+          diaDoMes: recorrenciaData.data.diaDoMes,
+          nth: recorrenciaData.data.nth,
+          weekday: recorrenciaData.data.weekday,
+        }),
         ...(horarioPadrao !== undefined && { horarioPadrao }),
       },
       include: includeTemplate,

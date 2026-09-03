@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { funcionarioEstaDeFolga } from '@/lib/rh-folga';
 import { gerarDatas, ymdBrasilia } from '@/lib/tarefas-recorrencia';
+import { templateToSlotRecorrencia } from '@/lib/tarefas-template-recorrencia';
 
 export type PropagacaoResultado = {
   funcionarios: number;
@@ -29,11 +30,21 @@ export async function propagarTemplateNoGrupo(
       id: true,
       lojaId: true,
       cargoId: true,
+      recorrenciaTipo: true,
       diasSemana: true,
+      mensalModo: true,
+      diaDoMes: true,
+      nth: true,
+      weekday: true,
       horarioPadrao: true,
     },
   });
-  if (!template || template.diasSemana.length === 0 || !template.horarioPadrao) {
+  if (!template || !template.horarioPadrao) {
+    return vazio;
+  }
+
+  const recorrencia = templateToSlotRecorrencia(template);
+  if (recorrencia.tipo === 'semanal' && !(recorrencia.diasSemana?.length)) {
     return vazio;
   }
 
@@ -105,10 +116,22 @@ export async function propagarTemplateNoGrupo(
       templateId,
       dataBase: hoje,
       horario: template.horarioPadrao,
-      recorrencia: { tipo: 'semanal', diasSemana: template.diasSemana },
+      recorrencia,
     }).filter((d) => d > agora && !funcionarioEstaDeFolga(func, d));
 
     if (datas.length === 0) continue;
+
+    const serieFields = {
+      horario: template.horarioPadrao,
+      tipo: recorrencia.tipo ?? 'semanal',
+      diasSemana: recorrencia.diasSemana ?? [],
+      mensalModo: recorrencia.mensalModo ?? null,
+      diaDoMes: recorrencia.diaDoMes ?? null,
+      nth: recorrencia.nth ?? null,
+      weekday: recorrencia.weekday ?? null,
+      renovarAuto: true,
+      ativo: true,
+    };
 
     const serie = await prisma.tarefaSerie.upsert({
       where: {
@@ -119,19 +142,9 @@ export async function propagarTemplateNoGrupo(
         templateId,
         funcionarioId,
         lojaId,
-        horario: template.horarioPadrao,
-        tipo: 'semanal',
-        diasSemana: template.diasSemana,
-        renovarAuto: true,
-        ativo: true,
+        ...serieFields,
       },
-      update: {
-        horario: template.horarioPadrao,
-        tipo: 'semanal',
-        diasSemana: template.diasSemana,
-        renovarAuto: true,
-        ativo: true,
-      },
+      update: serieFields,
     });
 
     const existentes = await prisma.tarefaAtribuida.findMany({

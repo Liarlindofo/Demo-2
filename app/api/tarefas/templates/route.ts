@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rhGetUser } from '@/lib/rh-auth';
-import { parseDiasSemana, parseHorarioHHmm } from '@/lib/tarefas-dias';
+import { parseHorarioHHmm } from '@/lib/tarefas-dias';
+import { parseTemplateRecorrencia } from '@/lib/tarefas-template-recorrencia';
 import { propagarTemplateNoGrupo } from '@/lib/tarefas-propagar-grupo';
 
 export const dynamic = 'force-dynamic';
@@ -49,7 +50,6 @@ export async function POST(req: Request) {
       lojaId,
       cargoId,
       grupoId,
-      diasSemana: diasSemanaRaw,
       horarioPadrao: horarioRaw,
     } = body;
 
@@ -65,13 +65,12 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    const diasSemana = parseDiasSemana(diasSemanaRaw);
-    if (!diasSemana || diasSemana.length === 0) {
-      return NextResponse.json(
-        { error: 'Selecione pelo menos um dia da semana em que a tarefa deve ser feita.' },
-        { status: 400 },
-      );
+
+    const recorrencia = parseTemplateRecorrencia(body);
+    if (recorrencia.ok === false) {
+      return NextResponse.json({ error: recorrencia.error }, { status: 400 });
     }
+
     const horarioPadrao = parseHorarioHHmm(horarioRaw);
     if (!horarioPadrao) {
       return NextResponse.json(
@@ -111,7 +110,12 @@ export async function POST(req: Request) {
         validacaoIA: validacaoIA ?? null,
         lojaId: lojaId || null,
         cargoId: cargoId || null,
-        diasSemana,
+        recorrenciaTipo: recorrencia.data.recorrenciaTipo,
+        diasSemana: recorrencia.data.diasSemana,
+        mensalModo: recorrencia.data.mensalModo,
+        diaDoMes: recorrencia.data.diaDoMes,
+        nth: recorrencia.data.nth,
+        weekday: recorrencia.data.weekday,
         horarioPadrao,
         criadoPor: rh.userId,
         grupoItens: {

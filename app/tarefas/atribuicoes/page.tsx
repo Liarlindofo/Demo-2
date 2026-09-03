@@ -70,7 +70,12 @@ interface Template {
   lojaId: string | null;
   cargoId: string | null;
   ativo: boolean;
+  recorrenciaTipo?: string;
   diasSemana?: number[];
+  mensalModo?: string | null;
+  diaDoMes?: number | null;
+  nth?: number | null;
+  weekday?: number | null;
   horarioPadrao?: string;
 }
 
@@ -578,24 +583,46 @@ export default function AtribuicoesPage() {
       const slots: SlotConfig[] = Array.from(selectedTemplateIds).map((tid) => {
         const tpl = templates.find((t) => t.id === tid);
         const dias = (tpl?.diasSemana ?? []).filter((d) => d >= 0 && d <= 6);
-        const temDias = dias.length > 0;
         const horario =
           tpl?.horarioPadrao && /^\d{2}:\d{2}$/.test(tpl.horarioPadrao)
             ? tpl.horarioPadrao
             : '08:00';
+
+        const isMensal = tpl?.recorrenciaTipo === 'mensal';
+        const mensalModo =
+          tpl?.mensalModo === 'nth_weekday' ? 'nth_weekday' : 'dia_do_mes';
+        const nth =
+          tpl?.nth === 2 || tpl?.nth === 3 || tpl?.nth === 4 || tpl?.nth === -1
+            ? tpl.nth
+            : 1;
+        const weekday =
+          typeof tpl?.weekday === 'number' && tpl.weekday >= 0 && tpl.weekday <= 6
+            ? tpl.weekday
+            : weekdayDefault;
+        const diaDoMes =
+          typeof tpl?.diaDoMes === 'number' &&
+          tpl.diaDoMes >= 1 &&
+          tpl.diaDoMes <= 31
+            ? tpl.diaDoMes
+            : dayOfMonth;
+
         return {
           templateId: tid,
           data: selectedDate,
           horario,
-          repetir: temDias,
-          recorrenciaTipo: temDias ? 'semanal' : 'diaria',
+          repetir: isMensal || dias.length > 0,
+          recorrenciaTipo: isMensal
+            ? 'mensal'
+            : dias.length > 0
+              ? 'semanal'
+              : 'diaria',
           diasSemana: dias,
           dataFim: addDays(selectedDate, 7),
-          semDataFim: false,
-          mensalModo: 'dia_do_mes',
-          diaDoMes: dayOfMonth,
-          nth: 1,
-          weekday: weekdayDefault,
+          semDataFim: isMensal || dias.length > 0,
+          mensalModo,
+          diaDoMes,
+          nth,
+          weekday,
           lojaExecucaoId: wLojaId, // padrão: mesma loja do funcionário
         };
       });
