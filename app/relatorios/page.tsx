@@ -265,21 +265,36 @@ function ConversationMedia({
 
   useEffect(() => {
     let cancelled = false;
+    let objectUrl: string | null = null;
     (async () => {
       try {
         const res = await fetch(`/api/whatsapp-messages/${messageId}/media`);
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.url) {
+        if (!res.ok) {
           if (!cancelled) setFailed(true);
           return;
         }
-        if (!cancelled) setUrl(data.url as string);
+        const contentType = res.headers.get('content-type') ?? '';
+        if (contentType.startsWith('image/')) {
+          // Proxy direto: resposta é o binário da imagem original
+          const blob = await res.blob();
+          objectUrl = URL.createObjectURL(blob);
+          if (!cancelled) setUrl(objectUrl);
+        } else {
+          // Resposta JSON com { url }
+          const data = await res.json().catch(() => ({}));
+          if (!data.url) {
+            if (!cancelled) setFailed(true);
+            return;
+          }
+          if (!cancelled) setUrl(data.url as string);
+        }
       } catch {
         if (!cancelled) setFailed(true);
       }
     })();
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [messageId]);
 
