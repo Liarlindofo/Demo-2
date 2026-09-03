@@ -358,24 +358,156 @@ function getSupabase() {
   return supabaseClient;
 }
 
-async function baixarMidia(message, client) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Dimensões JPEG/PNG a partir dos primeiros bytes (detecção de thumbnail). */
+function readImageDimensions(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 24) return null;
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
+    const width = buf.readUInt32BE(16);
+    const height = buf.readUInt32BE(20);
+    if (width > 0 && height > 0) return { width, height };
+  }
+  if (buf[0] === 0xff && buf[1] === 0xd8) {
+    let i = 2;
+    while (i < buf.length - 9) {
+      if (buf[i] !== 0xff) {
+        i += 1;
+        continue;
+      }
+      const marker = buf[i + 1];
+      if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
+        const height = buf.readUInt16BE(i + 5);
+        const width = buf.readUInt16BE(i + 7);
+        if (width > 0 && height > 0) return { width, height };
+        break;
+      }
+      const len = buf.readUInt16BE(i + 2);
+      if (len < 2) break;
+      i += 2 + len;
+    }
+  }
+  return null;
+}
+
+/**
+ * Preview embutido no evento WPP (`message.body`) é thumbnail de baixa res.
+ * NUNCA usar como fonte de upload — só para rejeitar buffers que batem com ele.
+ */
+function bodyThumbnailBuffer(message) {
+  const body = String(message?.body || '').trim();
+  if (!body || !looksLikeEmbeddedMedia(body)) return null;
   try {
-    const buf = await withTimeout(client.decryptFile(message), TIMEOUT_MIDIA_MS, 'decryptFile');
-    if (Buffer.isBuffer(buf) && buf.length > 0) return buf;
+    const raw = body.startsWith('data:') ? body.split(',')[1] || '' : body;
+    if (!raw || raw.length < 80) return null;
+    const buf = Buffer.from(raw.replace(/\s/g, ''), 'base64');
+    return buf.length > 32 ? buf : null;
+  } catch {
+    return null;
+  }
+}
+
+function toMediaBuffer(resultado) {
+  if (!resultado) return null;
+  if (Buffer.isBuffer(resultado)) return resultado.length > 0 ? resultado : null;
+  if (resultado instanceof Uint8Array) {
+    return resultado.length > 0 ? Buffer.from(resultado) : null;
+  }
+  if (typeof resultado === 'string') {
+    const partes = resultado.split(',');
+    const b64 = partes.length > 1 ? partes[1] : partes[0];
+    if (!b64) return null;
+    const buf = Buffer.from(b64.replace(/\s/g, ''), 'base64');
+    return buf.length > 0 ? buf : null;
+  }
+  return null;
+}
+
+/**
+ * Thumbnail do WhatsApp costuma ser < ~40KB e bem abaixo de 240px.
+ * `message.size` (quando presente) é o tamanho do arquivo original.
+ * Stickers são naturalmente pequenos — só rejeita se bater com o body preview.
+ */
+function looksLikeThumbnail(buf, message, type) {
+  if (!Buffer.isBuffer(buf) || buf.length === 0) return true;
+
+  const thumb = bodyThumbnailBuffer(message);
+  if (thumb && thumb.length === buf.length && thumb.equals(buf)) return true;
+
+  if (type === 'sticker') {
+    return buf.length < 2_048;
+  }
+  if (type !== 'image') return false;
+
+  const declared = Number(message?.size);
+  if (Number.isFinite(declared) && declared > 0 && buf.length < declared * 0.5 && buf.length < 80_000) {
+    return true;
+  }
+
+  if (buf.length < 8_192) return true;
+
+  const dims = readImageDimensions(buf);
+  if (dims && buf.length < 40_960 && Math.max(dims.width, dims.height) < 240) {
+    return true;
+  }
+  return false;
+}
+
+async function tentarDownloadMedia(message, client) {
+  // 1) downloadMedia (WA-JS) — mídia original, não o preview do body
+  try {
+    const resultado = await withTimeout(client.downloadMedia(message), TIMEOUT_MIDIA_MS, 'downloadMedia');
+    const buf = toMediaBuffer(resultado);
+    if (buf) return { buf, via: 'downloadMedia' };
+  } catch (err) {
+    logger.warn(`[messageArchive] downloadMedia falhou: ${err?.message}`);
+  }
+
+  // 2) decryptFile — baixa do CDN + decifra (também original)
+  try {
+    const raw = await withTimeout(client.decryptFile(message), TIMEOUT_MIDIA_MS, 'decryptFile');
+    const buf = toMediaBuffer(raw);
+    if (buf) return { buf, via: 'decryptFile' };
   } catch (err) {
     logger.warn(`[messageArchive] decryptFile falhou: ${err?.message}`);
   }
-  try {
-    const resultado = await withTimeout(client.downloadMedia(message), TIMEOUT_MIDIA_MS, 'downloadMedia');
-    if (!resultado) return null;
-    if (Buffer.isBuffer(resultado)) return resultado;
-    if (typeof resultado === 'string') {
-      const partes = resultado.split(',');
-      const b64 = partes.length > 1 ? partes[1] : partes[0];
-      return Buffer.from(b64, 'base64');
+
+  return null;
+}
+
+/**
+ * Baixa a mídia ORIGINAL. Nunca usa message.body (thumbnail).
+ * Retries curtos: no onAnyMessage a mídia às vezes ainda não está pronta.
+ */
+async function baixarMidia(message, client, type) {
+  const attempts = [0, 1500, 3500];
+  let lastThumbBytes = null;
+
+  for (let i = 0; i < attempts.length; i += 1) {
+    if (attempts[i] > 0) await sleep(attempts[i]);
+    const got = await tentarDownloadMedia(message, client);
+    if (!got?.buf) continue;
+
+    if (looksLikeThumbnail(got.buf, message, type)) {
+      lastThumbBytes = got.buf.length;
+      logger.warn(
+        `[messageArchive] buffer parece thumbnail (${got.via}, ${got.buf.length} bytes) — tentativa ${i + 1}/${attempts.length}`,
+      );
+      continue;
     }
-  } catch (err) {
-    logger.warn(`[messageArchive] downloadMedia falhou: ${err?.message}`);
+
+    logger.info(
+      `[messageArchive] mídia original ok via=${got.via} bytes=${got.buf.length} type=${type}`,
+    );
+    return got.buf;
+  }
+
+  if (lastThumbBytes != null) {
+    logger.warn(
+      `[messageArchive] desistindo do upload: só obtive preview/thumbnail (${lastThumbBytes} bytes), não a mídia original`,
+    );
   }
   return null;
 }
@@ -400,7 +532,7 @@ function extFromMime(mime, type) {
 async function uploadMedia({ tenantUserId, slot, contactId, message, client, type }) {
   const supabase = getSupabase();
   if (!supabase) return null;
-  const buffer = await baixarMidia(message, client);
+  const buffer = await baixarMidia(message, client, type);
   if (!buffer?.length) return null;
 
   // Bucket privado criado no painel: "whatsapp-evidencias".
@@ -418,6 +550,7 @@ async function uploadMedia({ tenantUserId, slot, contactId, message, client, typ
     logger.warn(`[messageArchive] upload falhou (bucket=${BUCKET}): ${error.message}`);
     return null;
   }
+  logger.info(`[messageArchive] upload ok path=${fileName} bytes=${buffer.length}`);
   return fileName;
 }
 

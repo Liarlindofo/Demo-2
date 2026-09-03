@@ -123,9 +123,17 @@ export async function GET(
   }
 
   // ── 3. Fallback: base64 embutida em textContent (thumbnail do WhatsApp) ──
+  // Não é resolução completa — só legado quando o download original falhou.
   const embedded = dataUrlFromText(row.textContent, row.messageType);
   if (embedded) {
-    return NextResponse.json({ url: embedded, expiresIn: SIGNED_TTL_SECONDS });
+    console.warn(
+      `[whatsapp-messages/media] msg=${id} servindo thumbnail de textContent (mídia original indisponível)`,
+    );
+    return NextResponse.json({
+      url: embedded,
+      expiresIn: SIGNED_TTL_SECONDS,
+      isThumbnail: true,
+    });
   }
 
   if (row.mediaUrl) {

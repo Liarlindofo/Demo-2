@@ -261,6 +261,7 @@ function ConversationMedia({
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [isThumbnail, setIsThumbnail] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
@@ -278,7 +279,10 @@ function ConversationMedia({
           // Proxy direto: resposta é o binário da imagem original
           const blob = await res.blob();
           objectUrl = URL.createObjectURL(blob);
-          if (!cancelled) setUrl(objectUrl);
+          if (!cancelled) {
+            setIsThumbnail(false);
+            setUrl(objectUrl);
+          }
         } else {
           // Resposta JSON com { url }
           const data = await res.json().catch(() => ({}));
@@ -286,7 +290,10 @@ function ConversationMedia({
             if (!cancelled) setFailed(true);
             return;
           }
-          if (!cancelled) setUrl(data.url as string);
+          if (!cancelled) {
+            setIsThumbnail(Boolean(data.isThumbnail));
+            setUrl(data.url as string);
+          }
         }
       } catch {
         if (!cancelled) setFailed(true);
@@ -331,7 +338,11 @@ function ConversationMedia({
           className="max-h-24 w-auto max-w-[200px] object-cover cursor-zoom-in"
         />
       </button>
-      <p className="text-[10px] text-gray-500 mt-1">Clique na imagem para ampliar</p>
+      <p className="text-[10px] text-gray-500 mt-1">
+        {isThumbnail
+          ? 'Prévia de baixa resolução (mídia original não arquivada)'
+          : 'Clique na imagem para ampliar'}
+      </p>
 
       {lightboxOpen && (
         <div
@@ -363,6 +374,11 @@ function ConversationMedia({
             }}
             onClick={(e) => e.stopPropagation()}
           />
+          {isThumbnail && (
+            <p className="absolute bottom-6 left-1/2 -translate-x-1/2 text-xs text-amber-200/90 text-center max-w-md px-4">
+              Esta é só a prévia do WhatsApp. A foto em resolução completa não foi salva no arquivo.
+            </p>
+          )}
         </div>
       )}
     </>

@@ -26,7 +26,10 @@ import {
   writeAtaNarrative,
   type ConversationMessage,
 } from '@/lib/complaints/classify';
-import { selectIfoodGroupEvidencePhoto, selectRelevantClientPhoto } from '@/lib/complaints/photo';
+import {
+  selectIfoodGroupEvidencePhotoDetailed,
+  selectRelevantClientPhotoDetailed,
+} from '@/lib/complaints/photo';
 
 const MAX_IMAGE_WIDTH = 480;
 const MAX_IMAGE_HEIGHT = 360;
@@ -161,32 +164,49 @@ function imageTypeFromPath(path: string): 'jpg' | 'png' | 'gif' | 'bmp' {
   return 'jpg';
 }
 
-async function downloadEvidenceImage(
-  mediaUrl: string,
-): Promise<{ data: Buffer; type: 'jpg' | 'png' | 'gif' | 'bmp' } | null> {
+type DownloadImageResult =
+  | { ok: true; data: Buffer; type: 'jpg' | 'png' | 'gif' | 'bmp'; bytes: number }
+  | { ok: false; error: string };
+
+async function downloadEvidenceImage(mediaUrl: string): Promise<DownloadImageResult> {
   const path = whatsappEvidenceStoragePath(mediaUrl);
-  if (!path) return null;
+  if (!path) {
+    return { ok: false, error: `path inválido a partir de mediaUrl=${mediaUrl.slice(0, 80)}` };
+  }
   const supabase = getWhatsAppEvidenceSupabase();
-  if (!supabase) return null;
+  if (!supabase) {
+    return { ok: false, error: 'Supabase não configurado (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)' };
+  }
 
   const { data, error } = await supabase.storage
     .from(WHATSAPP_EVIDENCIAS_BUCKET)
     .download(path);
-  if (error || !data) return null;
+  if (error || !data) {
+    return {
+      ok: false,
+      error: `download bucket falhou path=${path}: ${error?.message || 'sem data'}`,
+    };
+  }
 
   const ab = await data.arrayBuffer();
   const buf = Buffer.from(ab);
-  if (buf.length < 32) return null;
-  return { data: buf, type: imageTypeFromPath(path) };
+  if (buf.length < 32) {
+    return { ok: false, error: `arquivo muito pequeno (${buf.length} bytes) path=${path}` };
+  }
+  return { ok: true, data: buf, type: imageTypeFromPath(path), bytes: buf.length };
 }
 
-async function embedSinglePhoto(mediaUrl: string): Promise<Paragraph | null> {
+type EmbedPhotoResult =
+  | { ok: true; paragraph: Paragraph; bytes: number }
+  | { ok: false; error: string };
+
+async function embedSinglePhoto(mediaUrl: string): Promise<EmbedPhotoResult> {
   try {
     const img = await downloadEvidenceImage(mediaUrl);
-    if (!img) return null;
+    if (img.ok === false) return { ok: false, error: img.error };
     const natural = readImageSize(img.data) ?? { width: MAX_IMAGE_WIDTH, height: MAX_IMAGE_HEIGHT };
     const size = fitSize(natural.width, natural.height);
-    return new Paragraph({
+    const paragraph = new Paragraph({
       children: [
         new ImageRun({
           type: img.type,
@@ -201,9 +221,10 @@ async function embedSinglePhoto(mediaUrl: string): Promise<Paragraph | null> {
       ],
       spacing: { before: 80, after: 160 },
     });
+    return { ok: true, paragraph, bytes: img.bytes };
   } catch (err) {
-    console.warn('[generate-ata] falha ao embutir imagem:', err);
-    return null;
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `exceção ao embutir ImageRun: ${message}` };
   }
 }
 
@@ -308,6 +329,22 @@ export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buf
     );
 
     const contactIds = [...new Set(run.complaints.map((c) => c.contactId))];
+    const evidenceIds = [
+      ...new Set(run.complaints.flatMap((c) => c.evidenciaMessageIds || [])),
+    ];
+
+    const messageSelect = {
+      id: true,
+      contactId: true,
+      contactName: true,
+      direction: true,
+      messageType: true,
+      textContent: true,
+      sentByAgent: true,
+      mediaUrl: true,
+      timestamp: true,
+    } as const;
+
     const periodMessages =
       contactIds.length > 0
         ? await prisma.whatsAppMessage.findMany({
@@ -316,34 +353,47 @@ export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buf
               contactId: { in: contactIds },
               timestamp: { gte: run.periodStart, lte: run.periodEnd },
             },
-            select: {
-              id: true,
-              contactId: true,
-              contactName: true,
-              direction: true,
-              messageType: true,
-              textContent: true,
-              sentByAgent: true,
-              mediaUrl: true,
-              timestamp: true,
-            },
+            select: messageSelect,
             orderBy: { timestamp: 'asc' },
           })
         : [];
 
-    const byContact = new Map<string, typeof periodMessages>();
+    // Evidências podem cair fora da janela do período (fuso / borda do mês).
+    const missingEvidenceIds = evidenceIds.filter(
+      (id) => !periodMessages.some((m) => m.id === id),
+    );
+    const extraEvidenceMessages =
+      missingEvidenceIds.length > 0
+        ? await prisma.whatsAppMessage.findMany({
+            where: { userId: run.userId, id: { in: missingEvidenceIds } },
+            select: messageSelect,
+            orderBy: { timestamp: 'asc' },
+          })
+        : [];
+
+    type MsgRow = (typeof periodMessages)[number];
+    const byContact = new Map<string, MsgRow[]>();
     const clientNameByContact = new Map<string, string>();
-    for (const row of periodMessages) {
+    const mergeIntoContact = (row: MsgRow) => {
       const list = byContact.get(row.contactId) ?? [];
-      list.push(row);
+      if (!list.some((m) => m.id === row.id)) list.push(row);
       byContact.set(row.contactId, list);
       if (!clientNameByContact.has(row.contactId)) {
-        const name = pickClientContactName([{ direction: row.direction, contactName: row.contactName }]);
+        const name = pickClientContactName([
+          { direction: row.direction, contactName: row.contactName },
+        ]);
         if (name) clientNameByContact.set(row.contactId, name);
       }
+    };
+    for (const row of periodMessages) mergeIntoContact(row);
+    for (const row of extraEvidenceMessages) mergeIntoContact(row);
+    for (const list of byContact.values()) {
+      list.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     }
 
     let idx = 0;
+    let withPhoto = 0;
+    let withoutPhoto = 0;
     for (const c of run.complaints) {
       idx += 1;
       const convRows = byContact.get(c.contactId) ?? [];
@@ -366,17 +416,25 @@ export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buf
               fallbackNumeroPedido: c.numeroPedido,
             });
 
-      const selectedPhoto =
+      const selection =
         c.origem === 'GRUPO_IFOOD'
-          ? selectIfoodGroupEvidencePhoto({
+          ? selectIfoodGroupEvidencePhotoDetailed({
               messages: convRows,
               evidenciaMessageIds: c.evidenciaMessageIds,
             })
-          : await selectRelevantClientPhoto({
+          : await selectRelevantClientPhotoDetailed({
               messages: convRows,
               evidenciaMessageIds: c.evidenciaMessageIds,
               numeroPedido: narrative.numeroPedido,
             });
+
+      const selectedPhoto = selection.photo;
+      const evidenceIdsCount = c.evidenciaMessageIds?.length ?? 0;
+      console.info(
+        `[generate-ata] reclamacao=${c.id} idx=${idx} origem=${c.origem} ` +
+          `evidenciaMessageIds=${evidenceIdsCount} ` +
+          `fotoEscolhida=${selectedPhoto?.id ?? 'null'} motivo=${selection.reason}`,
+      );
 
       if (
         c.origem !== 'GRUPO_IFOOD' &&
@@ -419,12 +477,33 @@ export async function generateComplaintAtaDocx(reviewRunId: string): Promise<Buf
       }
 
       if (selectedPhoto?.mediaUrl) {
-        const photoPara = await embedSinglePhoto(selectedPhoto.mediaUrl);
-        if (photoPara) children.push(photoPara);
+        const embedded = await embedSinglePhoto(selectedPhoto.mediaUrl);
+        if (embedded.ok === true) {
+          children.push(embedded.paragraph);
+          withPhoto += 1;
+          console.info(
+            `[generate-ata] reclamacao=${c.id} foto embutida ok msg=${selectedPhoto.id} bytes=${embedded.bytes}`,
+          );
+        } else {
+          withoutPhoto += 1;
+          console.error(
+            `[generate-ata] reclamacao=${c.id} SEM FOTO no Word — evidência msg=${selectedPhoto.id} ` +
+              `mediaUrl=${selectedPhoto.mediaUrl} falhou: ${embedded.error}`,
+          );
+        }
+      } else {
+        withoutPhoto += 1;
+        console.warn(
+          `[generate-ata] reclamacao=${c.id} SEM FOTO no Word — nenhuma candidata. ${selection.reason}`,
+        );
       }
 
       children.push(body(narrative.resumo));
     }
+
+    console.info(
+      `[generate-ata] run=${reviewRunId} resumo fotos: com=${withPhoto} sem=${withoutPhoto} total=${run.complaints.length}`,
+    );
   }
 
   children.push(heading('3. Comparação com o mês anterior'));

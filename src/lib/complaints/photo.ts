@@ -1,5 +1,5 @@
 /**
- * Escolha da foto de prova da reclamação: proximidade na conversa + visão.
+ * Escolha da foto de prova da reclamação: evidências classificadas + proximidade + visão.
  */
 
 import { callComplaintsOpenRouter, extractJsonObject } from '@/lib/complaints/openrouter';
@@ -10,6 +10,8 @@ import {
 } from '@/lib/whatsapp-evidence-storage';
 
 const PROXIMITY_MS = 20 * 60 * 1000;
+/** Janela ampliada quando a de 20 min não acha candidata. */
+const PROXIMITY_FALLBACK_MS = 2 * 60 * 60 * 1000;
 const MAX_VISION_BYTES = 3.5 * 1024 * 1024;
 const MAX_VISION_CANDIDATES = 4;
 
@@ -25,6 +27,12 @@ export type PhotoCandidate = {
 export type SelectedPhoto = {
   id: string;
   mediaUrl: string;
+};
+
+export type PhotoSelectionResult = {
+  photo: SelectedPhoto | null;
+  /** Motivo legível para log da ata. */
+  reason: string;
 };
 
 function isClientPhoto(m: PhotoCandidate): m is PhotoCandidate & { mediaUrl: string } {
@@ -134,16 +142,79 @@ produtoRecebido=false para comprovante de Pix/pagamento, print de tela, cardápi
 }
 
 /**
+ * Fotos IN já apontadas em evidenciaMessageIds (classificação) — prioridade máxima.
+ */
+function evidenceClientPhotos(
+  messages: PhotoCandidate[],
+  evidenciaMessageIds: string[],
+): Array<PhotoCandidate & { mediaUrl: string }> {
+  const evidence = new Set(evidenciaMessageIds);
+  return messages
+    .filter((m) => evidence.has(m.id) && isClientPhoto(m))
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+}
+
+async function pickFirstProductPhoto(
+  candidates: Array<PhotoCandidate & { mediaUrl: string }>,
+  opts: { acceptOnVisionNull: boolean },
+): Promise<{ photo: SelectedPhoto | null; rejected: number; visionNull: number }> {
+  let rejected = 0;
+  let visionNull = 0;
+  for (const p of candidates.slice(0, MAX_VISION_CANDIDATES)) {
+    const ok = await isProductPhoto(p.mediaUrl);
+    if (ok === true) {
+      return { photo: { id: p.id, mediaUrl: p.mediaUrl }, rejected, visionNull };
+    }
+    if (ok === false) {
+      rejected += 1;
+      continue;
+    }
+    visionNull += 1;
+    if (opts.acceptOnVisionNull) {
+      return { photo: { id: p.id, mediaUrl: p.mediaUrl }, rejected, visionNull };
+    }
+  }
+  return { photo: null, rejected, visionNull };
+}
+
+/**
  * Escolhe no máximo UMA foto IN de produto, perto do pedido/problema.
- * Nunca cai no "primeira imagem da conversa" (evita comprovante de Pix).
+ * Prioriza imagens já listadas em evidenciaMessageIds; não cai na "primeira da conversa".
  */
 export async function selectRelevantClientPhoto(params: {
   messages: PhotoCandidate[];
   evidenciaMessageIds: string[];
   numeroPedido: string | null;
 }): Promise<SelectedPhoto | null> {
+  const result = await selectRelevantClientPhotoDetailed(params);
+  return result.photo;
+}
+
+export async function selectRelevantClientPhotoDetailed(params: {
+  messages: PhotoCandidate[];
+  evidenciaMessageIds: string[];
+  numeroPedido: string | null;
+}): Promise<PhotoSelectionResult> {
   const photos = params.messages.filter(isClientPhoto);
-  if (!photos.length) return null;
+  if (!photos.length) {
+    return {
+      photo: null,
+      reason:
+        'nenhuma mensagem IN image/sticker com mediaUrl na conversa carregada (download na captura pode ter falhado)',
+    };
+  }
+
+  // 1) Preferir fotos já marcadas como evidência na classificação
+  const fromEvidence = evidenceClientPhotos(params.messages, params.evidenciaMessageIds);
+  if (fromEvidence.length > 0) {
+    const picked = await pickFirstProductPhoto(fromEvidence, { acceptOnVisionNull: true });
+    if (picked.photo) {
+      return {
+        photo: picked.photo,
+        reason: `foto de evidenciaMessageIds (msg=${picked.photo.id}; rejeitadasVisao=${picked.rejected}; visaoNullAceita=${picked.visionNull > 0})`,
+      };
+    }
+  }
 
   const anchors = complaintAnchorTimes(
     params.messages,
@@ -155,17 +226,40 @@ export async function selectRelevantClientPhoto(params: {
     .map((p) => ({ p, dist: minDistanceMs(p.timestamp.getTime(), anchors) }))
     .sort((a, b) => a.dist - b.dist);
 
-  const near = ranked.filter((x) => Number.isFinite(x.dist) && x.dist <= PROXIMITY_MS);
-  const queue = (near.length > 0 ? near : ranked.slice(0, 3)).slice(0, MAX_VISION_CANDIDATES);
+  const near20 = ranked.filter((x) => Number.isFinite(x.dist) && x.dist <= PROXIMITY_MS);
+  const near2h = ranked.filter(
+    (x) => Number.isFinite(x.dist) && x.dist <= PROXIMITY_FALLBACK_MS,
+  );
 
-  for (const { p } of queue) {
-    const ok = await isProductPhoto(p.mediaUrl);
-    if (ok === true) {
-      return { id: p.id, mediaUrl: p.mediaUrl };
-    }
+  const queueSource =
+    near20.length > 0
+      ? near20
+      : near2h.length > 0
+        ? near2h
+        : ranked.slice(0, 3);
+
+  const queue = queueSource.slice(0, MAX_VISION_CANDIDATES).map((x) => x.p);
+  const picked = await pickFirstProductPhoto(queue, { acceptOnVisionNull: false });
+
+  if (picked.photo) {
+    return {
+      photo: picked.photo,
+      reason: `foto por proximidade (msg=${picked.photo.id}; janela=${near20.length > 0 ? '20min' : near2h.length > 0 ? '2h' : 'top3'}; rejeitadasVisao=${picked.rejected})`,
+    };
   }
 
-  return null;
+  // Último recurso: evidência classificada mesmo se visão rejeitou todas as próximas
+  if (fromEvidence[0]) {
+    return {
+      photo: { id: fromEvidence[0].id, mediaUrl: fromEvidence[0].mediaUrl },
+      reason: `fallback evidenciaMessageIds sem visão positiva (msg=${fromEvidence[0].id}; rejeitadasVisao=${picked.rejected})`,
+    };
+  }
+
+  return {
+    photo: null,
+    reason: `candidatas=${photos.length}; evidenciaComFoto=${fromEvidence.length}; anchors=${anchors.length}; rejeitadasVisao=${picked.rejected}; visaoNull=${picked.visionNull} (heurística anti-Pix/print ou falha de visão)`,
+  };
 }
 
 /**
@@ -176,11 +270,28 @@ export function selectIfoodGroupEvidencePhoto(params: {
   messages: PhotoCandidate[];
   evidenciaMessageIds: string[];
 }): SelectedPhoto | null {
+  return selectIfoodGroupEvidencePhotoDetailed(params).photo;
+}
+
+export function selectIfoodGroupEvidencePhotoDetailed(params: {
+  messages: PhotoCandidate[];
+  evidenciaMessageIds: string[];
+}): PhotoSelectionResult {
   const evidence = new Set(params.evidenciaMessageIds);
   const photos = params.messages
     .filter((m) => evidence.has(m.id) && isAnyPhoto(m))
     .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   const first = photos[0];
-  if (!first) return null;
-  return { id: first.id, mediaUrl: first.mediaUrl };
+  if (!first) {
+    const evidenceCount = params.evidenciaMessageIds.length;
+    const anyImage = params.messages.filter(isAnyPhoto).length;
+    return {
+      photo: null,
+      reason: `iFood: nenhuma imagem com mediaUrl entre evidenciaMessageIds (ids=${evidenceCount}; imagensNaConversa=${anyImage})`,
+    };
+  }
+  return {
+    photo: { id: first.id, mediaUrl: first.mediaUrl },
+    reason: `iFood: primeira mídia das evidências (msg=${first.id})`,
+  };
 }
