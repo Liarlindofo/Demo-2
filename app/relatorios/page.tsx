@@ -320,7 +320,7 @@ function ConversationMedia({
 
       {lightboxOpen && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-6"
           onClick={() => setLightboxOpen(false)}
           role="dialog"
           aria-modal="true"
@@ -334,18 +334,20 @@ function ConversationMedia({
           >
             <X className="w-5 h-5" />
           </button>
-          <div
-            className="relative flex items-center justify-center"
-            style={{ maxHeight: '90vh', maxWidth: '90vw', minWidth: 'min(80vw, 400px)', minHeight: 'min(60vh, 300px)' }}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt={label}
+            className="rounded-lg shadow-2xl block"
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '88vh',
+              width: 'auto',
+              height: 'auto',
+              objectFit: 'contain',
+            }}
             onClick={(e) => e.stopPropagation()}
-          >
-            <img
-              src={url}
-              alt={label}
-              className="rounded-lg shadow-2xl object-contain"
-              style={{ maxHeight: '90vh', maxWidth: '90vw', width: '100%', height: 'auto' }}
-            />
-          </div>
+          />
         </div>
       )}
     </>
