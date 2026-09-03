@@ -334,12 +334,18 @@ function ConversationMedia({
           >
             <X className="w-5 h-5" />
           </button>
-          <img
-            src={url}
-            alt={label}
-            className="max-h-[90vh] max-w-[min(95vw,1200px)] w-auto object-contain rounded-lg shadow-2xl"
+          <div
+            className="relative flex items-center justify-center"
+            style={{ maxHeight: '90vh', maxWidth: '90vw', minWidth: 'min(80vw, 400px)', minHeight: 'min(60vh, 300px)' }}
             onClick={(e) => e.stopPropagation()}
-          />
+          >
+            <img
+              src={url}
+              alt={label}
+              className="rounded-lg shadow-2xl object-contain"
+              style={{ maxHeight: '90vh', maxWidth: '90vw', width: '100%', height: 'auto' }}
+            />
+          </div>
         </div>
       )}
     </>
