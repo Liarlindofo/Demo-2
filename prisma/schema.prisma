@@ -973,9 +973,14 @@ model RhFuncionario {
   bonificacoesAssiduidade RhBonificacaoAssiduidade[]
   plrPagamentos           RhPLRPagamento[]
   numeroFolha             String?                  @unique
+  /// NumeroPis vindo das batidas do Secullum — preenchido automaticamente pelo webhook
+  pisSecullum             String?
+  /// FuncionarioId interno do Secullum — usado como "Código Empregado" na planilha da contabilidade
+  codigoEmpregadoSecullum Int?
   tarefasAtribuidas       TarefaAtribuida[]
   tarefaSeries            TarefaSerie[]
   pontoRegistros          PontoRegistro[]
+  fechamentoLinhas        FechamentoLinha[]
 
   @@index([userId, cpf])
   @@index([userId])
@@ -1019,6 +1024,59 @@ model PontoPendencia {
   @@unique([numeroFolhaOrigem, data])
   @@index([numeroFolhaOrigem])
   @@map("ponto_pendencias")
+}
+
+model FechamentoMensal {
+  id        String            @id @default(cuid())
+  mes       Int               // 1-12
+  ano       Int
+  /// rascunho | em_revisao | concluido
+  status    String            @default("rascunho")
+  linhas    FechamentoLinha[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@unique([mes, ano])
+  @@map("fechamento_mensal")
+}
+
+model FechamentoLinha {
+  id           String           @id @default(cuid())
+  fechamentoId String
+  fechamento   FechamentoMensal @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
+  funcionarioId String
+  funcionario  RhFuncionario    @relation(fields: [funcionarioId], references: [id])
+
+  /// Vindo do Secullum (editável em caso de correção manual) — formato "HH:mm"
+  ex60      String?
+  ex100     String?
+  en60      String?
+  en100     String?
+  atraso    String?
+  faltas    String?
+  faltaDsr  String?
+
+  /// Vindo do cadastro RH (valorVT), editável nesta tela
+  valeTransporte Decimal? @db.Decimal(10, 2)
+
+  /// Preenchimento manual
+  descDiversos  Decimal? @db.Decimal(10, 2)
+  descRefeicao  Decimal? @db.Decimal(10, 2)
+  descCompras   Decimal? @db.Decimal(10, 2)
+
+  /// pendente | aprovado | rejeitado
+  status     String  @default("pendente")
+  observacao String?
+  /// Preenchido se a chamada ao Secullum falhar para este funcionário
+  origemErro String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([fechamentoId, funcionarioId])
+  @@index([fechamentoId])
+  @@index([funcionarioId])
+  @@map("fechamento_linhas")
 }
 
 model RhBonificacaoTrimestral {

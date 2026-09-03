@@ -66,10 +66,26 @@ export async function POST(req: NextRequest) {
     // Busca funcionário pelo campo numeroFolha (sem filtro de userId para aceitar qualquer empresa)
     const funcionario = await prisma.rhFuncionario.findFirst({
       where: { numeroFolha: matricula },
-      select: { id: true },
+      select: { id: true, pisSecullum: true, codigoEmpregadoSecullum: true },
     });
 
     if (funcionario) {
+      // Captura oportunista: actualiza PIS e codigoEmpregado se ainda não preenchidos ou divergentes
+      const pisSec = item.pis ? String(item.pis).trim() : null;
+      const codEmp = item.funcionarioId ? Number(item.funcionarioId) : null;
+      const deveLimpar =
+        (pisSec && funcionario.pisSecullum !== pisSec) ||
+        (codEmp && funcionario.codigoEmpregadoSecullum !== codEmp);
+      if (deveLimpar) {
+        await prisma.rhFuncionario.update({
+          where: { id: funcionario.id },
+          data: {
+            ...(pisSec ? { pisSecullum: pisSec } : {}),
+            ...(codEmp ? { codigoEmpregadoSecullum: codEmp } : {}),
+          },
+        });
+      }
+
       await prisma.pontoRegistro.upsert({
         where: { batidaIdSecullum: batidaId },
         update: {
