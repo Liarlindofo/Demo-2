@@ -246,7 +246,8 @@ export async function POST(
   const wsValor = buildAbaValor(linhas, fechamento.mes, fechamento.ano);
   XLSX.utils.book_append_sheet(wb, wsValor, 'Eventos Valor');
 
-  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  const rawBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  const buffer = new Uint8Array(rawBuffer);
 
   // Atualiza status para concluido
   await prisma.fechamentoMensal.update({
@@ -261,7 +262,7 @@ export async function POST(
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="${filename}"`,
-      'Content-Length': String(buffer.length),
+      'Content-Length': String(rawBuffer.length),
     },
   });
 }
