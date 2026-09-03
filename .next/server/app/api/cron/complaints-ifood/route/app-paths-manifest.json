@@ -1,0 +1,3 @@
+{
+  "/api/cron/complaints-ifood/route": "app/api/cron/complaints-ifood/route.js"
+}

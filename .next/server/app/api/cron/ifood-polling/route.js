@@ -1,8 +1,8 @@
 var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/cron/ifood-polling/route.js")
-R.c("server/chunks/[root-of-the-server]__3c969708._.js")
-R.c("server/chunks/797a3_next_dist_adc3ff95._.js")
-R.c("server/chunks/[root-of-the-server]__174edc0b._.js")
-R.c("server/chunks/797a3_next_8ffc8760._.js")
-R.c("server/chunks/0038a__next-internal_server_app_api_cron_ifood-polling_route_actions_80905341.js")
-R.m(195555)
-module.exports=R.m(195555).exports
+R.c("server/chunks/[root-of-the-server]__62dc84a2._.js")
+R.c("server/chunks/6e6c4_next_dist_caea266e._.js")
+R.c("server/chunks/[root-of-the-server]__ad20b4aa._.js")
+R.c("server/chunks/6e6c4_next_8a0b8c70._.js")
+R.c("server/chunks/Demo-2__next-internal_server_app_api_cron_ifood-polling_route_actions_0ffbbf3f.js")
+R.m(862685)
+module.exports=R.m(862685).exports

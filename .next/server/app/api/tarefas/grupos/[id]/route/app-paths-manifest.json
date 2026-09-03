@@ -1,0 +1,3 @@
+{
+  "/api/tarefas/grupos/[id]/route": "app/api/tarefas/grupos/[id]/route.js"
+}

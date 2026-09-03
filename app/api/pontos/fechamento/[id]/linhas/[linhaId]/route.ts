@@ -12,12 +12,12 @@ export const dynamic = 'force-dynamic';
  */
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string; linhaId: string } },
+  { params }: { params: Promise<{ id: string; linhaId: string }> },
 ) {
   const { error } = await requireRhPermission(P.EMPLOYEES_VIEW);
   if (error) return error;
 
-  const { id: fechamentoId, linhaId } = params;
+  const { id: fechamentoId, linhaId } = await params;
 
   let body: Record<string, string | null | undefined>;
   try {

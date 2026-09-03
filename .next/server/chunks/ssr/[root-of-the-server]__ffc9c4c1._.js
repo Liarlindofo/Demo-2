@@ -1,3 +1,0 @@
-module.exports=[193695,(a,b,c)=>{b.exports=a.x("next/dist/shared/lib/no-fallback-error.external.js",()=>require("next/dist/shared/lib/no-fallback-error.external.js"))},29173,(a,b,c)=>{b.exports=a.x("@prisma/client",()=>require("@prisma/client"))},674061,a=>{a.n(a.i(16261))},653888,a=>{a.n(a.i(960012))},172225,a=>{a.n(a.i(191102))},111321,a=>{a.n(a.i(198056))},610843,a=>{a.n(a.i(501492))},274474,a=>{a.n(a.i(311470))}];
-
-//# sourceMappingURL=%5Broot-of-the-server%5D__ffc9c4c1._.js.map

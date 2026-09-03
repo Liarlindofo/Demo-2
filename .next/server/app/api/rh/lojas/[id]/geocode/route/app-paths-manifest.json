@@ -1,0 +1,3 @@
+{
+  "/api/rh/lojas/[id]/geocode/route": "app/api/rh/lojas/[id]/geocode/route.js"
+}

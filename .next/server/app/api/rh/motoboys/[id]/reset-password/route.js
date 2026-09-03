@@ -1,0 +1,12 @@
+var R=require("../../../../../../chunks/[turbopack]_runtime.js")("server/app/api/rh/motoboys/[id]/reset-password/route.js")
+R.c("server/chunks/[root-of-the-server]__e56c4e05._.js")
+R.c("server/chunks/Demo-2_src_lib_rider-auth_ts_2b9ab4de._.js")
+R.c("server/chunks/6e6c4_next_9550159f._.js")
+R.c("server/chunks/6e6c4_next_dist_caea266e._.js")
+R.c("server/chunks/6e6c4_5d09c957._.js")
+R.c("server/chunks/[root-of-the-server]__ad20b4aa._.js")
+R.c("server/chunks/6e6c4_next_8a0b8c70._.js")
+R.c("server/chunks/Demo-2_0d15e081._.js")
+R.c("server/chunks/a0f55_server_app_api_rh_motoboys_[id]_reset-password_route_actions_d84397d3.js")
+R.m(456155)
+module.exports=R.m(456155).exports

@@ -1,3 +1,0 @@
-module.exports=[193695,(a,b,c)=>{b.exports=a.x("next/dist/shared/lib/no-fallback-error.external.js",()=>require("next/dist/shared/lib/no-fallback-error.external.js"))},674061,a=>{a.n(a.i(16261))},653888,a=>{a.n(a.i(960012))},172225,a=>{a.n(a.i(191102))},111321,a=>{a.n(a.i(198056))},610843,a=>{a.n(a.i(501492))},274474,a=>{a.n(a.i(311470))},155840,a=>{a.n(a.i(317456))},788225,a=>{"use strict";a.i(944095);var b=a.i(96047);function c(){(0,b.redirect)("/calenza-adm")}a.s(["default",()=>c])}];
-
-//# sourceMappingURL=%5Broot-of-the-server%5D__c98e731a._.js.map

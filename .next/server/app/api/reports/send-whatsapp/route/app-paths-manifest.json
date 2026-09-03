@@ -1,0 +1,3 @@
+{
+  "/api/reports/send-whatsapp/route": "app/api/reports/send-whatsapp/route.js"
+}

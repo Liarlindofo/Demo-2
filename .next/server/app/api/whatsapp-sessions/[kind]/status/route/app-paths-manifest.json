@@ -1,0 +1,3 @@
+{
+  "/api/whatsapp-sessions/[kind]/status/route": "app/api/whatsapp-sessions/[kind]/status/route.js"
+}

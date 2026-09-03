@@ -198,13 +198,14 @@ function buildAbaValor(linhas: LinhaExport[], mes: number, ano: number): XLSX.Wo
 
 export async function POST(
   _req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const { error } = await requireRhPermission(P.EMPLOYEES_VIEW);
   if (error) return error;
 
   const fechamento = await prisma.fechamentoMensal.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       linhas: {
         include: {
@@ -249,7 +250,7 @@ export async function POST(
 
   // Atualiza status para concluido
   await prisma.fechamentoMensal.update({
-    where: { id: params.id },
+    where: { id },
     data: { status: 'concluido' },
   });
 

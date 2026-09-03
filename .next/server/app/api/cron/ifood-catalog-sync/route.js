@@ -1,8 +1,8 @@
 var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/cron/ifood-catalog-sync/route.js")
-R.c("server/chunks/[root-of-the-server]__fe78af9c._.js")
-R.c("server/chunks/797a3_next_dist_adc3ff95._.js")
-R.c("server/chunks/[root-of-the-server]__174edc0b._.js")
-R.c("server/chunks/797a3_next_8ffc8760._.js")
-R.c("server/chunks/0038a__next-internal_server_app_api_cron_ifood-catalog-sync_route_actions_2b8f6c19.js")
-R.m(252661)
-module.exports=R.m(252661).exports
+R.c("server/chunks/[root-of-the-server]__1eb38f38._.js")
+R.c("server/chunks/6e6c4_next_dist_caea266e._.js")
+R.c("server/chunks/[root-of-the-server]__ad20b4aa._.js")
+R.c("server/chunks/6e6c4_next_8a0b8c70._.js")
+R.c("server/chunks/81d96__next-internal_server_app_api_cron_ifood-catalog-sync_route_actions_6b95c986.js")
+R.m(277278)
+module.exports=R.m(277278).exports

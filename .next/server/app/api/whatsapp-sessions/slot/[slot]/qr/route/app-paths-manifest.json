@@ -1,0 +1,3 @@
+{
+  "/api/whatsapp-sessions/slot/[slot]/qr/route": "app/api/whatsapp-sessions/slot/[slot]/qr/route.js"
+}

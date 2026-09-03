@@ -1,0 +1,10 @@
+var R=require("../../../../../../chunks/[turbopack]_runtime.js")("server/app/api/reports/complaints/ifood-groups/[id]/route.js")
+R.c("server/chunks/[root-of-the-server]__40c2357e._.js")
+R.c("server/chunks/6e6c4_next_8a0b8c70._.js")
+R.c("server/chunks/6e6c4_next_9550159f._.js")
+R.c("server/chunks/[root-of-the-server]__ad20b4aa._.js")
+R.c("server/chunks/Demo-2_0d15e081._.js")
+R.c("server/chunks/6e6c4_next_dist_caea266e._.js")
+R.c("server/chunks/a0f55_server_app_api_reports_complaints_ifood-groups_[id]_route_actions_5c6149b0.js")
+R.m(278388)
+module.exports=R.m(278388).exports

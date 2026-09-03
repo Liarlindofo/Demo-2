@@ -1,0 +1,11 @@
+var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/rider/forgot-password/route.js")
+R.c("server/chunks/[root-of-the-server]__0ced0dbf._.js")
+R.c("server/chunks/6e6c4_next_9550159f._.js")
+R.c("server/chunks/Demo-2_src_lib_rider-auth_ts_2b9ab4de._.js")
+R.c("server/chunks/6e6c4_next_8a0b8c70._.js")
+R.c("server/chunks/[root-of-the-server]__ad20b4aa._.js")
+R.c("server/chunks/6e6c4_5d09c957._.js")
+R.c("server/chunks/6e6c4_next_dist_caea266e._.js")
+R.c("server/chunks/81d96__next-internal_server_app_api_rider_forgot-password_route_actions_b4a41eb3.js")
+R.m(297772)
+module.exports=R.m(297772).exports

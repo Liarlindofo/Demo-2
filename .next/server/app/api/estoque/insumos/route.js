@@ -1,0 +1,11 @@
+var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/estoque/insumos/route.js")
+R.c("server/chunks/[root-of-the-server]__207db90d._.js")
+R.c("server/chunks/6e6c4_next_9550159f._.js")
+R.c("server/chunks/6e6c4_next_dist_esm_build_templates_app-route_1125b75d.js")
+R.c("server/chunks/6e6c4_next_8a0b8c70._.js")
+R.c("server/chunks/6e6c4_next_dist_caea266e._.js")
+R.c("server/chunks/Demo-2_0d15e081._.js")
+R.c("server/chunks/[root-of-the-server]__ad20b4aa._.js")
+R.c("server/chunks/Demo-2__next-internal_server_app_api_estoque_insumos_route_actions_48530863.js")
+R.m(642072)
+module.exports=R.m(642072).exports
