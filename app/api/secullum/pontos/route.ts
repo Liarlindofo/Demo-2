@@ -57,6 +57,9 @@ export async function POST(req: NextRequest) {
     const matricula = String(item.matricula ?? '').trim();
     const batidaId = Number(item.batidaId);
     const data = new Date(item.data);
+    // Normaliza a data para "00:00 UTC" para evitar diferenças de fuso horário
+    // que fazem o registro cair fora da janela [dia selecionado, dia + 1).
+    data.setUTCHours(0, 0, 0, 0);
 
     if (!matricula || isNaN(batidaId) || isNaN(data.getTime())) {
       console.warn('[secullum/pontos] Item inválido ignorado:', item);

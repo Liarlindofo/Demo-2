@@ -16,10 +16,12 @@ async function obterTokenSecullum(): Promise<{ token: string; bancoid: string }>
 
   if (!user || !pass) throw new Error('SECULLUM_API_USER/SECULLUM_API_PASS não configuradas');
 
+  // client_id=3 é obrigatório pelo OAuth do Secullum (application/x-www-form-urlencoded)
   const body = new URLSearchParams({
     grant_type: 'password',
     username: user,
     password: pass,
+    client_id: '3',
   });
 
   const res = await fetch('https://autenticador.secullum.com.br/Token', {
