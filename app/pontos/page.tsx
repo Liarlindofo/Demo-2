@@ -619,17 +619,17 @@ function AbaRelatorio() {
               <thead className="border-b border-[#2a2a2e] bg-[#111113]">
                 <tr>
                   <th className={`${headCls} sticky left-0 bg-[#111113]`}>Funcionário</th>
-                  <th className={headCls}>Ex 60%</th>
-                  <th className={headCls}>Ex 100%</th>
-                  <th className={headCls}>EN 60%</th>
-                  <th className={headCls}>EN 100%</th>
-                  <th className={headCls}>Atraso</th>
-                  <th className={headCls}>Faltas</th>
-                  <th className={headCls}>Falta DSR</th>
-                  <th className={headCls}>VT (R$)</th>
-                  <th className={headCls}>Desc. Div.</th>
-                  <th className={headCls}>Desc. Ref.</th>
-                  <th className={headCls}>Desc. Comp.</th>
+                  <th className={headCls} title="Código 37">HE 60% Diurna</th>
+                  <th className={headCls} title="Código 49">HE 100% Diurna</th>
+                  <th className={headCls} title="Código 38">HE 60% Noturna</th>
+                  <th className={headCls} title="Código 50">HE 100% Noturna</th>
+                  <th className={headCls} title="Código 29">Atraso</th>
+                  <th className={headCls} title="Código 23">Horas Faltas</th>
+                  <th className={headCls} title="Código 25">Horas Falta DSR</th>
+                  <th className={headCls} title="Código 816">Vale Transporte</th>
+                  <th className={headCls} title="Código 814">Desc Diversos</th>
+                  <th className={headCls} title="Código 813">Desc. Refeição</th>
+                  <th className={headCls} title="Código 1199">Desc. Compras</th>
                   <th className={headCls}>Status</th>
                   <th className={headCls}>Ações</th>
                 </tr>
