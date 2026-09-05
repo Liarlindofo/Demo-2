@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { UserProfileDropdown } from '@/components/user-profile-dropdown';
 import { Logo } from '@/components/logo';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -23,8 +22,6 @@ import {
   Clock,
   Phone,
   MapPin,
-  Wifi,
-  WifiOff,
   RefreshCw,
   User,
   CheckCircle2,
@@ -102,57 +99,15 @@ interface IfoodOrder {
 }
 
 // ---------------------------------------------------------------------------
-// Kanban columns config
+// Kanban columns config — visual neutro (sem rainbow)
 // ---------------------------------------------------------------------------
 const COLUMNS = [
-  {
-    id: 'NOVOS',
-    label: 'Novos Pedidos',
-    statuses: ['PLACED'],
-    color: 'border-blue-500',
-    headerColor: 'bg-blue-500/10 text-blue-400',
-    dot: 'bg-blue-500',
-  },
-  {
-    id: 'EM_PREPARO',
-    label: 'Em Preparo',
-    statuses: ['CONFIRMED', 'PREPARING'],
-    color: 'border-yellow-500',
-    headerColor: 'bg-yellow-500/10 text-yellow-400',
-    dot: 'bg-yellow-500',
-  },
-  {
-    id: 'SAIU_ENTREGA',
-    label: 'Saiu para Entrega',
-    statuses: ['DISPATCHED'],
-    color: 'border-green-500',
-    headerColor: 'bg-green-500/10 text-green-400',
-    dot: 'bg-green-500',
-  },
-  {
-    id: 'RETIRADA',
-    label: 'Pronto para Retirada',
-    statuses: ['READY_TO_PICKUP'],
-    color: 'border-purple-500',
-    headerColor: 'bg-purple-500/10 text-purple-400',
-    dot: 'bg-purple-500',
-  },
-  {
-    id: 'CONCLUIDOS',
-    label: 'Concluídos',
-    statuses: ['CONCLUDED'],
-    color: 'border-gray-600',
-    headerColor: 'bg-gray-600/10 text-gray-400',
-    dot: 'bg-gray-500',
-  },
-  {
-    id: 'CANCELAMENTOS',
-    label: 'Cancelamentos',
-    statuses: ['CANCELLED', 'DISPUTE'],
-    color: 'border-red-700',
-    headerColor: 'bg-red-700/10 text-red-400',
-    dot: 'bg-red-500',
-  },
+  { id: 'NOVOS', label: 'Novos', statuses: ['PLACED'] },
+  { id: 'EM_PREPARO', label: 'Em preparo', statuses: ['CONFIRMED', 'PREPARING'] },
+  { id: 'SAIU_ENTREGA', label: 'Saiu para entrega', statuses: ['DISPATCHED'] },
+  { id: 'RETIRADA', label: 'Pronto p/ retirada', statuses: ['READY_TO_PICKUP'] },
+  { id: 'CONCLUIDOS', label: 'Concluídos', statuses: ['CONCLUDED'] },
+  { id: 'CANCELAMENTOS', label: 'Cancelamentos', statuses: ['CANCELLED', 'DISPUTE'] },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -278,12 +233,21 @@ function CountdownBadge({ createdAt }: { createdAt: string }) {
   const LIMIT = 3 * 60;
   const remaining = LIMIT - elapsed;
   if (remaining <= 0) {
-    return <span className="text-xs text-red-400 font-bold animate-pulse">⚠ EXPIRADO</span>;
+    return (
+      <span className="text-xs text-[#EA1D2C] font-medium tabular-nums">
+        Expirado
+      </span>
+    );
   }
   const urgent = remaining < 60;
   return (
-    <span className={`text-xs font-bold ${urgent ? 'text-red-400 animate-pulse' : 'text-yellow-400'}`}>
-      ⏱ {formatElapsed(remaining)}
+    <span
+      className={`text-xs tabular-nums flex items-center gap-1 ${
+        urgent ? 'text-[#EA1D2C] font-medium' : 'text-gray-500'
+      }`}
+    >
+      <Clock className="h-3 w-3" />
+      {formatElapsed(remaining)}
     </span>
   );
 }
@@ -291,7 +255,7 @@ function CountdownBadge({ createdAt }: { createdAt: string }) {
 function ElapsedBadge({ createdAt }: { createdAt: string }) {
   const elapsed = useElapsedSeconds(createdAt);
   return (
-    <span className="text-xs text-gray-500 flex items-center gap-1">
+    <span className="text-xs text-gray-500 flex items-center gap-1 tabular-nums">
       <Clock className="h-3 w-3" />
       {formatElapsed(elapsed)}
     </span>
@@ -335,145 +299,128 @@ function OrderCard({
   const hasVoucher = benefits.length > 0;
   const voucherDiscount = hasVoucher ? getBenefitsTotalDiscount(benefits) : 0;
 
+  const statusLabel = isCancelled
+    ? 'Cancelado'
+    : isDispute
+      ? 'Disputa'
+      : isConcluded
+        ? 'Concluído'
+        : null;
+
   return (
     <Card
-      className={`rounded-xl cursor-pointer transition-all mb-3 select-none border ${
-        isScheduled
-          ? 'bg-[#0d1a2e] border-blue-500/40 hover:border-blue-400/70'
-          : !isDelivery
-            ? 'bg-[#1a1a1a] border-purple-500/40 hover:border-purple-400/60'
-            : 'bg-[#1a1a1a] border-[#374151] hover:border-[#EA1D2C]/40'
-      }`}
+      className="rounded-lg cursor-pointer transition-colors mb-2.5 select-none border border-[#2a2a2c] bg-[#141415] hover:border-[#4b5563]"
       onClick={() => onCardClick(order)}
     >
-      <CardContent className="p-4 space-y-3">
+      <CardContent className="p-3.5 space-y-2.5">
         {/* Header row */}
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`font-bold text-lg ${isCancelled ? 'text-gray-500 line-through' : 'text-white'}`}>
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <span
+              className={`font-semibold text-base tracking-tight ${
+                isCancelled ? 'text-gray-500 line-through' : 'text-white'
+              }`}
+            >
               #{order.displayId}
             </span>
             {order.isTest && (
-              <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-[10px] px-1.5 py-0">
-                TESTE
-              </Badge>
+              <span className="text-[10px] uppercase tracking-wide text-gray-500 border border-[#374151] rounded px-1.5 py-0.5">
+                Teste
+              </span>
             )}
             {isScheduled && (
-              <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px] px-1.5 py-0">
-                AGENDADO
-              </Badge>
+              <span className="text-[10px] uppercase tracking-wide text-gray-400 border border-[#374151] rounded px-1.5 py-0.5">
+                Agendado
+              </span>
             )}
-            {hasVoucher && (
-              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px] px-1.5 py-0">
-                VOUCHER
-              </Badge>
-            )}
-            {isCancelled && (
-              <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[10px] px-1.5 py-0">
-                CANCELADO
-              </Badge>
-            )}
-            {isDispute && (
-              <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-[10px] px-1.5 py-0">
-                DISPUTA
-              </Badge>
-            )}
-            {isConcluded && (
-              <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px] px-1.5 py-0">
-                CONCLUÍDO
-              </Badge>
+            {statusLabel && (
+              <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                {statusLabel}
+              </span>
             )}
           </div>
-          {isDelivery ? (
-            <Bike className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
-          ) : (
-            <Package className="h-4 w-4 text-purple-400 shrink-0 mt-0.5" />
-          )}
+          <span className="text-[11px] text-gray-500 shrink-0 flex items-center gap-1 mt-0.5">
+            {isDelivery ? (
+              <><Bike className="h-3.5 w-3.5" />Delivery</>
+            ) : (
+              <><Package className="h-3.5 w-3.5" />Retirada</>
+            )}
+          </span>
         </div>
 
         {/* Agendamento */}
         {isScheduled && order.scheduledDateTime && (
-          <div className="flex items-center gap-1.5 text-blue-300 text-xs bg-blue-500/10 rounded-md px-2 py-1">
+          <div className="flex items-center gap-1.5 text-gray-400 text-xs">
             <CalendarClock className="h-3.5 w-3.5 shrink-0" />
-            <span className="font-medium">📅 {formatScheduledDate(order.scheduledDateTime)}</span>
+            <span>{formatScheduledDate(order.scheduledDateTime)}</span>
           </div>
         )}
 
         {/* Customer */}
         {order.customerName && (
-          <p className="text-gray-300 text-sm font-medium truncate">{order.customerName}</p>
+          <p className="text-gray-300 text-sm truncate">{order.customerName}</p>
         )}
 
         {/* Items summary */}
-        <p className="text-gray-500 text-xs leading-relaxed">{summarizeItems(order.items)}</p>
+        <p className="text-gray-500 text-xs leading-relaxed line-clamp-2">
+          {summarizeItems(order.items)}
+        </p>
 
         {/* Voucher discount */}
         {hasVoucher && voucherDiscount > 0 && (
-          <div className="flex items-center gap-1.5 text-emerald-400 text-xs">
+          <div className="flex items-center gap-1.5 text-gray-400 text-xs">
             <Tag className="h-3 w-3" />
-            <span>Desconto: -{formatCurrency(voucherDiscount)}</span>
+            <span>Desconto {formatCurrency(voucherDiscount)}</span>
           </div>
         )}
 
-        {/* Footer row */}
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-white font-semibold shrink-0">{formatCurrency(order.totalAmount)}</span>
-          {primaryPayment && (
-            primaryPayment.method === 'CASH' ? (
-              <span className="text-yellow-400 text-xs font-medium text-right">
-                💵 Dinheiro
-                {primaryPayment.cash?.changeFor && primaryPayment.cash.changeFor > order.totalAmount
-                  ? ` — Troco: ${formatCurrency(primaryPayment.cash.changeFor - order.totalAmount)}`
-                  : ' — Sem troco'}
-              </span>
-            ) : (
-              <span className="text-gray-500 text-xs">{getPaymentLabel(primaryPayment.method)}</span>
-            )
-          )}
-        </div>
-
-        {/* Timer */}
-        <div className="flex items-center justify-between">
-          {isPlaced ? (
-            <CountdownBadge createdAt={order.createdAt} />
-          ) : (
-            <ElapsedBadge createdAt={order.createdAt} />
-          )}
-          <Badge
-            className={`text-[10px] px-1.5 py-0 ${
-              isDelivery
-                ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-            }`}
-          >
-            {isDelivery ? 'Delivery' : 'Retirada'}
-          </Badge>
-        </div>
-
-        {/* Código de retirada — exibido com destaque na coluna "Pronto para Retirada" */}
-        {order.status === 'READY_TO_PICKUP' && order.pickupCode && (
-          <div className="flex items-center gap-2.5 bg-purple-500/15 border border-purple-500/30 rounded-lg px-3 py-2">
-            <Package className="h-4 w-4 text-purple-400 shrink-0" />
-            <div>
-              <p className="text-purple-300 text-[10px] font-medium uppercase tracking-wider leading-none mb-0.5">
-                Código de Retirada
+        {/* Footer: valor + pagamento + timer */}
+        <div className="flex items-end justify-between gap-2 pt-0.5 border-t border-[#2a2a2c]">
+          <div className="min-w-0 pt-2">
+            <p className="text-white font-medium text-sm">{formatCurrency(order.totalAmount)}</p>
+            {primaryPayment && (
+              <p className="text-gray-500 text-[11px] truncate mt-0.5">
+                {primaryPayment.method === 'CASH'
+                  ? primaryPayment.cash?.changeFor && primaryPayment.cash.changeFor > order.totalAmount
+                    ? `Dinheiro · troco ${formatCurrency(primaryPayment.cash.changeFor - order.totalAmount)}`
+                    : 'Dinheiro · sem troco'
+                  : getPaymentLabel(primaryPayment.method)}
               </p>
-              <p className="text-purple-100 text-xl font-bold tracking-widest leading-none">
+            )}
+          </div>
+          <div className="pt-2 shrink-0">
+            {isPlaced ? (
+              <CountdownBadge createdAt={order.createdAt} />
+            ) : (
+              <ElapsedBadge createdAt={order.createdAt} />
+            )}
+          </div>
+        </div>
+
+        {/* Código de retirada */}
+        {order.status === 'READY_TO_PICKUP' && order.pickupCode && (
+          <div className="flex items-center gap-2.5 bg-[#1a1a1a] border border-[#374151] rounded-md px-3 py-2">
+            <Package className="h-4 w-4 text-gray-400 shrink-0" />
+            <div>
+              <p className="text-gray-500 text-[10px] uppercase tracking-wider leading-none mb-0.5">
+                Código
+              </p>
+              <p className="text-white text-lg font-semibold tracking-widest leading-none">
                 {order.pickupCode}
               </p>
             </div>
           </div>
         )}
 
-        {/* Botões de ação — não propagam clique para o modal */}
+        {/* Ações */}
         {canCancelOrder && (
-          <div onClick={(e) => e.stopPropagation()} className="space-y-1.5">
+          <div onClick={(e) => e.stopPropagation()} className="space-y-1.5 pt-0.5">
             {isPlaced && (
               <Button
                 size="sm"
                 disabled={loading}
                 onClick={() => onConfirm(order)}
-                className="w-full bg-green-700/30 hover:bg-green-700/50 text-green-400 border border-green-700/40 text-xs h-8"
+                className="w-full bg-[#EA1D2C] hover:bg-[#c9111f] text-white text-xs h-8 border-0"
               >
                 {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (
                   <><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Confirmar</>
@@ -486,10 +433,10 @@ function OrderCard({
                 size="sm"
                 disabled={loading}
                 onClick={() => onStartPrep(order)}
-                className="w-full bg-blue-700/30 hover:bg-blue-700/50 text-blue-400 border border-blue-700/40 text-xs h-8"
+                className="w-full bg-[#1a1a1a] hover:bg-[#222] text-white border border-[#374151] text-xs h-8"
               >
                 {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (
-                  <><PlayCircle className="h-3.5 w-3.5 mr-1.5" />Iniciar Preparo</>
+                  <><PlayCircle className="h-3.5 w-3.5 mr-1.5" />Iniciar preparo</>
                 )}
               </Button>
             )}
@@ -499,7 +446,7 @@ function OrderCard({
                 size="sm"
                 disabled={loading}
                 onClick={() => onDispatch(order)}
-                className="w-full bg-orange-700/30 hover:bg-orange-700/50 text-orange-400 border border-orange-700/40 text-xs h-8"
+                className="w-full bg-[#1a1a1a] hover:bg-[#222] text-white border border-[#374151] text-xs h-8"
               >
                 {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (
                   <><Truck className="h-3.5 w-3.5 mr-1.5" />Despachar</>
@@ -512,24 +459,22 @@ function OrderCard({
                 size="sm"
                 disabled={loading}
                 onClick={() => onReadyToPickup(order)}
-                className="w-full bg-purple-700/30 hover:bg-purple-700/50 text-purple-400 border border-purple-700/40 text-xs h-8"
+                className="w-full bg-[#1a1a1a] hover:bg-[#222] text-white border border-[#374151] text-xs h-8"
               >
                 {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (
-                  <><Package className="h-3.5 w-3.5 mr-1.5" />Pronto p/ Retirada</>
+                  <><Package className="h-3.5 w-3.5 mr-1.5" />Pronto p/ retirada</>
                 )}
               </Button>
             )}
 
-            {/* Botão cancelar — discreto, abaixo da ação principal */}
-            <Button
-              size="sm"
+            <button
+              type="button"
               disabled={loading}
               onClick={() => onCancel(order)}
-              className="w-full bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/30 text-xs h-7"
+              className="w-full text-[11px] text-gray-500 hover:text-gray-300 py-1 transition-colors disabled:opacity-50"
             >
-              <XCircle className="h-3.5 w-3.5 mr-1.5" />
               Cancelar pedido
-            </Button>
+            </button>
           </div>
         )}
       </CardContent>
@@ -655,17 +600,23 @@ function OrderDetailModal({
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="bg-[#141415] border-[#374151] text-white max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 flex-wrap">
-            <ShoppingBag className="h-5 w-5 text-[#EA1D2C]" />
+          <DialogTitle className="flex items-center gap-2 flex-wrap text-base font-semibold">
+            <ShoppingBag className="h-4 w-4 text-[#EA1D2C]" />
             Pedido #{order.displayId}
             {order.isTest && (
-              <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">TESTE</Badge>
+              <span className="text-[10px] uppercase tracking-wide text-gray-500 border border-[#374151] rounded px-1.5 py-0.5 font-normal">
+                Teste
+              </span>
             )}
             {isScheduled && (
-              <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">AGENDADO</Badge>
+              <span className="text-[10px] uppercase tracking-wide text-gray-400 border border-[#374151] rounded px-1.5 py-0.5 font-normal">
+                Agendado
+              </span>
             )}
             {hasVoucher && (
-              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">VOUCHER</Badge>
+              <span className="text-[10px] uppercase tracking-wide text-gray-400 border border-[#374151] rounded px-1.5 py-0.5 font-normal">
+                Voucher
+              </span>
             )}
           </DialogTitle>
           <DialogDescription className="text-gray-400">
@@ -676,43 +627,32 @@ function OrderDetailModal({
         <div className="space-y-5 py-1">
 
           {/* Tipo e timing do pedido */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge
-              className={`text-xs px-2 py-0.5 ${
-                isDelivery
-                  ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
-                  : 'bg-purple-500/15 text-purple-400 border-purple-500/30'
-              }`}
-            >
+          <div className="flex items-center gap-3 text-xs text-gray-400">
+            <span className="flex items-center gap-1.5">
               {isDelivery ? (
-                <><Bike className="h-3 w-3 mr-1 inline" />Delivery</>
+                <><Bike className="h-3.5 w-3.5" />Delivery</>
               ) : (
-                <><Package className="h-3 w-3 mr-1 inline" />Retirada</>
+                <><Package className="h-3.5 w-3.5" />Retirada</>
               )}
-            </Badge>
-            <Badge
-              className={`text-xs px-2 py-0.5 ${
-                isScheduled
-                  ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
-                  : 'bg-gray-600/30 text-gray-400 border-gray-600/40'
-              }`}
-            >
+            </span>
+            <span className="text-[#2a2a2c]">·</span>
+            <span className="flex items-center gap-1.5">
               {isScheduled ? (
-                <><CalendarClock className="h-3 w-3 mr-1 inline" />Agendado</>
+                <><CalendarClock className="h-3.5 w-3.5" />Agendado</>
               ) : (
-                <><Clock className="h-3 w-3 mr-1 inline" />Imediato</>
+                <><Clock className="h-3.5 w-3.5" />Imediato</>
               )}
-            </Badge>
+            </span>
           </div>
 
           {/* Agendamento */}
           {isScheduled && order.scheduledDateTime && (
-            <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/25 rounded-lg p-3">
-              <CalendarClock className="h-4 w-4 text-blue-400 shrink-0" />
+            <div className="flex items-center gap-2 bg-[#1a1a1a] border border-[#2a2a2c] rounded-lg p-3">
+              <CalendarClock className="h-4 w-4 text-gray-400 shrink-0" />
               <div>
-                <p className="text-blue-300 text-xs font-medium uppercase tracking-wider">Entrega Agendada</p>
-                <p className="text-white text-sm font-semibold">
-                  📅 {formatScheduledDate(order.scheduledDateTime)}
+                <p className="text-gray-500 text-xs uppercase tracking-wider">Entrega agendada</p>
+                <p className="text-white text-sm font-medium">
+                  {formatScheduledDate(order.scheduledDateTime)}
                 </p>
               </div>
             </div>
@@ -720,51 +660,51 @@ function OrderDetailModal({
 
           {/* Voucher / Benefício */}
           {hasVoucher && (
-            <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-lg p-3 space-y-1.5">
-              <div className="flex items-center gap-2 text-emerald-400 text-xs font-medium uppercase tracking-wider">
+            <div className="bg-[#1a1a1a] border border-[#2a2a2c] rounded-lg p-3 space-y-1.5">
+              <div className="flex items-center gap-2 text-gray-400 text-xs uppercase tracking-wider">
                 <Tag className="h-3.5 w-3.5" />
-                Cupom / Voucher Aplicado
+                Cupom / voucher
               </div>
               {benefits.map((b, bi) => (
                 <div key={bi}>
                   {b.value && b.value > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-300">{b.target ?? 'Desconto'}</span>
-                      <span className="text-emerald-400 font-semibold">-{formatCurrency(b.value)}</span>
+                      <span className="text-gray-200">-{formatCurrency(b.value)}</span>
                     </div>
                   )}
                   {(b.sponsorshipValues ?? []).map((sv, si) => (
                     <div key={si} className="flex justify-between text-sm">
                       <span className="text-gray-300">{sv.name ?? sv.description ?? 'Desconto'}</span>
-                      <span className="text-emerald-400 font-semibold">-{formatCurrency(sv.value)}</span>
+                      <span className="text-gray-200">-{formatCurrency(sv.value)}</span>
                     </div>
                   ))}
                 </div>
               ))}
               {voucherDiscount > 0 && (
-                <div className="flex justify-between text-sm font-bold border-t border-emerald-500/20 pt-1.5 mt-1">
-                  <span className="text-emerald-300">Total de descontos</span>
-                  <span className="text-emerald-400">-{formatCurrency(voucherDiscount)}</span>
+                <div className="flex justify-between text-sm font-medium border-t border-[#2a2a2c] pt-1.5 mt-1">
+                  <span className="text-gray-400">Total de descontos</span>
+                  <span className="text-white">-{formatCurrency(voucherDiscount)}</span>
                 </div>
               )}
             </div>
           )}
 
           {/* Customer */}
-          <div className="bg-black/30 rounded-lg p-3 space-y-2">
-            <p className="text-gray-400 text-xs font-medium uppercase tracking-wider">Cliente</p>
+          <div className="bg-[#1a1a1a] border border-[#2a2a2c] rounded-lg p-3 space-y-2">
+            <p className="text-gray-500 text-xs uppercase tracking-wider">Cliente</p>
             {order.customerName && (
               <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-gray-400 shrink-0" />
-                <span className="text-gray-300 text-sm">{order.customerName}</span>
+                <User className="h-4 w-4 text-gray-500 shrink-0" />
+                <span className="text-gray-200 text-sm">{order.customerName}</span>
               </div>
             )}
             {order.customerPhone && (
               <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-gray-400 shrink-0" />
+                <Phone className="h-4 w-4 text-gray-500 shrink-0" />
                 <a
                   href={`tel:${order.customerPhone}`}
-                  className="text-blue-400 hover:text-blue-300 text-sm"
+                  className="text-gray-200 hover:text-white text-sm underline-offset-2 hover:underline"
                 >
                   {order.customerPhone}
                 </a>
@@ -772,7 +712,7 @@ function OrderDetailModal({
             )}
             {order.customerTaxId && (
               <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-gray-400 shrink-0" />
+                <FileText className="h-4 w-4 text-gray-500 shrink-0" />
                 <span className="text-gray-300 text-sm">{formatCpfCnpj(order.customerTaxId)}</span>
               </div>
             )}
@@ -780,13 +720,13 @@ function OrderDetailModal({
 
           {/* Código de retirada (TAKEOUT) */}
           {!isDelivery && order.pickupCode && (
-            <div className="flex items-center gap-3 bg-purple-500/15 border border-purple-500/30 rounded-lg p-3">
-              <Package className="h-5 w-5 text-purple-400 shrink-0" />
+            <div className="flex items-center gap-3 bg-[#1a1a1a] border border-[#374151] rounded-lg p-3">
+              <Package className="h-5 w-5 text-gray-400 shrink-0" />
               <div>
-                <p className="text-purple-300 text-xs font-medium uppercase tracking-wider mb-0.5">
-                  Código de Retirada
+                <p className="text-gray-500 text-xs uppercase tracking-wider mb-0.5">
+                  Código de retirada
                 </p>
-                <p className="text-purple-100 text-2xl font-bold tracking-widest">
+                <p className="text-white text-2xl font-semibold tracking-widest">
                   {order.pickupCode}
                 </p>
               </div>
@@ -795,20 +735,20 @@ function OrderDetailModal({
 
           {/* Observations */}
           {order.observations && (
-            <div className="bg-yellow-500/10 border border-yellow-500/25 rounded-lg p-3">
-              <p className="text-yellow-400 text-xs font-medium uppercase tracking-wider mb-1">
-                Observações do Pedido
+            <div className="bg-[#1a1a1a] border border-[#2a2a2c] rounded-lg p-3">
+              <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">
+                Observações
               </p>
-              <p className="text-yellow-200 text-sm">{order.observations}</p>
+              <p className="text-gray-200 text-sm">{order.observations}</p>
             </div>
           )}
 
           {/* Delivery address */}
           {isDelivery && addr && (
-            <div className="bg-black/30 rounded-lg p-3 space-y-1">
-              <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
+            <div className="bg-[#1a1a1a] border border-[#2a2a2c] rounded-lg p-3 space-y-1">
+              <div className="flex items-center gap-2 text-gray-500 text-xs uppercase tracking-wider mb-1">
                 <MapPin className="h-3.5 w-3.5" />
-                Endereço de Entrega
+                Endereço de entrega
               </div>
               {addr.formattedAddress ? (
                 <p className="text-white text-sm">{addr.formattedAddress}</p>
@@ -821,7 +761,7 @@ function OrderDetailModal({
                 </p>
               )}
               {addr.complement && (
-                <p className="text-gray-300 text-xs">Complemento: {addr.complement}</p>
+                <p className="text-gray-400 text-xs">Complemento: {addr.complement}</p>
               )}
               {addr.neighborhood && (
                 <p className="text-gray-400 text-xs">Bairro: {addr.neighborhood}</p>
@@ -833,8 +773,8 @@ function OrderDetailModal({
                 <p className="text-gray-400 text-xs">CEP: {addr.postalCode}</p>
               )}
               {addr.reference && (
-                <p className="text-yellow-400 text-xs bg-yellow-500/10 rounded px-2 py-1 mt-1">
-                  📍 Referência: {addr.reference}
+                <p className="text-gray-300 text-xs mt-1">
+                  Referência: {addr.reference}
                 </p>
               )}
             </div>
@@ -842,10 +782,10 @@ function OrderDetailModal({
 
           {/* Items */}
           <div>
-            <p className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-2">Itens do Pedido</p>
+            <p className="text-gray-500 text-xs uppercase tracking-wider mb-2">Itens</p>
             <div className="space-y-2">
               {items.map((item, idx) => (
-                <div key={idx} className="bg-black/20 rounded-lg p-3">
+                <div key={idx} className="bg-[#1a1a1a] border border-[#2a2a2c] rounded-lg p-3">
                   <div className="flex justify-between items-start">
                     <span className="text-white text-sm font-medium">
                       {item.quantity ?? 1}x {item.name ?? 'Item'}
@@ -858,9 +798,9 @@ function OrderDetailModal({
                     </div>
                   </div>
                   {item.options && item.options.length > 0 && (
-                    <div className="mt-1.5 space-y-0.5 pl-2 border-l border-[#374151]">
+                    <div className="mt-1.5 space-y-0.5 pl-2 border-l border-[#2a2a2c]">
                       {item.options.map((opt, oi) => (
-                        <div key={oi} className="flex justify-between text-xs text-gray-400">
+                        <div key={oi} className="flex justify-between text-xs text-gray-500">
                           <span>
                             {opt.quantity && opt.quantity > 1 ? `${opt.quantity}x ` : ''}
                             {opt.name}
@@ -871,7 +811,7 @@ function OrderDetailModal({
                     </div>
                   )}
                   {item.observations && (
-                    <p className="text-xs text-yellow-400 mt-1.5 bg-yellow-500/10 rounded px-2 py-1">
+                    <p className="text-xs text-gray-400 mt-1.5">
                       Obs: {item.observations}
                     </p>
                   )}
@@ -881,9 +821,9 @@ function OrderDetailModal({
           </div>
 
           {/* Totals */}
-          <div className="bg-black/20 rounded-lg p-3 space-y-1.5 text-sm">
+          <div className="bg-[#1a1a1a] border border-[#2a2a2c] rounded-lg p-3 space-y-1.5 text-sm">
             <div className="flex justify-between text-gray-400">
-              <span>Subtotal dos itens</span>
+              <span>Subtotal</span>
               <span>{formatCurrency(itemsTotal)}</span>
             </div>
             {(order.deliveryFee ?? 0) > 0 && (
@@ -893,12 +833,12 @@ function OrderDetailModal({
               </div>
             )}
             {voucherDiscount > 0 && (
-              <div className="flex justify-between text-emerald-400">
-                <span>Desconto (voucher)</span>
+              <div className="flex justify-between text-gray-400">
+                <span>Desconto</span>
                 <span>-{formatCurrency(voucherDiscount)}</span>
               </div>
             )}
-            <div className="flex justify-between text-white font-semibold border-t border-[#374151] pt-1.5 mt-1.5">
+            <div className="flex justify-between text-white font-medium border-t border-[#2a2a2c] pt-1.5 mt-1.5">
               <span>Total</span>
               <span>{formatCurrency(order.totalAmount)}</span>
             </div>
@@ -906,10 +846,10 @@ function OrderDetailModal({
 
           {/* Payment */}
           {allPayments.length > 0 && (
-            <div className="bg-black/30 rounded-lg p-3 space-y-3">
-              <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wider">
+            <div className="bg-[#1a1a1a] border border-[#2a2a2c] rounded-lg p-3 space-y-3">
+              <div className="flex items-center gap-2 text-gray-500 text-xs uppercase tracking-wider">
                 <CreditCard className="h-3.5 w-3.5" />
-                Forma de Pagamento
+                Pagamento
               </div>
               {allPayments.map((pm, pi) => {
                 const isCash = pm.method === 'CASH';
@@ -925,24 +865,24 @@ function OrderDetailModal({
                     <div className="text-xs text-gray-500 flex items-center gap-1">
                       <Receipt className="h-3 w-3 shrink-0" />
                       {isOnline ? (
-                        <span className="text-green-400">✓ Já pago (online)</span>
+                        <span>Pago online</span>
                       ) : (
                         <span>Pagamento na entrega</span>
                       )}
                     </div>
                     {isCash && (
                       changeAmount > 0 ? (
-                        <div className="bg-yellow-500/10 border border-yellow-500/25 rounded px-2.5 py-1.5 space-y-0.5">
-                          <p className="text-yellow-300 text-xs">
-                            💵 Cliente pagará com: <span className="font-semibold">{formatCurrency(changeFor)}</span>
+                        <div className="border border-[#2a2a2c] rounded px-2.5 py-1.5 space-y-0.5">
+                          <p className="text-gray-400 text-xs">
+                            Cliente paga com <span className="text-gray-200">{formatCurrency(changeFor)}</span>
                           </p>
-                          <p className="text-yellow-400 text-sm font-bold">
-                            Troco a devolver: {formatCurrency(changeAmount)}
+                          <p className="text-white text-sm font-medium">
+                            Troco: {formatCurrency(changeAmount)}
                           </p>
                         </div>
                       ) : (
-                        <p className="text-gray-400 text-xs bg-black/20 rounded px-2 py-1">
-                          💵 Pagamento em dinheiro — sem troco
+                        <p className="text-gray-500 text-xs">
+                          Dinheiro — sem troco
                         </p>
                       )
                     )}
@@ -952,12 +892,9 @@ function OrderDetailModal({
             </div>
           )}
 
-          {/* Status info */}
-          <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3">
-            <p className="text-blue-400 text-xs text-center">
-              As ações deste pedido são realizadas diretamente pelo app do iFood.
-            </p>
-          </div>
+          <p className="text-gray-600 text-xs text-center">
+            Ações deste pedido ficam no app do iFood.
+          </p>
         </div>
 
         <div className="flex justify-end pt-2">
@@ -1299,16 +1236,16 @@ export default function IfoodOperacionalPage() {
 
           {/* Polling status + user */}
           <div className="ml-auto flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-xs">
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
               {pollingOk ? (
                 <>
-                  <Wifi className="h-3.5 w-3.5 text-green-400" />
-                  <span className="text-green-400 hidden sm:block">Polling ativo</span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+                  <span className="hidden sm:block">Ao vivo</span>
                 </>
               ) : (
                 <>
-                  <WifiOff className="h-3.5 w-3.5 text-red-400 animate-pulse" />
-                  <span className="text-red-400 hidden sm:block">Desconectado</span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#EA1D2C]" />
+                  <span className="hidden sm:block text-gray-400">Offline</span>
                 </>
               )}
             </div>
@@ -1317,7 +1254,7 @@ export default function IfoodOperacionalPage() {
               variant="ghost"
               disabled={refreshing}
               onClick={() => fetchOrders(true)}
-              className="h-7 w-7 p-0 text-gray-400 hover:text-white"
+              className="h-7 w-7 p-0 text-gray-500 hover:text-white"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             </Button>
@@ -1370,17 +1307,18 @@ export default function IfoodOperacionalPage() {
 
         {/* Loading skeleton */}
         {loading && stores.length > 0 && (
-          <div className="flex gap-4">
+          <div className="flex gap-3">
             {COLUMNS.map((col) => (
               <div key={col.id} className="flex-shrink-0 w-72">
-                <div className={`rounded-lg p-3 mb-3 ${col.headerColor}`}>
-                  <div className="h-4 bg-white/10 rounded animate-pulse w-32" />
+                <div className="flex items-center justify-between px-1 py-2 mb-3">
+                  <div className="h-3.5 bg-[#1a1a1a] rounded animate-pulse w-24" />
+                  <div className="h-3.5 bg-[#1a1a1a] rounded animate-pulse w-5" />
                 </div>
                 {[1, 2].map((i) => (
-                  <div key={i} className="bg-[#1a1a1a] rounded-xl p-4 mb-3 animate-pulse space-y-2">
-                    <div className="h-4 bg-white/10 rounded w-20" />
-                    <div className="h-3 bg-white/5 rounded w-32" />
-                    <div className="h-3 bg-white/5 rounded w-24" />
+                  <div key={i} className="bg-[#141415] border border-[#2a2a2c] rounded-lg p-3.5 mb-2.5 animate-pulse space-y-2">
+                    <div className="h-4 bg-[#1a1a1a] rounded w-16" />
+                    <div className="h-3 bg-[#1a1a1a] rounded w-28" />
+                    <div className="h-3 bg-[#1a1a1a] rounded w-20" />
                   </div>
                 ))}
               </div>
@@ -1390,33 +1328,30 @@ export default function IfoodOperacionalPage() {
 
         {/* Last poll time */}
         {lastPoll && !loading && (
-          <p className="text-gray-600 text-xs mb-4">
-            Última atualização: {lastPoll.toLocaleTimeString('pt-BR')}
+          <p className="text-gray-600 text-xs mb-3">
+            Atualizado às {lastPoll.toLocaleTimeString('pt-BR')}
           </p>
         )}
 
         {/* Kanban */}
         {!loading && stores.length > 0 && (
-          <div className="flex gap-4 overflow-x-auto pb-4">
+          <div className="flex gap-3 overflow-x-auto pb-4">
             {COLUMNS.map((col) => {
               const colOrders = getColumnOrders(col.statuses);
               return (
                 <div key={col.id} className="flex-shrink-0 w-72">
                   {/* Column header */}
-                  <div className={`flex items-center justify-between rounded-lg px-3 py-2 mb-3 ${col.headerColor} border ${col.color}`}>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${col.dot}`} />
-                      <span className="font-semibold text-sm">{col.label}</span>
-                    </div>
-                    <Badge className="bg-white/10 text-current border-0 text-xs">
+                  <div className="flex items-center justify-between px-1 py-2 mb-2.5 border-b border-[#2a2a2c]">
+                    <span className="text-sm font-medium text-gray-300">{col.label}</span>
+                    <span className="text-xs tabular-nums text-gray-500 min-w-[1.25rem] text-right">
                       {colOrders.length}
-                    </Badge>
+                    </span>
                   </div>
 
                   {/* Cards */}
-                  <div className="space-y-0">
+                  <div>
                     {colOrders.length === 0 ? (
-                      <div className="text-gray-600 text-sm text-center py-8 border border-dashed border-[#374151] rounded-xl">
+                      <div className="text-gray-600 text-xs text-center py-10">
                         Nenhum pedido
                       </div>
                     ) : (() => {
@@ -1440,13 +1375,13 @@ export default function IfoodOperacionalPage() {
                           {scheduled.length > 0 && (
                             <>
                               {immediate.length > 0 && (
-                                <div className="flex items-center gap-2 my-2 px-1">
-                                  <div className="flex-1 h-px bg-blue-500/20" />
-                                  <span className="text-blue-400 text-[10px] font-medium uppercase tracking-wider flex items-center gap-1">
+                                <div className="flex items-center gap-2 my-3 px-1">
+                                  <div className="flex-1 h-px bg-[#2a2a2c]" />
+                                  <span className="text-gray-500 text-[10px] uppercase tracking-wider flex items-center gap-1">
                                     <CalendarClock className="h-3 w-3" />
                                     Agendados
                                   </span>
-                                  <div className="flex-1 h-px bg-blue-500/20" />
+                                  <div className="flex-1 h-px bg-[#2a2a2c]" />
                                 </div>
                               )}
                               {scheduled.map((order) => (
