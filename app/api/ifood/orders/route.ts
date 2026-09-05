@@ -68,7 +68,8 @@ export async function GET(req: NextRequest) {
         (delivery.deliveryDateTime as string | undefined) ??
         null;
 
-      const benefits = (raw.benefits as unknown[] | undefined) ?? [];
+      const benefitsRaw = raw.benefits;
+      const benefits = Array.isArray(benefitsRaw) ? benefitsRaw : [];
       const observations = (raw.observations as string | undefined) ?? null;
       const customerTaxId =
         (customer.taxPayerIdentificationNumber as string | undefined) ??
@@ -79,8 +80,16 @@ export async function GET(req: NextRequest) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { rawPayload: _raw, ...orderFields } = row;
 
+      const items = Array.isArray(row.items) ? row.items : [];
+      const payments =
+        row.payments && typeof row.payments === 'object' && !Array.isArray(row.payments)
+          ? row.payments
+          : { methods: [] };
+
       return {
         ...orderFields,
+        items,
+        payments,
         scheduledDateTime,
         benefits,
         observations,

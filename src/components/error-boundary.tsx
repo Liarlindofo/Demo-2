@@ -51,19 +51,22 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   handleClose = () => {
-    this.setState({
-      hasError: false,
-      error: null,
-    });
+    // Erro de render: limpar estado sem reload só remonta a árvore quebrada
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+      return;
+    }
+    this.setState({ hasError: false, error: null });
   };
 
   render() {
     if (this.state.hasError && this.state.error) {
+      // Não re-renderiza children que já quebraram — isso deixa a tela preta/vazia
+      // e silencia a causa. Mostra o popup com a mensagem real do erro.
       return (
-        <>
-          {this.props.children}
+        <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
           <ErrorPopup error={this.state.error} onClose={this.handleClose} />
-        </>
+        </div>
       );
     }
 

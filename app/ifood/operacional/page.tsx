@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -178,8 +179,19 @@ function playNewOrderAlert() {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function formatCurrency(value: number) {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+function formatCurrency(value: number | null | undefined) {
+  return (Number.isFinite(value) ? (value as number) : 0).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
+}
+
+function asOrderItems(items: unknown): OrderItem[] {
+  return Array.isArray(items) ? (items as OrderItem[]) : [];
+}
+
+function asBenefits(benefits: unknown): OrderBenefit[] {
+  return Array.isArray(benefits) ? (benefits as OrderBenefit[]) : [];
 }
 
 function useElapsedSeconds(isoDate: string): number {
@@ -215,12 +227,14 @@ function getPaymentLabel(method: string): string {
   return map[method] ?? method;
 }
 
-function summarizeItems(items: OrderItem[]): string {
-  return items
+function summarizeItems(items: unknown): string {
+  const list = asOrderItems(items);
+  if (list.length === 0) return 'Sem itens';
+  return list
     .slice(0, 2)
-    .map((i) => `${i.quantity}x ${i.name}`)
+    .map((i) => `${i.quantity ?? 1}x ${i.name ?? 'Item'}`)
     .join(', ')
-    .concat(items.length > 2 ? ` +${items.length - 2} mais` : '');
+    .concat(list.length > 2 ? ` +${list.length - 2} mais` : '');
 }
 
 function formatScheduledDate(isoDate: string): string {
@@ -317,8 +331,9 @@ function OrderCard({
   const isScheduled = order.orderTiming === 'SCHEDULED';
   const loading = actionLoading[order.orderId];
   const primaryPayment = order.payments?.methods?.[0];
-  const hasVoucher = order.benefits && order.benefits.length > 0;
-  const voucherDiscount = hasVoucher ? getBenefitsTotalDiscount(order.benefits) : 0;
+  const benefits = asBenefits(order.benefits);
+  const hasVoucher = benefits.length > 0;
+  const voucherDiscount = hasVoucher ? getBenefitsTotalDiscount(benefits) : 0;
 
   return (
     <Card
@@ -552,6 +567,9 @@ function CancelModal({
             <AlertTriangle className="h-5 w-5 text-red-400" />
             Cancelar Pedido #{order.displayId}
           </DialogTitle>
+          <DialogDescription className="text-gray-400">
+            Escolha o motivo para cancelar este pedido no iFood.
+          </DialogDescription>
         </DialogHeader>
 
         {loadingReasons ? (
@@ -626,11 +644,12 @@ function OrderDetailModal({
   const isDelivery = order.orderType === 'DELIVERY';
   const isScheduled = order.orderTiming === 'SCHEDULED';
   const allPayments = order.payments?.methods ?? [];
-  const primaryPayment = allPayments[0];
   const addr = order.deliveryAddress;
-  const itemsTotal = order.items.reduce((sum, i) => sum + i.totalPrice, 0);
-  const hasVoucher = order.benefits && order.benefits.length > 0;
-  const voucherDiscount = hasVoucher ? getBenefitsTotalDiscount(order.benefits) : 0;
+  const items = asOrderItems(order.items);
+  const itemsTotal = items.reduce((sum, i) => sum + (i.totalPrice ?? 0), 0);
+  const benefits = asBenefits(order.benefits);
+  const hasVoucher = benefits.length > 0;
+  const voucherDiscount = hasVoucher ? getBenefitsTotalDiscount(benefits) : 0;
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -649,6 +668,9 @@ function OrderDetailModal({
               <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">VOUCHER</Badge>
             )}
           </DialogTitle>
+          <DialogDescription className="text-gray-400">
+            Detalhes do pedido (somente leitura).
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 py-1">
@@ -703,7 +725,7 @@ function OrderDetailModal({
                 <Tag className="h-3.5 w-3.5" />
                 Cupom / Voucher Aplicado
               </div>
-              {order.benefits.map((b, bi) => (
+              {benefits.map((b, bi) => (
                 <div key={bi}>
                   {b.value && b.value > 0 && (
                     <div className="flex justify-between text-sm">
@@ -822,15 +844,15 @@ function OrderDetailModal({
           <div>
             <p className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-2">Itens do Pedido</p>
             <div className="space-y-2">
-              {order.items.map((item, idx) => (
+              {items.map((item, idx) => (
                 <div key={idx} className="bg-black/20 rounded-lg p-3">
                   <div className="flex justify-between items-start">
                     <span className="text-white text-sm font-medium">
-                      {item.quantity}x {item.name}
+                      {item.quantity ?? 1}x {item.name ?? 'Item'}
                     </span>
                     <div className="text-right ml-2 shrink-0">
                       <span className="text-gray-300 text-sm">{formatCurrency(item.totalPrice)}</span>
-                      {item.quantity > 1 && (
+                      {(item.quantity ?? 1) > 1 && (
                         <p className="text-gray-500 text-xs">{formatCurrency(item.unitPrice)} un.</p>
                       )}
                     </div>
@@ -843,7 +865,7 @@ function OrderDetailModal({
                             {opt.quantity && opt.quantity > 1 ? `${opt.quantity}x ` : ''}
                             {opt.name}
                           </span>
-                          {opt.price > 0 && <span>+{formatCurrency(opt.price)}</span>}
+                          {(opt.price ?? 0) > 0 && <span>+{formatCurrency(opt.price)}</span>}
                         </div>
                       ))}
                     </div>
@@ -1007,8 +1029,13 @@ export default function IfoodOperacionalPage() {
           '';
 
         setSelectedMerchant(initial);
+        // Sem merchant, fetchOrders nunca roda — libera o loading para não ficar tela preta vazia
+        if (!initial) setLoading(false);
       })
-      .catch(() => addToast('❌ Erro ao carregar lojas', 'error'));
+      .catch(() => {
+        addToast('❌ Erro ao carregar lojas', 'error');
+        setLoading(false);
+      });
   }, [addToast]);
 
   // -----------------------------------------------------------------------
