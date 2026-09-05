@@ -1,6 +1,52 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, type RefObject } from 'react';
+
+// ─── Hook: arrastar para rolar horizontalmente (sem scrollbar visível) ────────
+function useDragScroll(): {
+  ref: RefObject<HTMLDivElement | null>;
+  handlers: React.HTMLAttributes<HTMLDivElement>;
+} {
+  const ref = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startScrollLeft = useRef(0);
+
+  const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = ref.current;
+    if (!el) return;
+    dragging.current = true;
+    startX.current = e.clientX;
+    startScrollLeft.current = el.scrollLeft;
+    el.style.cursor = 'grabbing';
+    el.style.userSelect = 'none';
+  };
+
+  const onMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!dragging.current || !ref.current) return;
+    e.preventDefault();
+    const dx = e.clientX - startX.current;
+    ref.current.scrollLeft = startScrollLeft.current - dx;
+  };
+
+  const stopDrag = () => {
+    dragging.current = false;
+    if (ref.current) {
+      ref.current.style.cursor = 'grab';
+      ref.current.style.userSelect = '';
+    }
+  };
+
+  return {
+    ref,
+    handlers: {
+      onMouseDown,
+      onMouseMove,
+      onMouseUp: stopDrag,
+      onMouseLeave: stopDrag,
+    },
+  };
+}
 import Link from 'next/link';
 import { useLoja } from '@/contexts/LojaContext';
 import {
@@ -122,6 +168,8 @@ function mesLabel(mes: number, ano: number) {
 // ─── Tabela de Registros (Fase 6) ───────────────────────────────────────────
 
 function TabelaRegistros({ registros }: { registros: RegistroPonto[] }) {
+  const drag = useDragScroll();
+
   if (registros.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center px-4">
@@ -135,7 +183,12 @@ function TabelaRegistros({ registros }: { registros: RegistroPonto[] }) {
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div
+      ref={drag.ref}
+      {...drag.handlers}
+      className="overflow-x-auto [&::-webkit-scrollbar]:hidden"
+      style={{ scrollbarWidth: 'none', cursor: 'grab' }}
+    >
       <table className="w-full text-sm">
         <thead className="border-b border-[#2a2a2e] bg-[#111113]">
           <tr>
@@ -384,6 +437,60 @@ function FechamentoLinhaRow({
   );
 }
 
+// ─── Tabela do Relatório com drag-to-scroll horizontal ───────────────────────
+
+function TabelaRelatorioScroll({
+  linhas,
+  fechamentoId,
+  onLinhaUpdated,
+}: {
+  linhas: FechamentoLinha[];
+  fechamentoId: string;
+  onLinhaUpdated: (updated: FechamentoLinha) => void;
+}) {
+  const drag = useDragScroll();
+
+  return (
+    <div
+      ref={drag.ref}
+      {...drag.handlers}
+      className="overflow-x-auto [&::-webkit-scrollbar]:hidden"
+      style={{ scrollbarWidth: 'none', cursor: 'grab' }}
+    >
+      <table className="w-full text-sm">
+        <thead className="border-b border-[#2a2a2e] bg-[#111113]">
+          <tr>
+            <th className={`${headCls} sticky left-0 bg-[#111113]`}>Funcionário</th>
+            <th className={headCls}>Ex 60%</th>
+            <th className={headCls}>Ex 100%</th>
+            <th className={headCls}>EN 60%</th>
+            <th className={headCls}>EN 100%</th>
+            <th className={headCls}>Atraso</th>
+            <th className={headCls}>Faltas</th>
+            <th className={headCls}>Falta DSR</th>
+            <th className={headCls}>VT (R$)</th>
+            <th className={headCls}>Desc. Div.</th>
+            <th className={headCls}>Desc. Ref.</th>
+            <th className={headCls}>Desc. Comp.</th>
+            <th className={headCls}>Status</th>
+            <th className={headCls}>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.map((linha) => (
+            <FechamentoLinhaRow
+              key={linha.id}
+              linha={linha}
+              fechamentoId={fechamentoId}
+              onUpdated={onLinhaUpdated}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ─── Aba Relatório (Fase 9) ──────────────────────────────────────────────────
 
 function AbaRelatorio() {
@@ -614,38 +721,11 @@ function AbaRelatorio() {
           </div>
 
           {/* Tabela */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-[#2a2a2e] bg-[#111113]">
-                <tr>
-                  <th className={`${headCls} sticky left-0 bg-[#111113]`}>Funcionário</th>
-                  <th className={headCls} title="Código 37">HE 60% Diurna</th>
-                  <th className={headCls} title="Código 49">HE 100% Diurna</th>
-                  <th className={headCls} title="Código 38">HE 60% Noturna</th>
-                  <th className={headCls} title="Código 50">HE 100% Noturna</th>
-                  <th className={headCls} title="Código 29">Atraso</th>
-                  <th className={headCls} title="Código 23">Horas Faltas</th>
-                  <th className={headCls} title="Código 25">Horas Falta DSR</th>
-                  <th className={headCls} title="Código 816">Vale Transporte</th>
-                  <th className={headCls} title="Código 814">Desc Diversos</th>
-                  <th className={headCls} title="Código 813">Desc. Refeição</th>
-                  <th className={headCls} title="Código 1199">Desc. Compras</th>
-                  <th className={headCls}>Status</th>
-                  <th className={headCls}>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fechamento.linhas.map((linha) => (
-                  <FechamentoLinhaRow
-                    key={linha.id}
-                    linha={linha}
-                    fechamentoId={fechamento.id}
-                    onUpdated={onLinhaUpdated}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TabelaRelatorioScroll
+            linhas={fechamento.linhas}
+            fechamentoId={fechamento.id}
+            onLinhaUpdated={onLinhaUpdated}
+          />
         </div>
       )}
     </div>

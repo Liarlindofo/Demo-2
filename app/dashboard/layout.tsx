@@ -64,8 +64,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       <Menu className="h-5 w-5" />
                     </Button>
                   </SheetTrigger>
-                  <SheetContent side="left" className="w-64 bg-[#141415] border-[#374151] text-white">
-                    <div className="flex flex-col gap-4 mt-8">
+                  <SheetContent side="left" className="w-64 bg-[#141415] border-[#374151] text-white flex flex-col">
+                    <div className="flex flex-col gap-2 mt-8 flex-1 overflow-y-auto pb-6 pr-1 [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:transparent [&::-webkit-scrollbar-thumb]:bg-[#374151] [&::-webkit-scrollbar-thumb]:rounded-full">
                       {/* Conexões */}
                       {permissionsLoading ? (
                         <div className="px-4 py-3 text-gray-400 text-sm">Carregando permissões...</div>
