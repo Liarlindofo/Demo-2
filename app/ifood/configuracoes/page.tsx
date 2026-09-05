@@ -536,10 +536,14 @@ export default function IfoodConfiguracoesPage() {
   }
 
   async function handleRemovePause(conn: IfoodConnection, interruptionId: string) {
+    if (!interruptionId) {
+      addToast('❌ ID da pausa inválido — recarregue a página', 'error');
+      return;
+    }
     setRemovingPause((prev) => ({ ...prev, [interruptionId]: true }));
     try {
       const res = await fetch(
-        `/api/ifood/merchants/${conn.merchantId}/interruptions/${interruptionId}`,
+        `/api/ifood/merchants/${encodeURIComponent(conn.merchantId)}/interruptions/${encodeURIComponent(interruptionId)}`,
         { method: 'DELETE' },
       );
       if (res.ok || res.status === 204) {
@@ -548,9 +552,14 @@ export default function IfoodConfiguracoesPage() {
           [conn.merchantId]: (prev[conn.merchantId] ?? []).filter((i) => i.id !== interruptionId),
         }));
         addToast(`▶️ Pausa removida — "${conn.merchantName}" voltou ao ar`, 'success');
+        // Confirma com o iFood (evita pausa “fantasma” na UI)
+        await loadInterruptions(conn);
       } else {
-        const data = await res.json() as { error?: string };
-        addToast(`❌ ${data.error ?? 'Erro ao remover pausa'}`, 'error');
+        const data = await res.json().catch(() => ({})) as { error?: string; ifoodStatus?: number };
+        const detail = data.error ?? 'Erro ao remover pausa';
+        addToast(`❌ ${detail}`, 'error');
+        // Lista pode ter ficado desatualizada (pausa já sumiu no iFood)
+        await loadInterruptions(conn);
       }
     } catch {
       addToast('❌ Erro ao remover pausa', 'error');

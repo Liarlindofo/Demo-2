@@ -69,17 +69,23 @@ async function fetchNewToken(): Promise<{ token: string; expiresAt: Date }> {
  * Retorna um access token iFood válido.
  * Reutiliza o token armazenado se ainda não estiver perto de expirar,
  * caso contrário renova automaticamente.
+ * @param forceRefresh — ignora cache e solicita token novo (útil após 401)
  */
-export async function getValidIfoodToken(): Promise<string> {
-  const minExpiry = new Date(Date.now() + BUFFER_MS);
+export async function getValidIfoodToken(forceRefresh = false): Promise<string> {
+  if (!forceRefresh) {
+    const minExpiry = new Date(Date.now() + BUFFER_MS);
 
-  const stored = await db.ifoodToken.findFirst({
-    where: { expiresAt: { gt: minExpiry } },
-    orderBy: { createdAt: 'desc' },
-  });
+    const stored = await db.ifoodToken.findFirst({
+      where: { expiresAt: { gt: minExpiry } },
+      orderBy: { createdAt: 'desc' },
+    });
 
-  if (stored) {
-    return decrypt(stored.accessToken);
+    if (stored) {
+      return decrypt(stored.accessToken);
+    }
+  } else {
+    // Invalida tokens em cache antes de renovar
+    await db.ifoodToken.deleteMany({});
   }
 
   const { token, expiresAt } = await fetchNewToken();

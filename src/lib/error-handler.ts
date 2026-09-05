@@ -32,6 +32,7 @@ const SILENT_URL_PATTERNS = [
   /\/api\/checklist\//,
   /\/api\/cmv\//,
   /\/api\/food\//,
+  /\/api\/ifood\/merchants\/[^/]+\/interruptions/,
   /\/_next\//,
   /\/api\/auth\//,
   /stackframe/,
