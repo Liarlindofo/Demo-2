@@ -18,10 +18,10 @@ import {
 // 4. Envia acknowledgment para todos os eventos recebidos
 // ---------------------------------------------------------------------------
 export async function GET(req: NextRequest) {
-  // Proteger com CRON_SECRET se disponível
+  // Proteção obrigatória com CRON_SECRET — rejeita se não estiver definido
   const authHeader = req.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
