@@ -25,7 +25,7 @@ response=$(curl -fsS \
 exit_code=$?
 
 if [ $exit_code -eq 0 ]; then
-  echo "[$(timestamp)] OK  | $response" >> "$LOG"
+  printf '[%s] OK  | %s\n\n' "$(timestamp)" "$response" >> "$LOG"
 else
-  echo "[$(timestamp)] ERR (exit $exit_code) | $response" >> "$LOG"
+  printf '[%s] ERR (exit %s) | %s\n\n' "$(timestamp)" "$exit_code" "$response" >> "$LOG"
 fi
